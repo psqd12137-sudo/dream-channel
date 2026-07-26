@@ -7,6 +7,7 @@
       "hp": 16,
       "damage": 2,
       "victory": "宿主碎成蓝屏。波形坍缩：你离开了山屋。",
+      "ritualVictory": "你掐灭了全部信号锚。宿主在雪花里找不到你，频道断流。",
       "defeat": "你被编进片尾字幕。",
       "endingId": "end_host"
     },
@@ -17,6 +18,7 @@
       "hp": 14,
       "damage": 2,
       "victory": "耳语断了。你把自己的声音夺了回来。",
+      "ritualVictory": "锚点熄灭，墙内再无回声。你听见的只剩自己的呼吸。",
       "defeat": "你分不清哪个声音是自己的。",
       "endingId": "end_whisper"
     },
@@ -27,6 +29,7 @@
       "hp": 13,
       "damage": 1,
       "victory": "雾散。门外是真正的夜。",
+      "ritualVictory": "信号锚全部熄灭，雾失去了方向。那只手缩回黑暗。",
       "defeat": "你跟着那只手走进第二层雾。",
       "endingId": "end_fog"
     },
@@ -37,6 +40,7 @@
       "hp": 18,
       "damage": 2,
       "victory": "锁芯崩裂。祭坛熄灭。",
+      "ritualVictory": "四枚信号锚熄灭。祭坛失去播出权，锈锁空转。",
       "defeat": "铁门在身后合上，节目重播。",
       "endingId": "end_rust"
     }

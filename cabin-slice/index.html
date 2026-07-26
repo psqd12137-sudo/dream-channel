@@ -41,8 +41,20 @@
             <div class="title-actions">
               <button id="btn-start" class="btn btn-primary btn-ticket btn-start">打开电视机</button>
               <button id="btn-continue" class="btn btn-secondary btn-ticket hidden">接着看上集</button>
+              <button id="btn-boss-test" class="btn btn-ghost btn-ticket" type="button">跳到 Boss（测强度）</button>
             </div>
             <p id="boot-status" class="boot-status">电视机预热中…</p>
+            <section class="lab-panel folder-panel" aria-label="实验记录">
+              <header class="lab-head">
+                <h3>实验记录</h3>
+                <div class="lab-actions">
+                  <button id="btn-lab-export" class="btn btn-ticket btn-ghost" type="button">导出 JSON</button>
+                  <button id="btn-lab-clear" class="btn btn-ticket btn-ghost" type="button">清空</button>
+                </div>
+              </header>
+              <p id="lab-meta" class="lab-meta"></p>
+              <ul id="lab-list" class="lab-list"></ul>
+            </section>
           </div>
           <ol class="rules folder-panel">
             <li><img src="assets/ui/cards/SP_Card_IconT_Trap.png" alt="" /><span>走位引怪踩机关，削掉韧性</span></li>
@@ -135,6 +147,14 @@
               </div>
               <div id="enemy-intent" class="intent-banner">它想做 —</div>
             </header>
+            <div id="boss-ritual-hud" class="boss-ritual-hud hidden" aria-label="仪式状态">
+              <span id="boss-phase-chip" class="boss-phase-chip">开场</span>
+              <span id="program-directive" class="directive-chip">等待导播…</span>
+              <div class="broadcast-bar" title="播出进度满则失败">
+                <div id="broadcast-fill" class="broadcast-fill"></div>
+                <span id="broadcast-label" class="broadcast-label">播出 0/12</span>
+              </div>
+            </div>
             <div class="battle-hud">
               <div class="hud-card hud-you hud-banner">
                 <img class="hud-portrait" src="assets/ui/chars/SP_Lili_Profile.png" alt="" />
@@ -156,6 +176,7 @@
                     <div class="hud-row"><span>韧性</span><strong id="kite-meter">—</strong></div>
                     <div class="bar"><div id="tough-fill" class="bar-fill"></div></div>
                   </div>
+                  <div id="enemy-traits" class="trait-chips" aria-label="敌人机制"></div>
                 </div>
               </div>
             </div>
@@ -166,6 +187,7 @@
                 <span><i class="dot dot-wall"></i>墙</span>
                 <span><i class="dot dot-high"></i>高台</span>
                 <span><i class="dot dot-move"></i>能走</span>
+                <span><i class="dot dot-anchor"></i>锚</span>
               </div>
               <div id="battle-grid" class="battle-grid" aria-label="战斗场地"></div>
               <div id="combo-toast" class="combo-toast" aria-live="polite"></div>
@@ -177,6 +199,7 @@
             <p class="hand-label">道具卡 <span id="card-hint" class="hint-inline">悬停听旁白</span></p>
             <div id="hand-cards" class="hand-col"></div>
             <footer class="battle-foot">
+              <button id="btn-dismantle" class="btn btn-secondary btn-ticket hidden" type="button">拆信号（2）</button>
               <button id="btn-cancel-place" class="btn btn-ghost btn-ticket hidden">取消放置</button>
               <button id="btn-end-turn" class="btn btn-primary btn-ticket">回合结束</button>
             </footer>
@@ -198,16 +221,20 @@
           <h2 id="boss-name">?</h2>
           <p id="boss-phase-text"></p>
           <p id="boss-hp" class="chip"></p>
+          <div id="boss-kit" class="boss-kit" aria-label="Boss 机制"></div>
           <div id="boss-actions" class="choices"></div>
         </div>
       </section>
 
       <section id="screen-end" class="panel panel-title">
         <div class="end-wrap">
-          <img class="end-art" src="assets/ui/SP_Gameover.png" alt="" />
+          <p id="end-result" class="end-result" aria-live="polite"></p>
+          <img id="end-art" class="end-art" src="assets/ui/SP_Gameover.png" alt="" />
           <h2 id="end-title" class="title-hero"></h2>
           <p id="end-log" class="lede"></p>
+          <p id="end-lab-note" class="end-lab-note"></p>
           <button id="btn-restart" class="btn btn-primary btn-ticket">再看一集</button>
+          <button id="btn-lab-export-end" class="btn btn-secondary btn-ticket" type="button">导出本场实验 JSON</button>
         </div>
       </section>
     </main>

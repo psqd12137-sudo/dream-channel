@@ -96,7 +96,7 @@
       "name": "纸影傀儡",
       "type": "place",
       "cost": 1,
-      "text": "消耗。邻格放置一枚嘲讽虚影：怪优先追打它。挨 1 下或 2 回合后消散。",
+      "text": "消耗。邻格放置一枚嘲讽虚影：怪优先追打它。挨 1 下后消散（不限回合）。",
       "exhaust": true,
       "temp": true,
       "place": { "decoy": true, "glyph": "影" }

@@ -6,6 +6,8 @@ const { playTone, setMuted, startBgm } = window.CabinAudio || {
 
 let uidSeq = 1;
 const SAVE_KEY = "cabin-run-v3";
+const LAB_KEY = "cabin-lab-v1";
+const LAB_MAX_RUNS = 40;
 
 const state = {
   data: null,
@@ -26,6 +28,10 @@ const state = {
   nodePending: false,
   combatCount: 0,
   rewardRolls: {},
+  /** 当前实验会话（战斗进行中） */
+  lab: null,
+  /** 本局是否来自「跳到 Boss」测强度入口 */
+  labTag: "normal",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -57,6 +63,10 @@ function cardDef(id) {
 
 function relicDef(id) {
   return state.data.relics.relics[id];
+}
+
+function bossDef(id) {
+  return state.data?.bosses?.bosses?.[id] || null;
 }
 
 function cardKindLabel(type) {
@@ -322,6 +332,7 @@ function comboPop(name) {
   if (!c) return;
   c.comboFlash = name;
   log(`连击·${name}`, "ok");
+  labNoteCombo(name);
   const el = $("combo-toast");
   if (el) {
     el.textContent = `连击·${name}`;
@@ -332,7 +343,12 @@ function comboPop(name) {
 }
 
 function getEnemyGoal(c) {
-  if (c.decoy?.pos) return { ...c.decoy.pos };
+  if (decoyAlive(c)) return { ...c.decoy.pos };
+  // 节目指令「点亮舞台」：优先追最近亮锚
+  if (c.isBoss && c.directive?.id === "spotlight") {
+    const anchor = nearestLitAnchor(c, c.enemyPos);
+    if (anchor) return anchor;
+  }
   const sees = hasLoS(c.enemyPos, c.playerPos);
   if (sees) return { ...c.playerPos };
   if (c.lastSeen) return { ...c.lastSeen };
@@ -347,18 +363,225 @@ function smashDecoy(c, reason) {
   if (!decoyAlive(c)) return false;
   c.decoy.hp -= 1;
   log(`${c.enemy.name}${reason || "打散了"}纸影傀儡。`, "ok");
+  labEvent("decoy_smash", { reason: reason || "打散", pos: { ...c.decoy.pos } });
   if (c.decoy.hp <= 0) c.decoy = null;
   playTone("ok");
   return true;
 }
 
-function tickDecoyTtl(c) {
-  if (!decoyAlive(c)) return;
-  c.decoy.ttl = (c.decoy.ttl || 0) - 1;
-  if (c.decoy.ttl <= 0) {
-    log("纸影傀儡消散了。");
-    c.decoy = null;
+/* ========== Boss 仪式（锚点 / 播出时钟 / 蓄力 / 阶段 / 节目指令） ========== */
+
+function bossFightCfg() {
+  return state.data.pressure?.bossFight || {};
+}
+
+function litAnchorKeys(c) {
+  return Object.keys(c.anchors || {}).filter((k) => c.anchors[k]?.lit);
+}
+
+function anchorsClearedCount(c) {
+  return Object.values(c.anchors || {}).filter((a) => !a.lit).length;
+}
+
+function allAnchorsOut(c) {
+  const keys = Object.keys(c.anchors || {});
+  return keys.length > 0 && keys.every((k) => !c.anchors[k].lit);
+}
+
+function currentBossPhase(c) {
+  const phases = bossFightCfg().phases || [];
+  const cleared = anchorsClearedCount(c);
+  let best = phases[0] || { cleared: 0, name: "开场", stam: 4, clock: 1 };
+  for (const p of phases) {
+    if (cleared >= (p.cleared || 0)) best = p;
   }
+  return best;
+}
+
+function nearestLitAnchor(c, fromPos) {
+  let best = null;
+  let bestD = Infinity;
+  for (const k of litAnchorKeys(c)) {
+    const p = parseKey(k);
+    const d = manhattan(fromPos || c.enemyPos, p);
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  return best;
+}
+
+function chargeRadius(c) {
+  const phase = currentBossPhase(c);
+  return phase.wideCharge || phase.frenzy ? 2 : 1;
+}
+
+function chargeCellsAround(center, radius) {
+  const cells = [];
+  for (let dr = -radius; dr <= radius; dr += 1) {
+    for (let dc = -radius; dc <= radius; dc += 1) {
+      const pos = { r: center.r + dr, c: center.c + dc };
+      if (inBounds(pos) && !isWall(pos)) cells.push(pos);
+    }
+  }
+  return cells;
+}
+
+function damageAnchorsInCells(c, cells, amount, source) {
+  if (!c.isBoss || !c.anchors || amount <= 0) return 0;
+  let hit = 0;
+  for (const pos of cells || []) {
+    const k = keyOf(pos);
+    const a = c.anchors[k];
+    if (!a?.lit) continue;
+    a.hp -= amount;
+    hit += 1;
+    labEvent("anchor_hit", { key: k, amount, source, hpLeft: Math.max(0, a.hp) });
+    if (a.hp <= 0) {
+      a.lit = false;
+      a.hp = 0;
+      log(`信号锚 (${pos.r + 1},${pos.c + 1}) 熄灭了！`, "ok");
+      labEvent("anchor_out", { key: k, source });
+      if (state.lab) {
+        state.lab.summary.anchorsCleared = (state.lab.summary.anchorsCleared || 0) + 1;
+        if (source === "boss" || source === "charge") {
+          state.lab.summary.anchorsClearedByBoss = (state.lab.summary.anchorsClearedByBoss || 0) + 1;
+        }
+      }
+      relieveBroadcast(c, bossFightCfg().anchorClockRelief || 3, "熄灭锚点");
+      checkBossPhaseUp(c);
+      if (allAnchorsOut(c)) {
+        winCombat("ritual");
+        return hit;
+      }
+    } else {
+      log(`信号锚 (${pos.r + 1},${pos.c + 1}) 受损（剩 ${a.hp}）。`, "ok");
+    }
+  }
+  return hit;
+}
+
+function relieveBroadcast(c, amount, reason) {
+  if (!c.isBoss || !amount) return;
+  const before = c.broadcast || 0;
+  c.broadcast = Math.max(0, before - amount);
+  if (c.broadcast < before) {
+    log(`播出进度 -${before - c.broadcast}（${reason}）→ ${c.broadcast}/${c.broadcastMax}`, "ok");
+  }
+}
+
+function tickBroadcast(c) {
+  if (!c.isBoss) return false;
+  const phase = currentBossPhase(c);
+  let add = phase.clock || 1;
+  const sees = hasLoS(c.enemyPos, c.playerPos);
+  if (sees) add += bossFightCfg().seenClockBonus || 0;
+  if (c.directive?.id === "extra") add += 1;
+  c.broadcast = Math.min(c.broadcastMax, (c.broadcast || 0) + add);
+  labEvent("broadcast_tick", { add, value: c.broadcast, max: c.broadcastMax, sees });
+  log(`播出进度 +${add} → ${c.broadcast}/${c.broadcastMax}${sees ? "（有视线）" : ""}`, c.broadcast >= c.broadcastMax ? "bad" : "");
+  if (c.broadcast >= c.broadcastMax) {
+    loseCombat("broadcast");
+    return true;
+  }
+  return false;
+}
+
+function checkBossPhaseUp(c) {
+  if (!c.isBoss) return;
+  const phase = currentBossPhase(c);
+  const idx = (bossFightCfg().phases || []).findIndex((p) => p.name === phase.name);
+  if (idx > (c.phaseIndex || 0)) {
+    c.phaseIndex = idx;
+    c.phaseName = phase.name;
+    if (phase.stam) c.staminaMax = phase.stam + (tierScale(c.tier).stam || 0);
+    log(`频道切换——进入「${phase.name}」！`, "bad");
+    labEvent("phase_up", { name: phase.name, cleared: anchorsClearedCount(c) });
+    if (state.lab) state.lab.summary.phaseReached = phase.name;
+    playTone("face");
+  }
+}
+
+function drawBossDirective(c) {
+  if (!c.isBoss) return null;
+  const pool = bossFightCfg().directives || [];
+  if (!pool.length) return null;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  c.directive = { ...pick };
+  labEvent("directive", { id: pick.id, label: pick.label });
+  log(`节目指令：${pick.label}——${pick.desc}`, "bad");
+  if (pick.id === "mute") {
+    c.lastSeen = null;
+    log(`${c.enemy.name}这一回合丢失了气味追踪。`, "ok");
+  }
+  return c.directive;
+}
+
+function shouldBossCharge(c) {
+  if (!c.isBoss || c.chargePending) return false;
+  const sees = hasLoS(c.enemyPos, c.playerPos);
+  if (!sees) return false;
+  const dist = manhattan(c.enemyPos, c.playerPos);
+  // 贴脸或邻近、且体力够时有机会蓄力；终幕更高
+  const phase = currentBossPhase(c);
+  if (dist > 2) return false;
+  if (phase.frenzy) return Math.random() < 0.55;
+  if (phase.wideCharge) return Math.random() < 0.35;
+  return Math.random() < 0.22;
+}
+
+function beginBossCharge(c) {
+  const radius = chargeRadius(c);
+  const cells = chargeCellsAround(c.playerPos, radius);
+  const per = Math.ceil(estimateHurtDamage(c) * 1.5);
+  c.chargePending = {
+    cells: cells.map((p) => ({ ...p })),
+    damage: per,
+    center: { ...c.playerPos },
+    radius,
+  };
+  log(`${c.enemy.name}开始蓄力大招——红格已标出，下回合必落！`, "bad");
+  labEvent("charge_start", { damage: per, radius, cells: cells.length });
+  if (state.lab) state.lab.summary.chargeCasts = (state.lab.summary.chargeCasts || 0) + 1;
+  playTone("face");
+}
+
+function resolveBossCharge(c) {
+  const ch = c.chargePending;
+  if (!ch) return "ok";
+  c.chargePending = null;
+  labEvent("charge_land", { damage: ch.damage, cells: ch.cells.length });
+  log(`${c.enemy.name}释放蓄力冲击！`, "bad");
+  damageAnchorsInCells(c, ch.cells, 2, "charge");
+  if (!state.combat) return "done";
+  if (cellsContain(ch.cells, c.playerPos)) {
+    if (applyEnemyHit(c, "charge", ch.damage)) return "lose";
+  } else {
+    log("你躲开了蓄力冲击的落点。", "ok");
+  }
+  return "ok";
+}
+
+function tryDismantleAnchor() {
+  const c = state.combat;
+  if (!c?.isBoss) return false;
+  const k = keyOf(c.playerPos);
+  const a = c.anchors?.[k];
+  if (!a?.lit) {
+    log("你脚下没有亮着的信号锚。", "bad");
+    return false;
+  }
+  const cost = bossFightCfg().dismantleCost || 2;
+  if (c.energy < cost) {
+    log(`拆信号需要 ${cost} 行动力。`, "bad");
+    return false;
+  }
+  c.energy -= cost;
+  damageAnchorsInCells(c, [c.playerPos], 1, "dismantle");
+  if (!state.combat) return true;
+  renderCombat();
+  return true;
 }
 
 function portalMate(pos) {
@@ -510,6 +733,7 @@ function refreshVision() {
   if (enemySees) {
     if (!c.enemyHadLoS) faceReveal = true;
     c.lastSeen = { ...c.playerPos };
+    c.lastSeenAge = 0;
     c.enemyHadLoS = true;
     if (c.ambushActive) {
       c.ambushActive = false;
@@ -529,6 +753,237 @@ function log(msg, cls = "") {
   if (cls) el.className = cls;
   el.textContent = msg;
   $("log").prepend(el);
+}
+
+/* ========== 实验遥测 Lab（胜负不清，供强度分析） ========== */
+
+function deckCounts() {
+  const counts = {};
+  for (const c of allOwnedCards()) {
+    counts[c.id] = (counts[c.id] || 0) + 1;
+  }
+  return counts;
+}
+
+function loadLabStore() {
+  try {
+    const raw = localStorage.getItem(LAB_KEY);
+    if (!raw) return { version: 1, runs: [] };
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.runs)) return { version: 1, runs: [] };
+    return data;
+  } catch {
+    return { version: 1, runs: [] };
+  }
+}
+
+function saveLabStore(store) {
+  localStorage.setItem(LAB_KEY, JSON.stringify(store));
+}
+
+function labEvent(type, payload = {}) {
+  if (!state.lab) return;
+  state.lab.events.push({
+    t: Date.now(),
+    turn: state.lab.summary.turns,
+    type,
+    ...payload,
+  });
+}
+
+function beginLabCombat(room, enc, isBoss) {
+  state.lab = {
+    id: `lab_${Date.now()}_${Math.floor(Math.random() * 9999)}`,
+    startedAt: new Date().toISOString(),
+    tag: state.labTag || "normal",
+    roomId: room?.id || null,
+    roomName: room?.name || roomDef(room?.id)?.name || null,
+    player: {
+      speed: state.speed,
+      hpStart: state.hp,
+      maxHp: state.maxHp,
+      relics: [...state.relics],
+      deckCounts: deckCounts(),
+      visitLen: state.visitPath.length,
+      combatCount: state.combatCount || 0,
+    },
+    enemy: {
+      name: enc.name,
+      isBoss: !!isBoss,
+      bossId: isBoss ? state.chosenBoss : null,
+      hp: enc.hp,
+      damage: enc.damage,
+      toughness: enc.toughness,
+      staminaMax: enc.staminaMax,
+      traits: [...(enc.traits || [])],
+      archetype: enc.archetype,
+      archetypeLabel: enc.archetypeLabel,
+      tier: enc.tier,
+    },
+    summary: {
+      turns: 0,
+      damageDealt: 0,
+      damageTaken: 0,
+      damageBlocked: 0,
+      smashHits: 0,
+      trapHits: 0,
+      toughnessBroken: false,
+      toughnessBreakTurn: null,
+      combos: {},
+      enemyAttacks: 0,
+      faceReveals: 0,
+      playerHpEnd: null,
+      enemyHpEnd: null,
+      durationMs: null,
+      anchorsTotal: isBoss ? (roomDef("altar")?.arena?.anchors || []).length : 0,
+      anchorsCleared: 0,
+      anchorsClearedByBoss: 0,
+      broadcastEnd: null,
+      phaseReached: isBoss ? "开场" : null,
+      chargeCasts: 0,
+      outcomeReason: null,
+    },
+    events: [],
+    outcome: null,
+    endingTitle: null,
+  };
+  labEvent("combat_start", {
+    enemyHp: enc.hp,
+    toughness: enc.toughness,
+    playerHp: state.hp,
+    tag: state.lab.tag,
+  });
+}
+
+function labNoteCombo(name) {
+  if (!state.lab) return;
+  state.lab.summary.combos[name] = (state.lab.summary.combos[name] || 0) + 1;
+  labEvent("combo", { name });
+}
+
+function labNoteDamageDealt(amount, source) {
+  if (!state.lab || amount <= 0) return;
+  state.lab.summary.damageDealt += amount;
+  if (source === "smash") state.lab.summary.smashHits += 1;
+  if (source === "trap") state.lab.summary.trapHits += 1;
+  labEvent("damage_dealt", { amount, source, enemyHp: state.combat?.enemy?.hp });
+}
+
+function labNoteDamageTaken(raw, blocked, dealt, kind) {
+  if (!state.lab) return;
+  state.lab.summary.damageBlocked += blocked || 0;
+  state.lab.summary.damageTaken += dealt || 0;
+  state.lab.summary.enemyAttacks += 1;
+  labEvent("damage_taken", {
+    raw,
+    blocked: blocked || 0,
+    dealt: dealt || 0,
+    kind,
+    playerHp: state.hp,
+  });
+}
+
+function labNoteToughBreak(reason) {
+  if (!state.lab) return;
+  state.lab.summary.toughnessBroken = true;
+  state.lab.summary.toughnessBreakTurn = state.lab.summary.turns;
+  labEvent("toughness_break", { reason, turn: state.lab.summary.turns });
+}
+
+function labNotePlayerTurn(energy, rolls) {
+  if (!state.lab) return;
+  state.lab.summary.turns += 1;
+  labEvent("player_turn", {
+    turn: state.lab.summary.turns,
+    energy,
+    rolls: [...(rolls || [])],
+    playerHp: state.hp,
+    enemyHp: state.combat?.enemy?.hp,
+    toughness: state.combat?.toughness,
+    sees: !!state.combat?.enemySeesPlayer,
+  });
+}
+
+function finalizeLabCombat(outcome, endingTitle = null, outcomeReason = null) {
+  if (!state.lab) return null;
+  const c = state.combat;
+  state.lab.outcome = outcome;
+  state.lab.endingTitle = endingTitle;
+  state.lab.endedAt = new Date().toISOString();
+  state.lab.summary.playerHpEnd = state.hp;
+  state.lab.summary.enemyHpEnd = c?.enemy?.hp ?? null;
+  state.lab.summary.durationMs = Date.now() - Date.parse(state.lab.startedAt);
+  if (c?.isBoss) {
+    state.lab.summary.broadcastEnd = c.broadcast ?? null;
+    state.lab.summary.phaseReached = c.phaseName || state.lab.summary.phaseReached;
+    state.lab.summary.anchorsCleared = anchorsClearedCount(c);
+    state.lab.summary.outcomeReason = outcomeReason || outcome;
+  }
+  labEvent("combat_end", {
+    outcome,
+    endingTitle,
+    outcomeReason,
+    playerHp: state.hp,
+    enemyHp: c?.enemy?.hp ?? null,
+  });
+
+  const record = JSON.parse(JSON.stringify(state.lab));
+  const store = loadLabStore();
+  store.runs.unshift(record);
+  if (store.runs.length > LAB_MAX_RUNS) store.runs.length = LAB_MAX_RUNS;
+  saveLabStore(store);
+  state.lab = null;
+  renderLabPanel();
+  return record;
+}
+
+function exportLabJson() {
+  const store = loadLabStore();
+  const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `cabin-lab-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function clearLabStore() {
+  if (!confirm("清空全部实验记录？此操作不可恢复。")) return;
+  localStorage.removeItem(LAB_KEY);
+  renderLabPanel();
+}
+
+function renderLabPanel() {
+  const list = $("lab-list");
+  const meta = $("lab-meta");
+  if (!list) return;
+  const store = loadLabStore();
+  if (meta) {
+    meta.textContent = store.runs.length
+      ? `已记录 ${store.runs.length} 场（最多保留 ${LAB_MAX_RUNS}）· 键名 ${LAB_KEY}`
+      : `尚无实验记录 · 打完战斗后会自动写入 ${LAB_KEY}`;
+  }
+  list.innerHTML = "";
+  if (!store.runs.length) {
+    list.innerHTML = `<li class="lab-empty">还没有数据。用「跳到 Boss」或正常通关/失败各打一场即可。</li>`;
+    return;
+  }
+  for (const run of store.runs.slice(0, 12)) {
+    const s = run.summary || {};
+    const li = document.createElement("li");
+    const outcome =
+      run.outcome === "win" ? "胜" : run.outcome === "lose" ? "负" : run.outcome || "?";
+    const boss = run.enemy?.isBoss ? `Boss·${run.enemy?.name}` : run.enemy?.name || "战斗";
+    li.innerHTML = `<strong>[${outcome}] ${boss}</strong>
+      <span>${run.tag || "normal"} · ${s.turns || 0} 回 · 输出 ${s.damageDealt || 0} / 受伤 ${s.damageTaken || 0}
+      ${s.anchorsTotal ? ` · 锚 ${s.anchorsCleared || 0}/${s.anchorsTotal}` : ""}
+      ${s.broadcastEnd != null ? ` · 播出 ${s.broadcastEnd}` : ""}
+      ${s.phaseReached ? ` · ${s.phaseReached}` : ""}
+      ${s.outcomeReason ? ` · ${s.outcomeReason}` : ""}
+      · HP ${run.player?.hpStart}→${s.playerHpEnd} · ${run.endedAt ? run.endedAt.slice(11, 19) : ""}</span>`;
+    list.appendChild(li);
+  }
 }
 
 function saveGame() {
@@ -603,6 +1058,8 @@ function resetGame() {
   state.combatCount = 0;
   state.rewardRolls = {};
   state.midRelicDone = false;
+  state.lab = null;
+  state.labTag = "normal";
   $("log").innerHTML = "";
   discoverNeighbors(state.roomId);
   log("电视机亮起来了。山屋里的怪家伙有韧性——得用机关绊住再破韧。");
@@ -611,6 +1068,74 @@ function resetGame() {
   show("screen-game");
   saveGame();
   offerOpeningRelics();
+}
+
+/** 调试：模拟一局成长结束 + 满血，直接进 Boss 决战测强度 */
+function skipToBossTest() {
+  if (!state.data?.bosses?.bosses) {
+    throw new Error("Boss 数据未加载，请刷新页面后再试。");
+  }
+  localStorage.removeItem(SAVE_KEY);
+  localStorage.removeItem("cabin-run-v2");
+  localStorage.removeItem("cabin-run-v1");
+  const path = [
+    "foyer",
+    "living",
+    "kitchen",
+    "hall",
+    "gallery",
+    "study",
+    "attic",
+    "loft",
+    "cellar",
+    "ritual",
+  ];
+  state.roomId = "ritual";
+  state.speed = 5;
+  state.maxHp = 8;
+  state.hp = 8;
+  state.visitPath = [...path];
+  state.resolvedRooms = new Set(path);
+  state.knownRooms = new Set(Object.keys(state.data.rooms.rooms));
+  // 约一局期望牌库：起手 + 战斗/静室加牌（只保留数据里存在的 id）
+  const grown = [
+    ...state.data.cards.starter,
+    "heavy",
+    "heavy",
+    "flare",
+    "shove",
+    "snare",
+    "keepsake",
+    "plans",
+    "adrenaline",
+    "jab",
+    "guard",
+  ].filter((id) => !!cardDef(id));
+  state.deck = shuffle(grown.map((id) => makeCard(id)));
+  state.discard = [];
+  state.relics = ["omen_salt", "omen_signal", "omen_decoy", "omen_flint"].filter(
+    (id) => !!relicDef(id),
+  );
+  // 优先硬壳锈锁；没有则退回规则锁定
+  state.chosenBoss = bossDef("rust_keeper") ? "rust_keeper" : pickBossId();
+  if (!bossDef(state.chosenBoss)) {
+    state.chosenBoss = Object.keys(state.data.bosses.bosses)[0];
+  }
+  state.nodePending = false;
+  state.combat = null;
+  state.combatCount = 6;
+  state.rewardRolls = {};
+  state.midRelicDone = true;
+  state.labTag = "boss_test";
+  $("log").innerHTML = "";
+  show("screen-game");
+  showModal(null);
+  const boss = bossDef(state.chosenBoss);
+  log("【测 Boss】行程已满 · 满血 8/8 · 速度 5 · 强化牌库。", "ok");
+  log(`决战对手：${boss.name}（偏硬壳，方便测强度）。`);
+  renderAll();
+  saveGame();
+  openBoss();
 }
 
 function discoverNeighbors(roomId) {
@@ -708,7 +1233,8 @@ function renderBossBoard() {
   const board = $("boss-board");
   board.innerHTML = "";
   for (const rule of state.data.bosses.rules) {
-    const boss = state.data.bosses.bosses[rule.boss];
+    const boss = bossDef(rule.boss);
+    if (!boss) continue;
     const li = document.createElement("li");
     const alive = cand.has(rule.boss);
     const isLock = locked === rule.boss;
@@ -726,6 +1252,7 @@ function renderLists() {
   } else {
     for (const id of state.relics) {
       const r = relicDef(id);
+      if (!r) continue;
       const li = document.createElement("li");
       li.className = "has-tip";
       li.innerHTML = `<strong>${r.name}</strong><span>${r.desc}</span>`;
@@ -744,6 +1271,7 @@ function renderLists() {
   if (!ids.length) inv.innerHTML = `<li>空<span>悬停卡牌可看用途</span></li>`;
   for (const id of ids) {
     const def = cardDef(id);
+    if (!def) continue;
     const li = document.createElement("li");
     li.className = "has-tip";
     li.innerHTML = `<strong>${def.name} ×${counts[id]}</strong><span>${cardKindLabel(def.type)} · 费用 ${def.cost} · ${def.text}</span>`;
@@ -822,10 +1350,11 @@ function renderRoom() {
   const exits = $("exits");
   exits.innerHTML = "";
   for (const id of room.exits || []) {
-    if (roomDef(id).bossRoom) continue;
+    const dest = roomDef(id);
+    if (!dest || dest.bossRoom) continue;
     const btn = document.createElement("button");
     btn.className = "btn";
-    btn.textContent = state.knownRooms.has(id) ? `前往 ${roomDef(id).name}` : "前往未知房间";
+    btn.textContent = state.knownRooms.has(id) ? `前往 ${dest.name}` : "前往未知房间";
     btn.disabled = state.nodePending || runReadyForBoss();
     btn.onclick = () => moveTo(id);
     exits.appendChild(btn);
@@ -1220,8 +1749,8 @@ function canEnemyAttack(c, dist, sees) {
   const defense = playerDefenseTotal(c);
   const pk = keyOf(c.playerPos);
 
-  // slam AoE：距 ≤2
-  if (c.traits?.includes("slam") && dist <= 2 && c.enemyStamina >= cost) {
+  // slam AoE：须邻接（距 ≤1）。距 2 站桩砸地会让怪永远不迈步，体验过猛
+  if (c.traits?.includes("slam") && dist <= 1 && c.enemyStamina >= cost) {
     const cells = slamRectCells(c);
     if (cells.some((x) => keyOf(x) === pk)) {
       return { ok: true, cost, kind: "slam", cells };
@@ -1264,10 +1793,12 @@ function canEnemyAttack(c, dist, sees) {
   return { ok: false, cost, kind: null };
 }
 
-/** 每回合最多打你几下：默认单段，带「连击」词条才多段（段数始终在红字里写明） */
+/** 每回合最多打你几下：默认单段；连击词条可多段，但「重新发现你」时强制单段 */
 function maxHitsPerTurn(c) {
   if (!c.traits?.includes("flurry")) return 1;
-  return c.isBoss ? 3 : 2;
+  // Boss 不带 flurry；普通连击封顶 2——红字必须读得懂
+  if (c.isBoss) return 1;
+  return 2;
 }
 
 /** 首击花 firstCost 后，剩余体力还能追加几段 */
@@ -1321,7 +1852,9 @@ function planEnemyTurn(c) {
   const seesAfter = hasLoS(after.enemyPos, after.playerPos);
   const atk = canEnemyAttack(after, manhattan(after.enemyPos, after.playerPos), seesAfter);
   if (atk.ok) {
-    return { atk, hits: plannedHits(after, atk, after.enemyStamina), step, ctx: after };
+    // 当前没视线、走一步才撞上：预告「逼近」但最多 1 段——藏匿后被发现不连打
+    const hits = sees ? plannedHits(after, atk, after.enemyStamina) : 1;
+    return { atk, hits, step, ctx: after };
   }
   return { atk: null, hits: 0, step, ctx: c };
 }
@@ -1349,6 +1882,31 @@ function predictIntent(c) {
   const sees = hasLoS(c.enemyPos, c.playerPos);
   const goal = getEnemyGoal(c);
   const chasingDecoy = !!(decoyAlive(c) && goal && keyOf(goal) === keyOf(c.decoy.pos));
+
+  // Boss 蓄力中：虚线红格预告下回合必落
+  if (c.isBoss && c.chargePending) {
+    const ch = c.chargePending;
+    return {
+      type: "attack",
+      label: `蓄力 ${ch.damage}`,
+      detail: `下回合必落 · 范围半径 ${ch.radius} · 覆盖锚点会砸灭`,
+      zones: [
+        {
+          shape: "rect",
+          cells: ch.cells.map((p) => ({ ...p })),
+          kind: "hurt",
+          damage: ch.damage,
+          hits: 1,
+          total: ch.damage,
+          net: estimateNetTotal(c, ch.damage, 1, false),
+          attackKind: "charge",
+          pending: true,
+        },
+      ],
+      hits: 1,
+      pending: true,
+    };
+  }
 
   // 邻接傀儡：预告打碎傀儡（蓝/灰 hurt 在傀儡格）
   if (chasingDecoy && manhattan(c.enemyPos, c.decoy.pos) <= 1 && c.enemyStamina >= effectiveAttackCost(c)) {
@@ -1465,6 +2023,7 @@ function threatMapFromIntent(intent) {
           net: z.net != null ? z.net : z.damage || 0,
           shape: z.shape,
           attackKind: z.attackKind || null,
+          pending: !!z.pending,
         });
       } else if (z.kind === "move" && (!prev || prev.kind !== "hurt")) {
         map.set(k, { kind: "move", shape: z.shape });
@@ -1498,11 +2057,14 @@ function beginPlayerTurn(kept = []) {
   if (vis.faceReveal) {
     log(`突脸！${c.enemy.name}从遮挡后锁定了你。`, "bad");
     playTone("bad");
+    if (state.lab) state.lab.summary.faceReveals += 1;
+    labEvent("face_reveal", { phase: "player_turn_start" });
   }
   c.intent = predictIntent(c);
   c.hand = kept;
   const need = Math.max(0, state.data.cards.handSize - c.hand.length);
   c.hand.push(...drawHand(need));
+  labNotePlayerTurn(c.energy, c.rolls);
 }
 
 function drainToughness(amount, reason) {
@@ -1515,6 +2077,8 @@ function drainToughness(amount, reason) {
   const style = c.archetype;
   log(`破韧！【${c.archetypeLabel}】${reason || ""}`, "ok");
   playTone("ok");
+  labNoteToughBreak(reason || "");
+  if (c.isBoss) relieveBroadcast(c, bossFightCfg().breakClockRelief || 2, "破韧");
   if (style === "execute") {
     c.executeReady = true;
     log("获得处决：下次砸击/踩踏 +2。", "ok");
@@ -1562,6 +2126,7 @@ function dealToEnemy(rawDmg, source) {
   }
 
   c.enemy.hp -= dmg;
+  labNoteDamageDealt(dmg, source);
   return dmg;
 }
 
@@ -1634,6 +2199,7 @@ function resolveArena(room, isBoss) {
     portals,
     ambush: !!raw.ambush,
     spawnNote: raw.spawnNote || "",
+    anchors: [...(raw.anchors || [])],
   };
 }
 
@@ -1734,6 +2300,7 @@ function startCombat(room, isBoss) {
     playerPos: arena.playerPos,
     enemyPos: arena.enemyPos,
     lastSeen: null,
+    lastSeenAge: 0,
     enemyHadLoS: false,
     playerSeesEnemy: false,
     enemySeesPlayer: false,
@@ -1763,7 +2330,35 @@ function startCombat(room, isBoss) {
     freeDrawUsed: false,
     placeUid: null,
     intent: null,
+    // Boss 仪式
+    anchors: {},
+    broadcast: 0,
+    broadcastMax: 0,
+    phaseIndex: 0,
+    phaseName: "开场",
+    chargePending: null,
+    directive: null,
   };
+
+  if (isBoss) {
+    const cfg = bossFightCfg();
+    const hp = cfg.anchorHp || 2;
+    for (const key of arena.anchors || []) {
+      state.combat.anchors[key] = { lit: true, hp };
+    }
+    state.combat.broadcastMax = cfg.broadcastMax || 12;
+    state.combat.broadcast = 0;
+    const phase0 = (cfg.phases || [])[0];
+    if (phase0?.stam) {
+      state.combat.staminaMax = phase0.stam + (tierScale(enc.tier).stam || 0);
+      state.combat.enemyStamina = state.combat.staminaMax;
+    }
+    state.combat.phaseName = phase0?.name || "开场";
+    log(
+      `仪式开场：场上 ${Object.keys(state.combat.anchors).length} 枚信号锚。熄灭全部 或 打空血条均可通关。播出进度 ${state.combat.broadcastMax} 满则失败。`,
+      "ok",
+    );
+  }
   if (hasRelicEffect("revealAmbush") && state.combat.ambushActive) {
     state.combat.ambushActive = false;
     state.combat.ambushSpring = false;
@@ -1776,6 +2371,7 @@ function startCombat(room, isBoss) {
   if (state.combat.ambushActive && !vis.playerSees) {
     log("埋伏：它暂不主动搜索，直到有一方建立视线。");
   }
+  beginLabCombat(room, enc, isBoss);
   beginPlayerTurn([]);
   if (hasRelicEffect("combatDecoy")) {
     state.combat.hand.push(makeCard("decoy"));
@@ -1790,6 +2386,9 @@ function startCombat(room, isBoss) {
   if (enc.traits.length) {
     const labels = state.data.pressure.traitLabels || {};
     log(`机制：${enc.traits.map((t) => labels[t] || t).join(" / ")}`);
+  }
+  if (isBoss) {
+    log("Boss 仪式：熄灭全部信号锚 或 打空血条均可通关。播出进度满则失败。站在锚上可「拆信号」。", "ok");
   }
 }
 
@@ -1962,8 +2561,9 @@ function tryPlace(pos) {
   maybeFreeDraw(c, cost);
 
   if (isDecoyCard) {
-    c.decoy = { pos: { ...pos }, hp: 1, ttl: 2 };
-    log(`纸影傀儡立在 (${pos.r + 1},${pos.c + 1})——怪会优先追它。`, "ok");
+    c.decoy = { pos: { ...pos }, hp: 1 };
+    log(`纸影傀儡立在 (${pos.r + 1},${pos.c + 1})——怪会优先追它，挨打才消失。`, "ok");
+    labEvent("decoy_place", { pos: { ...pos } });
     playTone("ok");
   } else if (onEnemy && def.place?.onStep?.damage) {
     let dmg = def.place.onStep.damage + relicValue("damageBonus");
@@ -2000,9 +2600,19 @@ function tryPlace(pos) {
       log("强光炸开——它暂时丢失了你的踪迹。", "ok");
     }
     if (c.enemy.hp <= 0) {
-      winCombat();
+      winCombat("kill");
       return true;
     }
+  } else if (c.isBoss && c.anchors?.[k]?.lit) {
+    // 放置牌砸在亮锚上：拆信号（牌仍落到地上）
+    damageAnchorsInCells(c, [pos], 1, "place");
+    if (!state.combat) return true;
+    c.floor[k] = {
+      cardId: inst.id,
+      ...def.place,
+    };
+    log(`「${def.name}」砸上信号锚 (${pos.r + 1},${pos.c + 1})。`, "ok");
+    playTone("ok");
   } else {
     c.floor[k] = {
       cardId: inst.id,
@@ -2013,6 +2623,7 @@ function tryPlace(pos) {
     playTone("ok");
   }
 
+  if (!state.combat) return true;
   refreshVision();
   c.intent = predictIntent(c);
   renderCombat();
@@ -2151,6 +2762,7 @@ function applyEnemyHit(c, kind, damageOverride = null) {
   if (damageOverride == null && kind === "faceShock") incoming = Math.max(1, incoming);
   if (damageOverride == null && tileHeight(c.enemyPos) > tileHeight(c.playerPos)) incoming += 1;
   const raw = incoming;
+  let blockedTotal = 0;
 
   const cover = coverBlockAtPlayer();
   const heightCover = tileHeight(c.playerPos) > tileHeight(c.enemyPos) ? 1 : 0;
@@ -2166,10 +2778,11 @@ function applyEnemyHit(c, kind, damageOverride = null) {
     const blockUsed = Math.min(c.block || 0, remain);
     remain -= blockUsed;
     c.block = Math.max(0, (c.block || 0) - blockUsed);
+    blockedTotal = blockUsed + innUsed;
     incoming = remain;
-    if (blockUsed + innUsed > 0) {
+    if (blockedTotal > 0) {
       log(
-        `格挡/掩护抵消 ${blockUsed + innUsed}（预估 ${raw} → ${incoming}）。`,
+        `格挡/掩护抵消 ${blockedTotal}（预估 ${raw} → ${incoming}）。`,
         incoming > 0 ? "" : "ok",
       );
     }
@@ -2177,6 +2790,7 @@ function applyEnemyHit(c, kind, damageOverride = null) {
 
   if (incoming > 0) {
     state.hp -= incoming;
+    labNoteDamageTaken(raw, blockedTotal, incoming, kind);
     const verb =
       kind === "lunge"
         ? "突进"
@@ -2188,7 +2802,9 @@ function applyEnemyHit(c, kind, damageOverride = null) {
               ? "砸地"
               : kind === "beam"
                 ? "激光"
-                : "攻击";
+                : kind === "charge"
+                  ? "蓄力冲击"
+                  : "攻击";
     log(`${c.enemy.name}${verb}造成 ${incoming} 伤害。`, "bad");
     playTone("bad");
     if (c.traits?.includes("grab")) {
@@ -2204,6 +2820,7 @@ function applyEnemyHit(c, kind, damageOverride = null) {
       }
     }
   } else {
+    labNoteDamageTaken(raw, blockedTotal || raw, 0, kind);
     log("格挡与掩护挡住了攻击。", "ok");
   }
   return state.hp <= 0;
@@ -2223,6 +2840,12 @@ function executeEnemyAttack(c, atk, hitKind) {
   }
   c.enemyStamina = Math.max(0, c.enemyStamina - atk.cost);
 
+  // 砸地 AoE 可砸灭锚点（引怪自爆）
+  if (atk.kind === "slam" && atk.cells) {
+    damageAnchorsInCells(c, atk.cells, 2, "boss");
+    if (!state.combat) return "done";
+  }
+
   // 按威胁区结算：玩家须仍在 hurt cells 内（与预警同源）
   const cells = atk.cells || [{ ...c.playerPos }];
   if (!cellsContain(cells, c.playerPos)) {
@@ -2239,8 +2862,45 @@ function enemyTurn() {
   c.saltSteppedThisTurn = false;
   c.snareForcedThisTurn = false;
   c.hitsUsed = 0;
-  // 段数按回合开始时的预告锁定，玩家看到的红字就是实际会挨的刀数
-  c.hitBudget = Math.max(1, predictIntent(c)?.hits || 1);
+
+  if (c.isBoss) drawBossDirective(c);
+
+  // 蓄力必落：上一回合蓄的大招本回合结算，然后收工（大招即本回合主事件）
+  if (c.isBoss && c.chargePending) {
+    const landed = resolveBossCharge(c);
+    if (landed === "lose") {
+      loseCombat("hp");
+      return;
+    }
+    if (landed === "done" || !state.combat) return;
+    if (tickBroadcast(c) || !state.combat) return;
+    const endVis = refreshVision();
+    if (!endVis.enemySees) {
+      c.lastSeenAge = (c.lastSeenAge || 0) + 1;
+      if (c.lastSeen && c.lastSeenAge >= 2) {
+        c.lastSeen = null;
+        log(`${c.enemy.name}在遮挡后失去了你的踪迹。`, "ok");
+      }
+    } else {
+      c.lastSeenAge = 0;
+    }
+    return;
+  }
+  if (c.isBoss && shouldBossCharge(c)) {
+    beginBossCharge(c);
+    // 蓄力回合：不动不出手，红格已预告
+    if (tickBroadcast(c) || !state.combat) return;
+    return;
+  }
+
+  // 回合开始时若没有视线：本回合最多打 1 下（突脸/重新发现），不给连击清算
+  const sawAtStart = hasLoS(c.enemyPos, c.playerPos);
+  const planned = predictIntent(c);
+  c.hitBudget = Math.max(1, planned?.hits || 1);
+  if (!sawAtStart) c.hitBudget = 1;
+  // 导播特写：必须先移动才能出手
+  const needMoveFirst = c.isBoss && c.directive?.id === "closeup";
+
   let guard = 16;
   while (c.enemyStamina > 0 && guard-- > 0) {
     const vis = refreshVision();
@@ -2262,14 +2922,16 @@ function enemyTurn() {
       c.ambushSpring = false;
       freeStepToward(c, goal || c.playerPos, "埋伏扑出");
       if (c.enemy.hp <= 0) {
-        winCombat();
+        winCombat("kill");
         return;
       }
     }
 
+    const canAttackNow = !needMoveFirst || c.enemyMovesThisTurn > 0;
+
     const selfExposed = c.playerExposed && vis.enemySees && !vis.faceReveal;
     c.playerExposed = false;
-    if (!c.chasingDecoy && c.hitsUsed < c.hitBudget && (vis.faceReveal || selfExposed)) {
+    if (canAttackNow && !c.chasingDecoy && c.hitsUsed < c.hitBudget && (vis.faceReveal || selfExposed)) {
       if (selfExposed) log(`${c.enemy.name}早就盯着你暴露的位置——惊吓扑面而来！`, "bad");
       else log(`突脸！${c.enemy.name}拐过遮挡看见了你。`, "bad");
       playTone("face");
@@ -2277,7 +2939,7 @@ function enemyTurn() {
       if (c.traits?.includes("cornerCut") && vis.enemySees) {
         freeStepToward(c, c.playerPos, "抄近路");
         if (c.enemy.hp <= 0) {
-          winCombat();
+          winCombat("kill");
           return;
         }
       }
@@ -2291,20 +2953,26 @@ function enemyTurn() {
           const result = executeEnemyAttack(c, atk, hitKind);
           c.hitsUsed += 1;
           if (result === "win") {
-            winCombat();
+            winCombat("kill");
             return;
           }
+          if (result === "done" || !state.combat) return;
           if (result === "lose") {
-            loseCombat();
+            loseCombat("hp");
             return;
           }
-          continue;
+          break;
         }
-        // 够不着时的惊吓：1 伤，同样吃格挡
+        // 够不着时的惊吓：普通怪 1 伤；Boss 只喊声
+        if (c.isBoss) {
+          log(`${c.enemy.name}被你吓了一跳，但这一下够不着。`, "ok");
+          c.hitsUsed += 1;
+          break;
+        }
         const died = applyEnemyHit(c, "faceShock", 1);
         c.hitsUsed += 1;
         if (died) {
-          loseCombat();
+          loseCombat("hp");
           return;
         }
         break;
@@ -2338,28 +3006,32 @@ function enemyTurn() {
           }
           triggerFloor(c.enemyPos, "enemy");
           if (c.enemy.hp <= 0) {
-            winCombat();
+            winCombat("kill");
             return;
           }
+          if (!state.combat) return;
           continue;
         }
       }
     }
 
-    if (!c.chasingDecoy && c.hitsUsed < c.hitBudget) {
+    if (canAttackNow && !c.chasingDecoy && c.hitsUsed < c.hitBudget) {
       const dist = manhattan(c.enemyPos, c.playerPos);
       const atk = canEnemyAttack(c, dist, vis.enemySees);
       if (atk.ok) {
         const result = executeEnemyAttack(c, atk, atk.kind);
         c.hitsUsed += 1;
         if (result === "win") {
-          winCombat();
+          winCombat("kill");
           return;
         }
+        if (result === "done" || !state.combat) return;
         if (result === "lose") {
-          loseCombat();
+          loseCombat("hp");
           return;
         }
+        // 已经贴脸打过：本回合收工，别把剩余体力花在原地再砸
+        if (c.enemyMovesThisTurn === 0) break;
         continue;
       }
     }
@@ -2372,7 +3044,6 @@ function enemyTurn() {
       log(`${c.enemy.name}还不知道你的位置。`);
       break;
     }
-    // 预告的刀数已打完：不再追步，收工（避免超出红字的额外伤害）
     if (c.hitsUsed >= c.hitBudget) break;
     const step = stepEnemyToward(goal);
     if (!step || step.cost > c.enemyStamina) {
@@ -2383,7 +3054,7 @@ function enemyTurn() {
     c.enemyMovesThisTurn += 1;
     c.enemyPos = { ...step.p };
     const h = tileHeight(c.enemyPos);
-    const verb = c.chasingDecoy ? "追影" : vis.enemySees ? "追击" : "搜索";
+    const verb = c.chasingDecoy ? "追影" : c.directive?.id === "spotlight" ? "奔锚" : vis.enemySees ? "追击" : "搜索";
     log(
       `${c.enemy.name}${verb}至 (${step.p.r + 1},${step.p.c + 1})${h ? `高${h}` : ""}（耗${step.cost}）。`,
     );
@@ -2393,12 +3064,61 @@ function enemyTurn() {
     }
     triggerFloor(c.enemyPos, "enemy");
     if (c.enemy.hp <= 0) {
-      winCombat();
+      winCombat("kill");
       return;
     }
+    if (!state.combat) return;
   }
-  tickDecoyTtl(c);
-  refreshVision();
+
+  if (c.isBoss) {
+    if (tickBroadcast(c) || !state.combat) return;
+  }
+
+  const endVis = refreshVision();
+  // 丢视线后气味会散：连续 2 个敌回合找不到，就忘掉 lastSeen
+  if (!endVis.enemySees) {
+    c.lastSeenAge = (c.lastSeenAge || 0) + 1;
+    if (c.lastSeen && c.lastSeenAge >= 2) {
+      c.lastSeen = null;
+      log(`${c.enemy.name}在遮挡后失去了你的踪迹。`, "ok");
+    }
+  } else {
+    c.lastSeenAge = 0;
+  }
+}
+
+function renderBossRitualHud(c) {
+  const wrap = $("boss-ritual-hud");
+  if (!wrap) return;
+  if (!c.isBoss) {
+    wrap.classList.add("hidden");
+    return;
+  }
+  wrap.classList.remove("hidden");
+  const phase = $("boss-phase-chip");
+  if (phase) phase.textContent = c.phaseName || "开场";
+  const dir = $("program-directive");
+  if (dir) {
+    dir.textContent = c.directive ? `指令·${c.directive.label}` : "等待导播…";
+    dir.title = c.directive?.desc || "";
+  }
+  const bar = $("broadcast-fill");
+  const label = $("broadcast-label");
+  const max = Math.max(1, c.broadcastMax || 12);
+  const val = c.broadcast || 0;
+  if (bar) {
+    bar.style.width = `${Math.round((val / max) * 100)}%`;
+    bar.classList.toggle("hot", val >= max - 2);
+  }
+  if (label) label.textContent = `播出 ${val}/${max}`;
+  const btn = $("btn-dismantle");
+  if (btn) {
+    const onAnchor = !!c.anchors?.[keyOf(c.playerPos)]?.lit;
+    const cost = bossFightCfg().dismantleCost || 2;
+    btn.classList.toggle("hidden", !onAnchor);
+    btn.disabled = !onAnchor || c.energy < cost;
+    btn.textContent = `拆信号（${cost}）`;
+  }
 }
 
 function toggleHold(uid) {
@@ -2420,15 +3140,19 @@ function renderCombat() {
   $("combat-title").textContent = c.isBoss
     ? `${c.enemy.name}`
     : `${c.enemy.name}`;
-  $("card-check-label").textContent = `${c.roomName} · ${c.archetypeLabel} · 难度档 ${c.tier}`;
+  $("card-check-label").textContent = c.isBoss
+    ? `${c.roomName} · ${c.phaseName || "开场"} · 锚 ${anchorsClearedCount(c)}/${Object.keys(c.anchors || {}).length}`
+    : `${c.roomName} · ${c.archetypeLabel} · 难度档 ${c.tier}`;
   $("card-energy").textContent = String(c.energy);
   $("enemy-stamina").textContent = `${c.enemyStamina}/${c.staminaMax}`;
   $("enemy-intent").textContent = c.intent?.label || "观望";
-  $("enemy-intent").className = `intent-banner intent-${c.intent?.type || "chase"}`;
+  $("enemy-intent").className = `intent-banner intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
   $("enemy-intent").title = c.intent?.detail || c.intent?.label || "";
   $("enemy-hp").textContent = c.playerSeesEnemy ? String(c.enemy.hp) : "??";
   $("player-block").textContent = String(c.block + coverBlockAtPlayer());
   $("player-hp").textContent = `${state.hp}/${state.maxHp}`;
+  renderTraitChips(c);
+  renderBossRitualHud(c);
 
   const toughEl = $("kite-meter");
   const fill = $("tough-fill");
@@ -2473,8 +3197,9 @@ function renderCombat() {
     if (cardHint) cardHint.textContent = "放置模式";
     $("btn-cancel-place").classList.remove("hidden");
   } else {
-    hint.textContent =
-      "红格数字=它这回合会打你多少（2×2 即两段共 4，→后为格挡后实伤）· 蓝=它下一步 · 绿=可走";
+    hint.textContent = c.isBoss
+      ? "烛=亮锚 · 灰=熄灭 · 虚线红=蓄力预告 · 站锚上可「拆信号」· 引砸可灭锚"
+      : "红格数字=它这回合会打你多少（2×2 即两段共 4，→后为格挡后实伤）· 蓝=它下一步 · 绿=可走";
     if (cardHint) cardHint.textContent = c.archetypeDesc;
     $("btn-cancel-place").classList.add("hidden");
   }
@@ -2570,9 +3295,13 @@ function renderBattleGrid() {
       const isDecoy = decoyAlive(c) && keyOf(c.decoy.pos) === k;
       if (isDecoy) cell.classList.add("has-decoy");
       if (c.lastSeen && keyOf(c.lastSeen) === k && !sees) cell.classList.add("last-seen");
+      const anchor = c.anchors?.[k];
+      if (anchor?.lit) cell.classList.add("anchor-lit");
+      else if (anchor && !anchor.lit) cell.classList.add("anchor-dead");
 
       if (threat?.kind === "hurt") {
         cell.classList.add("threat-hurt");
+        if (threat.pending) cell.classList.add("pending-hurt");
         if (isP) cell.classList.add("threat-on-you");
       } else if (threat?.kind === "move") {
         cell.classList.add("threat-move");
@@ -2596,6 +3325,8 @@ function renderBattleGrid() {
 
       const bits = [];
       if (c.portals?.[k]) bits.push("门");
+      if (anchor?.lit) bits.push(`烛${anchor.hp}`);
+      else if (anchor && !anchor.lit) bits.push("灰");
       if (item) bits.push(item.glyph || "物");
       if (isDecoy) bits.push("影");
       if (h) bits.push(`↑${h}`);
@@ -2626,14 +3357,16 @@ function renderBattleGrid() {
         wall ? "墙" : "空地",
         h ? `高度 ${h}` : null,
         c.portals?.[k] ? "传送门" : null,
+        anchor?.lit ? `信号锚（亮 · 耐久 ${anchor.hp} · 站上拆 / 砸牌 / 引怪砸）` : null,
+        anchor && !anchor.lit ? "信号锚（已熄）" : null,
         item ? cardDef(item.cardId)?.name : null,
-        isDecoy ? "纸影傀儡（嘲讽）" : null,
+        isDecoy ? "纸影傀儡（嘲讽 · 挨打才消失）" : null,
         isP ? "你在这里" : null,
         isE && sees ? c.enemy.name : null,
         isE && !sees ? "有动静，但看不见" : null,
         threat?.kind === "hurt"
           ? threat.damage
-            ? `威胁 · ${threat.hits > 1 ? `${threat.damage}×${threat.hits} = ${threat.total}` : `${threat.damage}`} 伤${
+            ? `${threat.pending ? "蓄力预告" : "威胁"} · ${threat.hits > 1 ? `${threat.damage}×${threat.hits} = ${threat.total}` : `${threat.damage}`} 伤${
                 threat.net !== threat.total ? `（格挡后 ${threat.net}）` : ""
               }`
             : "威胁 · 撕碎傀儡"
@@ -2699,19 +3432,30 @@ function endTurn() {
   renderCombat();
 }
 
-function winCombat() {
+function winCombat(reason = "kill") {
   const c = state.combat;
   const isBoss = c.isBoss;
+  if (isBoss) {
+    const boss = state.data.bosses.bosses[state.chosenBoss];
+    const ending = state.data.bosses.endings[boss.endingId];
+    const ritual = reason === "ritual";
+    const title = ending?.title || "通关";
+    const body = ritual
+      ? `${boss.ritualVictory || boss.victory}\n${ending?.text || ""}`
+      : `${boss.victory}\n${ending?.text || ""}`;
+    finalizeLabCombat("win", title, ritual ? "ritual" : "kill");
+    for (const left of c.hand || []) retireCard(left);
+    state.discard = purgeTempCards(state.discard);
+    state.deck = purgeTempCards(state.deck);
+    state.combat = null;
+    endGame(true, ritual ? `${title} · 掐断仪式` : title, body);
+    return;
+  }
+  finalizeLabCombat("win", null, "kill");
   for (const left of c.hand || []) retireCard(left);
   state.discard = purgeTempCards(state.discard);
   state.deck = purgeTempCards(state.deck);
   state.combat = null;
-  if (isBoss) {
-    const boss = state.data.bosses.bosses[state.chosenBoss];
-    const ending = state.data.bosses.endings[boss.endingId];
-    endGame(true, ending.title, `${boss.victory}\n${ending.text}`);
-    return;
-  }
   const pool = [...state.data.cards.rewardPool];
   shuffle(pool);
   offerCardReward({
@@ -2750,20 +3494,28 @@ function stealCard({ preferHand = false, allowAny = false } = {}) {
   return target;
 }
 
-function loseCombat() {
+function loseCombat(reason = "hp") {
   const c = state.combat;
   const isBoss = c?.isBoss;
   const roomName = c?.roomName || "山屋";
+  const fail = state.data.bosses.endings.end_fail;
+  const broadcast = reason === "broadcast";
+  finalizeLabCombat("lose", isBoss ? fail?.title || "失败" : "节目中断", broadcast ? "broadcast" : "hp");
   if (c) {
     for (const left of c.hand || []) retireCard(left);
   }
   state.discard = purgeTempCards(state.discard);
   state.deck = purgeTempCards(state.deck);
   state.combat = null;
-  const fail = state.data.bosses.endings.end_fail;
   if (isBoss) {
     const boss = state.data.bosses.bosses[state.chosenBoss];
-    endGame(false, fail.title, boss?.defeat ? `${boss.defeat}\n${fail.text}` : fail.text);
+    const title = broadcast ? "结局·被播映" : fail.title;
+    const text = broadcast
+      ? `播出进度满格。频道锁定了你的影像。\n${fail.text}`
+      : boss?.defeat
+        ? `${boss.defeat}\n${fail.text}`
+        : fail.text;
+    endGame(false, title, text);
     return;
   }
   // 普通战斗失败也直接终局：逃出后缺牌难翻盘，不如重开
@@ -2774,16 +3526,58 @@ function loseCombat() {
   );
 }
 
+function traitLabel(id) {
+  return state.data.pressure?.traitLabels?.[id] || id;
+}
+
+function fillBossKit(preview) {
+  const box = $("boss-kit");
+  if (!box) return;
+  const labels = state.data.pressure?.traitLabels || {};
+  const arch = preview?.archetypeLabel || "";
+  const archDesc = preview?.archetypeDesc || "";
+  const traits = preview?.traits || [];
+  const chips = traits.map((t) => `<span class="trait-chip">${labels[t] || t}</span>`).join("");
+  box.innerHTML = `
+    <p class="boss-kit-lead"><strong>${arch}</strong> · ${archDesc}</p>
+    <div class="trait-chips">${chips}</div>
+    <p class="boss-kit-tip">双轨通关：熄灭全部信号锚，或打空血条。播出进度满则失败。引它砸地可砸灭锚点；蓄力回合红格提前亮出。</p>
+  `;
+}
+
+function renderTraitChips(c) {
+  const box = $("enemy-traits");
+  if (!box) return;
+  const labels = state.data.pressure?.traitLabels || {};
+  const bits = [];
+  if (c.archetypeLabel) {
+    bits.push(`<span class="trait-chip trait-arch" title="${c.archetypeDesc || ""}">${c.archetypeLabel}</span>`);
+  }
+  for (const t of c.traits || []) {
+    bits.push(`<span class="trait-chip" title="${labels[t] || t}">${labels[t] || t}</span>`);
+  }
+  box.innerHTML = bits.join("") || "";
+}
+
 function openBoss() {
   if (!runReadyForBoss()) return;
   state.chosenBoss = state.chosenBoss || pickBossId();
-  const boss = state.data.bosses.bosses[state.chosenBoss];
+  let boss = bossDef(state.chosenBoss);
+  if (!boss) {
+    state.chosenBoss = Object.keys(state.data.bosses.bosses)[0];
+    boss = bossDef(state.chosenBoss);
+  }
+  if (!boss) {
+    alert("Boss 数据缺失，请刷新页面。");
+    return;
+  }
   // 用 buildEncounter 预览含压力加成的实战数值，而非 bosses.json 原始值
   const preview = buildEncounter(null, true);
   showModal("screen-boss");
   $("boss-name").textContent = boss.name;
   $("boss-phase-text").textContent = boss.intro;
-  $("boss-hp").textContent = `生命 ${preview.hp} · 伤害 ${preview.damage} · 韧性 ${preview.toughness}`;
+  $("boss-hp").textContent = `生命 ${preview.hp} · 伤害 ${preview.damage} · 韧性 ${preview.toughness} · 仪式双轨（熄锚/击杀）`;
+  fillBossKit(preview);
   const actions = $("boss-actions");
   actions.innerHTML = "";
   addChoice(actions, "进入场地决战", "primary", () => {
@@ -2796,12 +3590,37 @@ function openBoss() {
 }
 
 function endGame(won, title, text) {
+  // 若战斗未正常 finalize（异常路径），兜底记一笔
+  if (state.lab) finalizeLabCombat(won ? "win" : "lose", title);
   showModal(null);
   show("screen-end");
+  const result = $("end-result");
+  const art = $("end-art");
+  if (result) {
+    result.textContent = won ? "通关 · 你赢了" : "失败 · 节目中断";
+    result.className = `end-result ${won ? "won" : "lost"}`;
+  }
+  if (art) {
+    art.src = won ? "assets/ui/SP_EndGame.png" : "assets/ui/SP_Gameover.png";
+    art.alt = won ? "通关" : "失败";
+  }
   $("end-title").textContent = title;
   $("end-log").textContent = text;
+  const labNote = $("end-lab-note");
+  if (labNote) {
+    const store = loadLabStore();
+    const last = store.runs[0];
+    if (last) {
+      const s = last.summary || {};
+      labNote.textContent = `本场已写入实验记录：${last.outcome === "win" ? "胜" : "负"} · ${s.turns || 0} 回合 · 输出 ${s.damageDealt || 0} / 受伤 ${s.damageTaken || 0}（标题页可导出 JSON）`;
+    } else {
+      labNote.textContent = "";
+    }
+  }
   playTone(won ? "ok" : "bad");
   localStorage.removeItem(SAVE_KEY);
+  state.labTag = "normal";
+  renderLabPanel();
 }
 
 function renderAll() {
@@ -2824,6 +3643,19 @@ function bindUi() {
     } catch (err) {
       console.error(err);
       alert(`无法开始：${err.message}`);
+    }
+  };
+  $("btn-boss-test").onclick = () => {
+    if (!state.data) {
+      alert("数据还在加载，请稍等一秒再点。");
+      return;
+    }
+    try {
+      startBgm();
+      skipToBossTest();
+    } catch (err) {
+      console.error(err);
+      alert(`无法跳转 Boss：${err.message}`);
     }
   };
   $("btn-restart").onclick = () => {
@@ -2856,6 +3688,14 @@ function bindUi() {
   };
   $("btn-end-turn").onclick = () => endTurn();
   $("btn-cancel-place").onclick = () => cancelPlace();
+  const dismantleBtn = $("btn-dismantle");
+  if (dismantleBtn) dismantleBtn.onclick = () => tryDismantleAnchor();
+  const exportBtn = $("btn-lab-export");
+  if (exportBtn) exportBtn.onclick = () => exportLabJson();
+  const exportEnd = $("btn-lab-export-end");
+  if (exportEnd) exportEnd.onclick = () => exportLabJson();
+  const clearBtn = $("btn-lab-clear");
+  if (clearBtn) clearBtn.onclick = () => clearLabStore();
   $("btn-mute").onclick = () => {
     state.muted = !state.muted;
     setMuted(state.muted);
@@ -2866,6 +3706,7 @@ function bindUi() {
 
 async function main() {
   bindUi();
+  renderLabPanel();
   const status = $("boot-status");
   try {
     await loadData();
