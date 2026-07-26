@@ -3,40 +3,51 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>山屋频道 · 今日特别节目</title>
+  <title>Dream Channel · 山屋频道</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body class="landscape">
   <div class="app">
     <div class="bg-grid" aria-hidden="true"></div>
-    <div class="bg-sun" aria-hidden="true"></div>
+    <div class="bg-blobs" aria-hidden="true"></div>
 
     <header class="app-header">
       <div class="brand">
-        <p class="brand-mark">午后儿童时段 · 198X</p>
-        <h1 class="brand-title">山屋频道</h1>
+        <img class="brand-avatar" src="assets/ui/chars/SP_Lili_Profile.png" alt="" width="56" height="56" />
+        <div class="brand-text">
+          <p class="brand-mark">Dream Channel</p>
+          <h1 class="brand-title">山屋频道</h1>
+        </div>
       </div>
       <div id="stats" class="stat-strip" aria-label="状态"></div>
-      <button id="btn-mute" class="btn btn-ghost" type="button">声音：开</button>
+      <button id="btn-mute" class="btn btn-ticket btn-ghost" type="button">声音：开</button>
     </header>
 
     <main class="app-main">
       <section id="screen-title" class="panel panel-title active">
-        <div class="title-row">
+        <div class="title-stage">
+          <div class="title-hero-art">
+            <div class="mouth-frame mouth-frame-lg">
+              <div class="mouth-teeth mouth-teeth-top" aria-hidden="true"></div>
+              <img class="title-portrait" src="assets/ui/chars/SP_Lili_Idle_01.png" alt="主角立绘" />
+              <div class="mouth-teeth mouth-teeth-bot" aria-hidden="true"></div>
+            </div>
+            <div class="title-antenna" aria-hidden="true"></div>
+          </div>
           <div class="title-copy">
-            <p class="signal">今日节目开始啦</p>
+            <p class="signal">信号锁定 · CH-198X</p>
             <h2 class="title-hero">山屋奇妙夜</h2>
-            <p class="lede">小朋友们好——今天我们要走进一栋奇怪的山屋。点按钮打开电视；悬停道具卡就能看见它的用处。走路只能上、下、左、右哦。</p>
+            <p class="lede">拧开频道旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪耗体力——别站桩硬刚。</p>
             <div class="title-actions">
-              <button id="btn-start" class="btn btn-primary btn-start">打开电视机</button>
-              <button id="btn-continue" class="btn btn-secondary hidden">接着看上集</button>
+              <button id="btn-start" class="btn btn-primary btn-ticket btn-start">打开电视机</button>
+              <button id="btn-continue" class="btn btn-secondary btn-ticket hidden">接着看上集</button>
             </div>
             <p id="boot-status" class="boot-status">电视机预热中…</p>
           </div>
-          <ol class="rules">
-            <li><span>1</span>用跑动和机关削弱怪物“硬壳”</li>
-            <li><span>2</span>不同怪物，打破硬壳后奖励不同</li>
-            <li><span>3</span>鼠标停在卡牌上，听听旁白怎么说</li>
+          <ol class="rules folder-panel">
+            <li><img src="assets/ui/cards/SP_Card_IconT_Trap.png" alt="" /><span>跑动 + 机关，削掉怪物硬壳</span></li>
+            <li><img src="assets/ui/cards/SP_Card_IconT_Omen.png" alt="" /><span>不同怪物，破壳后奖励不同</span></li>
+            <li><img src="assets/ui/cards/SP_Card_IconT_Thing.png" alt="" /><span>悬停卡牌，听旁白怎么说</span></li>
           </ol>
         </div>
       </section>
@@ -57,31 +68,40 @@
               <span><i class="dot dot-safe"></i>安静屋</span>
               <span><i class="dot dot-fog"></i>还没看清</span>
             </div>
-            <div id="house-map" class="house-map" aria-label="山屋地图"></div>
+            <div class="map-shell">
+              <div class="map-antenna" aria-hidden="true"></div>
+              <div class="map-teeth map-teeth-top" aria-hidden="true"></div>
+              <div id="house-map" class="house-map" aria-label="山屋地图"></div>
+              <div class="map-teeth map-teeth-bot" aria-hidden="true"></div>
+            </div>
             <div class="map-foot">
               <p id="room-desc" class="room-desc"></p>
               <div class="action-bar">
                 <div id="exits" class="exits"></div>
                 <div class="room-actions">
-                  <button id="btn-resolve" class="btn btn-primary">走进这一间</button>
-                  <button id="btn-boss" class="btn btn-danger hidden">去祭坛大结局</button>
+                  <button id="btn-resolve" class="btn btn-primary btn-ticket">走进这一间</button>
+                  <button id="btn-boss" class="btn btn-danger btn-ticket hidden">去祭坛大结局</button>
                 </div>
               </div>
             </div>
           </section>
 
           <aside class="pane-side">
-            <section class="side-card side-log">
-              <h3>旁白</h3>
+            <section class="side-card side-log folder-panel">
+              <div class="folder-tabs" aria-hidden="true">
+                <span class="tab tab-pink"></span>
+                <span class="tab tab-teal"></span>
+              </div>
+              <h3><img class="h3-icon" src="assets/ui/SP_Log.png" alt="" />旁白</h3>
               <div id="log" class="log" aria-live="polite"></div>
             </section>
-            <section class="side-card">
-              <h3>猜猜是谁</h3>
+            <section class="side-card folder-panel">
+              <h3><img class="h3-icon" src="assets/ui/OmenIcon.png" alt="" />猜猜是谁</h3>
               <p id="flags-note" class="side-note">前段 — · 后段 —</p>
               <ul id="boss-board" class="boss-board"></ul>
             </section>
-            <section class="side-card side-card-compact">
-              <h3>宝贝箱</h3>
+            <section class="side-card side-card-compact folder-panel">
+              <h3><img class="h3-icon" src="assets/ui/ItemIcon.png" alt="" />宝贝箱</h3>
               <p id="deck-note" class="side-note"></p>
               <ul id="relics" class="inventory"></ul>
               <ul id="inventory" class="inventory"></ul>
@@ -98,7 +118,7 @@
           <p id="event-text"></p>
           <div id="event-choices" class="choices"></div>
           <div id="reward-cards" class="reward-row"></div>
-          <button id="btn-close-event" class="btn btn-secondary hidden">回到散步</button>
+          <button id="btn-close-event" class="btn btn-secondary btn-ticket hidden">回到散步</button>
         </div>
       </section>
 
@@ -113,20 +133,26 @@
               <div id="enemy-intent" class="intent-banner">它想做 —</div>
             </header>
             <div class="battle-hud">
-              <div class="hud-card hud-you">
-                <p class="hud-label">小主角</p>
-                <div class="hud-row"><span>勇气</span><strong id="player-hp">—</strong></div>
-                <div class="hud-row"><span>力气</span><strong id="card-energy">0</strong></div>
-                <div class="hud-row"><span>护盾</span><strong id="player-block">0</strong></div>
-                <div id="energy-dice" class="energy-dice"></div>
+              <div class="hud-card hud-you hud-banner">
+                <img class="hud-portrait" src="assets/ui/chars/SP_Lili_Profile.png" alt="" />
+                <div class="hud-body">
+                  <p class="hud-label">小主角</p>
+                  <div class="hud-row"><span>勇气</span><strong id="player-hp">—</strong></div>
+                  <div class="hud-row"><span>力气</span><strong id="card-energy">0</strong></div>
+                  <div class="hud-row"><span>护盾</span><strong id="player-block">0</strong></div>
+                  <div id="energy-dice" class="energy-dice"></div>
+                </div>
               </div>
-              <div class="hud-card hud-foe">
-                <p class="hud-label">怪家伙</p>
-                <div class="hud-row"><span>生命</span><strong id="enemy-hp">—</strong></div>
-                <div class="hud-row"><span>力气</span><strong id="enemy-stamina">—</strong></div>
-                <div class="tough-block">
-                  <div class="hud-row"><span>硬壳</span><strong id="kite-meter">—</strong></div>
-                  <div class="bar"><div id="tough-fill" class="bar-fill"></div></div>
+              <div class="hud-card hud-foe hud-banner">
+                <img class="hud-portrait foe" src="assets/ui/chars/SP_Yellow_idle_1.png" alt="" />
+                <div class="hud-body">
+                  <p class="hud-label">怪家伙</p>
+                  <div class="hud-row"><span>生命</span><strong id="enemy-hp">—</strong></div>
+                  <div class="hud-row"><span>力气</span><strong id="enemy-stamina">—</strong></div>
+                  <div class="tough-block">
+                    <div class="hud-row"><span>硬壳</span><strong id="kite-meter">—</strong></div>
+                    <div class="bar"><div id="tough-fill" class="bar-fill"></div></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -147,8 +173,8 @@
             <p class="hand-label">道具卡 <span id="card-hint" class="hint-inline">悬停听旁白</span></p>
             <div id="hand-cards" class="hand-col"></div>
             <footer class="battle-foot">
-              <button id="btn-cancel-place" class="btn btn-ghost hidden">取消放置</button>
-              <button id="btn-end-turn" class="btn btn-primary">回合结束</button>
+              <button id="btn-cancel-place" class="btn btn-ghost btn-ticket hidden">取消放置</button>
+              <button id="btn-end-turn" class="btn btn-primary btn-ticket">回合结束</button>
             </footer>
           </aside>
         </div>
@@ -158,7 +184,7 @@
         <div class="modal-card modal-narrow">
           <p class="pane-kicker" id="dice-label">结果揭晓</p>
           <p id="dice-result" class="dice-result"></p>
-          <button id="btn-dice-continue" class="btn btn-primary">下一幕</button>
+          <button id="btn-dice-continue" class="btn btn-primary btn-ticket">下一幕</button>
         </div>
       </section>
 
@@ -173,9 +199,12 @@
       </section>
 
       <section id="screen-end" class="panel panel-title">
-        <h2 id="end-title" class="title-hero"></h2>
-        <p id="end-log" class="lede"></p>
-        <button id="btn-restart" class="btn btn-primary">再看一集</button>
+        <div class="end-wrap">
+          <img class="end-art" src="assets/ui/SP_Gameover.png" alt="" />
+          <h2 id="end-title" class="title-hero"></h2>
+          <p id="end-log" class="lede"></p>
+          <button id="btn-restart" class="btn btn-primary btn-ticket">再看一集</button>
+        </div>
       </section>
     </main>
 

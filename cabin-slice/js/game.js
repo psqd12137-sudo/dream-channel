@@ -65,6 +65,23 @@ function cardKindLabel(type) {
   return type || "卡牌";
 }
 
+function cardFrameClass(type) {
+  if (type === "medicine") return "frame-red";
+  if (type === "skill") return "frame-blue";
+  return "frame-yellow";
+}
+
+function cardKindIcon(type) {
+  if (type === "place") return "assets/ui/cards/SP_Card_IconT_Trap.png";
+  if (type === "medicine") return "assets/ui/cards/SP_Card_IconS_Life.png";
+  if (type === "skill") return "assets/ui/cards/SP_Card_IconT_Amulet.png";
+  return "assets/ui/cards/SP_Card_IconT_Thing.png";
+}
+
+function cardKindHtml(type) {
+  return `<span class="card-kind"><img src="${cardKindIcon(type)}" alt="" />${cardKindLabel(type)}</span>`;
+}
+
 function cardUsageHint(def) {
   if (def.type === "place") {
     return "用法：战斗中点选后放到邻格；有视线时可砸在敌人脚下立刻结算伤害。";
@@ -643,9 +660,9 @@ function startNonCombat(room) {
       const def = relicDef(id);
       const row = $("reward-cards");
       const card = document.createElement("div");
-      card.className = "reward-card";
+      card.className = "reward-card frame-blue";
       card.tabIndex = 0;
-      card.innerHTML = `<strong>${def.name}</strong><span class="card-kind">预兆</span><p class="blurb">${def.desc}</p>`;
+      card.innerHTML = `<strong>${def.name}</strong><span class="card-kind"><img src="assets/ui/cards/SP_Card_IconT_Omen.png" alt="" />预兆</span><p class="blurb">${def.desc}</p>`;
       bindHoverTip(card, relicTooltipHtml(def));
       row.appendChild(card);
       addChoice(box, "收下预兆", "primary", () => {
@@ -723,16 +740,16 @@ function offerCardReward({ title, lead, offers, onDone }) {
   for (const id of offers) {
     const def = cardDef(id);
     const card = document.createElement("div");
-    card.className = "reward-card";
+    card.className = `reward-card ${cardFrameClass(def.type)}`;
     card.tabIndex = 0;
     card.innerHTML = `<div class="cost">${def.cost}</div>
       <strong>${def.name}</strong>
-      <span class="card-kind">${cardKindLabel(def.type)}</span>
+      ${cardKindHtml(def.type)}
       <p class="blurb">${def.text}</p>`;
     bindHoverTip(card, cardTooltipHtml(def));
     const take = document.createElement("button");
     take.type = "button";
-    take.className = "btn btn-primary";
+    take.className = "btn btn-primary btn-ticket";
     take.textContent = "收下";
     take.onclick = () => {
       hideCardTooltip();
@@ -1430,9 +1447,8 @@ function renderCombat() {
       (c.heldUid === inst.uid ? " holding" : "");
 
     const btn = document.createElement("button");
-    btn.className = "card";
-    const kind = cardKindLabel(def.type);
-    btn.innerHTML = `<div class="cost">${cost}</div><strong>${def.name}</strong><span class="card-kind">${kind}</span><span>${def.text}</span>`;
+    btn.className = `card ${cardFrameClass(def.type)}`;
+    btn.innerHTML = `<div class="cost">${cost}</div><strong>${def.name}</strong>${cardKindHtml(def.type)}<span>${def.text}</span>`;
     btn.disabled = cost > c.energy;
     btn.onclick = () => selectCard(inst.uid);
     bindHoverTip(btn, cardTooltipHtml(def));
