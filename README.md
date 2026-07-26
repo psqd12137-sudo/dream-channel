@@ -4,6 +4,10 @@
 
 ## 快速开始
 
+换电脑请直接看：**[另一台电脑一键拉取.md](./另一台电脑一键拉取.md)**
+
+本机已有仓库时：
+
 ```bash
 cd cabin-slice
 python3 -m http.server 8787
