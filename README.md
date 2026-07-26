@@ -23,10 +23,42 @@ python3 -m http.server 8787
 ## 版本习惯
 
 - 小步提交：写清「改了什么 / 为什么」
-- 阶段节点可打 tag，例如 `v0.1-kids-tv`
+- 阶段节点可打 tag，例如 `v0.1-kids-tv`（本仓库已打）
 - 换电脑：先 `git pull`，再改，再 `git push`
+
+## 推到 GitHub（只需做一次）
+
+本机若还没登录 GitHub CLI：
+
+```bash
+cd "/Users/bytedance/Documents/claw/new channel"
+./.tools/gh_2.96.0_macOS_arm64/bin/gh auth login
+```
+
+登录后创建私有仓库并推送：
+
+```bash
+./.tools/gh_2.96.0_macOS_arm64/bin/gh repo create dream-channel --private --source=. --remote=origin --push
+git push origin v0.1-kids-tv
+```
+
+另一台电脑：
+
+```bash
+git clone https://github.com/<你的用户名>/dream-channel.git
+cd dream-channel/cabin-slice
+python3 -m http.server 8787
+```
+
+首次在本仓库提交前，建议设置本仓库作者（不会改全局）：
+
+```bash
+git config user.name "鲁清"
+git config user.email "你的邮箱或 GitHub noreply 邮箱"
+```
 
 ## 注意
 
 - 存档在浏览器 `localStorage`（键名见 `cabin-slice/README.md`），不会进 Git
 - 不要提交密钥、本地下载大文件、虚拟环境
+- 已忽略：`downloads/`、`.tools/`、`Quark_Magnet_Search/`
