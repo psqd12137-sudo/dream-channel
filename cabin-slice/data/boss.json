@@ -1,0 +1,43 @@
+{
+  "id": "channel_host",
+  "name": "频道宿主",
+  "intro": "雪花凝聚成人形。它用你的声音说：节目该收尾了。",
+  "defeatLog": "宿主在静电中碎裂。电视亮起蓝屏：波形坍缩完成。频道关闭。",
+  "victoryTitle": "撤离成功",
+  "defeatTitle": "被山屋吞没",
+  "phases": [
+    {
+      "id": 1,
+      "name": "试探",
+      "text": "宿主抬手，雪花像刀锋扫过。这是试探。",
+      "check": "courage",
+      "difficulty": 7,
+      "enemyDice": false,
+      "success": { "log": "你挡住了第一击。", "bossHp": -1 },
+      "fail": { "log": "刀锋擦过肩膀。", "hp": -1, "stress": 1 }
+    },
+    {
+      "id": 2,
+      "name": "压制",
+      "text": "客厅、走廊、阁楼的影像同时叠进祭坛。它要压垮你的理智。",
+      "check": "mind",
+      "difficulty": 8,
+      "enemyDice": false,
+      "success": { "log": "你抓住一个真实的自己。", "bossHp": -1, "stress": -1 },
+      "fail": { "log": "记忆错位，鼻血滴在盐圈上。", "hp": -1, "stress": 2 }
+    },
+    {
+      "id": 3,
+      "name": "终局",
+      "text": "宿主张开胸腔，里面是仍在播放的CRT。终局一击。有盐袋、护身符、钥匙或圆环准备时难度降低。",
+      "check": "body",
+      "difficulty": 11,
+      "enemyDice": false,
+      "preferItems": ["salt", "charm", "key"],
+      "easyDifficulty": 8,
+      "success": { "log": "你把盐与意志一并砸进屏幕。宿主熄灭。", "bossHp": -1 },
+      "fail": { "log": "屏幕吞没了你。观测结束。", "hp": -3, "stress": 3 }
+    }
+  ],
+  "bossHp": 3
+}

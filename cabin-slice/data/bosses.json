@@ -1,0 +1,73 @@
+{
+  "bosses": {
+    "channel_host": {
+      "id": "channel_host",
+      "name": "频道宿主",
+      "intro": "前后段都充斥战斗残响。宿主从雪花里站起。",
+      "hp": 16,
+      "damage": 2,
+      "victory": "宿主碎成蓝屏。波形坍缩：你离开了山屋。",
+      "defeat": "你被编进片尾字幕。",
+      "endingId": "end_host"
+    },
+    "whisper_wall": {
+      "id": "whisper_wall",
+      "name": "墙内耳语",
+      "intro": "前段混入静室，后段却杀气更重。墙里有人用你的声音说话。",
+      "hp": 14,
+      "damage": 2,
+      "victory": "耳语断了。你把自己的声音夺了回来。",
+      "defeat": "你分不清哪个声音是自己的。",
+      "endingId": "end_whisper"
+    },
+    "fog_walker": {
+      "id": "fog_walker",
+      "name": "雾中行人",
+      "intro": "路线偏静。雾里伸出一只邀你回去的手。",
+      "hp": 13,
+      "damage": 1,
+      "victory": "雾散。门外是真正的夜。",
+      "defeat": "你跟着那只手走进第二层雾。",
+      "endingId": "end_fog"
+    },
+    "rust_keeper": {
+      "id": "rust_keeper",
+      "name": "锈锁看守",
+      "intro": "后段充满金属味。看守认为你是未完成的祭品。",
+      "hp": 18,
+      "damage": 2,
+      "victory": "锁芯崩裂。祭坛熄灭。",
+      "defeat": "铁门在身后合上，节目重播。",
+      "endingId": "end_rust"
+    }
+  },
+  "endings": {
+    "end_host": { "title": "结局·关台", "text": "电视熄灭。观测者关掉旋钮。" },
+    "end_whisper": { "title": "结局·静音", "text": "墙内不再说话。你学会了沉默。" },
+    "end_fog": { "title": "结局·散雾", "text": "山屋轮廓从未知变成已读。" },
+    "end_rust": { "title": "结局·开锁", "text": "锈屑落下，像一场过期的雪。" },
+    "end_fail": { "title": "结局·被播映", "text": "你成为山屋频道的固定节目。" }
+  },
+  "rules": [
+    {
+      "id": "host",
+      "when": { "earlyCombat": 2, "lateCombatMin": 2 },
+      "boss": "channel_host"
+    },
+    {
+      "id": "whisper",
+      "when": { "earlyCombat": 1, "lateCombatMin": 2 },
+      "boss": "whisper_wall"
+    },
+    {
+      "id": "fog",
+      "when": { "earlyCombatMax": 1, "lateCombatMax": 1 },
+      "boss": "fog_walker"
+    },
+    {
+      "id": "rust_default",
+      "when": {},
+      "boss": "rust_keeper"
+    }
+  ]
+}

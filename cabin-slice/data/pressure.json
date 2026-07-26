@@ -1,0 +1,79 @@
+{
+  "combatCurve": [1, 2, 4, 3, 1, 5],
+  "tierScale": {
+    "1": { "hp": 0, "damage": 0, "tough": 0, "stam": 0 },
+    "2": { "hp": 1, "damage": 0, "tough": 1, "stam": 0 },
+    "3": { "hp": 2, "damage": 0, "tough": 2, "stam": 0 },
+    "4": { "hp": 3, "damage": 1, "tough": 3, "stam": 1 },
+    "5": { "hp": 4, "damage": 1, "tough": 4, "stam": 1 }
+  },
+  "archetypes": {
+    "execute": {
+      "id": "execute",
+      "label": "处决匣",
+      "baseTough": 4,
+      "desc": "破韧后获得一层处决：下次砸/踩 +2"
+    },
+    "armor": {
+      "id": "armor",
+      "label": "装甲猎犬",
+      "baseTough": 5,
+      "desc": "韧性未破时受伤 -1；破韧后恢复正常"
+    },
+    "stagger": {
+      "id": "stagger",
+      "label": "踉跄影",
+      "baseTough": 4,
+      "desc": "破韧后下回合敌体力上限 -2"
+    },
+    "crush": {
+      "id": "crush",
+      "label": "破甲兽",
+      "baseTough": 5,
+      "desc": "破韧后下一次受击伤害翻倍（额外最多 +4）"
+    },
+    "wire": {
+      "id": "wire",
+      "label": "布线虫",
+      "baseTough": 4,
+      "desc": "未破韧时砸击减半；踩踏不受影响，破韧后踩踏再 +1"
+    }
+  },
+  "roomArchetype": {
+    "living": "execute",
+    "kitchen": "wire",
+    "west_wing": "stagger",
+    "hall": "stagger",
+    "yard": "armor",
+    "shed": "wire",
+    "gallery": "execute",
+    "study": "wire",
+    "nursery": "execute",
+    "darkroom": "stagger",
+    "attic": "execute",
+    "loft": "stagger",
+    "cellar": "crush",
+    "boiler": "crush"
+  },
+  "roomTraits": {
+    "living": ["faceShock"],
+    "kitchen": ["grab"],
+    "west_wing": ["lunge"],
+    "hall": ["lunge", "faceShock"],
+    "yard": ["relentless"],
+    "shed": ["grab"],
+    "gallery": ["faceShock"],
+    "study": ["grab"],
+    "nursery": [],
+    "darkroom": ["lunge", "faceShock"],
+    "attic": ["relentless"],
+    "loft": ["lunge"],
+    "cellar": ["relentless", "grab"],
+    "boiler": ["faceShock", "relentless"]
+  },
+  "boss": {
+    "archetype": "crush",
+    "traits": ["lunge", "faceShock", "relentless"],
+    "toughBonus": 3
+  }
+}

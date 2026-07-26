@@ -1,0 +1,29 @@
+{
+  "relics": {
+    "omen_signal": {
+      "id": "omen_signal",
+      "name": "预兆·串台",
+      "desc": "战斗开始时体力骰结果 +1（总池）。不可被偷。",
+      "effect": { "energyBonus": 1 }
+    },
+    "omen_salt": {
+      "id": "omen_salt",
+      "name": "预兆·盐环",
+      "desc": "你造成的伤害 +1。不可被偷。",
+      "effect": { "damageBonus": 1 }
+    },
+    "omen_lens": {
+      "id": "omen_lens",
+      "name": "预兆·镜头",
+      "desc": "每场战斗首次费用 0 的牌额外抽 1。不可被偷。",
+      "effect": { "freeDraw": 1 }
+    },
+    "omen_echo": {
+      "id": "omen_echo",
+      "name": "预兆·回声",
+      "desc": "生命上限 +1 并回满差额。不可被偷。",
+      "effect": { "maxHp": 1 }
+    }
+  },
+  "pool": ["omen_signal", "omen_salt", "omen_lens", "omen_echo"]
+}

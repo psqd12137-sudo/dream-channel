@@ -1,0 +1,71 @@
+{
+  "baseSpeed": 3,
+  "handSize": 4,
+  "holdPerTurn": 1,
+  "diceFaces": [0, 1, 2],
+  "grid": { "rows": 3, "cols": 5 },
+  "moveCost": 1,
+  "starter": ["jab", "jab", "jab", "jab", "guard", "guard", "guard", "focus", "tonic", "flare"],
+  "rewardPool": ["jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline"],
+  "cards": {
+    "jab": {
+      "id": "jab",
+      "name": "地刺",
+      "type": "place",
+      "cost": 1,
+      "text": "邻格放置，或砸敌人脚下立刻 2 伤。",
+      "place": { "onStep": { "damage": 2 }, "glyph": "刺" }
+    },
+    "guard": {
+      "id": "guard",
+      "name": "盐圈",
+      "type": "place",
+      "cost": 1,
+      "text": "放在邻格。敌人进入多耗 1 体力；你站在上面受击时格挡 +2。",
+      "place": { "enterTax": 1, "coverBlock": 2, "glyph": "盐" }
+    },
+    "focus": {
+      "id": "focus",
+      "name": "屏息",
+      "type": "skill",
+      "cost": 0,
+      "text": "下一件放置费用 -1。",
+      "discountNext": 1
+    },
+    "flare": {
+      "id": "flare",
+      "name": "闪光雷",
+      "type": "place",
+      "cost": 2,
+      "text": "邻格放置，或砸敌人脚下立刻 4 伤。",
+      "place": { "onStep": { "damage": 4 }, "glyph": "闪" }
+    },
+    "heavy": {
+      "id": "heavy",
+      "name": "坠物",
+      "type": "place",
+      "cost": 2,
+      "text": "邻格放置，或砸敌人脚下立刻 4 伤。",
+      "place": { "onStep": { "damage": 4 }, "glyph": "坠" }
+    },
+    "tonic": {
+      "id": "tonic",
+      "name": "补剂",
+      "type": "medicine",
+      "cost": 0,
+      "text": "立刻体力 +2。可被偷。",
+      "gainEnergy": 2,
+      "stealable": true
+    },
+    "adrenaline": {
+      "id": "adrenaline",
+      "name": "肾上腺素",
+      "type": "medicine",
+      "cost": 1,
+      "text": "立刻体力 +3，自伤 1。可被偷。",
+      "gainEnergy": 3,
+      "selfDamage": 1,
+      "stealable": true
+    }
+  }
+}

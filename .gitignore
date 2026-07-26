@@ -1,0 +1,30 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace
+
+# Local caches / tools (not part of the game)
+.tools/
+downloads/
+
+# Unrelated local experiments in this folder
+Quark_Magnet_Search/
+
+# Python / node leftovers if added later
+.venv/
+venv/
+__pycache__/
+*.pyc
+node_modules/
+.env
+.env.*
+!.env.example
+
+# Logs & temp
+*.log
+.tmp/
+.cache/

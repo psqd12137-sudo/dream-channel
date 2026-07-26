@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>山屋频道 · 今日特别节目</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="landscape">
+  <div class="app">
+    <div class="bg-grid" aria-hidden="true"></div>
+    <div class="bg-sun" aria-hidden="true"></div>
+
+    <header class="app-header">
+      <div class="brand">
+        <p class="brand-mark">午后儿童时段 · 198X</p>
+        <h1 class="brand-title">山屋频道</h1>
+      </div>
+      <div id="stats" class="stat-strip" aria-label="状态"></div>
+      <button id="btn-mute" class="btn btn-ghost" type="button">声音：开</button>
+    </header>
+
+    <main class="app-main">
+      <section id="screen-title" class="panel panel-title active">
+        <div class="title-row">
+          <div class="title-copy">
+            <p class="signal">今日节目开始啦</p>
+            <h2 class="title-hero">山屋奇妙夜</h2>
+            <p class="lede">小朋友们好——今天我们要走进一栋奇怪的山屋。点按钮打开电视；悬停道具卡就能看见它的用处。走路只能上、下、左、右哦。</p>
+            <div class="title-actions">
+              <button id="btn-start" class="btn btn-primary btn-start">打开电视机</button>
+              <button id="btn-continue" class="btn btn-secondary hidden">接着看上集</button>
+            </div>
+            <p id="boot-status" class="boot-status">电视机预热中…</p>
+          </div>
+          <ol class="rules">
+            <li><span>1</span>用跑动和机关削弱怪物“硬壳”</li>
+            <li><span>2</span>不同怪物，打破硬壳后奖励不同</li>
+            <li><span>3</span>鼠标停在卡牌上，听听旁白怎么说</li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="screen-game" class="panel panel-game">
+        <div class="explore-layout">
+          <section class="pane pane-map">
+            <header class="pane-head">
+              <div>
+                <p class="pane-kicker" id="run-progress">今天的行程 0 / 10</p>
+                <h2 id="room-name">玄关</h2>
+              </div>
+              <span id="room-tag" class="chip">散步时间</span>
+            </header>
+            <div class="map-legend">
+              <span><i class="dot dot-you"></i>你在这儿</span>
+              <span><i class="dot dot-fight"></i>有惊吓</span>
+              <span><i class="dot dot-safe"></i>安静屋</span>
+              <span><i class="dot dot-fog"></i>还没看清</span>
+            </div>
+            <div id="house-map" class="house-map" aria-label="山屋地图"></div>
+            <div class="map-foot">
+              <p id="room-desc" class="room-desc"></p>
+              <div class="action-bar">
+                <div id="exits" class="exits"></div>
+                <div class="room-actions">
+                  <button id="btn-resolve" class="btn btn-primary">走进这一间</button>
+                  <button id="btn-boss" class="btn btn-danger hidden">去祭坛大结局</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="pane-side">
+            <section class="side-card side-log">
+              <h3>旁白</h3>
+              <div id="log" class="log" aria-live="polite"></div>
+            </section>
+            <section class="side-card">
+              <h3>猜猜是谁</h3>
+              <p id="flags-note" class="side-note">前段 — · 后段 —</p>
+              <ul id="boss-board" class="boss-board"></ul>
+            </section>
+            <section class="side-card side-card-compact">
+              <h3>宝贝箱</h3>
+              <p id="deck-note" class="side-note"></p>
+              <ul id="relics" class="inventory"></ul>
+              <ul id="inventory" class="inventory"></ul>
+              <div id="item-actions" class="item-actions"></div>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section id="screen-event" class="panel modal">
+        <div class="modal-card modal-wide">
+          <p class="pane-kicker">小插曲</p>
+          <h2 id="event-title"></h2>
+          <p id="event-text"></p>
+          <div id="event-choices" class="choices"></div>
+          <div id="reward-cards" class="reward-row"></div>
+          <button id="btn-close-event" class="btn btn-secondary hidden">回到散步</button>
+        </div>
+      </section>
+
+      <section id="screen-cards" class="panel modal">
+        <div class="modal-card battle-shell battle-landscape">
+          <aside class="battle-left">
+            <header class="battle-top">
+              <div>
+                <p class="pane-kicker" id="card-check-label">惊吓时间</p>
+                <h2 id="combat-title">场地战</h2>
+              </div>
+              <div id="enemy-intent" class="intent-banner">它想做 —</div>
+            </header>
+            <div class="battle-hud">
+              <div class="hud-card hud-you">
+                <p class="hud-label">小主角</p>
+                <div class="hud-row"><span>勇气</span><strong id="player-hp">—</strong></div>
+                <div class="hud-row"><span>力气</span><strong id="card-energy">0</strong></div>
+                <div class="hud-row"><span>护盾</span><strong id="player-block">0</strong></div>
+                <div id="energy-dice" class="energy-dice"></div>
+              </div>
+              <div class="hud-card hud-foe">
+                <p class="hud-label">怪家伙</p>
+                <div class="hud-row"><span>生命</span><strong id="enemy-hp">—</strong></div>
+                <div class="hud-row"><span>力气</span><strong id="enemy-stamina">—</strong></div>
+                <div class="tough-block">
+                  <div class="hud-row"><span>硬壳</span><strong id="kite-meter">—</strong></div>
+                  <div class="bar"><div id="tough-fill" class="bar-fill"></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="grid-wrap">
+              <div class="map-legend battle-legend">
+                <span><i class="dot dot-you"></i>你</span>
+                <span><i class="dot dot-fight"></i>怪</span>
+                <span><i class="dot dot-wall"></i>墙</span>
+                <span><i class="dot dot-high"></i>高台</span>
+                <span><i class="dot dot-move"></i>能走</span>
+              </div>
+              <div id="battle-grid" class="battle-grid" aria-label="战斗场地"></div>
+              <p id="place-hint" class="place-hint"></p>
+            </div>
+          </aside>
+
+          <aside class="battle-right">
+            <p class="hand-label">道具卡 <span id="card-hint" class="hint-inline">悬停听旁白</span></p>
+            <div id="hand-cards" class="hand-col"></div>
+            <footer class="battle-foot">
+              <button id="btn-cancel-place" class="btn btn-ghost hidden">取消放置</button>
+              <button id="btn-end-turn" class="btn btn-primary">回合结束</button>
+            </footer>
+          </aside>
+        </div>
+      </section>
+
+      <section id="screen-dice" class="panel modal">
+        <div class="modal-card modal-narrow">
+          <p class="pane-kicker" id="dice-label">结果揭晓</p>
+          <p id="dice-result" class="dice-result"></p>
+          <button id="btn-dice-continue" class="btn btn-primary">下一幕</button>
+        </div>
+      </section>
+
+      <section id="screen-boss" class="panel modal">
+        <div class="modal-card modal-narrow">
+          <p class="pane-kicker">大结局猜谜</p>
+          <h2 id="boss-name">?</h2>
+          <p id="boss-phase-text"></p>
+          <p id="boss-hp" class="chip"></p>
+          <div id="boss-actions" class="choices"></div>
+        </div>
+      </section>
+
+      <section id="screen-end" class="panel panel-title">
+        <h2 id="end-title" class="title-hero"></h2>
+        <p id="end-log" class="lede"></p>
+        <button id="btn-restart" class="btn btn-primary">再看一集</button>
+      </section>
+    </main>
+
+    <div id="card-tooltip" class="card-tooltip hidden" role="tooltip"></div>
+  </div>
+
+  <script src="js/audio.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

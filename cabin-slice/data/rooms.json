@@ -1,0 +1,973 @@
+{
+  "startRoom": "foyer",
+  "runLength": 10,
+  "rewardOdds": {
+    "relic": 0.3,
+    "item": 0.35,
+    "stat": 0.35
+  },
+  "defaultArena": {
+    "rows": 3,
+    "cols": 5,
+    "player": [
+      1,
+      0
+    ],
+    "enemy": [
+      1,
+      4
+    ],
+    "walls": [
+      "0,2",
+      "2,2"
+    ],
+    "heights": {
+      "0,1": 1,
+      "2,3": 1
+    }
+  },
+  "mapSize": {
+    "cols": 6,
+    "rows": 7
+  },
+  "rooms": {
+    "foyer": {
+      "id": "foyer",
+      "name": "玄关",
+      "desc": "山屋在雾里铺开。门厅只是第一格坐标。",
+      "combat": false,
+      "forcedReward": "stat",
+      "stat": {
+        "speed": 1
+      },
+      "exits": [
+        "living",
+        "kitchen",
+        "porch"
+      ],
+      "map": {
+        "col": 3,
+        "row": 7
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 4,
+        "player": [
+          1,
+          0
+        ],
+        "enemy": [
+          1,
+          3
+        ],
+        "walls": [
+          "0,1",
+          "2,2"
+        ],
+        "heights": {
+          "1,1": 1
+        }
+      }
+    },
+    "porch": {
+      "id": "porch",
+      "name": "门廊",
+      "desc": "木阶吱呀。雾从栏杆缝里往里钻。",
+      "combat": false,
+      "exits": [
+        "foyer",
+        "living",
+        "mudroom"
+      ],
+      "map": {
+        "col": 2,
+        "row": 7
+      },
+      "arena": {
+        "rows": 2,
+        "cols": 5,
+        "player": [
+          0,
+          0
+        ],
+        "enemy": [
+          1,
+          4
+        ],
+        "walls": [
+          "0,2"
+        ],
+        "heights": {
+          "1,1": 1,
+          "1,2": 1
+        }
+      }
+    },
+    "living": {
+      "id": "living",
+      "name": "客厅",
+      "desc": "CRT自己亮着。沙发与茶几把场地切成可绕的岛。",
+      "combat": true,
+      "enemy": {
+        "name": "雪花剪影",
+        "hp": 6,
+        "damage": 1
+      },
+      "exits": [
+        "foyer",
+        "porch",
+        "hall",
+        "parlor",
+        "west_wing"
+      ],
+      "map": {
+        "col": 2,
+        "row": 6
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 5,
+        "player": [
+          1,
+          0
+        ],
+        "enemy": [
+          1,
+          4
+        ],
+        "walls": [
+          "0,2",
+          "2,2"
+        ],
+        "heights": {
+          "0,1": 1,
+          "2,3": 1
+        }
+      }
+    },
+    "kitchen": {
+      "id": "kitchen",
+      "name": "厨房",
+      "desc": "岛台把空间一分为二。黑水在倒数。",
+      "combat": true,
+      "enemy": {
+        "name": "冰箱里的手",
+        "hp": 5,
+        "damage": 1
+      },
+      "exits": [
+        "foyer",
+        "pantry",
+        "mudroom",
+        "gallery"
+      ],
+      "map": {
+        "col": 4,
+        "row": 6
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 4,
+        "player": [
+          2,
+          0
+        ],
+        "enemy": [
+          0,
+          3
+        ],
+        "walls": [
+          "1,1",
+          "1,2"
+        ],
+        "heights": {
+          "0,0": 1,
+          "2,3": 1
+        }
+      }
+    },
+    "mudroom": {
+      "id": "mudroom",
+      "name": "泥靴间",
+      "desc": "挂钩上挂着不属于你的外套。",
+      "combat": false,
+      "exits": [
+        "porch",
+        "kitchen",
+        "yard",
+        "shed"
+      ],
+      "map": {
+        "col": 5,
+        "row": 6
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 3,
+        "player": [
+          1,
+          0
+        ],
+        "enemy": [
+          1,
+          2
+        ],
+        "walls": [
+          "0,1"
+        ],
+        "heights": {
+          "2,1": 1
+        }
+      }
+    },
+    "west_wing": {
+      "id": "west_wing",
+      "name": "西厢",
+      "desc": "窄廊通向更深的未知。脚步声会折返。",
+      "combat": true,
+      "enemy": {
+        "name": "折返脚步",
+        "hp": 6,
+        "damage": 1
+      },
+      "exits": [
+        "living",
+        "parlor",
+        "guest"
+      ],
+      "map": {
+        "col": 1,
+        "row": 6
+      },
+      "arena": {
+        "rows": 2,
+        "cols": 6,
+        "player": [
+          0,
+          0
+        ],
+        "enemy": [
+          1,
+          5
+        ],
+        "walls": [
+          "0,2",
+          "0,3"
+        ],
+        "heights": {
+          "1,1": 1,
+          "1,4": 1
+        }
+      }
+    },
+    "parlor": {
+      "id": "parlor",
+      "name": "会客室",
+      "desc": "空相框像一排监视孔。",
+      "combat": false,
+      "exits": [
+        "living",
+        "west_wing",
+        "hall",
+        "guest"
+      ],
+      "map": {
+        "col": 1,
+        "row": 5
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 4,
+        "player": [
+          1,
+          0
+        ],
+        "enemy": [
+          1,
+          3
+        ],
+        "walls": [
+          "0,2",
+          "2,1"
+        ],
+        "heights": {
+          "1,1": 1
+        }
+      }
+    },
+    "hall": {
+      "id": "hall",
+      "name": "长廊",
+      "desc": "灯管嗡鸣。这是一条适合拉扯的直线。",
+      "combat": true,
+      "enemy": {
+        "name": "先到的影子",
+        "hp": 7,
+        "damage": 1
+      },
+      "exits": [
+        "living",
+        "parlor",
+        "gallery",
+        "bedroom",
+        "study"
+      ],
+      "map": {
+        "col": 3,
+        "row": 5
+      },
+      "arena": {
+        "rows": 2,
+        "cols": 7,
+        "player": [
+          0,
+          0
+        ],
+        "enemy": [
+          1,
+          6
+        ],
+        "walls": [
+          "0,3"
+        ],
+        "heights": {
+          "1,2": 1,
+          "0,5": 1
+        }
+      }
+    },
+    "pantry": {
+      "id": "pantry",
+      "name": "储藏间",
+      "desc": "货架挤成巷道。转身都要侧身。",
+      "combat": false,
+      "exits": [
+        "kitchen",
+        "gallery",
+        "yard"
+      ],
+      "map": {
+        "col": 4,
+        "row": 5
+      },
+      "arena": {
+        "rows": 4,
+        "cols": 3,
+        "player": [
+          3,
+          0
+        ],
+        "enemy": [
+          0,
+          2
+        ],
+        "walls": [
+          "1,1",
+          "2,1"
+        ],
+        "heights": {
+          "0,0": 1,
+          "3,2": 1
+        }
+      }
+    },
+    "yard": {
+      "id": "yard",
+      "name": "后院",
+      "desc": "开阔的雾地。追击路线很长。",
+      "combat": true,
+      "enemy": {
+        "name": "雾团犬",
+        "hp": 6,
+        "damage": 1
+      },
+      "exits": [
+        "mudroom",
+        "pantry",
+        "shed",
+        "greenhouse",
+        "cellar"
+      ],
+      "map": {
+        "col": 5,
+        "row": 5
+      },
+      "arena": {
+        "rows": 4,
+        "cols": 6,
+        "player": [
+          3,
+          0
+        ],
+        "enemy": [
+          0,
+          5
+        ],
+        "walls": [
+          "1,3"
+        ],
+        "heights": {
+          "1,1": 1,
+          "1,2": 1,
+          "2,2": 2,
+          "2,4": 1
+        }
+      }
+    },
+    "shed": {
+      "id": "shed",
+      "name": "工具棚",
+      "desc": "生锈的铲和绳子。角落能卡位。",
+      "combat": true,
+      "enemy": {
+        "name": "绳结人",
+        "hp": 7,
+        "damage": 1
+      },
+      "exits": [
+        "mudroom",
+        "yard",
+        "greenhouse"
+      ],
+      "map": {
+        "col": 6,
+        "row": 5
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 3,
+        "player": [
+          2,
+          0
+        ],
+        "enemy": [
+          0,
+          2
+        ],
+        "walls": [
+          "1,1"
+        ],
+        "heights": {
+          "0,0": 1,
+          "2,2": 1
+        }
+      }
+    },
+    "guest": {
+      "id": "guest",
+      "name": "客房",
+      "desc": "床是空的，但枕头凹着。",
+      "combat": false,
+      "exits": [
+        "west_wing",
+        "parlor",
+        "bedroom",
+        "nursery"
+      ],
+      "map": {
+        "col": 1,
+        "row": 4
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 4,
+        "player": [
+          1,
+          0
+        ],
+        "enemy": [
+          1,
+          3
+        ],
+        "walls": [
+          "0,2",
+          "2,2"
+        ],
+        "heights": {
+          "1,1": 1
+        }
+      }
+    },
+    "gallery": {
+      "id": "gallery",
+      "name": "画廊",
+      "desc": "画布全是噪点。立柱提供绕射。",
+      "combat": true,
+      "enemy": {
+        "name": "画中瞳",
+        "hp": 7,
+        "damage": 1
+      },
+      "exits": [
+        "kitchen",
+        "hall",
+        "pantry",
+        "study",
+        "darkroom"
+      ],
+      "map": {
+        "col": 3,
+        "row": 4
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 5,
+        "player": [
+          1,
+          0
+        ],
+        "enemy": [
+          1,
+          4
+        ],
+        "walls": [
+          "0,2",
+          "2,2"
+        ],
+        "heights": {
+          "0,1": 1,
+          "2,4": 1
+        }
+      }
+    },
+    "greenhouse": {
+      "id": "greenhouse",
+      "name": "温室",
+      "desc": "枯藤缠成网格。能看见，却不好穿。",
+      "combat": false,
+      "exits": [
+        "yard",
+        "shed",
+        "darkroom",
+        "boiler"
+      ],
+      "map": {
+        "col": 5,
+        "row": 4
+      },
+      "arena": {
+        "rows": 4,
+        "cols": 4,
+        "player": [
+          3,
+          0
+        ],
+        "enemy": [
+          0,
+          3
+        ],
+        "walls": [
+          "1,1",
+          "2,2"
+        ],
+        "heights": {
+          "0,1": 1,
+          "0,2": 1,
+          "3,2": 1
+        }
+      }
+    },
+    "bedroom": {
+      "id": "bedroom",
+      "name": "主卧",
+      "desc": "床单平整。绕床一圈刚好耗掉追击。",
+      "combat": false,
+      "exits": [
+        "hall",
+        "guest",
+        "study",
+        "attic",
+        "nursery"
+      ],
+      "map": {
+        "col": 2,
+        "row": 3
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 5,
+        "player": [
+          1,
+          0
+        ],
+        "enemy": [
+          1,
+          4
+        ],
+        "walls": [
+          "1,2"
+        ],
+        "heights": {
+          "0,1": 1,
+          "0,2": 1,
+          "2,3": 1
+        }
+      }
+    },
+    "study": {
+      "id": "study",
+      "name": "书房",
+      "desc": "书架成墙。通道只有肩宽。",
+      "combat": true,
+      "enemy": {
+        "name": "纸页脸",
+        "hp": 8,
+        "damage": 2
+      },
+      "exits": [
+        "hall",
+        "gallery",
+        "bedroom",
+        "darkroom",
+        "loft"
+      ],
+      "map": {
+        "col": 3,
+        "row": 3
+      },
+      "arena": {
+        "rows": 4,
+        "cols": 3,
+        "player": [
+          3,
+          0
+        ],
+        "enemy": [
+          0,
+          2
+        ],
+        "walls": [
+          "1,1",
+          "2,1"
+        ],
+        "heights": {
+          "0,0": 1,
+          "3,2": 1
+        }
+      }
+    },
+    "nursery": {
+      "id": "nursery",
+      "name": "育儿室",
+      "desc": "摇篮空着，却仍在轻轻晃。",
+      "combat": true,
+      "enemy": {
+        "name": "空摇篮",
+        "hp": 6,
+        "damage": 1
+      },
+      "exits": [
+        "guest",
+        "bedroom",
+        "attic"
+      ],
+      "map": {
+        "col": 1,
+        "row": 3
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 4,
+        "player": [
+          1,
+          0
+        ],
+        "enemy": [
+          2,
+          3
+        ],
+        "walls": [
+          "0,2",
+          "1,1"
+        ],
+        "heights": {
+          "2,0": 1,
+          "0,0": 1
+        }
+      }
+    },
+    "darkroom": {
+      "id": "darkroom",
+      "name": "暗房",
+      "desc": "红灯下只有短距离可见。",
+      "combat": true,
+      "enemy": {
+        "name": "定影残影",
+        "hp": 8,
+        "damage": 2
+      },
+      "exits": [
+        "gallery",
+        "greenhouse",
+        "study",
+        "cellar",
+        "boiler"
+      ],
+      "map": {
+        "col": 4,
+        "row": 3
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 3,
+        "player": [
+          1,
+          0
+        ],
+        "enemy": [
+          1,
+          2
+        ],
+        "walls": [
+          "0,1"
+        ],
+        "heights": {
+          "2,0": 1,
+          "0,2": 1
+        }
+      }
+    },
+    "attic": {
+      "id": "attic",
+      "name": "阁楼",
+      "desc": "斜屋顶压低头顶。盒子还在跳。",
+      "combat": true,
+      "enemy": {
+        "name": "盒中心跳",
+        "hp": 7,
+        "damage": 1
+      },
+      "exits": [
+        "bedroom",
+        "nursery",
+        "loft",
+        "ritual"
+      ],
+      "map": {
+        "col": 2,
+        "row": 2
+      },
+      "arena": {
+        "rows": 2,
+        "cols": 5,
+        "player": [
+          1,
+          0
+        ],
+        "enemy": [
+          0,
+          4
+        ],
+        "walls": [
+          "0,2"
+        ],
+        "heights": {
+          "1,1": 1,
+          "0,3": 2
+        }
+      }
+    },
+    "loft": {
+      "id": "loft",
+      "name": "阁楼栈桥",
+      "desc": "一条木桥连着东西两侧。掉下去没有楼下。",
+      "combat": true,
+      "enemy": {
+        "name": "桥下风",
+        "hp": 7,
+        "damage": 1
+      },
+      "exits": [
+        "study",
+        "attic",
+        "boiler",
+        "ritual"
+      ],
+      "map": {
+        "col": 3,
+        "row": 2
+      },
+      "arena": {
+        "rows": 2,
+        "cols": 7,
+        "player": [
+          0,
+          0
+        ],
+        "enemy": [
+          1,
+          6
+        ],
+        "walls": [
+          "0,2",
+          "1,4"
+        ],
+        "heights": {
+          "0,1": 1,
+          "1,1": 1,
+          "0,5": 1,
+          "1,5": 1
+        }
+      }
+    },
+    "cellar": {
+      "id": "cellar",
+      "name": "地窖",
+      "desc": "石柱与盐痕。转身空间很小。",
+      "combat": true,
+      "enemy": {
+        "name": "锈锁守卫",
+        "hp": 9,
+        "damage": 2
+      },
+      "exits": [
+        "yard",
+        "darkroom",
+        "boiler",
+        "ritual"
+      ],
+      "map": {
+        "col": 5,
+        "row": 2
+      },
+      "arena": {
+        "rows": 3,
+        "cols": 3,
+        "player": [
+          2,
+          0
+        ],
+        "enemy": [
+          0,
+          2
+        ],
+        "walls": [
+          "1,1"
+        ],
+        "heights": {
+          "0,0": 1,
+          "2,2": 1
+        }
+      }
+    },
+    "boiler": {
+      "id": "boiler",
+      "name": "锅炉房",
+      "desc": "管道纵横，像强制的折线路径。",
+      "combat": true,
+      "enemy": {
+        "name": "汽阀嘴",
+        "hp": 8,
+        "damage": 2
+      },
+      "exits": [
+        "greenhouse",
+        "darkroom",
+        "loft",
+        "cellar",
+        "ritual"
+      ],
+      "map": {
+        "col": 4,
+        "row": 2
+      },
+      "arena": {
+        "rows": 4,
+        "cols": 4,
+        "player": [
+          3,
+          0
+        ],
+        "enemy": [
+          0,
+          3
+        ],
+        "walls": [
+          "1,1",
+          "2,2",
+          "1,2"
+        ],
+        "heights": {
+          "0,0": 1,
+          "3,1": 1,
+          "0,2": 2
+        }
+      }
+    },
+    "ritual": {
+      "id": "ritual",
+      "name": "祭坛前厅",
+      "desc": "倒数的开阔地。节目尾声前的最后拉扯。",
+      "combat": false,
+      "exits": [
+        "attic",
+        "loft",
+        "cellar",
+        "boiler",
+        "altar"
+      ],
+      "map": {
+        "col": 3,
+        "row": 1
+      },
+      "arena": {
+        "rows": 4,
+        "cols": 5,
+        "player": [
+          3,
+          0
+        ],
+        "enemy": [
+          0,
+          4
+        ],
+        "walls": [
+          "1,2",
+          "2,2"
+        ],
+        "heights": {
+          "0,1": 1,
+          "0,3": 1,
+          "3,2": 2
+        }
+      }
+    },
+    "altar": {
+      "id": "altar",
+      "name": "祭坛房",
+      "desc": "频道核心。整间屋子都是舞台。",
+      "combat": false,
+      "bossRoom": true,
+      "exits": [
+        "ritual"
+      ],
+      "map": {
+        "col": 4,
+        "row": 1
+      },
+      "arena": {
+        "rows": 4,
+        "cols": 6,
+        "player": [
+          3,
+          0
+        ],
+        "enemy": [
+          0,
+          5
+        ],
+        "walls": [
+          "1,2",
+          "1,3",
+          "2,2"
+        ],
+        "heights": {
+          "0,1": 1,
+          "0,4": 1,
+          "3,2": 2,
+          "3,3": 1
+        }
+      }
+    }
+  }
+}
