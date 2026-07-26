@@ -5,7 +5,7 @@
   "grid": { "rows": 3, "cols": 5 },
   "moveCost": 1,
   "starter": ["jab", "jab", "jab", "jab", "guard", "guard", "guard", "focus", "tonic", "flare"],
-  "rewardPool": ["jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline", "plans", "stash", "keepsake"],
+  "rewardPool": ["jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline", "plans", "stash", "keepsake", "snare", "shove"],
   "cards": {
     "jab": {
       "id": "jab",
@@ -52,7 +52,7 @@
       "name": "护身符",
       "type": "skill",
       "cost": 1,
-      "text": "保留。获得 2 格挡。回合结束不丢弃。",
+      "text": "保留（未打出则留手牌）。点一下立刻获得 2 格挡，不用放置；留在手里不会挡伤。",
       "gainBlock": 2,
       "retain": true
     },
@@ -90,6 +90,32 @@
       "gainEnergy": 3,
       "selfDamage": 1,
       "stealable": true
+    },
+    "decoy": {
+      "id": "decoy",
+      "name": "纸影傀儡",
+      "type": "place",
+      "cost": 1,
+      "text": "消耗。邻格放置一枚嘲讽虚影：怪优先追打它。挨 1 下或 2 回合后消散。",
+      "exhaust": true,
+      "temp": true,
+      "place": { "decoy": true, "glyph": "影" }
+    },
+    "snare": {
+      "id": "snare",
+      "name": "绊线",
+      "type": "place",
+      "cost": 1,
+      "text": "邻格放置。敌人踩上后朝当前嘲讽目标（傀儡优先）再被迫走 1 步。",
+      "place": { "onStep": { "forceStepTowardGoal": true }, "glyph": "绊" }
+    },
+    "shove": {
+      "id": "shove",
+      "name": "推撞",
+      "type": "skill",
+      "cost": 1,
+      "text": "需与敌人邻接：把它推开 1 格并触发落点机关；撞墙则削韧 1。",
+      "shove": true
     }
   }
 }

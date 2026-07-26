@@ -88,13 +88,17 @@ function cardUsageHint(def) {
     return "用法：战斗中点选后放到邻格；有视线时可砸在敌人脚下立刻结算伤害。";
   }
   if (def.type === "medicine") {
-    return "用法：打出后立刻生效，不占格子。注意：可被敌人偷取的药物会标「可被偷」。";
+    return "用法：点一下立刻生效，不用放到格子上。注意：可被敌人偷取的药物会标「可被偷」。";
   }
   if (def.type === "skill") {
+    if (def.gainBlock) {
+      return "用法：和补剂/肾上腺素一样——点一下立刻获得格挡，不用放置。留在手里不会自动挡伤害。";
+    }
+    if (def.shove) return "用法：点一下立刻推开邻接的敌人，不用放置。";
     if (def.grantRetain) return "用法：打出后本场获得留牌能力（类似尖塔「周密计划」）。";
     if (def.retainThisTurn) return "用法：打出后，本回合结束时可点「留」保住一张牌。";
-    if (def.retain) return "用法：带「保留」——未打出时回合结束不丢弃。";
-    return "用法：打出后立刻生效，通常用于减费或辅助。";
+    if (def.retain) return "用法：带「保留」——未打出时回合结束不丢弃；要生效仍需点出去。";
+    return "用法：点一下立刻生效，不用放到格子上。";
   }
   return "用法：在战斗手牌中点选使用。";
 }
@@ -284,9 +288,198 @@ function neighbors(pos) {
   ].filter(isPassable);
 }
 
-function climbCost(from, to) {
+function climbCost(from, to, forPlayer = false) {
   const dh = tileHeight(to) - tileHeight(from);
-  return dh > 0 ? dh : 0;
+  if (dh <= 0) return 0;
+  if (forPlayer && hasRelicEffect("ignoreClimb")) return 0;
+  return dh;
+}
+
+function isExhaustCard(instOrDef) {
+  const def = typeof instOrDef === "string" ? cardDef(instOrDef) : instOrDef.id ? cardDef(instOrDef.id) : instOrDef;
+  return !!def?.exhaust;
+}
+
+function isTempCard(instOrDef) {
+  const def = typeof instOrDef === "string" ? cardDef(instOrDef) : instOrDef.id ? cardDef(instOrDef.id) : instOrDef;
+  return !!def?.temp;
+}
+
+/** 打出后：消耗牌不进弃牌；普通牌进弃牌 */
+function retireCard(inst) {
+  if (!inst) return;
+  if (isExhaustCard(inst) || isTempCard(inst)) return;
+  state.discard.push(inst);
+}
+
+function purgeTempCards(list) {
+  if (!list) return [];
+  return list.filter((c) => !isTempCard(c));
+}
+
+function comboPop(name) {
+  const c = state.combat;
+  if (!c) return;
+  c.comboFlash = name;
+  log(`连击·${name}`, "ok");
+  const el = $("combo-toast");
+  if (el) {
+    el.textContent = `连击·${name}`;
+    el.classList.remove("show");
+    void el.offsetWidth;
+    el.classList.add("show");
+  }
+}
+
+function getEnemyGoal(c) {
+  if (c.decoy?.pos) return { ...c.decoy.pos };
+  const sees = hasLoS(c.enemyPos, c.playerPos);
+  if (sees) return { ...c.playerPos };
+  if (c.lastSeen) return { ...c.lastSeen };
+  return null;
+}
+
+function decoyAlive(c) {
+  return !!(c.decoy && c.decoy.hp > 0 && c.decoy.pos);
+}
+
+function smashDecoy(c, reason) {
+  if (!decoyAlive(c)) return false;
+  c.decoy.hp -= 1;
+  log(`${c.enemy.name}${reason || "打散了"}纸影傀儡。`, "ok");
+  if (c.decoy.hp <= 0) c.decoy = null;
+  playTone("ok");
+  return true;
+}
+
+function tickDecoyTtl(c) {
+  if (!decoyAlive(c)) return;
+  c.decoy.ttl = (c.decoy.ttl || 0) - 1;
+  if (c.decoy.ttl <= 0) {
+    log("纸影傀儡消散了。");
+    c.decoy = null;
+  }
+}
+
+function portalMate(pos) {
+  const c = state.combat;
+  if (!c?.portals) return null;
+  const k = keyOf(pos);
+  const dest = c.portals[k];
+  return dest ? parseKey(dest) : null;
+}
+
+/** 踏入传送格：移到对端。返回是否传送。落地后由调用方 triggerFloor。 */
+function tryPortal(who, fromPos) {
+  const c = state.combat;
+  const dest = portalMate(fromPos);
+  if (!dest) return false;
+  // 对端被占则不传（玩家/怪/傀儡）
+  const blocked =
+    (who !== "player" && keyOf(dest) === keyOf(c.playerPos)) ||
+    (who !== "enemy" && keyOf(dest) === keyOf(c.enemyPos)) ||
+    (decoyAlive(c) && keyOf(dest) === keyOf(c.decoy.pos));
+  if (blocked || isWall(dest) || !inBounds(dest)) {
+    log("传送门嗡了一下，但对端被挡住了。");
+    return false;
+  }
+  if (who === "player") c.playerPos = { ...dest };
+  else if (who === "enemy") c.enemyPos = { ...dest };
+  log(who === "player" ? `你跌进隧道，出现在 (${dest.r + 1},${dest.c + 1})。` : `${c.enemy.name}跌进隧道，出现在 (${dest.r + 1},${dest.c + 1})。`, who === "player" ? "ok" : "bad");
+  c.portalLanded = true;
+  return true;
+}
+
+function adjacentTrapBonus(c, enemyPos) {
+  return neighbors(enemyPos).some((p) => {
+    const item = c.floor[keyOf(p)];
+    return item && (item.onStep?.damage || item.enterTax);
+  });
+}
+
+function pickRelicOffers(n = 2) {
+  const available = state.data.relics.pool.filter((x) => !state.relics.includes(x));
+  const pool = shuffle([...available]);
+  return pool.slice(0, n);
+}
+
+function offerOpeningRelics() {
+  const offers = pickRelicOffers(2);
+  if (!offers.length) return;
+  showModal("screen-event");
+  $("event-title").textContent = "行前预兆";
+  $("event-text").textContent = "拧开旋钮前，频道先送来两枚预兆——选一枚随身带走。";
+  $("btn-close-event").classList.add("hidden");
+  clearRewardCards();
+  hideCardTooltip();
+  const box = $("event-choices");
+  box.innerHTML = "";
+  const row = $("reward-cards");
+  for (const id of offers) {
+    const def = relicDef(id);
+    const card = document.createElement("div");
+    card.className = "reward-card frame-blue";
+    card.tabIndex = 0;
+    card.innerHTML = `<strong>${def.name}</strong><span class="card-kind"><img src="assets/ui/cards/SP_Card_IconT_Omen.png" alt="" />预兆</span><p class="blurb">${def.desc}</p>`;
+    bindHoverTip(card, relicTooltipHtml(def));
+    const take = document.createElement("button");
+    take.type = "button";
+    take.className = "btn btn-primary btn-ticket";
+    take.textContent = "带上";
+    take.onclick = () => {
+      hideCardTooltip();
+      gainRelic(id);
+      clearRewardCards();
+      $("event-text").textContent = `${def.name}贴在掌心。该进山屋了。`;
+      box.innerHTML = "";
+      $("btn-close-event").classList.remove("hidden");
+      renderAll();
+      saveGame();
+    };
+    card.appendChild(take);
+    row.appendChild(card);
+  }
+}
+
+function resolveShove(inst) {
+  const c = state.combat;
+  const def = cardDef(inst.id);
+  if (!isOrthoAdjacent(c.playerPos, c.enemyPos)) {
+    log("推撞需要与敌人邻接。", "bad");
+    return false;
+  }
+  const cost = Math.max(0, def.cost - c.discount);
+  if (cost > c.energy) return false;
+  c.energy -= cost;
+  c.discount = 0;
+  c.hand = c.hand.filter((x) => x.uid !== inst.uid);
+  if (c.heldUid === inst.uid) c.heldUid = null;
+  if (c.placeUid === inst.uid) c.placeUid = null;
+  retireCard(inst);
+  maybeFreeDraw(c, cost);
+
+  const dr = Math.sign(c.enemyPos.r - c.playerPos.r);
+  const dc = Math.sign(c.enemyPos.c - c.playerPos.c);
+  const dest = { r: c.enemyPos.r + dr, c: c.enemyPos.c + dc };
+  if (!inBounds(dest) || isWall(dest) || keyOf(dest) === keyOf(c.playerPos) || (decoyAlive(c) && keyOf(dest) === keyOf(c.decoy.pos))) {
+    drainToughness(1, "推撞撞墙削韧");
+    log(`推撞：${c.enemy.name}撞上障碍，韧性 -1。`, "ok");
+    playTone("ok");
+  } else {
+    c.enemyPos = { ...dest };
+    log(`你把${c.enemy.name}推到 (${dest.r + 1},${dest.c + 1})。`, "ok");
+    playTone("ok");
+    c.portalLanded = false;
+    tryPortal("enemy", c.enemyPos);
+    triggerFloor(c.enemyPos, "enemy");
+    if (c.enemy.hp <= 0) {
+      winCombat();
+      return true;
+    }
+  }
+  c.intent = predictIntent(c);
+  renderCombat();
+  return true;
 }
 
 /** 格子视线：墙遮挡；中间更高的脊也遮挡；邻接始终可见 */
@@ -320,7 +513,8 @@ function refreshVision() {
     c.enemyHadLoS = true;
     if (c.ambushActive) {
       c.ambushActive = false;
-      log(`${c.enemy.name}的埋伏被揭开了！`, "bad");
+      c.ambushSpring = true;
+      log(`${c.enemy.name}的埋伏被揭开了——它猛地扑出来！`, "bad");
     }
   } else {
     c.enemyHadLoS = false;
@@ -353,6 +547,7 @@ function saveGame() {
     nodePending: state.nodePending,
     combatCount: state.combatCount || 0,
     rewardRolls: state.rewardRolls || {},
+    midRelicDone: !!state.midRelicDone,
     uidSeq,
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
@@ -377,6 +572,7 @@ function loadGame() {
     state.nodePending = !!p.nodePending;
     state.combatCount = p.combatCount || 0;
     state.rewardRolls = p.rewardRolls || {};
+    state.midRelicDone = !!p.midRelicDone;
     uidSeq = p.uidSeq || 100;
     return true;
   } catch {
@@ -399,17 +595,22 @@ function resetGame() {
   state.discard = [];
   state.relics = [];
   state.chosenBoss = null;
-  state.nodePending = true;
+  // 玄关只作为出发格：开局预兆二选一已是唯一起步奖励，不再弹强制速度
+  state.visitPath = [state.roomId];
+  state.resolvedRooms = new Set([state.roomId]);
+  state.nodePending = false;
   state.combat = null;
   state.combatCount = 0;
   state.rewardRolls = {};
+  state.midRelicDone = false;
   $("log").innerHTML = "";
   discoverNeighbors(state.roomId);
-  log("电视机亮起来了。山屋里的怪家伙有硬壳——光绕圈可不够哦。");
+  log("电视机亮起来了。山屋里的怪家伙有韧性——得用机关绊住再破韧。");
+  log("行前先选一枚预兆；玄关只是出发坐标，不再发第二份奖励。");
   renderAll();
   show("screen-game");
-  showModal(null);
   saveGame();
+  offerOpeningRelics();
 }
 
 function discoverNeighbors(roomId) {
@@ -487,7 +688,7 @@ function formatWhen(w = {}) {
 function renderStats() {
   const pills = [
     ["速度", state.speed],
-    ["勇气", `${state.hp}/${state.maxHp}`],
+    ["生命", `${state.hp}/${state.maxHp}`],
     ["集数", `${state.visitPath.length}/${state.data.rooms.runLength}`],
     ["道具", state.deck.length + state.discard.length],
     ["惊吓", state.combatCount || 0],
@@ -687,18 +888,31 @@ function startNonCombat(room) {
   if (!rolled) {
     const odds = state.data.rooms.rewardOdds;
     const roll = Math.random();
-    const kind =
+    // 中点保底：已结算 ≥4 且本局尚未发过中点遗物
+    const midGuaranteed =
+      !room.forcedReward && !state.midRelicDone && state.resolvedRooms.size >= 4;
+    let kind =
       room.forcedReward ||
-      (roll < odds.relic ? "relic" : roll < odds.relic + odds.item ? "item" : "stat");
+      (midGuaranteed
+        ? "relic"
+        : roll < odds.relic
+          ? "relic"
+          : roll < odds.relic + odds.item
+            ? "item"
+            : "stat");
     let id = null;
     if (kind === "relic") {
       const available = state.data.relics.pool.filter((x) => !state.relics.includes(x));
       id = available.length ? available[Math.floor(Math.random() * available.length)] : null;
-    } else if (kind === "item") {
+      if (midGuaranteed && !id) kind = "item";
+    }
+    if (kind === "item") {
       const pool = state.data.cards.rewardPool;
       id = pool[Math.floor(Math.random() * pool.length)];
     }
-    rolled = { kind, id };
+    const isMid = !!midGuaranteed && kind === "relic" && !!id;
+    if (isMid) state.midRelicDone = true;
+    rolled = { kind, id, midGuaranteed: isMid };
     state.rewardRolls[room.id] = rolled;
     saveGame();
   }
@@ -715,7 +929,9 @@ function startNonCombat(room) {
   if (kind === "relic") {
     const id = rolled.id;
     $("event-text").textContent = id
-      ? `静室浮现预兆。悬停卡片查看效果，再决定收或弃。`
+      ? rolled.midGuaranteed
+        ? `行程中点——频道强制送来一枚预兆。悬停查看，再决定收或弃。`
+        : `静室浮现预兆。悬停卡片查看效果，再决定收或弃。`
       : "预兆已齐。";
     if (id) {
       const def = relicDef(id);
@@ -759,7 +975,7 @@ function startNonCombat(room) {
   }
 
   if (room.stat?.speed) {
-    $("event-text").textContent = "门厅冷空气（强制）。速度提升，移动与放置会更从容。";
+    $("event-text").textContent = "这里提供强制速度提升。";
     addChoice(box, `接受 速度 +${room.stat.speed}`, "primary", () => {
       state.speed += room.stat.speed;
       log(`速度 S +${room.stat.speed}`, "ok");
@@ -769,13 +985,35 @@ function startNonCombat(room) {
     return;
   }
 
+  // 玄关等无数值池的静室兜底
+  if (room.id === "foyer") {
+    $("event-text").textContent = "行前预兆已经选过了，玄关只是出发坐标。";
+    addChoice(box, "继续前进", "primary", () => {
+      completeRoom();
+      finishNodeModal("该推开下一扇门了。");
+    });
+    return;
+  }
+
   $("event-text").textContent = "静室提供数值，也可放弃。";
-  const options = [
-    { label: "速度 +1", apply: () => { state.speed += 1; log("速度 S +1", "ok"); } },
-    { label: "生命上限 +1 并治疗 1", apply: () => { state.maxHp += 1; state.hp = Math.min(state.maxHp, state.hp + 1); log("生命上限 +1", "ok"); } },
-    { label: "恢复 2 生命", apply: () => { state.hp = Math.min(state.maxHp, state.hp + 2); log("恢复 2 生命", "ok"); } },
+  const pool = [
+    { id: "speed", weight: 0.35, label: "速度 +1", apply: () => { state.speed += 1; log("速度 S +1", "ok"); } },
+    { id: "max", weight: 1, label: "生命上限 +1 并治疗 1", apply: () => { state.maxHp += 1; state.hp = Math.min(state.maxHp, state.hp + 1); log("生命上限 +1", "ok"); } },
+    { id: "heal", weight: 1, label: "恢复 2 生命", apply: () => { state.hp = Math.min(state.maxHp, state.hp + 2); log("恢复 2 生命", "ok"); } },
   ];
-  for (const opt of options) {
+  const picked = [];
+  const bag = [...pool];
+  while (picked.length < 2 && bag.length) {
+    const total = bag.reduce((s, o) => s + o.weight, 0);
+    let r = Math.random() * total;
+    let idx = 0;
+    for (; idx < bag.length; idx += 1) {
+      r -= bag[idx].weight;
+      if (r <= 0) break;
+    }
+    picked.push(bag.splice(Math.min(idx, bag.length - 1), 1)[0]);
+  }
+  for (const opt of picked) {
     addChoice(box, opt.label, "", () => {
       opt.apply();
       completeRoom();
@@ -889,32 +1127,351 @@ function effectiveAttackCost(c) {
   return c.attackCost;
 }
 
+function playerDefenseTotal(c) {
+  const cover = coverBlockAtPlayer();
+  const heightCover = tileHeight(c.playerPos) > tileHeight(c.enemyPos) ? 1 : 0;
+  return (c.block || 0) + cover + heightCover;
+}
+
+/** 预估对玩家的毛伤害（含高差）；展示时再扣当前格挡 */
+function estimateHurtDamage(c) {
+  let dmg = c.enemy.damage;
+  if (tileHeight(c.enemyPos) > tileHeight(c.playerPos)) dmg += 1;
+  return dmg;
+}
+
+function estimateNetHurt(c) {
+  return estimateNetTotal(c, estimateHurtDamage(c), 1, false);
+}
+
+/** 突进落点：走到与玩家相邻的一格（从当前距 2） */
+function lungeLanding(c) {
+  return neighbors(c.enemyPos)
+    .filter((p) => keyOf(p) !== keyOf(c.playerPos))
+    .filter((p) => manhattan(p, c.playerPos) === 1)
+    .map((p) => {
+      const leaveTax = c.floor[keyOf(c.enemyPos)]?.enterTax || 0;
+      const enterTax = c.floor[keyOf(p)]?.enterTax || 0;
+      const climb = climbCost(c.enemyPos, p);
+      return { p, cost: 1 + leaveTax + enterTax + climb };
+    })
+    .sort((a, b) => a.cost - b.cost)[0] || null;
+}
+
+function stepCostTo(c, p) {
+  const leaveTax = c.floor[keyOf(c.enemyPos)]?.enterTax || 0;
+  const enterTax = c.floor[keyOf(p)]?.enterTax || 0;
+  const climb = climbCost(c.enemyPos, p);
+  return 1 + leaveTax + enterTax + climb;
+}
+
+/** slam：以玩家为角、向敌人方向扩的 2×2 */
+function slamRectCells(c) {
+  const p = c.playerPos;
+  const e = c.enemyPos;
+  const dr = Math.sign(e.r - p.r);
+  const dc = Math.sign(e.c - p.c);
+  const rows = dr < 0 ? [p.r - 1, p.r] : [p.r, p.r + 1];
+  const cols = dc < 0 ? [p.c - 1, p.c] : [p.c, p.c + 1];
+  const cells = [];
+  for (const r of rows) {
+    for (const col of cols) {
+      const pos = { r, c: col };
+      if (inBounds(pos) && !isWall(pos)) cells.push(pos);
+    }
+  }
+  return cells;
+}
+
+/** beam：从敌人朝玩家方向的 1×3 线（须同行或同列） */
+function beamLineCells(c) {
+  const e = c.enemyPos;
+  const p = c.playerPos;
+  if (e.r !== p.r && e.c !== p.c) return [];
+  const cells = [];
+  if (e.r === p.r) {
+    const step = Math.sign(p.c - e.c);
+    if (!step) return [];
+    for (let i = 1; i <= 3; i += 1) {
+      const pos = { r: e.r, c: e.c + step * i };
+      if (!inBounds(pos) || isWall(pos)) break;
+      cells.push(pos);
+    }
+  } else {
+    const step = Math.sign(p.r - e.r);
+    if (!step) return [];
+    for (let i = 1; i <= 3; i += 1) {
+      const pos = { r: e.r + step * i, c: e.c };
+      if (!inBounds(pos) || isWall(pos)) break;
+      cells.push(pos);
+    }
+  }
+  return cells;
+}
+
+function cellsContain(cells, pos) {
+  const k = keyOf(pos);
+  return (cells || []).some((x) => keyOf(x) === k);
+}
+
 function canEnemyAttack(c, dist, sees) {
-  if (!sees) return false;
+  if (!sees) return { ok: false, cost: effectiveAttackCost(c), kind: null };
   const cost = effectiveAttackCost(c);
-  if (dist <= 1 && c.enemyStamina >= cost) return { ok: true, cost, kind: "melee" };
-  if (c.traits?.includes("lunge") && dist === 2 && c.enemyStamina >= cost + 1) {
-    return { ok: true, cost: cost + 1, kind: "lunge" };
+  const defense = playerDefenseTotal(c);
+  const pk = keyOf(c.playerPos);
+
+  // slam AoE：距 ≤2
+  if (c.traits?.includes("slam") && dist <= 2 && c.enemyStamina >= cost) {
+    const cells = slamRectCells(c);
+    if (cells.some((x) => keyOf(x) === pk)) {
+      return { ok: true, cost, kind: "slam", cells };
+    }
+  }
+
+  // beam 1×3：同行/列且距 2–3
+  if (
+    c.traits?.includes("beam") &&
+    dist >= 2 &&
+    dist <= 3 &&
+    (c.enemyPos.r === c.playerPos.r || c.enemyPos.c === c.playerPos.c) &&
+    c.enemyStamina >= cost
+  ) {
+    const cells = beamLineCells(c);
+    if (cells.some((x) => keyOf(x) === pk)) {
+      return { ok: true, cost, kind: "beam", cells };
+    }
+  }
+
+  if (dist <= 1 && c.enemyStamina >= cost) {
+    if (c.traits?.includes("guardBreak") && defense > 0 && c.enemyStamina >= cost + 1) {
+      return { ok: true, cost: cost + 1, kind: "guardBreak", cells: [{ ...c.playerPos }] };
+    }
+    return { ok: true, cost, kind: "melee", cells: [{ ...c.playerPos }] };
+  }
+
+  if (c.traits?.includes("lunge") && dist === 2) {
+    const land = lungeLanding(c);
+    if (land && c.enemyStamina >= land.cost + cost) {
+      return {
+        ok: true,
+        cost: land.cost + cost,
+        kind: "lunge",
+        land,
+        cells: [{ ...land.p }, { ...c.playerPos }],
+      };
+    }
   }
   return { ok: false, cost, kind: null };
 }
 
+/** 每回合最多打你几下：默认单段，带「连击」词条才多段（段数始终在红字里写明） */
+function maxHitsPerTurn(c) {
+  if (!c.traits?.includes("flurry")) return 1;
+  return c.isBoss ? 3 : 2;
+}
+
+/** 首击花 firstCost 后，剩余体力还能追加几段 */
+function plannedHits(c, atk, staminaAvailable) {
+  const followCost = Math.max(1, effectiveAttackCost(c));
+  let left = staminaAvailable - atk.cost;
+  let hits = 1;
+  while (hits < maxHitsPerTurn(c) && left >= followCost) {
+    left -= followCost;
+    hits += 1;
+  }
+  return hits;
+}
+
+/** 模拟格挡池：掩体/高差每段都吃，卡牌格挡是会被打光的池子 */
+function estimateNetTotal(c, perHit, hits, ignoreDefense) {
+  if (ignoreDefense) return perHit * hits;
+  const innate = coverBlockAtPlayer() + (tileHeight(c.playerPos) > tileHeight(c.enemyPos) ? 1 : 0);
+  let pool = c.block || 0;
+  let total = 0;
+  for (let i = 0; i < hits; i += 1) {
+    let inc = Math.max(0, perHit - innate);
+    const used = Math.min(pool, inc);
+    pool -= used;
+    total += inc - used;
+  }
+  return total;
+}
+
+/**
+ * 推演敌人这一回合会怎么打你：现在就能打 / 走一步再打 / 只是靠近。
+ * 红区与实际结算共用这份计划，避免「显示追击却挨了一刀」。
+ */
+function planEnemyTurn(c) {
+  const sees = hasLoS(c.enemyPos, c.playerPos);
+  const now = canEnemyAttack(c, manhattan(c.enemyPos, c.playerPos), sees);
+  if (now.ok) {
+    return { atk: now, hits: plannedHits(c, now, c.enemyStamina), step: null, ctx: c };
+  }
+
+  const goal = getEnemyGoal(c);
+  if (!goal || c.enemyStamina < 1) return { atk: null, hits: 0, step: null, ctx: c };
+  const step = stepEnemyToward(goal);
+  if (!step || step.cost > c.enemyStamina) return { atk: null, hits: 0, step: null, ctx: c };
+
+  const after = {
+    ...c,
+    enemyPos: { ...step.p },
+    enemyStamina: c.enemyStamina - step.cost,
+  };
+  const seesAfter = hasLoS(after.enemyPos, after.playerPos);
+  const atk = canEnemyAttack(after, manhattan(after.enemyPos, after.playerPos), seesAfter);
+  if (atk.ok) {
+    return { atk, hits: plannedHits(after, atk, after.enemyStamina), step, ctx: after };
+  }
+  return { atk: null, hits: 0, step, ctx: c };
+}
+
+function hurtZoneFromAttack(ctx, atk, hits) {
+  const perHit = estimateHurtDamage(ctx);
+  const ignore = atk.kind === "guardBreak";
+  const cells = (atk.cells || [{ ...ctx.playerPos }]).map((p) => ({ ...p }));
+  let shape = "cell";
+  if (atk.kind === "lunge" || atk.kind === "beam") shape = "line";
+  if (atk.kind === "slam") shape = "rect";
+  return {
+    shape,
+    cells,
+    kind: "hurt",
+    damage: perHit,
+    hits,
+    total: perHit * hits,
+    net: estimateNetTotal(ctx, perHit, hits, ignore),
+    attackKind: atk.kind,
+  };
+}
+
 function predictIntent(c) {
   const sees = hasLoS(c.enemyPos, c.playerPos);
-  const dist = manhattan(c.enemyPos, c.playerPos);
-  const atk = canEnemyAttack(c, dist, sees);
-  if (atk.ok) {
-    const tag = atk.kind === "lunge" ? "突进" : "突脸";
-    return { type: "attack", label: `${tag} ${c.enemy.damage}（耗${atk.cost}）` };
+  const goal = getEnemyGoal(c);
+  const chasingDecoy = !!(decoyAlive(c) && goal && keyOf(goal) === keyOf(c.decoy.pos));
+
+  // 邻接傀儡：预告打碎傀儡（蓝/灰 hurt 在傀儡格）
+  if (chasingDecoy && manhattan(c.enemyPos, c.decoy.pos) <= 1 && c.enemyStamina >= effectiveAttackCost(c)) {
+    return {
+      type: "attack",
+      label: "撕影",
+      detail: "打碎纸影傀儡",
+      zones: [{ shape: "cell", cells: [{ ...c.decoy.pos }], kind: "hurt", damage: 0, attackKind: "decoy" }],
+      attack: { ok: true, cost: effectiveAttackCost(c), kind: "decoy", cells: [{ ...c.decoy.pos }] },
+    };
   }
-  if (sees && c.enemyStamina >= 1) {
-    return { type: "chase", label: `目击追击（体${c.enemyStamina}）` };
+
+  const plan = chasingDecoy ? { atk: null, hits: 0, step: null, ctx: c } : planEnemyTurn(c);
+
+  if (plan.atk) {
+    const short = {
+      lunge: "突进",
+      guardBreak: "破防",
+      melee: "挥击",
+      slam: "砸地",
+      beam: "激光",
+      faceShock: "突脸",
+    };
+    const zone = hurtZoneFromAttack(plan.ctx, plan.atk, plan.hits);
+    const tag = `${plan.step ? "逼近" : ""}${short[plan.atk.kind] || "攻击"}`;
+    const shots = plan.hits > 1 ? `${zone.damage}×${plan.hits}` : `${zone.damage}`;
+    const blocked = zone.net !== zone.total;
+    const zones = [zone];
+    if (plan.step) zones.push({ shape: "step", cells: [{ ...plan.step.p }], kind: "move" });
+    return {
+      type: "attack",
+      label: `${tag} ${shots}${blocked ? `→${zone.net}` : ""}`,
+      detail: [
+        tag,
+        plan.hits > 1 ? `${plan.hits} 段 · 每段 ${zone.damage} · 合计 ${zone.total}` : `单段 ${zone.damage}`,
+        plan.atk.kind === "guardBreak"
+          ? "破防：无视格挡与掩体"
+          : blocked
+            ? `格挡/掩护后实伤 ${zone.net}`
+            : null,
+        plan.step ? `先走到 (${plan.step.p.r + 1},${plan.step.p.c + 1})` : null,
+        `耗它行动力 ${plan.atk.cost}`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      zones,
+      attack: plan.atk,
+      hits: plan.hits,
+    };
   }
-  if (!sees && c.lastSeen && c.enemyStamina >= 1) {
-    return { type: "search", label: "失去目标·搜索" };
+
+  // 移动意图：下一步落点（蓝虚线）——傀儡优先
+  let stepPos = null;
+  let moveLabel = chasingDecoy ? "追影" : "追击";
+  let type = chasingDecoy ? "chase" : "chase";
+  if (!chasingDecoy && c.traits?.includes("vault") && sees) {
+    const climbOpt = neighbors(c.enemyPos)
+      .filter((p) => keyOf(p) !== keyOf(c.playerPos) && climbCost(c.enemyPos, p) > 0)
+      .filter((p) => !(decoyAlive(c) && keyOf(p) === keyOf(c.decoy.pos)))
+      .map((p) => ({ p, cost: stepCostTo(c, p), height: tileHeight(p) }))
+      .filter((o) => o.cost <= c.enemyStamina)
+      .sort((a, b) => b.height - a.height || a.cost - b.cost)[0];
+    // 只在不拉远与目标距离时攀爬，避免死守出生高台
+    if (climbOpt && climbOpt.height > tileHeight(c.enemyPos)) {
+      const goalPos = goal || c.playerPos;
+      const afterDist = manhattan(climbOpt.p, goalPos);
+      const nowDist = manhattan(c.enemyPos, goalPos);
+      if (afterDist <= nowDist) {
+        stepPos = climbOpt.p;
+        moveLabel = "攀爬";
+      }
+    }
   }
-  if (c.enemyStamina >= 1) return { type: "search", label: "摸索前进" };
-  return { type: "stall", label: "力竭观望" };
+  if (!stepPos && c.ambushSpring && (sees || chasingDecoy)) {
+    const s = stepEnemyToward(goal || c.playerPos);
+    if (s) {
+      stepPos = s.p;
+      moveLabel = "扑出";
+    }
+  }
+  if (!stepPos && goal && c.enemyStamina >= 1 && (sees || chasingDecoy || c.lastSeen)) {
+    const s = stepEnemyToward(goal);
+    if (s && s.cost <= c.enemyStamina) stepPos = s.p;
+    moveLabel = chasingDecoy ? "追影" : sees ? "追击" : "搜索";
+    type = sees || chasingDecoy ? "chase" : "search";
+  }
+  if (!stepPos && c.enemyStamina >= 1 && !sees && !chasingDecoy) {
+    return { type: "search", label: "摸索", detail: "尚不知你的位置", zones: [] };
+  }
+  if (stepPos) {
+    return {
+      type,
+      label: moveLabel,
+      detail: `${moveLabel} → (${stepPos.r + 1},${stepPos.c + 1})`,
+      zones: [{ shape: "step", cells: [{ ...stepPos }], kind: "move" }],
+    };
+  }
+  return { type: "stall", label: "观望", detail: "体力不足", zones: [] };
+}
+
+/** 从 intent.zones 建格 → 威胁信息映射，供渲染 */
+function threatMapFromIntent(intent) {
+  const map = new Map();
+  for (const z of intent?.zones || []) {
+    for (const cell of z.cells || []) {
+      const k = keyOf(cell);
+      const prev = map.get(k);
+      if (z.kind === "hurt") {
+        map.set(k, {
+          kind: "hurt",
+          damage: z.damage || 0,
+          hits: z.hits || 1,
+          total: z.total != null ? z.total : z.damage || 0,
+          net: z.net != null ? z.net : z.damage || 0,
+          shape: z.shape,
+          attackKind: z.attackKind || null,
+        });
+      } else if (z.kind === "move" && (!prev || prev.kind !== "hurt")) {
+        map.set(k, { kind: "move", shape: z.shape });
+      }
+    }
+  }
+  return map;
 }
 
 function beginPlayerTurn(kept = []) {
@@ -934,6 +1491,9 @@ function beginPlayerTurn(kept = []) {
   }
   c.enemyStamina = stamCap;
   c.enemyMovesThisTurn = 0;
+  c.saltSteppedThisTurn = false;
+  c.snareForcedThisTurn = false;
+  c.portalLanded = false;
   const vis = refreshVision();
   if (vis.faceReveal) {
     log(`突脸！${c.enemy.name}从遮挡后锁定了你。`, "bad");
@@ -1053,16 +1613,93 @@ function resolveArena(room, isBoss) {
   const enemy = raw.enemy || [Math.floor(rows / 2), cols - 1];
   const walls = new Set([...(raw.walls || [])]);
   const heights = { ...(raw.heights || {}) };
+  const playerPos = { r: player[0], c: player[1] };
+  const enemyPos = { r: enemy[0], c: enemy[1] };
+  // 防死局：墙不能把玩家与敌人完全切开；必要时拆掉挡路的墙格
+  ensureArenaPath(rows, cols, walls, playerPos, enemyPos);
+  const portals = {};
+  for (const pair of raw.portals || []) {
+    if (!pair || pair.length < 2) continue;
+    const [a, b] = pair;
+    portals[a] = b;
+    portals[b] = a;
+  }
   return {
     rows,
     cols,
-    playerPos: { r: player[0], c: player[1] },
-    enemyPos: { r: enemy[0], c: enemy[1] },
+    playerPos,
+    enemyPos,
     walls,
     heights,
+    portals,
     ambush: !!raw.ambush,
     spawnNote: raw.spawnNote || "",
   };
+}
+
+/** BFS：若玩家到不了敌人格，逐格拆墙直到通路存在 */
+function ensureArenaPath(rows, cols, walls, playerPos, enemyPos) {
+  const goal = keyOf(enemyPos);
+  const inb = (p) => p.r >= 0 && p.r < rows && p.c >= 0 && p.c < cols;
+  const canReach = () => {
+    const q = [{ ...playerPos }];
+    const seen = new Set([keyOf(playerPos)]);
+    while (q.length) {
+      const cur = q.shift();
+      if (keyOf(cur) === goal) return true;
+      for (const n of [
+        { r: cur.r - 1, c: cur.c },
+        { r: cur.r + 1, c: cur.c },
+        { r: cur.r, c: cur.c - 1 },
+        { r: cur.r, c: cur.c + 1 },
+      ]) {
+        if (!inb(n)) continue;
+        const k = keyOf(n);
+        if (seen.has(k)) continue;
+        if (walls.has(k) && k !== goal) continue;
+        seen.add(k);
+        q.push(n);
+      }
+    }
+    return false;
+  };
+  if (canReach()) return;
+  // 找一条无视墙的最短路，拆掉路上的墙
+  const q = [{ ...playerPos }];
+  const prev = new Map([[keyOf(playerPos), null]]);
+  let found = false;
+  while (q.length && !found) {
+    const cur = q.shift();
+    for (const n of [
+      { r: cur.r - 1, c: cur.c },
+      { r: cur.r + 1, c: cur.c },
+      { r: cur.r, c: cur.c - 1 },
+      { r: cur.r, c: cur.c + 1 },
+    ]) {
+      if (!inb(n)) continue;
+      const k = keyOf(n);
+      if (prev.has(k)) continue;
+      prev.set(k, keyOf(cur));
+      if (k === goal) {
+        found = true;
+        break;
+      }
+      q.push(n);
+    }
+  }
+  if (!found) return;
+  let k = goal;
+  const cleared = [];
+  while (k) {
+    if (walls.has(k) && k !== goal && k !== keyOf(playerPos)) {
+      walls.delete(k);
+      cleared.push(k);
+    }
+    k = prev.get(k);
+  }
+  if (cleared.length) {
+    log(`场地校准：拆开堵死通道的墙（${cleared.join(" / ")}），避免死局。`, "ok");
+  }
 }
 
 function startCombat(room, isBoss) {
@@ -1093,6 +1730,7 @@ function startCombat(room, isBoss) {
     grid: { rows: arena.rows, cols: arena.cols },
     walls: arena.walls,
     heights: arena.heights,
+    portals: arena.portals || {},
     playerPos: arena.playerPos,
     enemyPos: arena.enemyPos,
     lastSeen: null,
@@ -1101,10 +1739,19 @@ function startCombat(room, isBoss) {
     enemySeesPlayer: false,
     ambush: arena.ambush,
     ambushActive: arena.ambush,
+    ambushSpring: false,
     spawnNote: arena.spawnNote,
     playerExposed: false,
     enemyMovesThisTurn: 0,
     floor: {},
+    decoy: null,
+    saltSteppedThisTurn: false,
+    blindArmed: false,
+    firstSmashUsed: false,
+    snareForcedThisTurn: false,
+    chasingDecoy: false,
+    portalLanded: false,
+    comboFlash: null,
     energy: 0,
     rolls: [],
     hand: [],
@@ -1117,6 +1764,11 @@ function startCombat(room, isBoss) {
     placeUid: null,
     intent: null,
   };
+  if (hasRelicEffect("revealAmbush") && state.combat.ambushActive) {
+    state.combat.ambushActive = false;
+    state.combat.ambushSpring = false;
+    log("预兆·铃铛叮了一声——埋伏被揭开了。", "ok");
+  }
   const vis = refreshVision();
   if (state.combat.spawnNote) log(state.combat.spawnNote, vis.playerSees ? "ok" : "");
   else if (!vis.playerSees) log(`你踏进${state.combat.roomName}——有东西在，但被地形挡住了。`);
@@ -1125,13 +1777,20 @@ function startCombat(room, isBoss) {
     log("埋伏：它暂不主动搜索，直到有一方建立视线。");
   }
   beginPlayerTurn([]);
+  if (hasRelicEffect("combatDecoy")) {
+    state.combat.hand.push(makeCard("decoy"));
+    log("预兆·纸影：手牌加入「纸影傀儡」。", "ok");
+  }
   renderCombat();
   showModal("screen-cards");
   playTone("dice");
   log(
     `遭遇【${enc.archetypeLabel}】${enc.name} · 难度档 ${enc.tier} · 韧性 ${enc.toughness}。${enc.archetypeDesc}`,
   );
-  if (enc.traits.length) log(`机制：${enc.traits.join(" / ")}`);
+  if (enc.traits.length) {
+    const labels = state.data.pressure.traitLabels || {};
+    log(`机制：${enc.traits.map((t) => labels[t] || t).join(" / ")}`);
+  }
 }
 
 function cancelPlace() {
@@ -1161,6 +1820,10 @@ function selectCard(uid) {
 function resolveInstant(inst) {
   const c = state.combat;
   const def = cardDef(inst.id);
+  if (def.shove) {
+    resolveShove(inst);
+    return;
+  }
   const cost = Math.max(0, def.cost - c.discount);
   if (cost > c.energy) return;
   c.energy -= cost;
@@ -1184,8 +1847,8 @@ function resolveInstant(inst) {
     state.hp -= def.selfDamage;
     log(`反噬 ${def.selfDamage}`, "bad");
   }
-  // 保留牌打出后仍进弃牌（与尖塔一致）；未打出的保留牌靠 retain 关键字留在手牌
-  state.discard.push(inst);
+  // 保留牌打出后仍进弃牌；消耗/临时牌不进弃牌
+  retireCard(inst);
   maybeFreeDraw(c, cost);
   playTone("ok");
   if (state.hp <= 0) {
@@ -1208,16 +1871,24 @@ function tryMovePlayer(pos) {
     return false;
   }
   if (keyOf(pos) === keyOf(c.enemyPos)) return false;
-  const cost = state.data.cards.moveCost + climbCost(c.playerPos, pos);
+  const cost = state.data.cards.moveCost + climbCost(c.playerPos, pos, true);
   if (c.energy < cost) {
     log(`体力不足（移动需 ${cost}，含攀爬）。`, "bad");
+    return false;
+  }
+  if (decoyAlive(c) && keyOf(pos) === keyOf(c.decoy.pos)) {
+    log("傀儡占着这格。", "bad");
     return false;
   }
   const wasSeen = hasLoS(c.enemyPos, c.playerPos);
   c.energy -= cost;
   c.playerPos = { ...pos };
-  const h = tileHeight(pos);
-  log(`你移到 (${pos.r + 1},${pos.c + 1})${h ? ` · 高${h}` : ""}（耗${cost}）。`);
+  c.portalLanded = false;
+  if (tryPortal("player", c.playerPos)) {
+    /* teleported */
+  }
+  const h = tileHeight(c.playerPos);
+  log(`你移到 (${c.playerPos.r + 1},${c.playerPos.c + 1})${h ? ` · 高${h}` : ""}（耗${cost}）。`);
   playTone("ui");
   const vis = refreshVision();
   if (vis.faceReveal) {
@@ -1251,19 +1922,34 @@ function tryPlace(pos) {
     return false;
   }
   const onEnemy = keyOf(pos) === keyOf(c.enemyPos);
+  const onDecoy = decoyAlive(c) && keyOf(pos) === keyOf(c.decoy.pos);
   if (onEnemy && !hasLoS(c.playerPos, c.enemyPos)) {
     log("没有视线，砸不到转角后的敌人。", "bad");
     return false;
   }
   const k = keyOf(pos);
-  if (!onEnemy && c.floor[k]) {
-    log("这里已有物品。", "bad");
-    return false;
-  }
-
   const inst = c.hand.find((x) => x.uid === c.placeUid);
   if (!inst) return false;
   const def = cardDef(inst.id);
+  const isDecoyCard = !!def.place?.decoy;
+
+  if (isDecoyCard) {
+    if (onEnemy) {
+      log("傀儡不能砸在敌人身上，放到邻格。", "bad");
+      return false;
+    }
+    if (c.floor[k]) {
+      log("这里已有物品。", "bad");
+      return false;
+    }
+  } else if (!onEnemy && c.floor[k]) {
+    log("这里已有物品。", "bad");
+    return false;
+  } else if (!onEnemy && onDecoy) {
+    log("傀儡占着这格。", "bad");
+    return false;
+  }
+
   const cost = Math.max(0, def.cost - c.discount);
   if (cost > c.energy) return false;
 
@@ -1272,21 +1958,45 @@ function tryPlace(pos) {
   c.hand = c.hand.filter((x) => x.uid !== inst.uid);
   c.placeUid = null;
   if (c.heldUid === inst.uid) c.heldUid = null;
-  state.discard.push(inst);
+  retireCard(inst);
   maybeFreeDraw(c, cost);
 
-  if (onEnemy && def.place?.onStep?.damage) {
+  if (isDecoyCard) {
+    c.decoy = { pos: { ...pos }, hp: 1, ttl: 2 };
+    log(`纸影傀儡立在 (${pos.r + 1},${pos.c + 1})——怪会优先追它。`, "ok");
+    playTone("ok");
+  } else if (onEnemy && def.place?.onStep?.damage) {
     let dmg = def.place.onStep.damage + relicValue("damageBonus");
+    const combos = [];
     if (tileHeight(c.playerPos) > tileHeight(c.enemyPos)) {
       dmg += 1;
-      log("高位优势：伤害 +1。", "ok");
+      combos.push("高台砸击");
+    }
+    if (c.blindArmed) {
+      dmg += 2;
+      c.blindArmed = false;
+      combos.push("闪瞎连击");
+    }
+    if (adjacentTrapBonus(c, c.enemyPos)) {
+      dmg += 1;
+      drainToughness(1, "夹击连击削韧");
+      combos.push("夹击连击");
+    }
+    if (!c.firstSmashUsed && hasRelicEffect("firstSmashBonus")) {
+      dmg += relicValue("firstSmashBonus");
+      c.firstSmashUsed = true;
+      log("预兆·火漆：首次砸击加伤。", "ok");
+    } else {
+      c.firstSmashUsed = true;
     }
     drainToughness(1, "砸击削韧");
     const dealt = dealToEnemy(dmg, "smash");
     log(`你把「${def.name}」砸向${c.enemy.name}，造成 ${dealt} 伤害。`, "ok");
+    for (const name of combos) comboPop(name);
     playTone("ok");
     if (def.place.onStep.blind) {
       c.lastSeen = null;
+      c.blindArmed = true;
       log("强光炸开——它暂时丢失了你的踪迹。", "ok");
     }
     if (c.enemy.hp <= 0) {
@@ -1322,27 +2032,60 @@ function triggerFloor(pos, who) {
   const item = c.floor[k];
   if (!item) return { tax: 0 };
   let tax = item.enterTax || 0;
-  if (who === "enemy" && item.onStep?.damage) {
+  if (who === "enemy" && item.onStep?.forceStepTowardGoal) {
+    log(`${c.enemy.name}绊上「${cardDef(item.cardId).name}」。`, "ok");
+    delete c.floor[k];
+    playTone("ok");
+    if (!c.snareForcedThisTurn) {
+      c.snareForcedThisTurn = true;
+      const goal = getEnemyGoal(c);
+      if (goal) {
+        const step = stepEnemyToward(goal);
+        if (step && keyOf(step.p) !== keyOf(c.playerPos)) {
+          c.enemyPos = { ...step.p };
+          c.enemyMovesThisTurn = (c.enemyMovesThisTurn || 0) + 1;
+          log(`${c.enemy.name}被绊线拽向目标 (${step.p.r + 1},${step.p.c + 1})。`, "ok");
+          c.portalLanded = false;
+          if (tryPortal("enemy", c.enemyPos)) {
+            /* portal */
+          }
+          triggerFloor(c.enemyPos, "enemy");
+        }
+      }
+    }
+  } else if (who === "enemy" && item.onStep?.damage) {
     let dmg = item.onStep.damage + relicValue("damageBonus");
-    let chaseBonus = false;
+    const combos = [];
     if ((c.enemyMovesThisTurn || 0) >= 1) {
       dmg += 1;
-      chaseBonus = true;
+      combos.push("追击踩踏");
+    }
+    if (c.saltSteppedThisTurn) {
+      dmg += 1;
+      drainToughness(1, "盐道连击削韧");
+      combos.push("盐道连击");
+    }
+    if (c.chasingDecoy || (decoyAlive(c) && getEnemyGoal(c) && keyOf(getEnemyGoal(c)) === keyOf(c.decoy.pos))) {
+      dmg += 1;
+      combos.push("纸影连击");
+    }
+    if (c.portalLanded) {
+      combos.push("隧道连击");
     }
     drainToughness(2, "陷阱削韧");
     const dealt = dealToEnemy(dmg, "trap");
-    log(
-      `${c.enemy.name}踩上「${cardDef(item.cardId).name}」受到 ${dealt} 伤害${chaseBonus ? "（追击踩踏 +1）" : ""}。`,
-      "ok",
-    );
+    log(`${c.enemy.name}踩上「${cardDef(item.cardId).name}」受到 ${dealt} 伤害。`, "ok");
+    for (const name of combos) comboPop(name);
     if (item.onStep.blind) {
       c.lastSeen = null;
+      c.blindArmed = true;
       log("强光炸开——它丢失了你的踪迹。", "ok");
     }
     delete c.floor[k];
     playTone("ok");
   } else if (who === "enemy" && item.enterTax) {
     log(`${c.enemy.name}踏入盐圈，多耗体力。`);
+    c.saltSteppedThisTurn = true;
     drainToughness(1, "盐圈削韧");
   }
   return { tax };
@@ -1356,104 +2099,281 @@ function coverBlockAtPlayer() {
 
 function stepEnemyToward(goal) {
   const c = state.combat;
-  const leaveTax = c.floor[keyOf(c.enemyPos)]?.enterTax || 0;
+  const trapAware = c.traits?.includes("trapAware");
+  const vault = c.traits?.includes("vault");
   const opts = neighbors(c.enemyPos)
     .filter((p) => keyOf(p) !== keyOf(c.playerPos))
+    .filter((p) => !(decoyAlive(c) && keyOf(p) === keyOf(c.decoy.pos)))
     .map((p) => {
       const item = c.floor[keyOf(p)];
       const enterTax = item?.enterTax || 0;
       const climb = climbCost(c.enemyPos, p);
+      const leaveTax = c.floor[keyOf(c.enemyPos)]?.enterTax || 0;
+      const trapHazard = item?.onStep?.damage ? 2 : enterTax > 0 ? 1 : 0;
       return {
         p,
         dist: manhattan(p, goal),
         cost: 1 + leaveTax + enterTax + climb,
+        climb,
+        trapHazard,
+        height: tileHeight(p),
       };
     });
   if (!opts.length) return null;
-  // 杀意优先：不计陷阱；贴目标；同距留体力
-  opts.sort((a, b) => a.dist - b.dist || a.cost - b.cost);
+  opts.sort((a, b) => {
+    if (a.dist !== b.dist) return a.dist - b.dist;
+    if (trapAware && a.trapHazard !== b.trapHazard) return a.trapHazard - b.trapHazard;
+    if (vault && a.height !== b.height) return b.height - a.height;
+    return a.cost - b.cost;
+  });
   return opts[0];
 }
 
-function applyEnemyHit(c, kind) {
-  let incoming = c.enemy.damage;
-  if (kind === "lunge") incoming += 0;
-  if (kind === "faceShock") incoming = Math.max(1, incoming);
-  if (tileHeight(c.enemyPos) > tileHeight(c.playerPos)) incoming += 1;
+/** 朝目标免费迈一步（埋伏弹簧 / 抄近路），不耗体力 */
+function freeStepToward(c, goal, label) {
+  const step = stepEnemyToward(goal);
+  if (!step) return false;
+  c.enemyPos = { ...step.p };
+  c.enemyMovesThisTurn = (c.enemyMovesThisTurn || 0) + 1;
+  c.chasingDecoy = !!(decoyAlive(c) && goal && keyOf(goal) === keyOf(c.decoy.pos));
+  const h = tileHeight(c.enemyPos);
+  log(`${c.enemy.name}${label}至 (${step.p.r + 1},${step.p.c + 1})${h ? `高${h}` : ""}。`, "bad");
+  c.portalLanded = false;
+  if (tryPortal("enemy", c.enemyPos)) {
+    /* portal */
+  }
+  triggerFloor(c.enemyPos, "enemy");
+  return true;
+}
+
+function applyEnemyHit(c, kind, damageOverride = null) {
+  let incoming = damageOverride != null ? damageOverride : c.enemy.damage;
+  if (damageOverride == null && kind === "faceShock") incoming = Math.max(1, incoming);
+  if (damageOverride == null && tileHeight(c.enemyPos) > tileHeight(c.playerPos)) incoming += 1;
+  const raw = incoming;
+
   const cover = coverBlockAtPlayer();
   const heightCover = tileHeight(c.playerPos) > tileHeight(c.enemyPos) ? 1 : 0;
-  const blocked = Math.min(c.block + cover + heightCover, incoming);
-  incoming -= blocked;
-  c.block = 0;
+  if (kind === "guardBreak") {
+    log(`${c.enemy.name}破防一击——格挡与掩体被撕开！`, "bad");
+    c.block = 0;
+  } else {
+    // 先吃地形/高差掩护，再扣卡牌格挡；格挡是池子，未被打光的可挡本回合后续命中
+    let remain = incoming;
+    const innate = cover + heightCover;
+    const innUsed = Math.min(innate, remain);
+    remain -= innUsed;
+    const blockUsed = Math.min(c.block || 0, remain);
+    remain -= blockUsed;
+    c.block = Math.max(0, (c.block || 0) - blockUsed);
+    incoming = remain;
+    if (blockUsed + innUsed > 0) {
+      log(
+        `格挡/掩护抵消 ${blockUsed + innUsed}（预估 ${raw} → ${incoming}）。`,
+        incoming > 0 ? "" : "ok",
+      );
+    }
+  }
+
   if (incoming > 0) {
     state.hp -= incoming;
-    log(`${c.enemy.name}${kind === "lunge" ? "突进" : kind === "faceShock" ? "惊吓" : "攻击"}造成 ${incoming} 伤害。`, "bad");
+    const verb =
+      kind === "lunge"
+        ? "突进"
+        : kind === "faceShock"
+          ? "惊吓"
+          : kind === "guardBreak"
+            ? "破防"
+            : kind === "slam"
+              ? "砸地"
+              : kind === "beam"
+                ? "激光"
+                : "攻击";
+    log(`${c.enemy.name}${verb}造成 ${incoming} 伤害。`, "bad");
     playTone("bad");
     if (c.traits?.includes("grab")) {
-      const stolen = stealCard();
-      if (stolen) log(`搜刮：夺走了 ${cardDef(stolen.id).name}！`, "bad");
+      const stolen = stealCard({ preferHand: true, allowAny: true });
+      if (stolen) {
+        const med = !!cardDef(stolen.id).stealable;
+        log(
+          med
+            ? `搜刮：夺走了 ${cardDef(stolen.id).name}！`
+            : `扯走了杂物：${cardDef(stolen.id).name}！`,
+          "bad",
+        );
+      }
     }
   } else {
-    log("地形/掩体挡住了攻击。", "ok");
+    log("格挡与掩护挡住了攻击。", "ok");
   }
   return state.hp <= 0;
+}
+
+function executeEnemyAttack(c, atk, hitKind) {
+  if (atk.kind === "lunge" && atk.land) {
+    c.enemyPos = { ...atk.land.p };
+    c.enemyMovesThisTurn += 1;
+    log(`${c.enemy.name}突进贴近至 (${atk.land.p.r + 1},${atk.land.p.c + 1})。`, "bad");
+    c.portalLanded = false;
+    if (tryPortal("enemy", c.enemyPos)) {
+      /* portal */
+    }
+    triggerFloor(c.enemyPos, "enemy");
+    if (c.enemy.hp <= 0) return "win";
+  }
+  c.enemyStamina = Math.max(0, c.enemyStamina - atk.cost);
+
+  // 按威胁区结算：玩家须仍在 hurt cells 内（与预警同源）
+  const cells = atk.cells || [{ ...c.playerPos }];
+  if (!cellsContain(cells, c.playerPos)) {
+    log(`${c.enemy.name}的攻击落空——你已不在威胁区内。`, "ok");
+    return "ok";
+  }
+  if (applyEnemyHit(c, hitKind || atk.kind)) return "lose";
+  return "ok";
 }
 
 function enemyTurn() {
   const c = state.combat;
   c.enemyMovesThisTurn = 0;
+  c.saltSteppedThisTurn = false;
+  c.snareForcedThisTurn = false;
+  c.hitsUsed = 0;
+  // 段数按回合开始时的预告锁定，玩家看到的红字就是实际会挨的刀数
+  c.hitBudget = Math.max(1, predictIntent(c)?.hits || 1);
   let guard = 16;
   while (c.enemyStamina > 0 && guard-- > 0) {
     const vis = refreshVision();
-    // 玩家自己走进视线（tryMovePlayer 里标记），回合开始时若仍暴露则同样吃惊吓
+    const goal = getEnemyGoal(c);
+    c.chasingDecoy = !!(decoyAlive(c) && goal && keyOf(goal) === keyOf(c.decoy.pos));
+
+    // 邻接傀儡：优先撕碎
+    if (c.chasingDecoy && manhattan(c.enemyPos, c.decoy.pos) <= 1) {
+      const cost = effectiveAttackCost(c);
+      if (c.enemyStamina >= cost) {
+        c.enemyStamina -= cost;
+        smashDecoy(c, "撕碎了");
+        continue;
+      }
+    }
+
+    // 埋伏弹簧：揭开当回合免费扑一步
+    if (c.ambushSpring && (vis.enemySees || c.chasingDecoy)) {
+      c.ambushSpring = false;
+      freeStepToward(c, goal || c.playerPos, "埋伏扑出");
+      if (c.enemy.hp <= 0) {
+        winCombat();
+        return;
+      }
+    }
+
     const selfExposed = c.playerExposed && vis.enemySees && !vis.faceReveal;
     c.playerExposed = false;
-    if (vis.faceReveal || selfExposed) {
+    if (!c.chasingDecoy && c.hitsUsed < c.hitBudget && (vis.faceReveal || selfExposed)) {
       if (selfExposed) log(`${c.enemy.name}早就盯着你暴露的位置——惊吓扑面而来！`, "bad");
       else log(`突脸！${c.enemy.name}拐过遮挡看见了你。`, "bad");
       playTone("face");
-      // faceShock：重获视线/玩家暴露时立刻打一记（若够得着）
+
+      if (c.traits?.includes("cornerCut") && vis.enemySees) {
+        freeStepToward(c, c.playerPos, "抄近路");
+        if (c.enemy.hp <= 0) {
+          winCombat();
+          return;
+        }
+      }
+
       if (c.traits?.includes("faceShock")) {
         const dist = manhattan(c.enemyPos, c.playerPos);
         const atk = canEnemyAttack(c, dist, true);
         if (atk.ok) {
-          c.enemyStamina = Math.max(0, c.enemyStamina - atk.cost);
-          if (applyEnemyHit(c, "faceShock")) {
+          const shaped = ["guardBreak", "slam", "beam", "lunge"].includes(atk.kind);
+          const hitKind = shaped ? atk.kind : "faceShock";
+          const result = executeEnemyAttack(c, atk, hitKind);
+          c.hitsUsed += 1;
+          if (result === "win") {
+            winCombat();
+            return;
+          }
+          if (result === "lose") {
             loseCombat();
             return;
           }
           continue;
         }
-        // 够不着也惊吓 1 点（无视部分掩体感：固定 1）
-        state.hp -= 1;
-        log(`${c.enemy.name}的惊吓让你失神，受到 1 伤害。`, "bad");
-        if (state.hp <= 0) {
+        // 够不着时的惊吓：1 伤，同样吃格挡
+        const died = applyEnemyHit(c, "faceShock", 1);
+        c.hitsUsed += 1;
+        if (died) {
           loseCombat();
           return;
+        }
+        break;
+      }
+    }
+
+    // vault：仅当攀爬不拉远与目标的距离时才优先上高台
+    if (!c.chasingDecoy && c.traits?.includes("vault") && vis.enemySees) {
+      const climbOpts = neighbors(c.enemyPos)
+        .filter((p) => keyOf(p) !== keyOf(c.playerPos) && climbCost(c.enemyPos, p) > 0)
+        .filter((p) => !(decoyAlive(c) && keyOf(p) === keyOf(c.decoy.pos)))
+        .map((p) => ({ p, cost: stepCostTo(c, p), height: tileHeight(p) }))
+        .filter((o) => o.cost <= c.enemyStamina)
+        .sort((a, b) => b.height - a.height || a.cost - b.cost);
+      const best = climbOpts[0];
+      if (best && best.height > tileHeight(c.enemyPos)) {
+        const goalPos = goal || c.playerPos;
+        const afterDist = manhattan(best.p, goalPos);
+        const nowDist = manhattan(c.enemyPos, goalPos);
+        if (afterDist <= nowDist) {
+          c.enemyStamina -= best.cost;
+          c.enemyMovesThisTurn += 1;
+          c.enemyPos = { ...best.p };
+          log(
+            `${c.enemy.name}攀上高台 (${best.p.r + 1},${best.p.c + 1})高${best.height}（耗${best.cost}）。`,
+            "bad",
+          );
+          c.portalLanded = false;
+          if (tryPortal("enemy", c.enemyPos)) {
+            /* portal */
+          }
+          triggerFloor(c.enemyPos, "enemy");
+          if (c.enemy.hp <= 0) {
+            winCombat();
+            return;
+          }
+          continue;
         }
       }
     }
 
-    const dist = manhattan(c.enemyPos, c.playerPos);
-    const atk = canEnemyAttack(c, dist, vis.enemySees);
-    if (atk.ok) {
-      c.enemyStamina -= atk.cost;
-      if (applyEnemyHit(c, atk.kind)) {
-        loseCombat();
-        return;
+    if (!c.chasingDecoy && c.hitsUsed < c.hitBudget) {
+      const dist = manhattan(c.enemyPos, c.playerPos);
+      const atk = canEnemyAttack(c, dist, vis.enemySees);
+      if (atk.ok) {
+        const result = executeEnemyAttack(c, atk, atk.kind);
+        c.hitsUsed += 1;
+        if (result === "win") {
+          winCombat();
+          return;
+        }
+        if (result === "lose") {
+          loseCombat();
+          return;
+        }
+        continue;
       }
-      continue;
     }
 
-    if (c.ambushActive && !vis.enemySees) {
+    if (c.ambushActive && !vis.enemySees && !c.chasingDecoy) {
       log(`${c.enemy.name}仍藏在出生点，没有下来搜索。`);
       break;
     }
-    const goal = vis.enemySees ? c.playerPos : c.lastSeen;
     if (!goal) {
       log(`${c.enemy.name}还不知道你的位置。`);
       break;
     }
+    // 预告的刀数已打完：不再追步，收工（避免超出红字的额外伤害）
+    if (c.hitsUsed >= c.hitBudget) break;
     const step = stepEnemyToward(goal);
     if (!step || step.cost > c.enemyStamina) {
       log(`${c.enemy.name}在遮挡后停住了。`);
@@ -1461,19 +2381,23 @@ function enemyTurn() {
     }
     c.enemyStamina -= step.cost;
     c.enemyMovesThisTurn += 1;
-    // 逼它跑：移动削韧（风筝核心收益改到这里）
-    drainToughness(step.cost, "追击耗体削韧");
     c.enemyPos = { ...step.p };
     const h = tileHeight(c.enemyPos);
+    const verb = c.chasingDecoy ? "追影" : vis.enemySees ? "追击" : "搜索";
     log(
-      `${c.enemy.name}${vis.enemySees ? "追击" : "搜索"}至 (${step.p.r + 1},${step.p.c + 1})${h ? `高${h}` : ""}（耗${step.cost}）。`,
+      `${c.enemy.name}${verb}至 (${step.p.r + 1},${step.p.c + 1})${h ? `高${h}` : ""}（耗${step.cost}）。`,
     );
+    c.portalLanded = false;
+    if (tryPortal("enemy", c.enemyPos)) {
+      /* portal */
+    }
     triggerFloor(c.enemyPos, "enemy");
     if (c.enemy.hp <= 0) {
       winCombat();
       return;
     }
   }
+  tickDecoyTtl(c);
   refreshVision();
 }
 
@@ -1501,6 +2425,7 @@ function renderCombat() {
   $("enemy-stamina").textContent = `${c.enemyStamina}/${c.staminaMax}`;
   $("enemy-intent").textContent = c.intent?.label || "观望";
   $("enemy-intent").className = `intent-banner intent-${c.intent?.type || "chase"}`;
+  $("enemy-intent").title = c.intent?.detail || c.intent?.label || "";
   $("enemy-hp").textContent = c.playerSeesEnemy ? String(c.enemy.hp) : "??";
   $("player-block").textContent = String(c.block + coverBlockAtPlayer());
   $("player-hp").textContent = `${state.hp}/${state.maxHp}`;
@@ -1548,7 +2473,8 @@ function renderCombat() {
     if (cardHint) cardHint.textContent = "放置模式";
     $("btn-cancel-place").classList.remove("hidden");
   } else {
-    hint.textContent = "点绿色邻格移动（四向）· 点手牌放置 · 逼跑/陷阱削韧";
+    hint.textContent =
+      "红格数字=它这回合会打你多少（2×2 即两段共 4，→后为格挡后实伤）· 蓝=它下一步 · 绿=可走";
     if (cardHint) cardHint.textContent = c.archetypeDesc;
     $("btn-cancel-place").classList.add("hidden");
   }
@@ -1590,6 +2516,12 @@ function renderCombat() {
       tag.textContent = "保留";
       wrap.appendChild(tag);
     }
+    if (def.exhaust || def.temp) {
+      const tag = document.createElement("div");
+      tag.className = "card-exhaust-tag";
+      tag.textContent = "消耗";
+      wrap.appendChild(tag);
+    }
     hand.appendChild(wrap);
   }
 }
@@ -1601,6 +2533,9 @@ function renderBattleGrid() {
   box.style.gridTemplateColumns = `repeat(${g.cols}, minmax(40px, 1fr))`;
   box.innerHTML = "";
   const sees = c.playerSeesEnemy;
+  // 意图刷新：玩家走位后威胁区跟着变
+  c.intent = predictIntent(c);
+  const threats = threatMapFromIntent(c.intent);
 
   for (let r = 0; r < g.rows; r += 1) {
     for (let cidx = 0; cidx < g.cols; cidx += 1) {
@@ -1615,6 +2550,7 @@ function renderBattleGrid() {
       const isE = keyOf(c.enemyPos) === k;
       const item = c.floor[k];
       const adjP = isOrthoAdjacent(pos, c.playerPos) && !wall;
+      const threat = threats.get(k);
 
       if (wall) {
         cell.classList.add("is-wall");
@@ -1630,17 +2566,38 @@ function renderBattleGrid() {
       if (isE && sees) cell.classList.add("has-enemy");
       if (isE && !sees) cell.classList.add("enemy-fog");
       if (item) cell.classList.add("has-item");
+      if (c.portals?.[k]) cell.classList.add("is-portal");
+      const isDecoy = decoyAlive(c) && keyOf(c.decoy.pos) === k;
+      if (isDecoy) cell.classList.add("has-decoy");
       if (c.lastSeen && keyOf(c.lastSeen) === k && !sees) cell.classList.add("last-seen");
 
+      if (threat?.kind === "hurt") {
+        cell.classList.add("threat-hurt");
+        if (isP) cell.classList.add("threat-on-you");
+      } else if (threat?.kind === "move") {
+        cell.classList.add("threat-move");
+      }
+
       const canPlaceEnemy = isE && sees && hasLoS(c.playerPos, c.enemyPos);
-      if (c.placeUid && adjP && !isP && ((isE && canPlaceEnemy) || (!isE && !item))) {
+      const placingDecoy = c.placeUid && cardDef(c.hand.find((x) => x.uid === c.placeUid)?.id || "")?.place?.decoy;
+      if (
+        c.placeUid &&
+        adjP &&
+        !isP &&
+        ((isE && canPlaceEnemy && !placingDecoy) || (!isE && !item && (!isDecoy || placingDecoy)))
+      ) {
         cell.classList.add("place-ok");
       }
       if (c.placeUid && adjP && canPlaceEnemy) cell.classList.add("place-enemy");
-      if (!c.placeUid && adjP && !isE && !isP) cell.classList.add("move-ok");
+      // 威胁优先：有 hurt 时不盖绿色可走提示
+      if (!c.placeUid && adjP && !isE && !isP && !isDecoy && threat?.kind !== "hurt") {
+        cell.classList.add("move-ok");
+      }
 
       const bits = [];
+      if (c.portals?.[k]) bits.push("门");
       if (item) bits.push(item.glyph || "物");
+      if (isDecoy) bits.push("影");
       if (h) bits.push(`↑${h}`);
       let pawnHtml = "";
       if (isP) {
@@ -1651,16 +2608,37 @@ function renderBattleGrid() {
           `<span class="battle-pawn enemy-pawn"><img class="char-token" src="assets/ui/chars/SP_Enemy_Pixel.png" alt="敌" width="28" height="28" draggable="false" /></span>`;
       } else if (isE && !sees) {
         pawnHtml = `<span class="battle-pawn enemy-pawn fog-pawn" aria-label="未知">?</span>`;
+      } else if (isDecoy) {
+        pawnHtml = `<span class="battle-pawn decoy-pawn" aria-label="纸影">影</span>`;
       }
+      const shots = threat?.hits > 1 ? `${threat.damage}×${threat.hits}` : `${threat?.damage}`;
+      const dmgHtml =
+        threat?.kind === "hurt" && threat.damage
+          ? `<span class="threat-dmg">${
+              threat.net !== threat.total ? `${shots}→${threat.net}` : shots
+            }</span>`
+          : threat?.kind === "hurt" && threat.attackKind === "decoy"
+            ? `<span class="threat-dmg">影</span>`
+            : "";
       const meta = bits.length ? `<span class="cell-meta">${bits.join(" ")}</span>` : "";
-      cell.innerHTML = `${pawnHtml}${meta || (!isP && !isE ? "<span>·</span>" : "")}`;
+      cell.innerHTML = `${dmgHtml}${pawnHtml}${meta || (!isP && !isE && !isDecoy && !dmgHtml ? "<span>·</span>" : "")}`;
       cell.title = [
         wall ? "墙" : "空地",
         h ? `高度 ${h}` : null,
+        c.portals?.[k] ? "传送门" : null,
         item ? cardDef(item.cardId)?.name : null,
+        isDecoy ? "纸影傀儡（嘲讽）" : null,
         isP ? "你在这里" : null,
         isE && sees ? c.enemy.name : null,
         isE && !sees ? "有动静，但看不见" : null,
+        threat?.kind === "hurt"
+          ? threat.damage
+            ? `威胁 · ${threat.hits > 1 ? `${threat.damage}×${threat.hits} = ${threat.total}` : `${threat.damage}`} 伤${
+                threat.net !== threat.total ? `（格挡后 ${threat.net}）` : ""
+              }`
+            : "威胁 · 撕碎傀儡"
+          : null,
+        threat?.kind === "move" ? "它下一步可能到这" : null,
         adjP && !c.placeUid ? "可移动" : null,
         adjP && c.placeUid ? "可放置" : null,
       ]
@@ -1669,6 +2647,13 @@ function renderBattleGrid() {
       cell.onclick = () => onTileClick(pos);
       box.appendChild(cell);
     }
+  }
+  // 同步短 banner
+  const banner = $("enemy-intent");
+  if (banner) {
+    banner.textContent = c.intent?.label || "观望";
+    banner.className = `intent-banner intent-${c.intent?.type || "chase"}`;
+    banner.title = c.intent?.detail || "";
   }
 }
 
@@ -1689,10 +2674,11 @@ function endTurn() {
     rest.push(left);
   }
   for (const left of rest) {
+    if (isTempCard(left)) continue; // 临时牌回合结束消失
     if (c.heldUid && left.uid === c.heldUid && kept.filter((k) => !cardDef(k.id).retain).length < budget) {
       kept.push(left);
     } else {
-      state.discard.push(left);
+      retireCard(left);
     }
   }
   c.hand = [];
@@ -1716,7 +2702,9 @@ function endTurn() {
 function winCombat() {
   const c = state.combat;
   const isBoss = c.isBoss;
-  for (const left of c.hand || []) state.discard.push(left);
+  for (const left of c.hand || []) retireCard(left);
+  state.discard = purgeTempCards(state.discard);
+  state.deck = purgeTempCards(state.deck);
   state.combat = null;
   if (isBoss) {
     const boss = state.data.bosses.bosses[state.chosenBoss];
@@ -1737,11 +2725,21 @@ function winCombat() {
   });
 }
 
-function stealCard() {
-  const all = [...state.deck, ...state.discard, ...(state.combat?.hand || [])];
+function stealCard({ preferHand = false, allowAny = false } = {}) {
+  const hand = state.combat?.hand || [];
+  const all = [...state.deck, ...state.discard, ...hand];
   if (!all.length) return null;
-  // 只有标记「可被偷」的牌（药物）会被偷；没有药物时偷不走东西
-  const pool = all.filter((c) => cardDef(c.id).stealable);
+  let pool = [];
+  if (preferHand) {
+    pool = hand.filter((c) => cardDef(c.id).stealable);
+  }
+  if (!pool.length) {
+    pool = all.filter((c) => cardDef(c.id).stealable);
+  }
+  if (!pool.length && allowAny) {
+    // grab 无药时扯走杂物，保证有反馈
+    pool = all;
+  }
   if (!pool.length) return null;
   const target = pool[Math.floor(Math.random() * pool.length)];
   state.deck = state.deck.filter((c) => c.uid !== target.uid);
@@ -1755,31 +2753,25 @@ function stealCard() {
 function loseCombat() {
   const c = state.combat;
   const isBoss = c?.isBoss;
+  const roomName = c?.roomName || "山屋";
   if (c) {
-    for (const left of c.hand || []) state.discard.push(left);
+    for (const left of c.hand || []) retireCard(left);
   }
+  state.discard = purgeTempCards(state.discard);
+  state.deck = purgeTempCards(state.deck);
   state.combat = null;
+  const fail = state.data.bosses.endings.end_fail;
   if (isBoss) {
     const boss = state.data.bosses.bosses[state.chosenBoss];
-    const fail = state.data.bosses.endings.end_fail;
     endGame(false, fail.title, boss?.defeat ? `${boss.defeat}\n${fail.text}` : fail.text);
     return;
   }
-  const stolen = stealCard();
-  if (stolen) log(`物品被偷走：${cardDef(stolen.id).name}`, "bad");
-  state.hp = Math.max(1, state.hp);
-  completeRoom();
-  showModal("screen-dice");
-  $("dice-label").textContent = "战斗失败 · 无加牌机会";
-  $("dice-result").textContent = stolen
-    ? `你逃出节点，丢失 ${cardDef(stolen.id).name}。`
-    : "你逃出节点。";
-  $("dice-result").className = "dice-result bad";
-  state.pending = () => {
-    showModal(null);
-    renderAll();
-    saveGame();
-  };
+  // 普通战斗失败也直接终局：逃出后缺牌难翻盘，不如重开
+  endGame(
+    false,
+    "结局·节目中断",
+    `你在${roomName}没能逃掉。\n山屋把这一集掐灭了——按下「再看一集」重开一局。\n${fail.text}`,
+  );
 }
 
 function openBoss() {

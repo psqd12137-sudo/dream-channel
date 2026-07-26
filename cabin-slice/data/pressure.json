@@ -3,7 +3,7 @@
   "tierScale": {
     "1": { "hp": 0, "damage": 0, "tough": 0, "stam": 0 },
     "2": { "hp": 1, "damage": 0, "tough": 1, "stam": 0 },
-    "3": { "hp": 2, "damage": 0, "tough": 2, "stam": 0 },
+    "3": { "hp": 2, "damage": 1, "tough": 2, "stam": 0 },
     "4": { "hp": 3, "damage": 1, "tough": 3, "stam": 1 },
     "5": { "hp": 4, "damage": 1, "tough": 4, "stam": 1 }
   },
@@ -57,25 +57,38 @@
     "boiler": "crush"
   },
   "roomTraits": {
-    "living": ["faceShock"],
-    "kitchen": ["grab"],
-    "west_wing": ["lunge"],
-    "hall": ["lunge", "faceShock"],
-    "pantry": ["grab", "faceShock"],
-    "yard": ["relentless"],
-    "shed": ["grab"],
-    "gallery": ["faceShock"],
-    "study": ["grab"],
-    "nursery": [],
-    "darkroom": ["lunge", "faceShock"],
-    "attic": ["relentless"],
-    "loft": ["lunge"],
-    "cellar": ["relentless", "grab"],
-    "boiler": ["faceShock", "relentless"]
+    "living": ["faceShock", "cornerCut"],
+    "kitchen": ["grab", "vault"],
+    "west_wing": ["lunge", "cornerCut"],
+    "hall": ["lunge", "faceShock", "cornerCut", "beam"],
+    "pantry": ["grab", "vault", "faceShock"],
+    "yard": ["relentless", "trapAware", "slam"],
+    "shed": ["grab", "vault"],
+    "gallery": ["faceShock", "vault", "beam"],
+    "study": ["grab", "trapAware"],
+    "nursery": ["faceShock"],
+    "darkroom": ["lunge", "faceShock", "cornerCut"],
+    "attic": ["relentless", "vault", "flurry"],
+    "loft": ["lunge", "trapAware"],
+    "cellar": ["relentless", "grab", "trapAware", "flurry"],
+    "boiler": ["faceShock", "relentless", "guardBreak", "slam"]
   },
   "boss": {
     "archetype": "crush",
-    "traits": ["lunge", "faceShock", "relentless"],
+    "traits": ["lunge", "faceShock", "relentless", "guardBreak", "slam", "flurry"],
     "toughBonus": 3
+  },
+  "traitLabels": {
+    "lunge": "突进贴近",
+    "faceShock": "突脸惊吓",
+    "grab": "搜刮",
+    "relentless": "穷追",
+    "vault": "攀爬",
+    "cornerCut": "抄近路",
+    "trapAware": "避陷阱",
+    "guardBreak": "破防",
+    "slam": "砸地AoE",
+    "beam": "激光线",
+    "flurry": "连击（一回合多段）"
   }
 }

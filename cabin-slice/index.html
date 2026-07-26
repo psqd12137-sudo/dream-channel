@@ -37,7 +37,7 @@
           <div class="title-copy">
             <p class="signal">信号锁定 · CH-198X</p>
             <h2 class="title-hero">山屋奇妙夜</h2>
-            <p class="lede">拧开频道旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪耗体力——别站桩硬刚。</p>
+            <p class="lede">拧开频道旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪把行动力花在追你身上——别站桩硬刚。</p>
             <div class="title-actions">
               <button id="btn-start" class="btn btn-primary btn-ticket btn-start">打开电视机</button>
               <button id="btn-continue" class="btn btn-secondary btn-ticket hidden">接着看上集</button>
@@ -45,7 +45,7 @@
             <p id="boot-status" class="boot-status">电视机预热中…</p>
           </div>
           <ol class="rules folder-panel">
-            <li><img src="assets/ui/cards/SP_Card_IconT_Trap.png" alt="" /><span>跑动 + 机关，削掉怪物硬壳</span></li>
+            <li><img src="assets/ui/cards/SP_Card_IconT_Trap.png" alt="" /><span>走位引怪踩机关，削掉韧性</span></li>
             <li><img src="assets/ui/cards/SP_Card_IconT_Omen.png" alt="" /><span>不同怪物，破壳后奖励不同</span></li>
             <li><img src="assets/ui/cards/SP_Card_IconT_Thing.png" alt="" /><span>悬停卡牌，听旁白怎么说</span></li>
           </ol>
@@ -140,8 +140,8 @@
                 <img class="hud-portrait" src="assets/ui/chars/SP_Lili_Profile.png" alt="" />
                 <div class="hud-body">
                   <p class="hud-label">小主角</p>
-                  <div class="hud-row"><span>勇气</span><strong id="player-hp">—</strong></div>
-                  <div class="hud-row"><span>力气</span><strong id="card-energy">0</strong></div>
+                  <div class="hud-row"><span>生命</span><strong id="player-hp">—</strong></div>
+                  <div class="hud-row"><span>行动力</span><strong id="card-energy">0</strong></div>
                   <div class="hud-row"><span>护盾</span><strong id="player-block">0</strong></div>
                   <div id="energy-dice" class="energy-dice"></div>
                 </div>
@@ -151,9 +151,9 @@
                 <div class="hud-body">
                   <p class="hud-label">怪家伙</p>
                   <div class="hud-row"><span>生命</span><strong id="enemy-hp">—</strong></div>
-                  <div class="hud-row"><span>力气</span><strong id="enemy-stamina">—</strong></div>
+                  <div class="hud-row"><span>行动力</span><strong id="enemy-stamina">—</strong></div>
                   <div class="tough-block">
-                    <div class="hud-row"><span>硬壳</span><strong id="kite-meter">—</strong></div>
+                    <div class="hud-row"><span>韧性</span><strong id="kite-meter">—</strong></div>
                     <div class="bar"><div id="tough-fill" class="bar-fill"></div></div>
                   </div>
                 </div>
@@ -168,6 +168,7 @@
                 <span><i class="dot dot-move"></i>能走</span>
               </div>
               <div id="battle-grid" class="battle-grid" aria-label="战斗场地"></div>
+              <div id="combo-toast" class="combo-toast" aria-live="polite"></div>
               <p id="place-hint" class="place-hint"></p>
             </div>
           </aside>
