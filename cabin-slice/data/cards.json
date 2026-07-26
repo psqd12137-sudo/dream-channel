@@ -1,12 +1,11 @@
 {
   "baseSpeed": 3,
   "handSize": 4,
-  "holdPerTurn": 1,
   "diceFaces": [0, 1, 2],
   "grid": { "rows": 3, "cols": 5 },
   "moveCost": 1,
   "starter": ["jab", "jab", "jab", "jab", "guard", "guard", "guard", "focus", "tonic", "flare"],
-  "rewardPool": ["jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline"],
+  "rewardPool": ["jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline", "plans", "stash", "keepsake"],
   "cards": {
     "jab": {
       "id": "jab",
@@ -32,13 +31,38 @@
       "text": "下一件放置费用 -1。",
       "discountNext": 1
     },
+    "plans": {
+      "id": "plans",
+      "name": "预案",
+      "type": "skill",
+      "cost": 1,
+      "text": "获得「预案」：此后每回合结束时可留 1 张牌。（本场战斗）",
+      "grantRetain": 1
+    },
+    "stash": {
+      "id": "stash",
+      "name": "夹带",
+      "type": "skill",
+      "cost": 0,
+      "text": "本回合结束时可留 1 张牌。",
+      "retainThisTurn": 1
+    },
+    "keepsake": {
+      "id": "keepsake",
+      "name": "护身符",
+      "type": "skill",
+      "cost": 1,
+      "text": "保留。获得 2 格挡。回合结束不丢弃。",
+      "gainBlock": 2,
+      "retain": true
+    },
     "flare": {
       "id": "flare",
       "name": "闪光雷",
       "type": "place",
       "cost": 2,
-      "text": "邻格放置，或砸敌人脚下立刻 4 伤。",
-      "place": { "onStep": { "damage": 4 }, "glyph": "闪" }
+      "text": "邻格放置，或砸敌人脚下立刻 3 伤；命中还会闪瞎它，丢失对你的最后目击。",
+      "place": { "onStep": { "damage": 3, "blind": true }, "glyph": "闪" }
     },
     "heavy": {
       "id": "heavy",
