@@ -1,6 +1,9 @@
-# Dream Channel · 山屋频道
+# 织梦频道 · channel dream
 
-跨电脑协作的游戏制作仓库：可玩竖切片 demo（`cabin-slice/`）+ 策划文档。
+正式名：**《织梦频道 channel dream》**（日常可简称 **channel**）。  
+本仓库是跨电脑协作的制作库：可玩竖切片 demo（`cabin-slice/`）+ 策划文档。
+
+**美学主打**：怀旧 · 邪典 · 荒诞——有点像 *Superjail* 那种「儿童节目外壳 + 失控的超现实内核」。不是温馨合家欢，也不是马里奥派对。
 
 ## 快速开始
 
@@ -15,14 +18,14 @@ python3 -m http.server 8787
 
 浏览器打开：http://127.0.0.1:8787/ → 点「打开电视机」
 
-## 当前 demo 状态（Run Scheme v3）
+## 当前 demo 状态（山屋切片 · Run Scheme v3）
 
-竖切片 `cabin-slice/` 是一款 **放置 × 走位** 的 roguelike 网页 demo：
+`cabin-slice/` 是 channel 里的一集可玩切片：**放置 × 走位** roguelike 网页 demo：
 
 - 出牌 = 往场地放道具（地刺、盐圈、闪光雷…），移动引怪踩陷阱削韧性
 - 每间房独立网格战场（墙、高低差、传送格），意图用红/蓝格子明示
 - 开局遗物二选一、牌库成长、中点保底遗物；Boss 可仪式熄锚或击杀通关
-- **下一轮**：用拼图 / 横版搜物等解密事件调剂节奏（减少纯战斗与平铺弹窗）
+- **下一轮**：少量解密/考验调剂节奏（Haunt 式，克制）；第二视角美学定 **3D 微缩景深**
 - 详细玩法见 **[cabin-slice/README.md](./cabin-slice/README.md)**
 
 ## 目录
@@ -30,7 +33,8 @@ python3 -m http.server 8787
 | 路径 | 说明 |
 | --- | --- |
 | `cabin-slice/` | 可玩竖切片（HTML / CSS / JS + JSON 数据） |
-| `Dream Channel 游戏策划案.md` | 主策划案 |
+| **[织梦频道_channel_dream_策划案与招标书.md](./织梦频道_channel_dream_策划案与招标书.md)** | **完整策划案 / 协作招标书（现行主文档）** |
+| `Dream Channel 游戏策划案.md` | 早期观测者宇宙策划（历史文件；产品名与范围以招标书为准） |
 | `Dream Channel - 阈限秘境 游戏策划案.md` | 阈限向草案 |
 | `个人片库 WebUI 技术方案.md` | 相关技术笔记 |
 

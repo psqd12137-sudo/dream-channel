@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>Dream Channel · 山屋频道</title>
+  <title>织梦频道 channel dream · 山屋</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body class="landscape">
@@ -15,8 +15,8 @@
       <div class="brand">
         <img class="brand-avatar" src="assets/ui/chars/SP_Lili_Profile.png" alt="" width="56" height="56" />
         <div class="brand-text">
-          <p class="brand-mark">Dream Channel</p>
-          <h1 class="brand-title">山屋频道</h1>
+          <p class="brand-mark">channel dream</p>
+          <h1 class="brand-title">织梦频道</h1>
         </div>
       </div>
       <div id="stats" class="stat-strip" aria-label="状态"></div>
@@ -35,13 +35,15 @@
             <div class="title-antenna" aria-hidden="true"></div>
           </div>
           <div class="title-copy">
-            <p class="signal">信号锁定 · CH-198X</p>
+            <p class="signal">信号锁定 · CH-198X · channel</p>
             <h2 class="title-hero">山屋奇妙夜</h2>
-            <p class="lede">拧开频道旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪把行动力花在追你身上——别站桩硬刚。</p>
+            <p class="lede">拧开织梦频道的旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪把行动力花在追你身上——邪典儿童节目，别站桩硬刚。</p>
             <div class="title-actions">
               <button id="btn-start" class="btn btn-primary btn-ticket btn-start">打开电视机</button>
               <button id="btn-continue" class="btn btn-secondary btn-ticket hidden">接着看上集</button>
               <button id="btn-boss-test" class="btn btn-ghost btn-ticket" type="button">跳到 Boss（测强度）</button>
+              <button id="btn-sideview-test" class="btn btn-ghost btn-ticket" type="button">测 WASD 手感（临时）</button>
+              <button id="btn-qte-test" class="btn btn-ghost btn-ticket" type="button">测 QTE 解谜占位</button>
             </div>
             <p id="boot-status" class="boot-status">电视机预热中…</p>
             <section class="lab-panel folder-panel" aria-label="实验记录">
@@ -237,12 +239,43 @@
           <button id="btn-lab-export-end" class="btn btn-secondary btn-ticket" type="button">导出本场实验 JSON</button>
         </div>
       </section>
+
+      <section id="screen-sideview" class="panel modal modal-sideview" aria-label="WASD 手感沙盒">
+        <div class="modal-card modal-sideview-card">
+          <header class="sideview-head">
+            <div>
+              <p class="pane-kicker">临时输入沙盒 · 非最终视觉</p>
+              <h2>测 WASD 手感</h2>
+            </div>
+            <button id="btn-sideview-exit" class="btn btn-secondary btn-ticket" type="button">回到标题</button>
+          </header>
+          <canvas id="sideview-canvas" width="960" height="420" aria-label="侧视移动场地"></canvas>
+          <p class="sideview-hint">WASD / 方向键移动 · W / ↑ / 空格跳跃 · Esc 退出。最终第二视角会改成 3D 微缩景深，不是这种扁横版。</p>
+        </div>
+      </section>
+
+      <section id="screen-qte" class="panel modal" aria-label="QTE 解谜占位">
+        <div class="modal-card modal-narrow qte-card">
+          <p class="pane-kicker">解谜占位 · QTE</p>
+          <h2 id="qte-title">信号咬合</h2>
+          <p id="qte-lead" class="qte-lead"></p>
+          <div class="qte-stage" aria-live="polite">
+            <div id="qte-prompt" class="qte-prompt">—</div>
+            <p id="qte-meta" class="qte-meta"></p>
+            <div class="qte-timer" aria-hidden="true"><div id="qte-timer-fill" class="qte-timer-fill"></div></div>
+            <p id="qte-status" class="qte-status">准备…</p>
+          </div>
+          <button id="btn-qte-exit" class="btn btn-secondary btn-ticket hidden" type="button">回到标题</button>
+        </div>
+      </section>
     </main>
 
     <div id="card-tooltip" class="card-tooltip hidden" role="tooltip"></div>
   </div>
 
   <script src="js/audio.js"></script>
+  <script src="js/sideview.js"></script>
+  <script src="js/qte.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

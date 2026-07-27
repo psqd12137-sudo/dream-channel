@@ -1434,9 +1434,63 @@ function addChoice(box, label, cls, fn) {
 }
 
 function startNonCombat(room) {
+  // QTE 解谜占位：先考验，再进原有静室奖励；失败则丢奖励（可不致死）
+  const rolledGate = state.rewardRolls[room.id];
+  if (room.eventType === "qte" && !rolledGate?.qteResolved) {
+    beginQteForRoom(room);
+    return;
+  }
+  startNonCombatRewards(room);
+}
+
+function beginQteForRoom(room) {
+  if (!window.CabinQte) {
+    startNonCombatRewards(room);
+    return;
+  }
+  showModal("screen-qte");
+  $("btn-qte-exit").classList.add("hidden");
+  CabinQte.start({
+    title: room.name,
+    lead: "频道要求你跟上乱码节拍。成功后才能翻静室奖励；失败只丢掉这次奖励（Haunt 式考验）。",
+    onDone: (result) => {
+      const prev = state.rewardRolls[room.id] || {};
+      state.rewardRolls[room.id] = { ...prev, qteResolved: true, qteOk: !!result.ok };
+      saveGame();
+      if (result.ok) {
+        log(`【考验】${room.name}：节拍咬合。`, "ok");
+        playTone("ok");
+        startNonCombatRewards(room);
+        return;
+      }
+      log(`【考验】${room.name}：节拍失手，静室奖励溜走了。`, "bad");
+      playTone("bad");
+      // 小代价：若血量 >1 扣 1，否则只丢奖励
+      if (state.hp > 1) {
+        state.hp -= 1;
+        log("被回声刮了一下（−1 生命）。", "bad");
+      }
+      completeRoom();
+      showModal("screen-event");
+      $("event-title").textContent = room.name;
+      $("event-text").textContent = result.message + " 抽屉自己合上了。";
+      $("btn-close-event").classList.add("hidden");
+      clearRewardCards();
+      const box = $("event-choices");
+      box.innerHTML = "";
+      addChoice(box, "离开", "primary", () => {
+        finishNodeModal("你空着手退回走廊。");
+      });
+      renderAll();
+      saveGame();
+    },
+  });
+}
+
+function startNonCombatRewards(room) {
   // 已摇过的奖励从存档取，防止刷新页面重摇
   let rolled = state.rewardRolls[room.id];
-  if (!rolled) {
+  if (!rolled || rolled.kind == null) {
     const odds = state.data.rooms.rewardOdds;
     const roll = Math.random();
     // 中点保底：已结算 ≥4 且本局尚未发过中点遗物
@@ -1463,7 +1517,7 @@ function startNonCombat(room) {
     }
     const isMid = !!midGuaranteed && kind === "relic" && !!id;
     if (isMid) state.midRelicDone = true;
-    rolled = { kind, id, midGuaranteed: isMid };
+    rolled = { ...(rolled || {}), kind, id, midGuaranteed: isMid };
     state.rewardRolls[room.id] = rolled;
     saveGame();
   }
@@ -3680,6 +3734,56 @@ function bindUi() {
       alert(`无法跳转 Boss：${err.message}`);
     }
   };
+  const exitSideview = () => {
+    if (window.CabinSideview) window.CabinSideview.stop();
+    showModal(null);
+    show("screen-title");
+  };
+  window.CabinSideviewOnExit = exitSideview;
+  const sideBtn = $("btn-sideview-test");
+  if (sideBtn) {
+    sideBtn.onclick = () => {
+      show("screen-title");
+      showModal("screen-sideview");
+      if (window.CabinSideview) window.CabinSideview.start();
+    };
+  }
+  const sideExit = $("btn-sideview-exit");
+  if (sideExit) sideExit.onclick = () => exitSideview();
+  const exitQteSandbox = () => {
+    if (window.CabinQte) CabinQte.stop();
+    const exitBtn = $("btn-qte-exit");
+    if (exitBtn) exitBtn.classList.add("hidden");
+    showModal(null);
+    show("screen-title");
+  };
+  const qteBtn = $("btn-qte-test");
+  if (qteBtn) {
+    qteBtn.onclick = () => {
+      show("screen-title");
+      showModal("screen-qte");
+      const exitBtn = $("btn-qte-exit");
+      if (exitBtn) exitBtn.classList.add("hidden");
+      if (!window.CabinQte) return;
+      CabinQte.start({
+        title: "信号咬合（试玩）",
+        onDone: (result) => {
+          const status = $("qte-status");
+          if (status) {
+            status.textContent = result.ok
+              ? result.message + "（正式局里过关才会发静室奖励）"
+              : result.message + "（正式局里失败只丢奖励）";
+          }
+          if (exitBtn) {
+            exitBtn.classList.remove("hidden");
+            exitBtn.onclick = () => exitQteSandbox();
+          }
+        },
+      });
+    };
+  }
+  const qteExit = $("btn-qte-exit");
+  if (qteExit) qteExit.onclick = () => exitQteSandbox();
   $("btn-restart").onclick = () => {
     startBgm();
     resetGame();
