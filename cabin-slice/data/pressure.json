@@ -1,9 +1,9 @@
 {
-  "combatCurve": [1, 2, 4, 3, 1, 5],
+  "combatCurve": [1, 1, 2, 3, 2, 5],
   "tierScale": {
     "1": { "hp": 0, "damage": 0, "tough": 0, "stam": 0 },
     "2": { "hp": 1, "damage": 0, "tough": 1, "stam": 0 },
-    "3": { "hp": 2, "damage": 1, "tough": 2, "stam": 0 },
+    "3": { "hp": 2, "damage": 0, "tough": 2, "stam": 0 },
     "4": { "hp": 3, "damage": 1, "tough": 3, "stam": 1 },
     "5": { "hp": 4, "damage": 1, "tough": 4, "stam": 1 }
   },
@@ -81,7 +81,7 @@
   "bossFight": {
     "broadcastMax": 12,
     "seenClockBonus": 1,
-    "anchorClockRelief": 3,
+    "anchorClockRelief": 2,
     "breakClockRelief": 2,
     "chargeTurns": 1,
     "anchorHp": 2,

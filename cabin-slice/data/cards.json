@@ -4,7 +4,7 @@
   "diceFaces": [0, 1, 2],
   "grid": { "rows": 3, "cols": 5 },
   "moveCost": 1,
-  "starter": ["jab", "jab", "jab", "jab", "guard", "guard", "guard", "focus", "tonic", "flare"],
+  "starter": ["jab", "jab", "jab", "guard", "guard", "guard", "keepsake", "focus", "tonic", "flare"],
   "rewardPool": ["jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline", "plans", "stash", "keepsake", "snare", "shove"],
   "cards": {
     "jab": {

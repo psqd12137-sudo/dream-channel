@@ -13,8 +13,8 @@ const state = {
   data: null,
   roomId: null,
   speed: 3,
-  hp: 5,
-  maxHp: 5,
+  hp: 6,
+  maxHp: 6,
   visitPath: [],
   resolvedRooms: new Set(),
   knownRooms: new Set(),
@@ -526,23 +526,45 @@ function shouldBossCharge(c) {
   // 贴脸或邻近、且体力够时有机会蓄力；终幕更高
   const phase = currentBossPhase(c);
   if (dist > 2) return false;
-  if (phase.frenzy) return Math.random() < 0.55;
-  if (phase.wideCharge) return Math.random() < 0.35;
-  return Math.random() < 0.22;
+  if (phase.frenzy) return Math.random() < 0.65;
+  if (phase.wideCharge) return Math.random() < 0.45;
+  return Math.random() < 0.32;
 }
 
 function beginBossCharge(c) {
   const radius = chargeRadius(c);
-  const cells = chargeCellsAround(c.playerPos, radius);
+  // 落点优先：覆盖玩家，并尽量吞进附近亮锚（让「引砸」成为可见策略）
+  const candidates = [{ ...c.playerPos }, ...neighbors(c.playerPos)];
+  for (const a of litAnchorKeys(c)) candidates.push(parseKey(a));
+  let best = null;
+  let bestScore = -1;
+  for (const center of candidates) {
+    if (!inBounds(center) || isWall(center)) continue;
+    const cells = chargeCellsAround(center, radius);
+    if (!cellsContain(cells, c.playerPos)) continue;
+    const anchorHits = cells.filter((p) => c.anchors?.[keyOf(p)]?.lit).length;
+    const score = anchorHits * 10 - manhattan(center, c.playerPos);
+    if (score > bestScore) {
+      bestScore = score;
+      best = { center: { ...center }, cells, radius };
+    }
+  }
+  if (!best) {
+    best = {
+      center: { ...c.playerPos },
+      cells: chargeCellsAround(c.playerPos, radius),
+      radius,
+    };
+  }
   const per = Math.ceil(estimateHurtDamage(c) * 1.5);
   c.chargePending = {
-    cells: cells.map((p) => ({ ...p })),
+    cells: best.cells.map((p) => ({ ...p })),
     damage: per,
-    center: { ...c.playerPos },
-    radius,
+    center: best.center,
+    radius: best.radius,
   };
   log(`${c.enemy.name}开始蓄力大招——红格已标出，下回合必落！`, "bad");
-  labEvent("charge_start", { damage: per, radius, cells: cells.length });
+  labEvent("charge_start", { damage: per, radius: best.radius, cells: best.cells.length });
   if (state.lab) state.lab.summary.chargeCasts = (state.lab.summary.chargeCasts || 0) + 1;
   playTone("face");
 }
@@ -1041,8 +1063,8 @@ function resetGame() {
   localStorage.removeItem("cabin-run-v1");
   state.roomId = state.data.rooms.startRoom;
   state.speed = state.data.cards.baseSpeed;
-  state.hp = 5;
-  state.maxHp = 5;
+  state.hp = 6;
+  state.maxHp = 6;
   state.visitPath = [];
   state.resolvedRooms = new Set();
   state.knownRooms = new Set([state.roomId]);
@@ -3725,3 +3747,31 @@ async function main() {
 }
 
 main();
+
+/* 自测 / 调试入口：浏览器控制台与 Playwright 用 */
+window.CabinDebug = {
+  getState: () => state,
+  skipToBossTest,
+  resetGame,
+  moveTo,
+  resolveCurrentNode,
+  openBoss,
+  endTurn,
+  tryMovePlayer,
+  tryPlace,
+  selectCard,
+  tryDismantleAnchor,
+  loseCombat,
+  winCombat,
+  roomDef,
+  cardDef,
+  loadLabStore,
+  LAB_KEY,
+  neighbors,
+  keyOf,
+  manhattan,
+  isPassable,
+  isOrthoAdjacent,
+  hasLoS,
+  runReadyForBoss,
+};
