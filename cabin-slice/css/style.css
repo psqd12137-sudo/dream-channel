@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@600;700;800&display=swap");
+﻿@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@600;700;800&display=swap");
 
 :root {
   --teal: #28b4a1;
@@ -235,6 +235,48 @@ body.landscape {
 }
 .panel.modal.active { display: grid; }
 
+/* 杀戮尖塔式：战场留底，框外压暗，框内奖励/结算 */
+body.sts-overlay-open #screen-cards {
+  pointer-events: none;
+}
+body.sts-overlay-open #screen-cards.panel.modal.active {
+  /* 底图仍可见，不再叠一层不透明遮罩感 */
+  background: transparent;
+}
+#screen-event.sts-reward,
+#screen-end.sts-overlay {
+  z-index: 30;
+  place-items: center;
+  padding: 24px 16px;
+  background: rgba(8, 14, 18, 0.62);
+  backdrop-filter: blur(1px);
+}
+#screen-event.sts-reward .sts-box,
+#screen-end.sts-overlay .sts-box {
+  width: min(520px, 94vw);
+  margin: 0 auto;
+  text-align: center;
+  border: 5px solid var(--ink);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fffaf0 0%, #f3e2c0 100%);
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.2),
+    0 18px 0 rgba(0, 0, 0, 0.35),
+    0 28px 48px rgba(0, 0, 0, 0.45);
+  animation: sts-pop 0.28s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+@keyframes sts-pop {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+#screen-event.sts-reward .reward-row {
+  justify-content: center;
+  margin: 16px 0 8px;
+}
+#screen-event.sts-reward .choices {
+  justify-content: center;
+}
+
 .panel-title { padding: 18px 8px 30px; }
 
 .title-stage {
@@ -402,15 +444,6 @@ body.landscape {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.end-lab-note {
-  margin: 8px auto 12px;
-  max-width: 36em;
-  font-size: 0.85rem;
-  color: var(--muted);
-  line-height: 1.4;
-  font-weight: 700;
 }
 
 .lab-panel {
@@ -589,6 +622,28 @@ body.landscape {
   color: var(--teal-ink);
 }
 
+.map-seed {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.map-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.map-tools .btn {
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  min-height: 0;
+}
+
 .map-legend, .battle-legend {
   display: flex;
   flex-wrap: wrap;
@@ -620,16 +675,20 @@ body.landscape {
 .map-shell {
   position: relative;
   flex: 0 0 auto;
-  height: min(42vh, 360px);
-  max-height: 380px;
+  height: min(46vh, 400px);
+  max-height: 420px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   border-radius: 24px;
   border: 6px solid var(--teal);
-  background: var(--teal-deep);
+  background:
+    linear-gradient(180deg, rgba(12, 48, 58, 0.55), rgba(12, 48, 58, 0.72)),
+    url("assets/ui/SP_LittleMap.png") center / cover no-repeat,
+    var(--teal-deep);
   padding: 22px 14px 16px;
   box-shadow: inset 0 0 0 3px #fff, 0 8px 0 rgba(0, 0, 0, 0.18);
+  overflow: hidden;
 }
 
 .map-antenna {
@@ -683,85 +742,170 @@ body.landscape {
 .map-teeth-top { top: 4px; }
 .map-teeth-bot { bottom: 4px; transform: scaleY(-1); }
 
-.house-map {
-  display: grid;
-  gap: 5px;
-  padding: 2px;
+.map-board {
+  position: relative;
   width: min(100%, 640px);
   margin: 0 auto;
   height: 100%;
-  max-height: 300px;
+  max-height: 340px;
+  border-radius: 16px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.map-board-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(232, 246, 244, 0.55), rgba(18, 58, 66, 0.35) 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.18));
+  mask-image: radial-gradient(ellipse at center, #000 55%, transparent 92%);
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 55%, transparent 92%);
+}
+
+.map-links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.map-link {
+  stroke: rgba(148, 168, 172, 0.85);
+  stroke-width: 0.12;
+  stroke-linecap: round;
+}
+
+.map-link-live {
+  stroke: #2bb3a5;
+  stroke-width: 0.16;
+  filter: drop-shadow(0 0 2px rgba(43, 179, 165, 0.65));
+}
+
+.house-map {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+  padding: 8px;
+  width: 100%;
+  height: 100%;
+  max-height: 340px;
   align-content: stretch;
 }
 
 .map-node {
   appearance: none;
-  border: 3px solid #9ec4c0;
-  border-radius: 12px;
-  background: #fff;
+  border: 2px solid #c5d4d8;
+  border-radius: 10px;
+  background: #f7fbfb;
   color: var(--muted);
   font: inherit;
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 800;
   cursor: pointer;
   position: relative;
-  padding: 2px 4px;
+  padding: 4px 4px 3px;
   min-height: 0;
   width: 100%;
   height: 100%;
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+    0 2px 0 rgba(0, 0, 0, 0.16);
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 }
 .map-node:hover:not(:disabled) {
   border-color: var(--ink);
   color: var(--ink);
-  background: var(--yellow);
+  background: #fff6c8;
+  transform: translateY(-1px);
+  z-index: 3;
 }
-.map-node:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+.map-node:disabled { opacity: 0.72; cursor: not-allowed; box-shadow: none; }
 .map-node.unknown {
-  background: repeating-linear-gradient(-45deg, #e8f3f1, #e8f3f1 4px, #d5e7e4 4px, #d5e7e4 8px);
+  background: repeating-linear-gradient(-45deg, rgba(210, 228, 226, 0.55), rgba(210, 228, 226, 0.55) 4px, rgba(180, 204, 202, 0.45) 4px, rgba(180, 204, 202, 0.45) 8px);
+  border-color: rgba(122, 163, 157, 0.45);
   color: transparent;
+  opacity: 0.55;
 }
 .map-node.unknown::after {
   content: "?";
-  color: #7aa39d;
+  color: rgba(90, 120, 118, 0.75);
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: 1rem;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
 }
-.map-node.combat-known { border-color: var(--red); background: #ffe4e4; }
-.map-node.safe-known { border-color: var(--green); background: #e5f8ec; }
+.map-node.combat-known { border-color: #e26b7a; background: #fff0f2; }
+.map-node.safe-known { border-color: #4caf82; background: #eefaf3; }
 .map-node.visited { color: var(--ink); }
+.map-node.reachable:not(.current) {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.8),
+    0 0 0 2px rgba(43, 179, 165, 0.35),
+    0 2px 0 rgba(0, 0, 0, 0.16);
+  animation: reach-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes reach-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.8), 0 0 0 2px rgba(43,179,165,0.28), 0 2px 0 rgba(0,0,0,0.16); }
+  50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.8), 0 0 0 3px rgba(43,179,165,0.55), 0 2px 0 rgba(0,0,0,0.16); }
+}
 
 .map-node-label {
   display: block;
-  line-height: 1.15;
+  line-height: 1.1;
   pointer-events: none;
+  padding-right: 14px;
+}
+
+.map-node-kind {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  opacity: 0.9;
+}
+.map-node-kind img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  image-rendering: pixelated;
 }
 
 .map-node.current {
   border-color: var(--ink);
   color: var(--ink);
-  background: var(--gold);
+  background: #ffe08a;
   box-shadow: 0 0 0 2px #fff, 0 3px 0 rgba(0, 0, 0, 0.22);
-  z-index: 2;
-  overflow: hidden;
+  z-index: 4;
+  overflow: visible;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 2px;
 }
 
-.map-node.current .map-node-label {
+.map-node.current .map-node-label,
+.map-node.current .map-node-kind {
   display: none;
 }
 
 .map-pawn {
   position: static;
-  width: 24px;
-  height: 24px;
+  width: 34px;
+  height: 34px;
   border: none;
   outline: none;
   background: none;
@@ -773,16 +917,16 @@ body.landscape {
   animation: pawn-bob 1.2s ease-in-out infinite;
 }
 
-.map-pawn .char-token {
-  width: 22px;
-  height: 22px;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+.map-pawn .char-token,
+.map-pawn .map-token {
+  width: 32px;
+  height: 32px;
+  image-rendering: auto;
   object-fit: contain;
   border: none;
-  border-radius: 0;
+  border-radius: 50%;
   background: transparent;
-  filter: none;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.28));
 }
 
 @keyframes pawn-bob {
@@ -832,18 +976,18 @@ body.landscape {
 .exits {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-start;
   align-content: flex-start;
-  padding: 10px;
-  min-height: 72px;
+  padding: 8px;
+  min-height: 56px;
   border-radius: 14px;
-  background: rgba(40, 180, 161, 0.08);
-  border: 2px dashed rgba(31, 111, 102, 0.35);
+  background: rgba(40, 180, 161, 0.06);
+  border: 1px dashed rgba(31, 111, 102, 0.28);
 }
 
 .exits:empty::after {
-  content: "当前没有可走的出口";
+  content: "点地图上的高亮格走动";
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 700;
@@ -851,8 +995,9 @@ body.landscape {
 }
 
 .exits .btn {
-  padding: 10px 14px;
-  font-size: 0.86rem;
+  padding: 7px 11px;
+  font-size: 0.78rem;
+  opacity: 0.92;
 }
 
 .room-actions {
@@ -867,6 +1012,7 @@ body.landscape {
   min-height: 48px;
   font-size: 0.95rem;
 }
+
 
 .choices, .item-actions, .title-actions {
   display: flex;
@@ -1179,6 +1325,25 @@ body.landscape {
   align-items: flex-start;
 }
 
+.battle-top-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.battle-menu {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.battle-menu .btn {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  min-height: 0;
+}
+
 .battle-top h2 {
   margin: 0;
   font-size: 1.2rem;
@@ -1260,6 +1425,10 @@ body.landscape {
 
 .trait-chip.trait-arch {
   background: #ffe08a;
+}
+.trait-chip.trait-blind {
+  background: #fff3a8;
+  color: #6a4a00;
 }
 
 .boss-kit {
@@ -1452,6 +1621,10 @@ body.landscape {
 .battle-cell.move-ok {
   border-color: var(--green);
   background: #d8f5e4;
+}
+.battle-cell.move-ok.move-hostile {
+  border-color: var(--orange);
+  background: #ffe6c8;
 }
 .battle-cell.place-ok {
   border-color: var(--blue);
@@ -1721,15 +1894,18 @@ body.landscape {
   font-weight: 800;
 }
 
+.end-wrap {
+  padding: 22px 20px 18px;
+}
 .end-result {
   display: inline-block;
   margin: 0 0 10px;
-  padding: 6px 14px;
+  padding: 6px 18px;
   border: 3px solid var(--ink);
   border-radius: 999px;
   font-family: var(--font-display);
-  font-size: 1rem;
-  letter-spacing: 0.06em;
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
 }
 .end-result.won {
   background: #d8f5e4;
@@ -1740,11 +1916,34 @@ body.landscape {
   color: #8b1e2d;
 }
 .end-art {
-  width: min(220px, 60%);
+  width: min(160px, 46%);
   height: auto;
-  margin-bottom: 8px;
+  margin: 4px 0 10px;
   image-rendering: auto;
   filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.15));
+}
+.end-wrap .title-hero {
+  font-size: clamp(1.4rem, 3.5vw, 2rem);
+  margin: 4px 0 10px;
+}
+.end-wrap .lede {
+  margin: 0 auto 12px;
+  max-width: 28em;
+  white-space: pre-wrap;
+  text-align: left;
+}
+.end-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.end-lab-note {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .boss-ritual-hud {
@@ -1818,7 +2017,7 @@ body.landscape {
     grid-template-columns: 1fr;
   }
   .map-shell {
-    height: min(38vh, 300px);
+    height: min(42vh, 340px);
   }
   .control-row {
     grid-template-columns: 1fr;

@@ -32,6 +32,18 @@
     "cols": 6,
     "rows": 7
   },
+  "layoutRoll": {
+    "enabled": true,
+    "mode": "map",
+    "placeCount": [10, 16],
+    "start": {
+      "id": "foyer",
+      "col": 3,
+      "row": 7
+    },
+    "startColRange": [2, 5],
+    "exclude": ["altar", "ritual"]
+  },
   "rooms": {
     "foyer": {
       "id": "foyer",

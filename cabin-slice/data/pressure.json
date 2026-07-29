@@ -1,5 +1,5 @@
 {
-  "combatCurve": [1, 1, 2, 3, 2, 5],
+  "combatCurve": [1, 1, 2, 3, 2, 3],
   "tierScale": {
     "1": { "hp": 0, "damage": 0, "tough": 0, "stam": 0 },
     "2": { "hp": 1, "damage": 0, "tough": 1, "stam": 0 },

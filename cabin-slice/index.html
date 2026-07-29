@@ -20,7 +20,7 @@
         </div>
       </div>
       <div id="stats" class="stat-strip" aria-label="状态"></div>
-      <button id="btn-mute" class="btn btn-ticket btn-ghost" type="button">声音：开</button>
+      <button id="btn-mute" class="btn btn-ticket btn-ghost" type="button">音乐：开</button>
     </header>
 
     <main class="app-main">
@@ -74,8 +74,13 @@
               <div>
                 <p class="pane-kicker" id="run-progress">今天的行程 0 / 10</p>
                 <h2 id="room-name">玄关</h2>
+                <p class="map-seed" id="map-seed" aria-live="polite"></p>
               </div>
-              <span id="room-tag" class="chip">散步时间</span>
+              <div class="map-tools">
+                <button id="btn-reroll-map" class="btn btn-ticket btn-ghost" type="button" title="放弃本集，换一张新平面图">换平面图</button>
+                <button id="btn-home" class="btn btn-ticket btn-ghost" type="button" title="回到标题">回首页</button>
+                <span id="room-tag" class="chip">散步时间</span>
+              </div>
             </header>
             <div id="tutorial-coach" class="tutorial-coach hidden" aria-live="polite">
               <p class="coach-kicker">导播耳语</p>
@@ -91,14 +96,18 @@
             <div class="map-shell">
               <div class="map-antenna" aria-hidden="true"></div>
               <div class="map-teeth map-teeth-top" aria-hidden="true"></div>
-              <div id="house-map" class="house-map" aria-label="山屋地图"></div>
+              <div class="map-board">
+                <div class="map-board-wash" aria-hidden="true"></div>
+                <svg id="map-links" class="map-links" aria-hidden="true"></svg>
+                <div id="house-map" class="house-map" aria-label="山屋地图"></div>
+              </div>
               <div class="map-teeth map-teeth-bot" aria-hidden="true"></div>
             </div>
             <div class="map-ops">
               <div class="ops-top">
                 <p id="room-desc" class="room-desc"></p>
               </div>
-              <div class="ops-label">操作区 · 选出口或进入当前房间</div>
+              <div class="ops-label">点地图走动 · 或点下方出口</div>
               <div class="control-row">
                 <div id="exits" class="exits" aria-label="出口"></div>
                 <div class="room-actions">
@@ -135,12 +144,12 @@
       </section>
 
       <section id="screen-event" class="panel modal">
-        <div class="modal-card modal-wide">
-          <p class="pane-kicker">小插曲</p>
+        <div class="modal-card modal-wide sts-box">
+          <p class="pane-kicker" id="event-kicker">小插曲</p>
           <h2 id="event-title"></h2>
           <p id="event-text"></p>
-          <div id="event-choices" class="choices"></div>
           <div id="reward-cards" class="reward-row"></div>
+          <div id="event-choices" class="choices"></div>
           <button id="btn-close-event" class="btn btn-secondary btn-ticket hidden">回到散步</button>
         </div>
       </section>
@@ -153,7 +162,12 @@
                 <p class="pane-kicker" id="card-check-label">惊吓时间</p>
                 <h2 id="combat-title">场地战</h2>
               </div>
-              <div id="enemy-intent" class="intent-banner">它想做 —</div>
+              <div class="battle-top-right">
+                <div class="battle-menu">
+                  <button id="btn-combat-home" class="btn btn-ticket btn-ghost" type="button" title="回到标题（可接着看上集）">主页</button>
+                </div>
+                <div id="enemy-intent" class="intent-banner">它想做 —</div>
+              </div>
             </header>
             <div id="boss-ritual-hud" class="boss-ritual-hud hidden" aria-label="仪式状态">
               <span id="boss-phase-chip" class="boss-phase-chip">开场</span>
@@ -239,15 +253,17 @@
         </div>
       </section>
 
-      <section id="screen-end" class="panel panel-title">
-        <div class="end-wrap">
+      <section id="screen-end" class="panel modal sts-overlay">
+        <div class="modal-card sts-box end-wrap">
           <p id="end-result" class="end-result" aria-live="polite"></p>
           <img id="end-art" class="end-art" src="assets/ui/SP_Gameover.png" alt="" />
           <h2 id="end-title" class="title-hero"></h2>
           <p id="end-log" class="lede"></p>
           <p id="end-lab-note" class="end-lab-note"></p>
-          <button id="btn-restart" class="btn btn-primary btn-ticket">再看一集</button>
-          <button id="btn-lab-export-end" class="btn btn-secondary btn-ticket" type="button">导出本场实验 JSON</button>
+          <div class="end-actions">
+            <button id="btn-restart" class="btn btn-primary btn-ticket">再看一集</button>
+            <button id="btn-lab-export-end" class="btn btn-secondary btn-ticket" type="button">导出本场实验 JSON</button>
+          </div>
         </div>
       </section>
 

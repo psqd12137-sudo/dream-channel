@@ -4,6 +4,7 @@
   "diceFaces": [0, 1, 2],
   "grid": { "rows": 3, "cols": 5 },
   "moveCost": 1,
+  "hostilePassCost": 1,
   "starter": ["jab", "jab", "jab", "guard", "guard", "guard", "keepsake", "focus", "tonic", "flare"],
   "rewardPool": ["jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline", "plans", "stash", "keepsake", "snare", "shove"],
   "cards": {
@@ -61,7 +62,7 @@
       "name": "闪光雷",
       "type": "place",
       "cost": 2,
-      "text": "邻格放置，或砸敌人脚下立刻 3 伤；命中还会闪瞎它，丢失对你的最后目击。",
+      "text": "邻格放置，或砸敌人脚下立刻 3 伤；命中会闪瞎它一整回合——丢失目击，无法锁定攻击。",
       "place": { "onStep": { "damage": 3, "blind": true }, "glyph": "闪" }
     },
     "heavy": {

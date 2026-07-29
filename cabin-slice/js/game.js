@@ -34,6 +34,9 @@ const state = {
   labTag: "normal",
   /** 新手教学：{ active, step, roomsMain } */
   tutorial: null,
+  /** 本局房间类型伪随机：种子 + id→combat|quiet */
+  runSeed: 0,
+  roomLayout: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -53,11 +56,30 @@ async function loadData() {
 function show(id) {
   document.querySelectorAll(".panel").forEach((el) => el.classList.remove("active"));
   $(id).classList.add("active");
+  document.body.classList.remove("sts-overlay-open");
+  $("screen-event")?.classList.remove("sts-reward");
 }
 
-function showModal(id) {
-  document.querySelectorAll(".panel.modal").forEach((el) => el.classList.remove("active"));
+/** keep: 仍保持激活的 modal id 列表（用于 STS 式叠层：战场留底、奖励框盖上） */
+function showModal(id, { keep = [] } = {}) {
+  document.querySelectorAll(".panel.modal").forEach((el) => {
+    if (keep.includes(el.id)) return;
+    el.classList.remove("active");
+  });
   if (id) $(id).classList.add("active");
+  const overlayOpen = !!(id && (id === "screen-end" || id === "screen-event") && keep.includes("screen-cards"));
+  document.body.classList.toggle("sts-overlay-open", overlayOpen);
+  const eventPanel = $("screen-event");
+  if (eventPanel) eventPanel.classList.toggle("sts-reward", overlayOpen && id === "screen-event");
+}
+
+function freezeCombatUnderlay() {
+  const cards = $("screen-cards");
+  if (cards && !cards.classList.contains("active")) {
+    // 若刚关掉，强制留住最后一帧战场
+    cards.classList.add("active");
+  }
+  return ["screen-cards"];
 }
 
 function cardDef(id) {
@@ -179,7 +201,152 @@ function clearRewardCards() {
 }
 
 function roomDef(id) {
-  return state.data.rooms.rooms[id];
+  const base = state.data.rooms.rooms[id];
+  if (!base) return null;
+  if (state.tutorial?.active) return base;
+  const loc = state.roomLayout?.[id];
+  // 空间布局覆盖：只改地图坐标与出口，内容/战斗/场地仍用原房间数据
+  if (loc && typeof loc === "object" && loc.col != null) {
+    return {
+      ...base,
+      map: { col: loc.col, row: loc.row },
+      exits: [...(loc.exits || [])],
+    };
+  }
+  return base;
+}
+
+/** 本局实际出现在大地图上的房间 id */
+function placedRoomIds() {
+  if (state.tutorial?.active || !isSpatialLayout(state.roomLayout)) {
+    return Object.keys(state.data.rooms.rooms);
+  }
+  return Object.keys(state.roomLayout);
+}
+
+function isSpatialLayout(layout) {
+  if (!layout) return false;
+  const first = Object.values(layout)[0];
+  return !!first && typeof first === "object" && first.col != null;
+}
+
+/** 可复现的伪随机（Mulberry32） */
+function makeRng(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle(arr, rng) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function cellKey(c, r) {
+  return `${c},${r}`;
+}
+
+/**
+ * 开局掷大地图布局：房间内容固定，落位 + 邻接出口伪随机（连通）。
+ * 玄关固定出生格；祭坛/仪式不进随机图（仍走 Boss 按钮）。
+ */
+function rollRoomLayout(seed = (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0) {
+  const cfg = state.data.rooms.layoutRoll;
+  const rooms = state.data.rooms.rooms;
+  const size = state.data.rooms.mapSize || { cols: 6, rows: 7 };
+
+  if (!cfg?.enabled || cfg.mode === "off" || state.tutorial?.active) {
+    state.runSeed = seed;
+    state.roomLayout = null;
+    return null;
+  }
+
+  const rng = makeRng(seed);
+  const exclude = new Set(cfg.exclude || ["altar", "ritual"]);
+  const startId = cfg.start?.id || state.data.rooms.startRoom || "foyer";
+  const [colLo, colHi] = cfg.startColRange || [cfg.start?.col ?? 3, cfg.start?.col ?? 3];
+  const startCol =
+    colLo + Math.floor(rng() * (Math.max(colLo, colHi) - colLo + 1));
+  const startRow = cfg.start?.row ?? rooms[startId]?.map?.row ?? size.rows;
+
+  const pool = seededShuffle(
+    Object.keys(rooms).filter(
+      (id) => id !== startId && !exclude.has(id) && !rooms[id].bossRoom,
+    ),
+    rng,
+  );
+
+  const [lo, hi] = cfg.placeCount || [pool.length + 1, pool.length + 1];
+  const want = Math.max(
+    1,
+    Math.min(pool.length + 1, lo + Math.floor(rng() * (Math.max(lo, hi) - lo + 1))),
+  );
+
+  const occupied = new Map(); // "c,r" -> id
+  const layout = {};
+  layout[startId] = { col: startCol, row: startRow, exits: [] };
+  occupied.set(cellKey(startCol, startRow), startId);
+
+  const dirs = [
+    [0, -1],
+    [0, 1],
+    [-1, 0],
+    [1, 0],
+  ];
+  const inBounds = (c, r) => c >= 1 && r >= 1 && c <= size.cols && r <= size.rows;
+
+  const frontierOf = () => {
+    const edge = [];
+    const seen = new Set();
+    for (const loc of Object.values(layout)) {
+      for (const [dc, dr] of dirs) {
+        const c = loc.col + dc;
+        const r = loc.row + dr;
+        const k = cellKey(c, r);
+        if (!inBounds(c, r) || occupied.has(k) || seen.has(k)) continue;
+        seen.add(k);
+        edge.push({ c, r });
+      }
+    }
+    return edge;
+  };
+
+  let pi = 0;
+  while (Object.keys(layout).length < want && pi < pool.length) {
+    const frontier = frontierOf();
+    if (!frontier.length) break;
+    const spot = frontier[Math.floor(rng() * frontier.length)];
+    const id = pool[pi++];
+    layout[id] = { col: spot.c, row: spot.r, exits: [] };
+    occupied.set(cellKey(spot.c, spot.r), id);
+  }
+
+  // 正交邻格互为出口（无向）
+  for (const [id, loc] of Object.entries(layout)) {
+    const exits = [];
+    for (const [dc, dr] of dirs) {
+      const nid = occupied.get(cellKey(loc.col + dc, loc.row + dr));
+      if (nid) exits.push(nid);
+    }
+    loc.exits = exits;
+  }
+
+  state.runSeed = seed;
+  state.roomLayout = layout;
+  const combatN = Object.keys(layout).filter((id) => rooms[id]?.combat).length;
+  log(
+    `本集山屋平面图 #${seed >>> 0} · ${Object.keys(layout).length} 间（惊吓 ${combatN}）`,
+    "ok",
+  );
+  return layout;
 }
 
 function makeCard(id) {
@@ -306,6 +473,42 @@ function climbCost(from, to, forPlayer = false) {
   if (dh <= 0) return 0;
   if (forPlayer && hasRelicEffect("ignoreClimb")) return 0;
   return dh;
+}
+
+/** 山屋惊魂式占格：单位不硬挡路；敌对穿格额外耗体，同阵营免费 */
+function occupantsAt(c, pos) {
+  if (!c || !pos) return { player: false, enemy: false, decoy: false };
+  const k = keyOf(pos);
+  return {
+    player: keyOf(c.playerPos) === k,
+    enemy: keyOf(c.enemyPos) === k,
+    decoy: decoyAlive(c) && keyOf(c.decoy.pos) === k,
+  };
+}
+
+function hostilePassCostValue() {
+  return state.data?.cards?.hostilePassCost ?? 1;
+}
+
+/** 仅玩家穿格计费：进敌人格耗 hostilePassCost；傀儡同阵营 0。敌人不计穿格税（以击杀为目标）。 */
+function unitPassCost(who, pos) {
+  const c = state.combat;
+  if (!c || !pos || who !== "player") return 0;
+  const o = occupantsAt(c, pos);
+  if (o.enemy) return hostilePassCostValue();
+  return 0;
+}
+
+function playerMoveCost(from, to) {
+  return state.data.cards.moveCost + climbCost(from, to, true) + unitPassCost("player", to);
+}
+
+/** 敌人落到单位格后的结算：踩上傀儡则打碎 */
+function resolveEnemyLandOverlap(c) {
+  if (!c) return;
+  if (decoyAlive(c) && keyOf(c.enemyPos) === keyOf(c.decoy.pos)) {
+    smashDecoy(c, "踩碎了");
+  }
 }
 
 function isExhaustCard(instOrDef) {
@@ -622,17 +825,16 @@ function tryPortal(who, fromPos) {
   const c = state.combat;
   const dest = portalMate(fromPos);
   if (!dest) return false;
-  // 对端被占则不传（玩家/怪/傀儡）
-  const blocked =
-    (who !== "player" && keyOf(dest) === keyOf(c.playerPos)) ||
-    (who !== "enemy" && keyOf(dest) === keyOf(c.enemyPos)) ||
-    (decoyAlive(c) && keyOf(dest) === keyOf(c.decoy.pos));
-  if (blocked || isWall(dest) || !inBounds(dest)) {
+  // 单位可叠格，仅墙/越界挡住传送
+  if (isWall(dest) || !inBounds(dest)) {
     log("传送门嗡了一下，但对端被挡住了。");
     return false;
   }
   if (who === "player") c.playerPos = { ...dest };
-  else if (who === "enemy") c.enemyPos = { ...dest };
+  else if (who === "enemy") {
+    c.enemyPos = { ...dest };
+    resolveEnemyLandOverlap(c);
+  }
   log(who === "player" ? `你跌进隧道，出现在 (${dest.r + 1},${dest.c + 1})。` : `${c.enemy.name}跌进隧道，出现在 (${dest.r + 1},${dest.c + 1})。`, who === "player" ? "ok" : "bad");
   c.portalLanded = true;
   return true;
@@ -710,7 +912,8 @@ function resolveShove(inst) {
   const dr = Math.sign(c.enemyPos.r - c.playerPos.r);
   const dc = Math.sign(c.enemyPos.c - c.playerPos.c);
   const dest = { r: c.enemyPos.r + dr, c: c.enemyPos.c + dc };
-  if (!inBounds(dest) || isWall(dest) || keyOf(dest) === keyOf(c.playerPos) || (decoyAlive(c) && keyOf(dest) === keyOf(c.decoy.pos))) {
+  // 单位可穿：仅墙/越界算撞障；推上傀儡则落地打碎
+  if (!inBounds(dest) || isWall(dest)) {
     drainToughness(1, "推撞撞墙削韧");
     log(`推撞：${c.enemy.name}撞上障碍，韧性 -1。`, "ok");
     playTone("ok");
@@ -718,6 +921,7 @@ function resolveShove(inst) {
     c.enemyPos = { ...dest };
     log(`你把${c.enemy.name}推到 (${dest.r + 1},${dest.c + 1})。`, "ok");
     playTone("ok");
+    resolveEnemyLandOverlap(c);
     c.portalLanded = false;
     tryPortal("enemy", c.enemyPos);
     triggerFloor(c.enemyPos, "enemy");
@@ -750,11 +954,38 @@ function hasLoS(a, b) {
   return true;
 }
 
+function isEnemyBlinded(c) {
+  return !!(c && (c.blindTurns || 0) > 0);
+}
+
+/** 闪光雷：致盲至少 1 个敌方回合——丢目击、本回合无法靠视线锁定/攻击 */
+function applyBlind(c, source = "flare") {
+  if (!c) return;
+  c.lastSeen = null;
+  c.lastSeenAge = 0;
+  c.blindArmed = true;
+  c.blindTurns = Math.max(c.blindTurns || 0, 1);
+  c.enemySeesPlayer = false;
+  log("强光炸开——它瞎了一回合：丢失目击，暂时无法锁定攻击！", "ok");
+  labEvent("blind", { source, turns: c.blindTurns });
+}
+
+function tickBlind(c) {
+  if (!c || !(c.blindTurns > 0)) return;
+  c.blindTurns -= 1;
+  if (c.blindTurns <= 0) {
+    c.blindTurns = 0;
+    log(`${c.enemy.name}的眼睛缓过来了。`);
+  }
+}
+
 function refreshVision() {
   const c = state.combat;
   if (!c) return { playerSees: false, enemySees: false, faceReveal: false };
   const playerSees = hasLoS(c.playerPos, c.enemyPos);
-  const enemySees = hasLoS(c.enemyPos, c.playerPos);
+  // 几何上有视线，但致盲期间当作看不见（否则砸闪光后立刻 refresh 会把目击设回来）
+  const geoSees = hasLoS(c.enemyPos, c.playerPos);
+  const enemySees = geoSees && !isEnemyBlinded(c);
   let faceReveal = false;
   if (enemySees) {
     if (!c.enemyHadLoS) faceReveal = true;
@@ -766,7 +997,7 @@ function refreshVision() {
       c.ambushSpring = true;
       log(`${c.enemy.name}的埋伏被揭开了——它猛地扑出来！`, "bad");
     }
-  } else {
+  } else if (!isEnemyBlinded(c)) {
     c.enemyHadLoS = false;
   }
   c.playerSeesEnemy = playerSees;
@@ -1030,6 +1261,8 @@ function saveGame() {
     combatCount: state.combatCount || 0,
     rewardRolls: state.rewardRolls || {},
     midRelicDone: !!state.midRelicDone,
+    runSeed: state.runSeed || 0,
+    roomLayout: state.roomLayout || null,
     uidSeq,
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
@@ -1055,7 +1288,13 @@ function loadGame() {
     state.combatCount = p.combatCount || 0;
     state.rewardRolls = p.rewardRolls || {};
     state.midRelicDone = !!p.midRelicDone;
+    state.runSeed = p.runSeed || 0;
+    state.roomLayout = p.roomLayout || null;
     uidSeq = p.uidSeq || 100;
+    // 旧存档若是「类型翻转」格式或缺失空间布局：按种子重掷平面图 / 或沿用 json
+    if (state.roomLayout && !isSpatialLayout(state.roomLayout)) {
+      rollRoomLayout(state.runSeed || ((Date.now() ^ 0x9e3779b9) >>> 0));
+    }
     return true;
   } catch {
     return false;
@@ -1089,6 +1328,92 @@ function setBattleCoach(title, body) {
 function clearCoaches() {
   $("tutorial-coach")?.classList.add("hidden");
   $("battle-coach")?.classList.add("hidden");
+}
+
+function updateMuteButton() {
+  const btn = $("btn-mute");
+  if (!btn) return;
+  btn.textContent = state.muted ? "音乐：关" : "音乐：开";
+  btn.setAttribute("aria-pressed", state.muted ? "true" : "false");
+}
+
+/** 放弃本集，换一张新平面图（新种子） */
+function rerollMapRun() {
+  if (state.tutorial?.active) {
+    log("教学片不能换平面图。先回首页再开正式节目。", "bad");
+    return;
+  }
+  if (state.combat) {
+    log("惊吓时间里不能换平面图——先打完或回首页。", "bad");
+    return;
+  }
+  const ok = window.confirm(
+    `放弃当前进度，换一张全新山屋平面图？\n（当前 #${state.runSeed >>> 0}）`,
+  );
+  if (!ok) return;
+  resetGame();
+}
+
+/** 回到标题页；存档保留，可用「接着看上集」 */
+function goHome({ fromCombat = false } = {}) {
+  if (state.combat) {
+    if (!fromCombat) {
+      const ok = window.confirm(
+        "正打着惊吓时间。回主页会中断本场（房间可再进；进度进存档，可接着看上集）。确定？",
+      );
+      if (!ok) return;
+    }
+    abandonCombatForMenu();
+  }
+  if (state.tutorial?.active) {
+    exitTutorialMode({ startReal: false });
+  }
+  showModal(null);
+  document.body.classList.remove("sts-overlay-open");
+  hideCardTooltip();
+  clearCoaches();
+  saveGame();
+  show("screen-title");
+  if (localStorage.getItem(SAVE_KEY)) $("btn-continue")?.classList.remove("hidden");
+  else $("btn-continue")?.classList.add("hidden");
+  const status = $("boot-status");
+  if (status) {
+    status.classList.remove("bad");
+    status.textContent = isSpatialLayout(state.roomLayout)
+      ? `上集平面图 #${state.runSeed >>> 0} 已存档。接着看上集可续玩；打开电视机 / 换平面图开新山屋。`
+      : "准备就绪——按下「打开电视机」或「接着看上集」。";
+  }
+}
+
+/** 尖塔式：离开战斗回菜单，不判负；未结算房间保持可再进 */
+function abandonCombatForMenu() {
+  const c = state.combat;
+  if (!c) return;
+  const roomId = c.roomId || state.roomId;
+  try {
+    for (const left of c.hand || []) retireCard(left);
+  } catch (_) {}
+  state.discard = purgeTempCards(state.discard);
+  state.deck = purgeTempCards(state.deck);
+  // 开战时已 +1 惊吓计数；中途退出要退回，避免再进同房叠档
+  if (!c.isBoss && (state.combatCount || 0) > 0) {
+    state.combatCount -= 1;
+  }
+  state.combat = null;
+  if (roomId) {
+    state.roomId = roomId;
+    if (!state.resolvedRooms.has(roomId)) state.nodePending = true;
+  }
+  document.body.classList.remove("sts-overlay-open");
+}
+
+/** 战斗中回主页（杀戮尖塔菜单感） */
+function combatGoHome() {
+  const ok = window.confirm(
+    "回到主页？\n本场惊吓会中断，但不会判负——接着看上集后可再进这间房。",
+  );
+  if (!ok) return;
+  goHome({ fromCombat: true });
 }
 
 function refreshTutorialCoach() {
@@ -1202,6 +1527,8 @@ async function startTutorial() {
   };
   state.data.rooms = state.data.tutorial;
   state.labTag = "tutorial";
+  state.roomLayout = null;
+  state.runSeed = 0;
   state.roomId = state.data.rooms.startRoom;
   state.speed = 3;
   state.hp = 6;
@@ -1279,9 +1606,12 @@ function resetGame() {
   state.lab = null;
   state.labTag = "normal";
   $("log").innerHTML = "";
+  rollRoomLayout();
   discoverNeighbors(state.roomId);
   log("电视机亮起来了。山屋里的怪家伙有韧性——得用机关绊住再破韧。");
   log("行前先选一枚预兆；玄关只是出发坐标，不再发第二份奖励。");
+  document.body.classList.remove("sts-overlay-open");
+  showModal(null);
   renderAll();
   show("screen-game");
   saveGame();
@@ -1346,6 +1676,8 @@ function skipToBossTest() {
   state.rewardRolls = {};
   state.midRelicDone = true;
   state.labTag = "boss_test";
+  state.roomLayout = null;
+  state.runSeed = 0;
   $("log").innerHTML = "";
   show("screen-game");
   showModal(null);
@@ -1441,6 +1773,16 @@ function renderStats() {
     .map(([k, v]) => `<div class="stat-pill"><span>${k}</span><strong>${v}</strong></div>`)
     .join("");
   $("run-progress").textContent = `今天的行程 ${state.visitPath.length} / ${state.data.rooms.runLength}`;
+  const seedEl = $("map-seed");
+  if (seedEl) {
+    if (state.tutorial?.active) {
+      seedEl.textContent = "教学片 · 固定小地图";
+    } else if (isSpatialLayout(state.roomLayout)) {
+      seedEl.textContent = `平面图 #${state.runSeed >>> 0} · ${Object.keys(state.roomLayout).length} 间`;
+    } else {
+      seedEl.textContent = "平面图：手摆固定稿";
+    }
+  }
 }
 
 function renderBossBoard() {
@@ -1503,13 +1845,52 @@ function renderLists() {
 
 function renderMap() {
   const box = $("house-map");
+  const links = $("map-links");
   const size = state.data.rooms.mapSize || { cols: 6, rows: 7 };
   box.style.gridTemplateColumns = `repeat(${size.cols}, minmax(0, 1fr))`;
   box.style.gridTemplateRows = `repeat(${size.rows}, minmax(0, 1fr))`;
   box.innerHTML = "";
+  if (links) {
+    links.innerHTML = "";
+    links.setAttribute("viewBox", `0 0 ${size.cols} ${size.rows}`);
+    links.setAttribute("preserveAspectRatio", "none");
+  }
   const here = roomDef(state.roomId);
-  const exits = new Set(here.exits || []);
-  for (const room of Object.values(state.data.rooms.rooms)) {
+  const exits = new Set(here?.exits || []);
+  const rooms = placedRoomIds().map((id) => roomDef(id)).filter(Boolean);
+  const byId = Object.fromEntries(rooms.map((r) => [r.id, r]));
+
+  // 走廊：已知↔已知的双向边只画一次
+  if (links) {
+    const drawn = new Set();
+    for (const room of rooms) {
+      if (!state.knownRooms.has(room.id) || !room.map) continue;
+      for (const eid of room.exits || []) {
+        const other = byId[eid];
+        if (!other?.map || !state.knownRooms.has(eid)) continue;
+        const a = room.id < eid ? room.id : eid;
+        const b = room.id < eid ? eid : room.id;
+        const key = `${a}|${b}`;
+        if (drawn.has(key)) continue;
+        drawn.add(key);
+        const from = room.id < eid ? room : other;
+        const to = room.id < eid ? other : room;
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", String(from.map.col - 0.5));
+        line.setAttribute("y1", String(from.map.row - 0.5));
+        line.setAttribute("x2", String(to.map.col - 0.5));
+        line.setAttribute("y2", String(to.map.row - 0.5));
+        const live =
+          (room.id === state.roomId && exits.has(eid)) ||
+          (eid === state.roomId && exits.has(room.id));
+        line.setAttribute("class", live ? "map-link map-link-live" : "map-link");
+        links.appendChild(line);
+      }
+    }
+  }
+
+  for (const room of rooms) {
+    if (!room.map) continue;
     const btn = document.createElement("button");
     btn.className = "map-node";
     btn.style.gridColumn = String(room.map.col);
@@ -1519,14 +1900,30 @@ function renderMap() {
     if (!known) {
       btn.classList.add("unknown");
       btn.disabled = true;
+      btn.title = "还没看清";
     } else {
       const label = document.createElement("span");
       label.className = "map-node-label";
       label.textContent = room.name;
       btn.appendChild(label);
-      if (room.combat) btn.classList.add("combat-known");
-      else btn.classList.add("safe-known");
+
+      const kind = document.createElement("span");
+      kind.className = "map-node-kind";
+      kind.setAttribute("aria-hidden", "true");
+      if (room.bossRoom) {
+        kind.innerHTML = `<img src="assets/ui/WarningSign.png" alt="" />`;
+      } else if (room.combat) {
+        kind.innerHTML = `<img src="assets/ui/EventIcon.png" alt="" />`;
+        btn.classList.add("combat-known");
+      } else {
+        kind.innerHTML = `<img src="assets/ui/OmenIcon.png" alt="" />`;
+        btn.classList.add("safe-known");
+      }
+      btn.appendChild(kind);
+
       if (visited) btn.classList.add("visited");
+      if (exits.has(room.id) && room.id !== state.roomId) btn.classList.add("reachable");
+
       if (room.id === state.roomId) {
         btn.classList.add("current");
         btn.title = `${room.name}（你在这里）`;
@@ -1534,9 +1931,12 @@ function renderMap() {
         pawn.className = "map-pawn";
         pawn.setAttribute("aria-label", `你在${room.name}`);
         pawn.innerHTML =
-          `<img class="char-token" src="assets/ui/chars/SP_Lili_Pixel.png" alt="你" width="32" height="32" draggable="false" />`;
+          `<img class="char-token map-token" src="assets/ui/chars/SP_Lili_MapToken.png" alt="你" width="40" height="40" draggable="false" />`;
         btn.appendChild(pawn);
+      } else {
+        btn.title = room.name + (room.combat ? " · 惊吓" : " · 静室");
       }
+
       const canMove =
         exits.has(room.id) &&
         !state.nodePending &&
@@ -1623,8 +2023,56 @@ function moveTo(targetId) {
 function resolveCurrentNode() {
   const room = roomDef(state.roomId);
   if (!state.nodePending || room.bossRoom) return;
-  if (room.combat) startCombat(room, false);
-  else startNonCombat(room);
+  if (room.combat) {
+    if (state.hp <= 2) {
+      offerCombatCaution(room);
+      return;
+    }
+    startCombat(room, false);
+  } else startNonCombat(room);
+}
+
+/** 残血进战：明确警告 + 可撤退（房间不结算，可改道） */
+function offerCombatCaution(room) {
+  const nextTier = combatTier((state.combatCount || 0) + 1);
+  const preview = (() => {
+    // 临时按「下一场」档位估伤害，不推进 combatCount
+    const saved = state.combatCount;
+    state.combatCount = (state.combatCount || 0) + 1;
+    const enc = buildEncounter(room, false);
+    state.combatCount = saved;
+    return enc;
+  })();
+  showModal("screen-event");
+  const kicker = $("event-kicker");
+  if (kicker) kicker.textContent = "残血警告";
+  $("event-title").textContent = room.name;
+  $("event-text").textContent =
+    `你只剩 ${state.hp}/${state.maxHp} 生命。此间预计难度档 ${nextTier} · ${preview.name}（伤 ${preview.damage} · 韧 ${preview.toughness}）。` +
+    (state.hp <= 1 ? "一击就可能结束这一集。" : "容错很薄，建议先去静室喘息。");
+  $("btn-close-event").classList.add("hidden");
+  clearRewardCards();
+  const box = $("event-choices");
+  box.innerHTML = "";
+  addChoice(box, "硬闯这一间", "danger", () => {
+    showModal(null);
+    startCombat(room, false);
+  });
+  addChoice(box, "先撤退", "primary", () => {
+    state.nodePending = false;
+    log(`你退回门口——${room.name}还在，可以稍后再进。`, "ok");
+    finishNodeModal("先去别处回回血，再回来。");
+    renderAll();
+    saveGame();
+  });
+}
+
+function healPlayer(amount, reason = "恢复") {
+  const before = state.hp;
+  state.hp = Math.min(state.maxHp, state.hp + Math.max(0, amount));
+  const gained = state.hp - before;
+  if (gained > 0) log(`${reason} +${gained}（现 ${state.hp}/${state.maxHp}）`, "ok");
+  return gained;
 }
 
 function addChoice(box, label, cls, fn) {
@@ -1763,6 +2211,17 @@ function startNonCombatRewards(room) {
   }
   const kind = rolled.kind;
 
+  // 进门前先记下残血，避免「静室喘息」把血抬过阈值后丢掉治疗保底
+  const enteredLowHp = state.hp <= 2 && state.hp < state.maxHp;
+
+  // 静室进门喘息：每房一次（写入 rewardRolls，防刷新重复回血）
+  if (room.id !== "foyer" && !rolled.quietBreath && state.hp < state.maxHp) {
+    healPlayer(1, "静室喘息");
+    rolled.quietBreath = true;
+    state.rewardRolls[room.id] = rolled;
+    saveGame();
+  }
+
   showModal("screen-event");
   $("event-title").textContent = room.name;
   $("btn-close-event").classList.add("hidden");
@@ -1840,14 +2299,41 @@ function startNonCombatRewards(room) {
     return;
   }
 
-  $("event-text").textContent = "静室提供数值，也可放弃。";
+  $("event-text").textContent =
+    enteredLowHp
+      ? "你还很虚弱。静室提供数值——治疗已加重权重。"
+      : "静室提供数值，也可放弃。";
+  const lowHp = enteredLowHp;
   const pool = [
-    { id: "speed", weight: 0.35, label: "速度 +1", apply: () => { state.speed += 1; log("速度 S +1", "ok"); } },
-    { id: "max", weight: 1, label: "生命上限 +1 并治疗 1", apply: () => { state.maxHp += 1; state.hp = Math.min(state.maxHp, state.hp + 1); log("生命上限 +1", "ok"); } },
-    { id: "heal", weight: 1, label: "恢复 2 生命", apply: () => { state.hp = Math.min(state.maxHp, state.hp + 2); log("恢复 2 生命", "ok"); } },
+    { id: "speed", weight: lowHp ? 0.15 : 0.35, label: "速度 +1", apply: () => { state.speed += 1; log("速度 S +1", "ok"); } },
+    {
+      id: "max",
+      weight: 1,
+      label: "生命上限 +1 并治疗 1",
+      apply: () => {
+        state.maxHp += 1;
+        healPlayer(1, "上限提升并治疗");
+      },
+    },
+    {
+      id: "heal",
+      weight: lowHp ? 2.5 : 1,
+      label: "恢复 2 生命",
+      apply: () => {
+        healPlayer(2, "静室治疗");
+      },
+    },
   ];
   const picked = [];
   const bag = [...pool];
+  // 残血保底：治疗选项必进二选一
+  if (lowHp && state.hp < state.maxHp) {
+    const healOpt = bag.find((o) => o.id === "heal");
+    if (healOpt) {
+      picked.push(healOpt);
+      bag.splice(bag.indexOf(healOpt), 1);
+    }
+  }
   while (picked.length < 2 && bag.length) {
     const total = bag.reduce((s, o) => s + o.weight, 0);
     let r = Math.random() * total;
@@ -1859,7 +2345,7 @@ function startNonCombatRewards(room) {
     picked.push(bag.splice(Math.min(idx, bag.length - 1), 1)[0]);
   }
   for (const opt of picked) {
-    addChoice(box, opt.label, "", () => {
+    addChoice(box, opt.label, opt.id === "heal" && lowHp ? "primary" : "", () => {
       opt.apply();
       completeRoom();
       finishNodeModal("身体给出反馈。");
@@ -1871,8 +2357,11 @@ function startNonCombatRewards(room) {
   });
 }
 
-function offerCardReward({ title, lead, offers, onDone }) {
-  showModal("screen-event");
+function offerCardReward({ title, lead, offers, onDone, overCombat = false }) {
+  const keep = overCombat ? freezeCombatUnderlay() : [];
+  showModal("screen-event", { keep });
+  const kicker = $("event-kicker");
+  if (kicker) kicker.textContent = overCombat ? "战斗奖励" : "小插曲";
   $("event-title").textContent = title;
   $("event-text").textContent = `${lead} 悬停卡牌可查看用途与用法。`;
   $("btn-close-event").classList.add("hidden");
@@ -1902,7 +2391,7 @@ function offerCardReward({ title, lead, offers, onDone }) {
     card.appendChild(take);
     row.appendChild(card);
   }
-  addChoice(box, "放弃这次机会", "", () => {
+  addChoice(box, "跳过", "", () => {
     hideCardTooltip();
     onDone("你判断加牌不划算，放弃了。");
   });
@@ -1952,10 +2441,14 @@ function gainRelic(id) {
 
 /* ========== 网格战斗 ========== */
 
-function combatTier() {
-  const curve = state.data.pressure?.combatCurve || [1, 2, 4, 3, 1, 5];
-  const idx = Math.min(Math.max(0, (state.combatCount || 1) - 1), curve.length - 1);
-  return curve[idx];
+function combatTier(atCount = state.combatCount || 1) {
+  // 末段不再跳档 5；残血再压一档，避免 1 血硬吃尖峰
+  const curve = state.data.pressure?.combatCurve || [1, 1, 2, 3, 2, 3];
+  const idx = Math.min(Math.max(0, atCount - 1), curve.length - 1);
+  let tier = curve[idx];
+  if (state.hp <= 1) tier = Math.min(tier, 2);
+  else if (state.hp <= 2) tier = Math.min(tier, 3);
+  return tier;
 }
 
 function tierScale(tier) {
@@ -2195,9 +2688,18 @@ function hurtZoneFromAttack(ctx, atk, hits) {
 }
 
 function predictIntent(c) {
-  const sees = hasLoS(c.enemyPos, c.playerPos);
+  const sees = hasLoS(c.enemyPos, c.playerPos) && !isEnemyBlinded(c);
   const goal = getEnemyGoal(c);
   const chasingDecoy = !!(decoyAlive(c) && goal && keyOf(goal) === keyOf(c.decoy.pos));
+
+  if (isEnemyBlinded(c) && !chasingDecoy) {
+    return {
+      type: "search",
+      label: "闪瞎",
+      detail: "强光致盲：本回合无法锁定你攻击",
+      zones: [],
+    };
+  }
 
   // Boss 蓄力中：虚线红格预告下回合必落
   if (c.isBoss && c.chargePending) {
@@ -2281,7 +2783,6 @@ function predictIntent(c) {
   if (!chasingDecoy && c.traits?.includes("vault") && sees) {
     const climbOpt = neighbors(c.enemyPos)
       .filter((p) => keyOf(p) !== keyOf(c.playerPos) && climbCost(c.enemyPos, p) > 0)
-      .filter((p) => !(decoyAlive(c) && keyOf(p) === keyOf(c.decoy.pos)))
       .map((p) => ({ p, cost: stepCostTo(c, p), height: tileHeight(p) }))
       .filter((o) => o.cost <= c.enemyStamina)
       .sort((a, b) => b.height - a.height || a.cost - b.cost)[0];
@@ -2648,6 +3149,7 @@ function startCombat(room, isBoss) {
     decoy: null,
     saltSteppedThisTurn: false,
     blindArmed: false,
+    blindTurns: 0,
     firstSmashUsed: false,
     snareForcedThisTurn: false,
     chasingDecoy: false,
@@ -2807,14 +3309,15 @@ function tryMovePlayer(pos) {
     log("遮挡物无法通过。", "bad");
     return false;
   }
-  if (keyOf(pos) === keyOf(c.enemyPos)) return false;
-  const cost = state.data.cards.moveCost + climbCost(c.playerPos, pos, true);
+  if (keyOf(pos) === keyOf(c.playerPos)) return false;
+  const passTax = unitPassCost("player", pos);
+  const cost = playerMoveCost(c.playerPos, pos);
   if (c.energy < cost) {
-    log(`体力不足（移动需 ${cost}，含攀爬）。`, "bad");
-    return false;
-  }
-  if (decoyAlive(c) && keyOf(pos) === keyOf(c.decoy.pos)) {
-    log("傀儡占着这格。", "bad");
+    if (passTax > 0) {
+      log(`体力不足（穿过敌人需 ${cost}，含敌对穿格 +${passTax}）。`, "bad");
+    } else {
+      log(`体力不足（移动需 ${cost}，含攀爬）。`, "bad");
+    }
     return false;
   }
   const wasSeen = hasLoS(c.enemyPos, c.playerPos);
@@ -2826,6 +3329,7 @@ function tryMovePlayer(pos) {
   }
   const h = tileHeight(c.playerPos);
   log(`你移到 (${c.playerPos.r + 1},${c.playerPos.c + 1})${h ? ` · 高${h}` : ""}（耗${cost}）。`);
+  if (passTax > 0) log(`擦身而过，多耗 ${passTax} 体力。`);
   playTone("ui");
   const vis = refreshVision();
   if (vis.faceReveal) {
@@ -2932,11 +3436,7 @@ function tryPlace(pos) {
     log(`你把「${def.name}」砸向${c.enemy.name}，造成 ${dealt} 伤害。`, "ok");
     for (const name of combos) comboPop(name);
     playTone("ok");
-    if (def.place.onStep.blind) {
-      c.lastSeen = null;
-      c.blindArmed = true;
-      log("强光炸开——它暂时丢失了你的踪迹。", "ok");
-    }
+    if (def.place.onStep.blind) applyBlind(c, def.id || "flare");
     if (c.enemy.hp <= 0) {
       winCombat("kill");
       return true;
@@ -3029,11 +3529,7 @@ function triggerFloor(pos, who) {
     const dealt = dealToEnemy(dmg, "trap");
     log(`${c.enemy.name}踩上「${cardDef(item.cardId).name}」受到 ${dealt} 伤害。`, "ok");
     for (const name of combos) comboPop(name);
-    if (item.onStep.blind) {
-      c.lastSeen = null;
-      c.blindArmed = true;
-      log("强光炸开——它丢失了你的踪迹。", "ok");
-    }
+    if (item.onStep.blind) applyBlind(c, item.cardId || "flare");
     delete c.floor[k];
     playTone("ok");
   } else if (who === "enemy" && item.enterTax) {
@@ -3054,20 +3550,18 @@ function stepEnemyToward(goal) {
   const c = state.combat;
   const trapAware = c.traits?.includes("trapAware");
   const vault = c.traits?.includes("vault");
+  // 不踩玩家格（贴脸就打，不「穿过」）；可踩傀儡格（落地打碎）
   const opts = neighbors(c.enemyPos)
     .filter((p) => keyOf(p) !== keyOf(c.playerPos))
-    .filter((p) => !(decoyAlive(c) && keyOf(p) === keyOf(c.decoy.pos)))
     .map((p) => {
       const item = c.floor[keyOf(p)];
       const enterTax = item?.enterTax || 0;
-      const climb = climbCost(c.enemyPos, p);
-      const leaveTax = c.floor[keyOf(c.enemyPos)]?.enterTax || 0;
       const trapHazard = item?.onStep?.damage ? 2 : enterTax > 0 ? 1 : 0;
       return {
         p,
         dist: manhattan(p, goal),
-        cost: 1 + leaveTax + enterTax + climb,
-        climb,
+        cost: stepCostTo(c, p),
+        climb: climbCost(c.enemyPos, p),
         trapHazard,
         height: tileHeight(p),
       };
@@ -3091,6 +3585,7 @@ function freeStepToward(c, goal, label) {
   c.chasingDecoy = !!(decoyAlive(c) && goal && keyOf(goal) === keyOf(c.decoy.pos));
   const h = tileHeight(c.enemyPos);
   log(`${c.enemy.name}${label}至 (${step.p.r + 1},${step.p.c + 1})${h ? `高${h}` : ""}。`, "bad");
+  resolveEnemyLandOverlap(c);
   c.portalLanded = false;
   if (tryPortal("enemy", c.enemyPos)) {
     /* portal */
@@ -3226,17 +3721,22 @@ function enemyTurn() {
     } else {
       c.lastSeenAge = 0;
     }
+    tickBlind(c);
     return;
   }
   if (c.isBoss && shouldBossCharge(c)) {
     beginBossCharge(c);
     // 蓄力回合：不动不出手，红格已预告
     if (tickBroadcast(c) || !state.combat) return;
+    tickBlind(c);
     return;
   }
 
-  // 回合开始时若没有视线：本回合最多打 1 下（突脸/重新发现），不给连击清算
-  const sawAtStart = hasLoS(c.enemyPos, c.playerPos);
+  // 回合开始时若没有视线（含致盲）：本回合最多打 1 下，不给连击清算
+  const sawAtStart = hasLoS(c.enemyPos, c.playerPos) && !isEnemyBlinded(c);
+  if (isEnemyBlinded(c)) {
+    log(`${c.enemy.name}被闪光晃花了眼，这一回合盯不稳你。`, "ok");
+  }
   const planned = predictIntent(c);
   c.hitBudget = Math.max(1, planned?.hits || 1);
   if (!sawAtStart) c.hitBudget = 1;
@@ -3321,11 +3821,10 @@ function enemyTurn() {
       }
     }
 
-    // vault：仅当攀爬不拉远与目标的距离时才优先上高台
-    if (!c.chasingDecoy && c.traits?.includes("vault") && vis.enemySees) {
+    // vault：仅当攀爬不拉远与目标的距离时才优先上高台（打过以后不再挪）
+    if (!c.chasingDecoy && c.hitsUsed === 0 && c.traits?.includes("vault") && vis.enemySees) {
       const climbOpts = neighbors(c.enemyPos)
         .filter((p) => keyOf(p) !== keyOf(c.playerPos) && climbCost(c.enemyPos, p) > 0)
-        .filter((p) => !(decoyAlive(c) && keyOf(p) === keyOf(c.decoy.pos)))
         .map((p) => ({ p, cost: stepCostTo(c, p), height: tileHeight(p) }))
         .filter((o) => o.cost <= c.enemyStamina)
         .sort((a, b) => b.height - a.height || a.cost - b.cost);
@@ -3342,6 +3841,7 @@ function enemyTurn() {
             `${c.enemy.name}攀上高台 (${best.p.r + 1},${best.p.c + 1})高${best.height}（耗${best.cost}）。`,
             "bad",
           );
+          resolveEnemyLandOverlap(c);
           c.portalLanded = false;
           if (tryPortal("enemy", c.enemyPos)) {
             /* portal */
@@ -3372,9 +3872,9 @@ function enemyTurn() {
           loseCombat("hp");
           return;
         }
-        // 已经贴脸打过：本回合收工，别把剩余体力花在原地再砸
-        if (c.enemyMovesThisTurn === 0) break;
-        continue;
+        // 出手后只尝试连击；刀数用尽则收工。绝不再用剩体力走路（贴脸挪开会像后退）
+        if (c.hitsUsed < c.hitBudget) continue;
+        break;
       }
     }
 
@@ -3386,7 +3886,8 @@ function enemyTurn() {
       log(`${c.enemy.name}还不知道你的位置。`);
       break;
     }
-    if (c.hitsUsed >= c.hitBudget) break;
+    // 本回合已经打过：不再追步（连击打不满时也不要把剩体力走成“后退”）
+    if (c.hitsUsed > 0) break;
     const step = stepEnemyToward(goal);
     if (!step || step.cost > c.enemyStamina) {
       log(`${c.enemy.name}在遮挡后停住了。`);
@@ -3400,6 +3901,7 @@ function enemyTurn() {
     log(
       `${c.enemy.name}${verb}至 (${step.p.r + 1},${step.p.c + 1})${h ? `高${h}` : ""}（耗${step.cost}）。`,
     );
+    resolveEnemyLandOverlap(c);
     c.portalLanded = false;
     if (tryPortal("enemy", c.enemyPos)) {
       /* portal */
@@ -3427,6 +3929,7 @@ function enemyTurn() {
   } else {
     c.lastSeenAge = 0;
   }
+  tickBlind(c);
 }
 
 function renderBossRitualHud(c) {
@@ -3660,9 +4163,13 @@ function renderBattleGrid() {
         cell.classList.add("place-ok");
       }
       if (c.placeUid && adjP && canPlaceEnemy) cell.classList.add("place-enemy");
-      // 威胁优先：有 hurt 时不盖绿色可走提示
-      if (!c.placeUid && adjP && !isE && !isP && !isDecoy && threat?.kind !== "hurt") {
-        cell.classList.add("move-ok");
+      // 威胁优先：有 hurt 时不盖绿色可走提示；单位可穿，敌对格标 move-hostile
+      if (!c.placeUid && adjP && !isP && threat?.kind !== "hurt") {
+        const moveCost = playerMoveCost(c.playerPos, pos);
+        if (c.energy >= moveCost) {
+          cell.classList.add("move-ok");
+          if (isE) cell.classList.add("move-hostile");
+        }
       }
 
       const bits = [];
@@ -3674,15 +4181,17 @@ function renderBattleGrid() {
       if (h) bits.push(`↑${h}`);
       let pawnHtml = "";
       if (isP) {
-        pawnHtml =
+        pawnHtml +=
           `<span class="battle-pawn player-pawn"><img class="char-token" src="assets/ui/chars/SP_Lili_Pixel.png" alt="你" width="28" height="28" draggable="false" /></span>`;
-      } else if (isE && sees) {
-        pawnHtml =
+      }
+      if (isE && sees) {
+        pawnHtml +=
           `<span class="battle-pawn enemy-pawn"><img class="char-token" src="assets/ui/chars/SP_Enemy_Pixel.png" alt="敌" width="28" height="28" draggable="false" /></span>`;
       } else if (isE && !sees) {
-        pawnHtml = `<span class="battle-pawn enemy-pawn fog-pawn" aria-label="未知">?</span>`;
-      } else if (isDecoy) {
-        pawnHtml = `<span class="battle-pawn decoy-pawn" aria-label="纸影">影</span>`;
+        pawnHtml += `<span class="battle-pawn enemy-pawn fog-pawn" aria-label="未知">?</span>`;
+      }
+      if (isDecoy) {
+        pawnHtml += `<span class="battle-pawn decoy-pawn" aria-label="纸影">影</span>`;
       }
       const shots = threat?.hits > 1 ? `${threat.damage}×${threat.hits}` : `${threat?.damage}`;
       const dmgHtml =
@@ -3755,8 +4264,16 @@ function endTurn() {
     rest.push(left);
   }
   for (const left of rest) {
-    if (isTempCard(left)) continue; // 临时牌回合结束消失
-    if (c.heldUid && left.uid === c.heldUid && kept.filter((k) => !cardDef(k.id).retain).length < budget) {
+    const canHold =
+      c.heldUid &&
+      left.uid === c.heldUid &&
+      kept.filter((k) => !cardDef(k.id).retain).length < budget;
+    if (isTempCard(left)) {
+      // 临时牌默认回合结束消失；若本回合点了「留」则例外带到下回合
+      if (canHold) kept.push(left);
+      continue;
+    }
+    if (canHold) {
       kept.push(left);
     } else {
       retireCard(left);
@@ -3795,6 +4312,7 @@ function winCombat(reason = "kill") {
     for (const left of c.hand || []) retireCard(left);
     state.discard = purgeTempCards(state.discard);
     state.deck = purgeTempCards(state.deck);
+    freezeCombatUnderlay();
     state.combat = null;
     endGame(true, ritual ? `${title} · 掐断仪式` : title, body);
     return;
@@ -3803,6 +4321,11 @@ function winCombat(reason = "kill") {
   for (const left of c.hand || []) retireCard(left);
   state.discard = purgeTempCards(state.discard);
   state.deck = purgeTempCards(state.deck);
+  // 战后喘息：残血多补一点，满血不浪费
+  const breath = state.hp <= 2 ? 2 : state.hp < state.maxHp ? 1 : 0;
+  if (breath) healPlayer(breath, "战后喘息");
+  // 先留住战场画面，再叠奖励框（杀戮尖塔式）
+  freezeCombatUnderlay();
   state.combat = null;
   $("battle-coach")?.classList.add("hidden");
 
@@ -3828,10 +4351,13 @@ function winCombat(reason = "kill") {
   const pool = [...state.data.cards.rewardPool];
   shuffle(pool);
   offerCardReward({
-    title: "惊吓结束 · 要不要新道具？",
-    lead: "今天的惊吓时间结束啦。最多收下一张道具卡，觉得会卡手也可以不要。",
+    title: "胜利！",
+    lead: "选择一张道具卡作为本场奖励，或跳过。",
     offers: pool.slice(0, 2),
+    overCombat: true,
     onDone: (msg) => {
+      document.body.classList.remove("sts-overlay-open");
+      $("screen-cards")?.classList.remove("active");
       completeRoom();
       finishNodeModal(msg);
     },
@@ -3875,6 +4401,7 @@ function loseCombat(reason = "hp") {
   }
   state.discard = purgeTempCards(state.discard);
   state.deck = purgeTempCards(state.deck);
+  freezeCombatUnderlay();
   state.combat = null;
   if (isBoss) {
     const boss = state.data.bosses.bosses[state.chosenBoss];
@@ -3949,6 +4476,9 @@ function renderTraitChips(c) {
   for (const t of c.traits || []) {
     bits.push(`<span class="trait-chip" title="${labels[t] || t}">${labels[t] || t}</span>`);
   }
+  if (isEnemyBlinded(c)) {
+    bits.push(`<span class="trait-chip trait-blind" title="本回合无法锁定攻击">闪瞎</span>`);
+  }
   box.innerHTML = bits.join("") || "";
 }
 
@@ -3985,12 +4515,23 @@ function openBoss() {
 function endGame(won, title, text) {
   // 若战斗未正常 finalize（异常路径），兜底记一笔
   if (state.lab) finalizeLabCombat(won ? "win" : "lose", title);
-  showModal(null);
-  show("screen-end");
+  // 保留当前战场/地图画面作底，叠 STS 式结算框
+  const keep = [];
+  if ($("screen-cards")?.classList.contains("active")) keep.push("screen-cards");
+  else if ($("screen-game")?.classList.contains("active")) {
+    // 地图场景：保持 game 底（非 modal，show 不碰它即可）
+  } else {
+    // 兜底：若已离开战斗，仍强制亮起最后一帧战场
+    freezeCombatUnderlay();
+    keep.push("screen-cards");
+  }
+  // 不切换主面板，只叠结束框
+  showModal("screen-end", { keep });
+  document.body.classList.add("sts-overlay-open");
   const result = $("end-result");
   const art = $("end-art");
   if (result) {
-    result.textContent = won ? "通关 · 你赢了" : "失败 · 节目中断";
+    result.textContent = won ? "胜利！" : "失败…";
     result.className = `end-result ${won ? "won" : "lost"}`;
   }
   if (art) {
@@ -4005,7 +4546,7 @@ function endGame(won, title, text) {
     const last = store.runs[0];
     if (last) {
       const s = last.summary || {};
-      labNote.textContent = `本场已写入实验记录：${last.outcome === "win" ? "胜" : "负"} · ${s.turns || 0} 回合 · 输出 ${s.damageDealt || 0} / 受伤 ${s.damageTaken || 0}（标题页可导出 JSON）`;
+      labNote.textContent = `本场已写入实验记录：${last.outcome === "win" ? "胜" : "负"} · ${s.turns || 0} 回合 · 输出 ${s.damageDealt || 0} / 受伤 ${s.damageTaken || 0}`;
     } else {
       labNote.textContent = "";
     }
@@ -4119,6 +4660,9 @@ function bindUi() {
   const qteExit = $("btn-qte-exit");
   if (qteExit) qteExit.onclick = () => exitQteSandbox();
   $("btn-restart").onclick = () => {
+    document.body.classList.remove("sts-overlay-open");
+    $("screen-cards")?.classList.remove("active");
+    showModal(null);
     startBgm();
     resetGame();
   };
@@ -4159,13 +4703,26 @@ function bindUi() {
   $("btn-mute").onclick = () => {
     state.muted = !state.muted;
     setMuted(state.muted);
-    $("btn-mute").textContent = state.muted ? "声音：关" : "声音：开";
+    try {
+      localStorage.setItem("cabin-mute", state.muted ? "1" : "0");
+    } catch (_) {}
+    updateMuteButton();
     if (!state.muted) startBgm();
   };
+  $("btn-reroll-map")?.addEventListener("click", () => rerollMapRun());
+  $("btn-home")?.addEventListener("click", () => goHome());
+  $("btn-combat-home")?.addEventListener("click", () => combatGoHome());
 }
 
 async function main() {
   bindUi();
+  try {
+    state.muted = localStorage.getItem("cabin-mute") === "1";
+  } catch (_) {
+    state.muted = false;
+  }
+  setMuted(state.muted);
+  updateMuteButton();
   renderLabPanel();
   const status = $("boot-status");
   try {
@@ -4214,4 +4771,9 @@ window.CabinDebug = {
   isOrthoAdjacent,
   hasLoS,
   runReadyForBoss,
+  rollRoomLayout,
+  placedRoomIds,
+  rerollMapRun,
+  goHome,
+  combatGoHome,
 };
