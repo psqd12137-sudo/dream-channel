@@ -1,0 +1,56 @@
+{
+  "startRoom": "tut_studio",
+  "runLength": 99,
+  "rewardOdds": { "relic": 0, "item": 1, "stat": 0 },
+  "mapSize": { "cols": 3, "rows": 2 },
+  "defaultArena": {
+    "rows": 3,
+    "cols": 5,
+    "player": [1, 0],
+    "enemy": [1, 4],
+    "walls": [],
+    "heights": {},
+    "ambush": false,
+    "spawnNote": "红格子 = 这回合站上去会挨打。先看格子，再行动。"
+  },
+  "rooms": {
+    "tut_studio": {
+      "id": "tut_studio",
+      "name": "导播间",
+      "desc": "教学片场。没有尖塔那套「站桩格挡砍人」，也没有山屋惊魂的掷骰对拼——这里靠往地上放道具，再跑动引怪踩上去。",
+      "combat": false,
+      "tutorialHub": true,
+      "exits": ["tut_practice"],
+      "map": { "col": 1, "row": 2 }
+    },
+    "tut_practice": {
+      "id": "tut_practice",
+      "name": "练习客厅",
+      "desc": "一只不会要你命的练习用剪影。目标：放刺 → 看红格躲开 → 让它自己踩上来破韧 → 再收拾它。",
+      "combat": true,
+      "tutorialFight": true,
+      "enemy": { "name": "练习用雪花剪影", "hp": 5, "damage": 1 },
+      "exits": ["tut_studio", "tut_lounge"],
+      "map": { "col": 2, "row": 2 },
+      "arena": {
+        "rows": 3,
+        "cols": 5,
+        "player": [1, 0],
+        "enemy": [1, 4],
+        "walls": ["0,2"],
+        "heights": { "2,1": 1 },
+        "ambush": false,
+        "spawnNote": "第一课：点「地刺」→ 点邻格放下。第二课：看红格，别站上去。第三课：回合结束，让它朝你走并踩刺。"
+      }
+    },
+    "tut_lounge": {
+      "id": "tut_lounge",
+      "name": "休息角",
+      "desc": "练习结束。正式节目里会有更多房间、预兆和祭坛 Boss——但核心就这三件事：放、跑、看格子。",
+      "combat": false,
+      "tutorialEnd": true,
+      "exits": ["tut_practice"],
+      "map": { "col": 3, "row": 2 }
+    }
+  }
+}

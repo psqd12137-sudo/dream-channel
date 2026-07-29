@@ -22,7 +22,7 @@ python3 -m http.server 8787
 - **实验记录** `cabin-lab-v1`：每场战斗的胜负、回合、输出/受伤、破韧、连击、牌库与遗物快照会保留，标题页可导出 JSON（最多 40 场）
 - 自测脚本：`scripts/boss_selftest.py`、`scripts/full_selftest.py`（需 Playwright）
 
-新开一局请点「打开电视机」。测 Boss 用「跳到 Boss（测强度）」。标题「测 WASD 手感 / 测 QTE」为临时沙盒；第二视角最终走 3D 微缩景深。行程里泥靴间已挂 `eventType: qte`。
+新开一局请点「打开电视机」。没玩过尖塔/山屋可用「新手教学」（导播提词 + 弱敌练习）。测 Boss 用「跳到 Boss」。标题另有 WASD/QTE 临时沙盒。
 
 ## 一局怎么玩
 

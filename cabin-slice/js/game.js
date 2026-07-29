@@ -32,19 +32,22 @@ const state = {
   lab: null,
   /** 本局是否来自「跳到 Boss」测强度入口 */
   labTag: "normal",
+  /** 新手教学：{ active, step, roomsMain } */
+  tutorial: null,
 };
 
 const $ = (id) => document.getElementById(id);
 
 async function loadData() {
-  const [rooms, cards, relics, bosses, pressure] = await Promise.all([
+  const [rooms, cards, relics, bosses, pressure, tutorial] = await Promise.all([
     fetch("data/rooms.json").then((r) => r.json()),
     fetch("data/cards.json").then((r) => r.json()),
     fetch("data/relics.json").then((r) => r.json()),
     fetch("data/bosses.json").then((r) => r.json()),
     fetch("data/pressure.json").then((r) => r.json()),
+    fetch("data/tutorial.json").then((r) => r.json()),
   ]);
-  state.data = { rooms, cards, relics, bosses, pressure };
+  state.data = { rooms, cards, relics, bosses, pressure, tutorial };
 }
 
 function show(id) {
@@ -649,6 +652,7 @@ function pickRelicOffers(n = 2) {
 }
 
 function offerOpeningRelics() {
+  if (state.tutorial?.active) return;
   const offers = pickRelicOffers(2);
   if (!offers.length) return;
   showModal("screen-event");
@@ -1009,6 +1013,7 @@ function renderLabPanel() {
 }
 
 function saveGame() {
+  if (state.tutorial?.active) return;
   const payload = {
     roomId: state.roomId,
     speed: state.speed,
@@ -1057,7 +1062,198 @@ function loadGame() {
   }
 }
 
+function setExploreCoach(title, body) {
+  const box = $("tutorial-coach");
+  if (!box) return;
+  if (!state.tutorial?.active) {
+    box.classList.add("hidden");
+    return;
+  }
+  box.classList.remove("hidden");
+  $("coach-title").textContent = title;
+  $("coach-body").textContent = body;
+}
+
+function setBattleCoach(title, body) {
+  const box = $("battle-coach");
+  if (!box) return;
+  if (!state.tutorial?.active || !state.combat) {
+    box.classList.add("hidden");
+    return;
+  }
+  box.classList.remove("hidden");
+  $("battle-coach-title").textContent = title;
+  $("battle-coach-body").textContent = body;
+}
+
+function clearCoaches() {
+  $("tutorial-coach")?.classList.add("hidden");
+  $("battle-coach")?.classList.add("hidden");
+}
+
+function refreshTutorialCoach() {
+  if (!state.tutorial?.active) {
+    clearCoaches();
+    return;
+  }
+  const room = roomDef(state.roomId);
+  if (state.combat) {
+    updateBattleTutorialCoach();
+    return;
+  }
+  if (room?.tutorialHub) {
+    setExploreCoach(
+      "先搞懂三件事",
+      "① 卡牌多半是往地上放的道具，不是站桩砍人。② 红格子 = 它要打的地方，走开。③ 让它踩刺/盐来削「韧性」，破韧后再收拾。点右边出口，走进练习客厅。",
+    );
+  } else if (room?.tutorialEnd) {
+    setExploreCoach(
+      "毕业了",
+      "正式一局里还有预兆、更多房间和祭坛 Boss，但核心不变：放置 · 走位 · 看格子。点「走进这一间」领取结业说明，或直接回标题开电视。",
+    );
+  } else if (room?.tutorialFight && state.nodePending) {
+    setExploreCoach(
+      "进练习战",
+      "点「走进这一间」开战。对手很弱，死了也能重试。目标不是硬刚，而是放刺再引它踩。",
+    );
+  } else if (room?.tutorialFight) {
+    setExploreCoach(
+      "练习客厅已清",
+      "可以去休息角听结业说明，或回导播间再看一遍提示。",
+    );
+  } else {
+    setExploreCoach("教学进行中", "跟着导播耳语走就行。");
+  }
+}
+
+function updateBattleTutorialCoach() {
+  const c = state.combat;
+  if (!c || !state.tutorial?.active) {
+    $("battle-coach")?.classList.add("hidden");
+    return;
+  }
+  const hasTrap = Object.values(c.floor || {}).some((f) => f?.onStep?.damage);
+  const step = state.tutorial.step || "place";
+
+  if (c.broken || c.toughness <= 0) {
+    state.tutorial.step = "finish";
+    setBattleCoach(
+      "韧性破了！",
+      "现在砸它脚下的地刺，或继续引它踩刺，把血削光。破韧后怪会好打许多——正式节目里不同类型破韧奖励还不一样。",
+    );
+    return;
+  }
+  if (!hasTrap && step === "place") {
+    setBattleCoach(
+      "第一课 · 放置",
+      "点手牌「地刺」，再点你旁边的空格子放下（高亮邻格）。这不是攻击键——是在布置陷阱。盐圈可以放来挡路/站上去格挡。",
+    );
+    return;
+  }
+  if (hasTrap && step === "place") state.tutorial.step = "intent";
+  if (state.tutorial.step === "intent") {
+    setBattleCoach(
+      "第二课 · 看红格",
+      "场上红底数字 = 回合结束后站在那里会挨打。先走开或放好再点「回合结束」。蓝虚线是它可能走的下一步。",
+    );
+    // advance after they've had a chance; mark when ending turn
+    return;
+  }
+  if (state.tutorial.step === "kite" || (hasTrap && c.energy === 0)) {
+    state.tutorial.step = "kite";
+    setBattleCoach(
+      "第三课 · 引怪踩踏",
+      "点「回合结束」。它会花行动力追你——踩到刺会掉血并削韧性。韧性条清空就会「破韧」。别站桩砍，跑起来。",
+    );
+    return;
+  }
+  setBattleCoach(
+    "继续练习",
+    "有刺就引它踩；没刺再放。看着韧性条往下掉。行动力不够时用「补剂」或结束回合。",
+  );
+}
+
+function exitTutorialMode({ startReal = false } = {}) {
+  if (state.tutorial?.roomsMain) {
+    state.data.rooms = state.tutorial.roomsMain;
+  }
+  state.tutorial = null;
+  clearCoaches();
+  state.combat = null;
+  showModal(null);
+  if (startReal) {
+    resetGame();
+  } else {
+    show("screen-title");
+    if (localStorage.getItem(SAVE_KEY)) $("btn-continue")?.classList.remove("hidden");
+  }
+}
+
+async function startTutorial() {
+  if (!state.data?.tutorial) {
+    alert("教学数据未加载，请刷新页面。");
+    return;
+  }
+  // 不覆盖正式存档
+  state.tutorial = {
+    active: true,
+    step: "place",
+    roomsMain: state.data.rooms,
+  };
+  state.data.rooms = state.data.tutorial;
+  state.labTag = "tutorial";
+  state.roomId = state.data.rooms.startRoom;
+  state.speed = 3;
+  state.hp = 6;
+  state.maxHp = 6;
+  state.visitPath = [state.roomId];
+  state.resolvedRooms = new Set([state.roomId]);
+  state.knownRooms = new Set([state.roomId]);
+  state.deck = shuffle(
+    ["jab", "jab", "jab", "jab", "guard", "guard", "keepsake", "tonic"].map((id) => makeCard(id)),
+  );
+  state.discard = [];
+  state.relics = [];
+  state.chosenBoss = null;
+  state.nodePending = false;
+  state.combat = null;
+  state.combatCount = 0;
+  state.rewardRolls = {};
+  state.midRelicDone = true;
+  state.lab = null;
+  uidSeq = 100;
+  $("log").innerHTML = "";
+  discoverNeighbors(state.roomId);
+  log("【新手教学】不玩过杀戮尖塔 / 山屋惊魂也没关系——这里只教三件事。", "ok");
+  log("放置道具、走位引怪、看红格子。正式节目的预兆与 Boss 以后再说。");
+  renderAll();
+  show("screen-game");
+  showModal("screen-event");
+  $("event-title").textContent = "频道教学片 · 三分钟上手";
+  $("event-text").textContent =
+    "这不是站桩砍怪的卡牌游戏，也不是掷骰比大小的桌游。\n\n出牌 ≈ 往地上放机关；你的移动会逼怪把力气花在追你上；红格子是它要打的地方。\n\n先去练习客厅打一只很弱的剪影，导播会在旁边出字提词。";
+  $("btn-close-event").classList.add("hidden");
+  clearRewardCards();
+  hideCardTooltip();
+  const box = $("event-choices");
+  box.innerHTML = "";
+  addChoice(box, "明白了，去导播间", "primary", () => {
+    showModal(null);
+    setExploreCoach(
+      "先搞懂三件事",
+      "① 卡牌多半是往地上放的道具。② 红格子会挨打，走开。③ 引怪踩刺削韧性。从出口进练习客厅。",
+    );
+    renderAll();
+  });
+  refreshTutorialCoach();
+}
+
 function resetGame() {
+  if (state.tutorial?.active && state.tutorial.roomsMain) {
+    state.data.rooms = state.tutorial.roomsMain;
+    state.tutorial = null;
+    clearCoaches();
+  }
   localStorage.removeItem(SAVE_KEY);
   localStorage.removeItem("cabin-run-v2");
   localStorage.removeItem("cabin-run-v1");
@@ -1094,6 +1290,7 @@ function resetGame() {
 
 /** 调试：模拟一局成长结束 + 满血，直接进 Boss 决战测强度 */
 function skipToBossTest() {
+  if (state.tutorial?.active) exitTutorialMode({ startReal: false });
   if (!state.data?.bosses?.bosses) {
     throw new Error("Boss 数据未加载，请刷新页面后再试。");
   }
@@ -1363,11 +1560,17 @@ function renderRoom() {
   const room = roomDef(state.roomId);
   $("room-name").textContent = room.name;
   $("room-desc").textContent = room.desc;
-  $("room-tag").textContent = room.bossRoom
-    ? "大结局"
-    : room.combat
-      ? "惊吓时间"
-      : "安静角落";
+  $("room-tag").textContent = state.tutorial?.active
+    ? room.tutorialFight
+      ? "教学战"
+      : room.tutorialEnd
+        ? "结业"
+        : "教学"
+    : room.bossRoom
+      ? "大结局"
+      : room.combat
+        ? "惊吓时间"
+        : "安静角落";
 
   const exits = $("exits");
   exits.innerHTML = "";
@@ -1488,6 +1691,43 @@ function beginQteForRoom(room) {
 }
 
 function startNonCombatRewards(room) {
+  if (room.tutorialHub) {
+    showModal("screen-event");
+    $("event-title").textContent = room.name;
+    $("event-text").textContent =
+      "导播间没有奖励。记住口诀：放机关 · 看红格 · 引怪踩 · 破韧再打。从出口进练习客厅开打。";
+    $("btn-close-event").classList.add("hidden");
+    clearRewardCards();
+    hideCardTooltip();
+    const box = $("event-choices");
+    box.innerHTML = "";
+    addChoice(box, "知道了", "primary", () => {
+      completeRoom();
+      finishNodeModal("去练习客厅吧。");
+      refreshTutorialCoach();
+    });
+    return;
+  }
+  if (room.tutorialEnd) {
+    showModal("screen-event");
+    $("event-title").textContent = "结业 · 三句话";
+    $("event-text").textContent =
+      "① 出牌多半是往场地放道具，不是站桩砍。\n② 红格子会挨打——走位比硬抗重要。\n③ 先削韧性（引怪踩刺/盐），破韧后再认真输出。\n\n正式节目还有预兆、行程地图和祭坛 Boss；内核就是这三句。";
+    $("btn-close-event").classList.add("hidden");
+    clearRewardCards();
+    hideCardTooltip();
+    const box = $("event-choices");
+    box.innerHTML = "";
+    addChoice(box, "打开电视机 · 正式一局", "primary", () => {
+      completeRoom();
+      exitTutorialMode({ startReal: true });
+    });
+    addChoice(box, "回标题", "", () => {
+      completeRoom();
+      exitTutorialMode({ startReal: false });
+    });
+    return;
+  }
   // 已摇过的奖励从存档取，防止刷新页面重摇
   let rolled = state.rewardRolls[room.id];
   if (!rolled || rolled.kind == null) {
@@ -2208,6 +2448,24 @@ function dealToEnemy(rawDmg, source) {
 
 function buildEncounter(room, isBoss) {
   const P = state.data.pressure;
+  if (room?.tutorialFight && !isBoss) {
+    const src = room.enemy;
+    const arch = P.archetypes.execute;
+    return {
+      name: src.name,
+      hp: src.hp,
+      damage: src.damage,
+      archetype: "execute",
+      archetypeLabel: arch.label,
+      archetypeDesc: "教学用：破韧后下次砸/踩 +2。正式局里不同类型奖励不同。",
+      toughness: 2,
+      toughnessMax: 2,
+      traits: [],
+      tier: 1,
+      staminaMax: 3,
+      attackCost: 2,
+    };
+  }
   const src = isBoss
     ? state.data.bosses.bosses[state.chosenBoss]
     : room.enemy;
@@ -2466,6 +2724,10 @@ function startCombat(room, isBoss) {
   if (isBoss) {
     log("Boss 仪式：熄灭全部信号锚 或 打空血条均可通关。播出进度满则失败。站在锚上可「拆信号」。", "ok");
   }
+  if (state.tutorial?.active) {
+    state.tutorial.step = "place";
+    updateBattleTutorialCoach();
+  }
 }
 
 function cancelPlace() {
@@ -2702,6 +2964,10 @@ function tryPlace(pos) {
   if (!state.combat) return true;
   refreshVision();
   c.intent = predictIntent(c);
+  if (state.tutorial?.active && state.tutorial.step === "place") {
+    const hasTrap = Object.values(c.floor || {}).some((f) => f?.onStep?.damage);
+    if (hasTrap) state.tutorial.step = "intent";
+  }
   renderCombat();
   return true;
 }
@@ -3464,11 +3730,17 @@ function renderBattleGrid() {
     banner.className = `intent-banner intent-${c.intent?.type || "chase"}`;
     banner.title = c.intent?.detail || "";
   }
+  if (state.tutorial?.active) updateBattleTutorialCoach();
 }
 
 function endTurn() {
   const c = state.combat;
   if (!c) return;
+  if (state.tutorial?.active) {
+    const hasTrap = Object.values(c.floor || {}).some((f) => f?.onStep?.damage);
+    if (hasTrap) state.tutorial.step = "kite";
+    else if (state.tutorial.step === "intent") state.tutorial.step = "place";
+  }
   c.placeUid = null;
 
   const budget = retainBudget(c);
@@ -3532,6 +3804,27 @@ function winCombat(reason = "kill") {
   state.discard = purgeTempCards(state.discard);
   state.deck = purgeTempCards(state.deck);
   state.combat = null;
+  $("battle-coach")?.classList.add("hidden");
+
+  if (state.tutorial?.active) {
+    state.tutorial.step = "done_fight";
+    offerCardReward({
+      title: "练习战结束",
+      lead: "正式节目里打完惊吓也会让你挑新道具。先随便收一张练手——或不要也行。然后去休息角听结业说明。",
+      offers: ["jab", "guard"],
+      onDone: (msg) => {
+        completeRoom();
+        finishNodeModal(msg);
+        setExploreCoach(
+          "去休息角",
+          "练习客厅已清。走到休息角，点「走进这一间」看结业三句话。",
+        );
+        renderAll();
+      },
+    });
+    return;
+  }
+
   const pool = [...state.data.cards.rewardPool];
   shuffle(pool);
   offerCardReward({
@@ -3595,6 +3888,30 @@ function loseCombat(reason = "hp") {
     return;
   }
   // 普通战斗失败也直接终局：逃出后缺牌难翻盘，不如重开
+  if (state.tutorial?.active) {
+    state.hp = Math.max(1, state.maxHp);
+    showModal("screen-event");
+    $("event-title").textContent = "练习失败 · 没关系";
+    $("event-text").textContent =
+      "教学里死了也能重来。再试一次：先放地刺，看红格躲开，再点回合结束让它自己踩上来。";
+    $("btn-close-event").classList.add("hidden");
+    clearRewardCards();
+    const box = $("event-choices");
+    box.innerHTML = "";
+    addChoice(box, "再打一次", "primary", () => {
+      state.tutorial.step = "place";
+      startCombat(roomDef("tut_practice"), false);
+    });
+    addChoice(box, "回导播间", "", () => {
+      showModal(null);
+      state.roomId = "tut_studio";
+      state.nodePending = false;
+      discoverNeighbors(state.roomId);
+      renderAll();
+      refreshTutorialCoach();
+    });
+    return;
+  }
   endGame(
     false,
     "结局·节目中断",
@@ -3704,6 +4021,7 @@ function renderAll() {
   renderBossBoard();
   renderLists();
   renderRoom();
+  refreshTutorialCoach();
   if ($("screen-game").classList.contains("active")) saveGame();
 }
 
@@ -3721,6 +4039,22 @@ function bindUi() {
       alert(`无法开始：${err.message}`);
     }
   };
+  const tutBtn = $("btn-tutorial");
+  if (tutBtn) {
+    tutBtn.onclick = () => {
+      if (!state.data) {
+        alert("数据还在加载，请稍等一秒再点。");
+        return;
+      }
+      try {
+        startBgm();
+        startTutorial();
+      } catch (err) {
+        console.error(err);
+        alert(`无法开始教学：${err.message}`);
+      }
+    };
+  }
   $("btn-boss-test").onclick = () => {
     if (!state.data) {
       alert("数据还在加载，请稍等一秒再点。");
@@ -3857,6 +4191,8 @@ window.CabinDebug = {
   getState: () => state,
   skipToBossTest,
   resetGame,
+  startTutorial,
+  exitTutorialMode,
   moveTo,
   resolveCurrentNode,
   openBoss,

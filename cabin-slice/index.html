@@ -40,6 +40,7 @@
             <p class="lede">拧开织梦频道的旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪把行动力花在追你身上——邪典儿童节目，别站桩硬刚。</p>
             <div class="title-actions">
               <button id="btn-start" class="btn btn-primary btn-ticket btn-start">打开电视机</button>
+              <button id="btn-tutorial" class="btn btn-secondary btn-ticket" type="button">新手教学</button>
               <button id="btn-continue" class="btn btn-secondary btn-ticket hidden">接着看上集</button>
               <button id="btn-boss-test" class="btn btn-ghost btn-ticket" type="button">跳到 Boss（测强度）</button>
               <button id="btn-sideview-test" class="btn btn-ghost btn-ticket" type="button">测 WASD 手感（临时）</button>
@@ -76,6 +77,11 @@
               </div>
               <span id="room-tag" class="chip">散步时间</span>
             </header>
+            <div id="tutorial-coach" class="tutorial-coach hidden" aria-live="polite">
+              <p class="coach-kicker">导播耳语</p>
+              <strong id="coach-title">—</strong>
+              <p id="coach-body"></p>
+            </div>
             <div class="map-legend">
               <span><i class="dot dot-you"></i>你在这儿</span>
               <span><i class="dot dot-fight"></i>有惊吓</span>
@@ -193,6 +199,11 @@
               </div>
               <div id="battle-grid" class="battle-grid" aria-label="战斗场地"></div>
               <div id="combo-toast" class="combo-toast" aria-live="polite"></div>
+              <aside id="battle-coach" class="battle-coach hidden" aria-live="polite">
+                <p class="coach-kicker">战斗导播</p>
+                <strong id="battle-coach-title">—</strong>
+                <p id="battle-coach-body"></p>
+              </aside>
               <p id="place-hint" class="place-hint"></p>
             </div>
           </aside>

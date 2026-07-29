@@ -1966,3 +1966,50 @@ body.landscape {
 
 .qte-status.ok { color: var(--ok, #2a8a4a); }
 .qte-status.bad { color: var(--danger, #c23b4a); }
+
+/* —— 新手教学导播 —— */
+.tutorial-coach,
+.battle-coach {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 3px solid var(--ink, #142628);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff8e4, #ffe9b8);
+  box-shadow: 4px 4px 0 rgba(18, 40, 38, 0.15);
+}
+
+.tutorial-coach.hidden,
+.battle-coach.hidden {
+  display: none;
+}
+
+.coach-kicker {
+  margin: 0 0 2px;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6a7a78;
+}
+
+.tutorial-coach strong,
+.battle-coach strong {
+  display: block;
+  margin: 0 0 4px;
+  font-family: var(--font-display, Georgia, serif);
+  color: var(--teal-ink, #1a4a4c);
+  font-size: 1.05rem;
+}
+
+.tutorial-coach p,
+.battle-coach p {
+  margin: 0;
+  line-height: 1.45;
+  color: #243836;
+  font-size: 0.92rem;
+}
+
+.battle-coach {
+  position: relative;
+  z-index: 2;
+  margin-top: 8px;
+}
