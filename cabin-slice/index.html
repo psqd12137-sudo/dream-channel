@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>织梦频道 channel dream · 山屋</title>
-  <link rel="stylesheet" href="css/style.css?v=20260730intent1" />
+  <link rel="stylesheet" href="css/style.css?v=20260730bossSoft" />
 </head>
 <body class="landscape">
   <div class="app">
@@ -49,7 +49,8 @@
                 <button id="btn-fling-test" class="btn btn-ghost btn-ticket" type="button">测预备·甩开</button>
                 <button id="btn-boss-test" class="btn btn-ghost btn-ticket" type="button">跳到 Boss（测强度）</button>
                 <button id="btn-sideview-test" class="btn btn-ghost btn-ticket" type="button">测 WASD 手感（临时）</button>
-                <button id="btn-qte-test" class="btn btn-ghost btn-ticket" type="button">测 QTE 解谜占位</button>
+                <button id="btn-qte-test" class="btn btn-ghost btn-ticket" type="button">测警察抓小偷</button>
+                <button id="btn-puzzle-test" class="btn btn-ghost btn-ticket" type="button">测八数码拼图</button>
               </div>
             </details>
             <p id="boot-status" class="boot-status">电视机预热中…</p>
@@ -216,10 +217,12 @@
               <div class="map-legend battle-legend">
                 <span><i class="dot dot-you"></i>你</span>
                 <span><i class="dot dot-fight"></i>怪</span>
-                <span><i class="dot dot-wall"></i>墙</span>
-                <span><i class="dot dot-high"></i>高台</span>
+                <span><i class="dot dot-hurt"></i>必伤</span>
+                <span><i class="dot dot-pending"></i>预告</span>
+                <span><i class="dot dot-intent-move"></i>它走</span>
                 <span><i class="dot dot-move"></i>能走</span>
-                <span><i class="dot dot-ready"></i>预备带</span>
+                <span><i class="dot dot-wall"></i>墙</span>
+                <span><i class="dot dot-ready"></i>预备</span>
                 <span><i class="dot dot-anchor"></i>锚</span>
               </div>
               <div id="battle-grid" class="battle-grid" aria-label="战斗场地"></div>
@@ -237,7 +240,7 @@
             <p class="hand-label">道具卡 <span id="card-hint" class="hint-inline">悬停听旁白</span></p>
             <div id="hand-cards" class="hand-col"></div>
             <footer class="battle-foot">
-              <button id="btn-dismantle" class="btn btn-secondary btn-ticket hidden" type="button">拆信号（2）</button>
+              <button id="btn-dismantle" class="btn btn-secondary btn-ticket hidden" type="button">拆信号（1）</button>
               <button id="btn-cancel-place" class="btn btn-ghost btn-ticket hidden">取消放置</button>
               <button id="btn-end-turn" class="btn btn-primary btn-ticket">回合结束</button>
             </footer>
@@ -292,18 +295,42 @@
         </div>
       </section>
 
-      <section id="screen-qte" class="panel modal" aria-label="QTE 解谜占位">
+      <section id="screen-qte" class="panel modal" aria-label="警察抓小偷">
         <div class="modal-card modal-narrow qte-card">
-          <p class="pane-kicker">解谜占位 · QTE</p>
-          <h2 id="qte-title">信号咬合</h2>
+          <p class="pane-kicker">解密事件 · 打字追逐</p>
+          <h2 id="qte-title">警察抓小偷</h2>
           <p id="qte-lead" class="qte-lead"></p>
-          <div class="qte-stage" aria-live="polite">
-            <div id="qte-prompt" class="qte-prompt">—</div>
+          <div id="qte-stage" class="qte-stage" aria-live="polite">
+            <div id="qte-countdown" class="qte-countdown hidden" aria-hidden="true"></div>
+            <div id="qte-stun" class="qte-stun hidden" aria-live="assertive">硬直！</div>
+            <div id="qte-track" class="qte-track" aria-label="追逐赛道"></div>
             <p id="qte-meta" class="qte-meta"></p>
-            <div class="qte-timer" aria-hidden="true"><div id="qte-timer-fill" class="qte-timer-fill"></div></div>
+            <div id="qte-word" class="qte-word" aria-label="当前单词"></div>
+            <p id="qte-ready-hint" class="qte-ready-hint">先点下面的按钮，倒计时结束后再打字。</p>
             <p id="qte-status" class="qte-status">准备…</p>
           </div>
-          <button id="btn-qte-exit" class="btn btn-secondary btn-ticket hidden" type="button">回到标题</button>
+          <div class="qte-actions">
+            <button id="btn-qte-go" class="btn btn-primary btn-ticket" type="button">开始追逐</button>
+            <button id="btn-qte-forfeit" class="btn btn-ghost btn-ticket hidden" type="button">举手投降</button>
+            <button id="btn-qte-exit" class="btn btn-secondary btn-ticket hidden" type="button">回到标题</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screen-puzzle" class="panel modal" aria-label="八数码拼图">
+        <div class="modal-card modal-narrow puzzle-card">
+          <p class="pane-kicker">解密事件 · 八数码</p>
+          <h2 id="puzzle-title">雪花拼图</h2>
+          <p id="puzzle-lead" class="puzzle-lead"></p>
+          <div class="puzzle-stage" aria-live="polite">
+            <div id="puzzle-grid" class="puzzle-grid" role="grid" aria-label="滑块拼图"></div>
+            <p id="puzzle-meta" class="puzzle-meta"></p>
+            <p id="puzzle-status" class="puzzle-status">准备…</p>
+          </div>
+          <div class="puzzle-actions">
+            <button id="btn-puzzle-forfeit" class="btn btn-ghost btn-ticket" type="button">放弃考验</button>
+            <button id="btn-puzzle-exit" class="btn btn-secondary btn-ticket hidden" type="button">回到标题</button>
+          </div>
         </div>
       </section>
     </main>
@@ -311,9 +338,10 @@
     <div id="card-tooltip" class="card-tooltip hidden" role="tooltip"></div>
   </div>
 
-  <script src="js/audio.js?v=20260730flingfix"></script>
-  <script src="js/sideview.js?v=20260730flingfix"></script>
-  <script src="js/qte.js?v=20260730flingfix"></script>
-  <script src="js/game.js?v=20260730fling2"></script>
+  <script src="js/audio.js?v=20260730chase"></script>
+  <script src="js/sideview.js?v=20260730chase"></script>
+  <script src="js/qte.js?v=20260730chase"></script>
+  <script src="js/puzzle.js?v=20260730chase"></script>
+  <script src="js/game.js?v=20260730bossSoft"></script>
 </body>
 </html>

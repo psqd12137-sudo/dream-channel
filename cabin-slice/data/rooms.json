@@ -204,7 +204,7 @@
     "mudroom": {
       "id": "mudroom",
       "name": "泥靴间",
-      "desc": "挂钩上挂着不属于你的外套。门缝里挤出一串乱码节拍——先咬住信号再搜抽屉。",
+      "desc": "挂钩上的外套忽然变成追兵。先打字跑过警察抓小偷，再搜抽屉。",
       "combat": false,
       "eventType": "qte",
       "exits": [
@@ -287,8 +287,9 @@
     "parlor": {
       "id": "parlor",
       "name": "会客室",
-      "desc": "空相框像一排监视孔。",
+      "desc": "空相框里雪花乱跳。先把台标拼回去，抽屉才会松口。",
       "combat": false,
+      "eventType": "puzzle",
       "exits": [
         "living",
         "west_wing",

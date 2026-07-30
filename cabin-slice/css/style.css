@@ -673,6 +673,15 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 .dot-move { background: #9be3b4; }
 .dot-ready { background: transparent; box-shadow: inset 0 0 0 2px #2a8a5a; }
 .dot-anchor { background: #e8a317; box-shadow: inset 0 0 0 1px #8a5a00; }
+.dot-hurt { background: #c02818; }
+.dot-pending {
+  background: rgba(220, 64, 48, 0.35);
+  box-shadow: inset 0 0 0 1px #c02818;
+}
+.dot-intent-move {
+  background: rgba(80, 160, 230, 0.55);
+  box-shadow: inset 0 0 0 1px #2a7ebd;
+}
 
 .map-shell {
   position: relative;
@@ -1433,6 +1442,11 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   background: #fff3a8;
   color: #6a4a00;
 }
+.trait-chip.trait-hot {
+  background: #ffd0c4;
+  border-color: #c02818;
+  color: #8a1008;
+}
 
 .boss-kit {
   margin: 10px 0 14px;
@@ -1657,6 +1671,27 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 .battle-cell.threat-hurt.threat-on-you {
   box-shadow: inset 0 0 0 3px #ff3b1f, 0 0 0 2px rgba(255, 60, 30, 0.35);
 }
+.battle-cell.threat-charge {
+  background: rgba(220, 48, 40, 0.52) !important;
+  border-style: solid !important;
+  border-color: #a01008 !important;
+  box-shadow: inset 0 0 0 3px rgba(255, 70, 40, 0.95) !important;
+  animation: threat-pulse 0.85s ease-in-out infinite;
+}
+.battle-cell.threat-charge.threat-on-you {
+  box-shadow: inset 0 0 0 3px #ff2a10, 0 0 0 3px rgba(255, 40, 20, 0.45) !important;
+}
+/* 蓄力常盖在亮锚上：红必须压过黄，锚只留角标感 */
+.battle-cell.threat-hurt.anchor-lit,
+.battle-cell.threat-charge.anchor-lit {
+  background: rgba(220, 48, 40, 0.5) !important;
+  background-image: radial-gradient(
+    circle at 78% 18%,
+    rgba(255, 200, 60, 0.4),
+    transparent 38%
+  ) !important;
+  box-shadow: inset 0 0 0 3px rgba(255, 70, 40, 0.95), inset 0 0 0 6px rgba(232, 163, 23, 0.35) !important;
+}
 .battle-cell.pending-hurt {
   background: rgba(220, 64, 48, 0.18) !important;
   border-style: dashed !important;
@@ -1698,6 +1733,11 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   text-shadow: 0 1px 0 #fff, 0 0 2px #fff;
   pointer-events: none;
   line-height: 1;
+}
+.battle-cell .threat-dmg.pending {
+  color: #a04838;
+  font-weight: 700;
+  opacity: 0.85;
 }
 @keyframes threat-pulse {
   0%,
@@ -2021,6 +2061,15 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 .intent-banner.pending {
   border-style: dashed;
   background: #ffe8d6;
+  color: #8a3a10;
+}
+.intent-banner.intent-attack {
+  background: #ffd0d0;
+  color: #8a1f1f;
+}
+.intent-banner.intent-search.pending {
+  background: #ffe0ec;
+  color: #8a3360;
 }
 
 @media (max-width: 980px) {
@@ -2113,85 +2162,230 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   letter-spacing: 0.02em;
 }
 
-/* —— QTE 解谜占位 —— */
+/* —— 警察抓小偷 · 打字追逐 —— */
 .qte-card {
   text-align: center;
+  max-width: 520px;
 }
-
 .qte-lead {
   margin: 6px 0 14px;
   color: var(--muted, #5a6e6c);
   font-size: 0.95rem;
   line-height: 1.45;
 }
-
 .qte-stage {
+  position: relative;
   display: grid;
   gap: 10px;
   justify-items: center;
-  margin: 8px 0 16px;
+  margin: 8px 0 12px;
+  padding: 12px 8px;
+  border: 3px solid var(--ink, #142628);
+  border-radius: 16px;
+  background: #f6f1e6;
 }
-
-.qte-prompt {
-  min-width: 120px;
-  min-height: 120px;
+.qte-stage.is-stunned {
+  background: #f8d8d4;
+}
+.qte-stage.qte-shake {
+  animation: qte-shake 0.35s ease;
+}
+@keyframes qte-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+.qte-countdown {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  border: 5px solid var(--ink, #142628);
-  border-radius: 22px;
-  background: linear-gradient(180deg, #fff8e8, #ffe7b8);
-  font-family: var(--font-display, Georgia, serif);
-  font-size: 2.6rem;
-  font-weight: 700;
-  color: var(--teal-ink, #1a4a4c);
-  box-shadow: 6px 6px 0 rgba(18, 40, 38, 0.18);
+  z-index: 3;
+  background: rgba(246, 241, 230, 0.88);
+  font-size: 4rem;
+  font-weight: 900;
+  color: var(--ink, #142628);
+  border-radius: 14px;
+  pointer-events: none;
 }
-
-.qte-prompt.qte-flash {
-  animation: qte-pop 0.22s ease-out;
+.qte-countdown.qte-pop {
+  animation: qte-pop 0.35s ease-out;
 }
-
-.qte-prompt.qte-fail {
-  background: linear-gradient(180deg, #ffe0e0, #ffb4b4);
-  color: #8a2030;
-}
-
 @keyframes qte-pop {
-  from { transform: scale(0.86); opacity: 0.5; }
+  from { transform: scale(0.7); opacity: 0.4; }
   to { transform: scale(1); opacity: 1; }
 }
-
+.qte-stun {
+  position: absolute;
+  top: 10px;
+  z-index: 2;
+  padding: 4px 14px;
+  border: 3px solid #8a2030;
+  border-radius: 999px;
+  background: #ffd0c8;
+  color: #8a2030;
+  font-weight: 900;
+  font-size: 1.1rem;
+  pointer-events: none;
+}
+.qte-track {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 3px;
+  justify-content: center;
+  width: 100%;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+.qte-cell {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #c5b8a4;
+  border-radius: 6px;
+  background: #efe7d8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #7a6e5c;
+}
+.qte-cell.is-goal {
+  background: #d8f0e0;
+  border-color: #2a8a4a;
+  color: #2a8a4a;
+}
+.qte-cell.is-thief {
+  background: #d9efff;
+  border-color: #1d4f7a;
+  color: #1d4f7a;
+}
+.qte-cell.is-cop {
+  background: #ffe0e0;
+  border-color: #c02818;
+  color: #c02818;
+}
+.qte-cell.is-caught {
+  background: #ffb4b4;
+  border-color: #8a1008;
+  color: #8a1008;
+}
 .qte-meta {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 800;
   color: #4d6360;
 }
-
-.qte-timer {
-  width: min(260px, 70%);
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(20, 40, 38, 0.15);
-  overflow: hidden;
-  border: 2px solid rgba(20, 40, 38, 0.25);
+.qte-word {
+  min-height: 2.2em;
+  font-size: 1.85rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  font-family: "Consolas", "Courier New", monospace;
+  color: var(--ink, #142628);
 }
-
-.qte-timer-fill {
-  width: 100%;
-  height: 100%;
-  transform-origin: left center;
-  transform: scaleX(1);
-  background: linear-gradient(90deg, #3cb8a8, #f0c35a);
+.qte-word span.is-done {
+  color: #2a8a4a;
 }
-
+.qte-word span.is-next {
+  color: #c02818;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.qte-ready-hint {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted, #5a6e6c);
+}
 .qte-status {
   margin: 0;
   min-height: 1.4em;
   font-weight: 600;
 }
-
 .qte-status.ok { color: var(--ok, #2a8a4a); }
 .qte-status.bad { color: var(--danger, #c23b4a); }
+.qte-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+/* —— 八数码拼图 —— */
+.puzzle-card {
+  text-align: center;
+}
+.puzzle-lead {
+  margin: 6px 0 14px;
+  color: var(--muted, #5a6e6c);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.puzzle-stage {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  margin: 8px 0 12px;
+}
+.puzzle-grid {
+  --puzzle-size: 3;
+  display: grid;
+  grid-template-columns: repeat(var(--puzzle-size), 64px);
+  grid-template-rows: repeat(var(--puzzle-size), 64px);
+  gap: 6px;
+  padding: 10px;
+  border: 4px solid var(--ink, #142628);
+  border-radius: 16px;
+  background: #1a3032;
+  box-shadow: var(--shadow);
+}
+.puzzle-tile {
+  display: grid;
+  place-items: center;
+  border: 3px solid var(--ink, #142628);
+  border-radius: 10px;
+  background: #f3efe4;
+  color: var(--ink, #142628);
+  font-size: 1.35rem;
+  font-weight: 900;
+  cursor: pointer;
+  user-select: none;
+}
+.puzzle-tile:hover:not(:disabled):not(.is-empty) {
+  background: #fff8e8;
+}
+.puzzle-tile:disabled {
+  cursor: default;
+  opacity: 0.95;
+}
+.puzzle-tile.is-empty {
+  background: transparent;
+  border-style: dashed;
+  border-color: #4a6668;
+  cursor: default;
+}
+.puzzle-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--ink, #142628);
+}
+.puzzle-status {
+  margin: 0;
+  min-height: 1.4em;
+  font-size: 0.92rem;
+  color: var(--muted, #5a6e6c);
+}
+.puzzle-status.ok { color: var(--ok, #2a8a4a); font-weight: 800; }
+.puzzle-status.bad { color: var(--danger, #c23b4a); font-weight: 800; }
+.puzzle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
 
 /* —— 新手教学导播 —— */
 .tutorial-coach,

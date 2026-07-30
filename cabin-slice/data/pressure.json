@@ -79,13 +79,13 @@
     "toughBonus": 3
   },
   "bossFight": {
-    "broadcastMax": 12,
+    "broadcastMax": 16,
     "seenClockBonus": 1,
-    "anchorClockRelief": 2,
+    "anchorClockRelief": 3,
     "breakClockRelief": 2,
     "chargeTurns": 1,
     "anchorHp": 2,
-    "dismantleCost": 2,
+    "dismantleCost": 1,
     "phases": [
       { "cleared": 0, "name": "开场", "stam": 4, "clock": 1 },
       { "cleared": 2, "name": "换台", "stam": 4, "clock": 1, "wideCharge": true },
@@ -95,16 +95,16 @@
       { "id": "closeup", "label": "导播要特写", "desc": "本回合必须先移动至少 1 格才能出手" },
       { "id": "spotlight", "label": "点亮舞台", "desc": "优先走向最近的亮锚" },
       { "id": "mute", "label": "静音", "desc": "本回合丢失气味追踪" },
-      { "id": "extra", "label": "加播", "desc": "播出进度额外 +1" }
+      { "id": "extra", "label": "加播", "desc": "播出进度额外 +1", "minCleared": 2 }
     ]
   },
   "traitLabels": {
     "lunge": "突进贴近",
-    "faceShock": "突脸惊吓",
+    "faceShock": "突脸惊吓（拐角见你就打/吓）",
     "grab": "搜刮",
     "relentless": "穷追",
     "vault": "攀爬",
-    "cornerCut": "抄近路",
+    "cornerCut": "抄近路（见面免费贴一步）",
     "trapAware": "避陷阱",
     "guardBreak": "破防",
     "slam": "砸地AoE（须邻接）",
