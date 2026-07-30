@@ -768,14 +768,26 @@ function comboPop(name) {
   }
 }
 
+/** 丢视线后仍记得玩家落点的敌回合数（此前为 2，易被挂机空转） */
+const LAST_SEEN_MEMORY_TURNS = 5;
+
 function getEnemyGoal(c) {
-  if (decoyAlive(c)) return { ...c.decoy.pos };
+  const sees = hasLoS(c.enemyPos, c.playerPos) && !isEnemyBlinded(c);
+
+  // 纸影：无视线时吸怪；邻接时顺手砸。有视线且不在旁 → 回追玩家，禁止无限吸怪
+  if (decoyAlive(c)) {
+    const nextToDecoy = manhattan(c.enemyPos, c.decoy.pos) <= 1;
+    if (!sees || nextToDecoy) {
+      c.patrolGoal = null;
+      return { ...c.decoy.pos };
+    }
+  }
+
   // 节目指令「点亮舞台」：优先追最近亮锚
   if (c.isBoss && c.directive?.id === "spotlight") {
     const anchor = nearestLitAnchor(c, c.enemyPos);
     if (anchor) return anchor;
   }
-  const sees = hasLoS(c.enemyPos, c.playerPos);
   if (sees) {
     c.patrolGoal = null;
     return { ...c.playerPos };
@@ -784,7 +796,7 @@ function getEnemyGoal(c) {
     c.patrolGoal = null;
     return { ...c.lastSeen };
   }
-  // 无目击：在场地里巡逻，不能无限挂机让玩家躲一辈子
+  // 无目击：巡逻偏向玩家所在半场，不能无限挂机
   return ensurePatrolGoal(c);
 }
 
@@ -804,8 +816,14 @@ function listPatrolCandidates(c) {
 function pickPatrolWaypoint(c) {
   const cands = listPatrolCandidates(c);
   if (!cands.length) return null;
-  cands.sort((a, b) => manhattan(b, c.enemyPos) - manhattan(a, c.enemyPos));
-  const pool = cands.slice(0, Math.max(3, Math.ceil(cands.length / 2)));
+  // 偏向玩家（或最后目击点）附近，其次再挑离自己略远的点做搜查
+  const bias = c.lastSeen || c.playerPos;
+  cands.sort(
+    (a, b) =>
+      manhattan(a, bias) - manhattan(b, bias) ||
+      manhattan(b, c.enemyPos) - manhattan(a, c.enemyPos),
+  );
+  const pool = cands.slice(0, Math.max(3, Math.ceil(cands.length / 3)));
   return { ...pool[Math.floor(Math.random() * pool.length)] };
 }
 
@@ -4815,34 +4833,94 @@ function coverBlockAtPlayer() {
   return item?.coverBlock || 0;
 }
 
+function enemyEdgeCost(c, from, to) {
+  const leaveTax = c.floor[keyOf(from)]?.enterTax || 0;
+  const enterTax = c.floor[keyOf(to)]?.enterTax || 0;
+  const climb = climbCost(from, to);
+  let cost = 1 + leaveTax + enterTax + climb;
+  if (c.traits?.includes("trapAware")) {
+    const item = c.floor[keyOf(to)];
+    if (item?.onStep?.damage) cost += 8;
+    else if (item?.enterTax) cost += 2;
+  }
+  return cost;
+}
+
+/**
+ * 朝目标走一步：Dijkstra 最短路首步（可绕墙），不踩玩家格。
+ * 目标是玩家时，走到邻接格即视为抵达。
+ */
 function stepEnemyToward(goal, c = state.combat) {
   if (!c || !goal) return null;
-  const trapAware = c.traits?.includes("trapAware");
   const vault = c.traits?.includes("vault");
-  // 不踩玩家格（贴脸就打，不「穿过」）；可踩傀儡格（落地打碎）
-  const opts = neighbors(c.enemyPos)
-    .filter((p) => keyOf(p) !== keyOf(c.playerPos))
-    .map((p) => {
-      const item = c.floor[keyOf(p)];
-      const enterTax = item?.enterTax || 0;
-      const trapHazard = item?.onStep?.damage ? 2 : enterTax > 0 ? 1 : 0;
-      return {
+  const playerKey = keyOf(c.playerPos);
+  const goalKey = keyOf(goal);
+  const targetPlayer = goalKey === playerKey;
+
+  if (targetPlayer && manhattan(c.enemyPos, c.playerPos) <= 1) return null;
+  if (!targetPlayer && keyOf(c.enemyPos) === goalKey) return null;
+
+  const reached = (p) => (targetPlayer ? manhattan(p, c.playerPos) === 1 : keyOf(p) === goalKey);
+  if (reached(c.enemyPos)) return null;
+
+  const startKey = keyOf(c.enemyPos);
+  const bestG = new Map([[startKey, 0]]);
+  const prev = new Map();
+  const pq = [{ p: { ...c.enemyPos }, g: 0 }];
+  let guard = 200;
+  let found = null;
+
+  while (pq.length && guard-- > 0) {
+    pq.sort((a, b) => a.g - b.g || (vault ? tileHeight(b.p) - tileHeight(a.p) : 0));
+    const cur = pq.shift();
+    const ck = keyOf(cur.p);
+    if (cur.g !== bestG.get(ck)) continue;
+    if (ck !== startKey && reached(cur.p)) {
+      found = cur.p;
+      break;
+    }
+    for (const n of neighbors(cur.p)) {
+      const nk = keyOf(n);
+      if (nk === playerKey) continue;
+      const g2 = cur.g + enemyEdgeCost(c, cur.p, n);
+      if (bestG.has(nk) && bestG.get(nk) <= g2) continue;
+      bestG.set(nk, g2);
+      prev.set(nk, { ...cur.p });
+      pq.push({ p: { ...n }, g: g2 });
+    }
+  }
+
+  if (!found) {
+    // 无通路时退回邻格贪心，尽量靠近目标
+    const opts = neighbors(c.enemyPos)
+      .filter((p) => keyOf(p) !== playerKey)
+      .map((p) => ({
         p,
         dist: manhattan(p, goal),
         cost: stepCostTo(c, p),
-        climb: climbCost(c.enemyPos, p),
-        trapHazard,
         height: tileHeight(p),
+      }));
+    if (!opts.length) return null;
+    opts.sort((a, b) => a.dist - b.dist || (vault ? b.height - a.height : 0) || a.cost - b.cost);
+    return opts[0];
+  }
+
+  let stepPos = found;
+  let backGuard = 64;
+  while (backGuard-- > 0) {
+    const pr = prev.get(keyOf(stepPos));
+    if (!pr) break;
+    if (keyOf(pr) === startKey) {
+      return {
+        p: { ...stepPos },
+        cost: stepCostTo(c, stepPos),
+        climb: climbCost(c.enemyPos, stepPos),
+        height: tileHeight(stepPos),
       };
-    });
-  if (!opts.length) return null;
-  opts.sort((a, b) => {
-    if (a.dist !== b.dist) return a.dist - b.dist;
-    if (trapAware && a.trapHazard !== b.trapHazard) return a.trapHazard - b.trapHazard;
-    if (vault && a.height !== b.height) return b.height - a.height;
-    return a.cost - b.cost;
-  });
-  return opts[0];
+    }
+    stepPos = pr;
+  }
+  return null;
 }
 
 /** 朝目标免费迈一步（埋伏弹簧 / 抄近路），不耗体力 */
@@ -4995,7 +5073,7 @@ function enemyTurn() {
     const endVis = refreshVision();
     if (!endVis.enemySees) {
       c.lastSeenAge = (c.lastSeenAge || 0) + 1;
-      if (c.lastSeen && c.lastSeenAge >= 2) {
+      if (c.lastSeen && c.lastSeenAge >= LAST_SEEN_MEMORY_TURNS) {
         c.lastSeen = null;
         log(`${c.enemy.name}在遮挡后失去了你的踪迹。`, "ok");
       }
@@ -5273,13 +5351,13 @@ function enemyTurn() {
   }
 
   const endVis = refreshVision();
-  // 丢视线后气味会散：连续 2 个敌回合找不到，就忘掉 lastSeen，改去巡逻
+  // 丢视线后气味会散：连续若干敌回合找不到，才忘掉 lastSeen，改去偏向玩家的搜查
   if (!endVis.enemySees) {
     c.lastSeenAge = (c.lastSeenAge || 0) + 1;
-    if (c.lastSeen && c.lastSeenAge >= 2) {
+    if (c.lastSeen && c.lastSeenAge >= LAST_SEEN_MEMORY_TURNS) {
       c.lastSeen = null;
       ensurePatrolGoal(c);
-      log(`${c.enemy.name}在遮挡后失去了你的踪迹，开始在场地里巡逻。`, "ok");
+      log(`${c.enemy.name}在遮挡后失去了你的踪迹，开始在场地里搜查。`, "ok");
     }
   } else {
     c.lastSeenAge = 0;
