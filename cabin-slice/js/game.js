@@ -232,9 +232,48 @@ function roomDef(id) {
       ...base,
       map: { col: loc.col, row: loc.row },
       exits: [...(loc.exits || [])],
+      // 山屋惊魂式门朝向：由邻接推算，渲染用
+      doors: loc.doors
+        ? { ...loc.doors }
+        : doorsFromExits(loc, state.roomLayout),
     };
   }
   return base;
+}
+
+/** 由布局邻接推出 NESW 门朝向（对齐 Unity Room.northDoor…） */
+function doorsFromExits(loc, layout) {
+  const doors = { N: false, E: false, S: false, W: false };
+  if (!loc || !layout) return doors;
+  for (const eid of loc.exits || []) {
+    const other = layout[eid];
+    if (!other) continue;
+    const dc = other.col - loc.col;
+    const dr = other.row - loc.row;
+    if (dc === 0 && dr === -1) doors.N = true;
+    else if (dc === 0 && dr === 1) doors.S = true;
+    else if (dc === 1 && dr === 0) doors.E = true;
+    else if (dc === -1 && dr === 0) doors.W = true;
+  }
+  return doors;
+}
+
+function assignDoorsToLayout(layout) {
+  for (const loc of Object.values(layout)) {
+    loc.doors = doorsFromExits(loc, layout);
+  }
+}
+
+/** 当前房间朝 (dc,dr) 方向的邻接出口 id（若有） */
+function exitIdToward(room, dc, dr) {
+  if (!room?.map || !state.roomLayout) return null;
+  const tc = room.map.col + dc;
+  const tr = room.map.row + dr;
+  for (const eid of room.exits || []) {
+    const other = state.roomLayout[eid];
+    if (other && other.col === tc && other.row === tr) return eid;
+  }
+  return null;
 }
 
 /** 本局实际出现在大地图上的房间 id */
@@ -316,9 +355,9 @@ function rollRoomLayout(seed = (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0
     [-1, 0],
     [1, 0],
   ];
-  // 在放大画布上生长，最后再居中裁进 mapSize
-  const growCols = Math.max(size.cols, 14);
-  const growRows = Math.max(size.rows, 14);
+  // 在放大画布上生长，最后再居中裁进 mapSize（画布略大于正式格，给翼楼/主廊伸展）
+  const growCols = Math.max(size.cols, 20);
+  const growRows = Math.max(size.rows, 20);
   const inBounds = (c, r) => c >= 1 && r >= 1 && c <= growCols && r <= growRows;
 
   const occupied = new Map(); // "c,r" -> id
@@ -550,6 +589,9 @@ function rollRoomLayout(seed = (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0
     }
   }
 
+  // 邻接定稿后再写门朝向（正交边才开对应墙门）
+  assignDoorsToLayout(layout);
+
   const topoLabel = {
     tree: "树状",
     mesh: "网状",
@@ -666,12 +708,40 @@ function isWall(pos) {
   return !!state.combat?.walls?.has(keyOf(pos));
 }
 
+function isVoid(pos) {
+  return !!state.combat?.voids?.has(keyOf(pos));
+}
+
+/** 墙或空洞：不可站、挡视线 */
+function isBlocked(pos) {
+  return isWall(pos) || isVoid(pos);
+}
+
 function tileHeight(pos) {
   return state.combat?.heights?.[keyOf(pos)] || 0;
 }
 
 function isPassable(pos) {
-  return inBounds(pos) && !isWall(pos);
+  return inBounds(pos) && !isBlocked(pos);
+}
+
+function doorEdgeKey(a, b) {
+  const ka = keyOf(a);
+  const kb = keyOf(b);
+  return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+}
+
+function hasDoorLink(a, b) {
+  const links = state.combat?.links;
+  if (!links) return true;
+  return links.has(doorEdgeKey(a, b));
+}
+
+/** 山屋图模式只沿门走；普通场地四向通行 */
+function canStepBetween(a, b) {
+  if (!a || !b || !isOrthoAdjacent(a, b)) return false;
+  if (state.combat?.houseGraph && !hasDoorLink(a, b)) return false;
+  return true;
 }
 
 /** 仅正交四向，禁止斜向 */
@@ -685,7 +755,7 @@ function neighbors(pos) {
     { r: pos.r + 1, c: pos.c },
     { r: pos.r, c: pos.c - 1 },
     { r: pos.r, c: pos.c + 1 },
-  ].filter(isPassable);
+  ].filter((n) => isPassable(n) && canStepBetween(pos, n));
 }
 
 function climbCost(from, to, forPlayer = false) {
@@ -909,7 +979,7 @@ function chargeCellsAround(center, radius) {
   for (let dr = -radius; dr <= radius; dr += 1) {
     for (let dc = -radius; dc <= radius; dc += 1) {
       const pos = { r: center.r + dr, c: center.c + dc };
-      if (inBounds(pos) && !isWall(pos)) cells.push(pos);
+      if (inBounds(pos) && !isBlocked(pos)) cells.push(pos);
     }
   }
   return cells;
@@ -1029,7 +1099,7 @@ function beginBossCharge(c) {
   let best = null;
   let bestScore = -1;
   for (const center of candidates) {
-    if (!inBounds(center) || isWall(center)) continue;
+    if (!inBounds(center) || isBlocked(center)) continue;
     const cells = chargeCellsAround(center, radius);
     if (!cellsContain(cells, c.playerPos)) continue;
     const anchorHits = cells.filter((p) => c.anchors?.[keyOf(p)]?.lit).length;
@@ -1115,7 +1185,7 @@ function tryPortal(who, fromPos) {
   const dest = portalMate(fromPos);
   if (!dest) return false;
   // 单位可叠格，仅墙/越界挡住传送
-  if (isWall(dest) || !inBounds(dest)) {
+  if (isBlocked(dest) || !inBounds(dest)) {
     log("传送门嗡了一下，但对端被挡住了。");
     return false;
   }
@@ -1212,7 +1282,7 @@ function cellIsPortal(pos) {
 function pickForcedShoveDest(c) {
   const pk = keyOf(c.playerPos);
   const ortho = neighbors(c.enemyPos).filter(
-    (p) => keyOf(p) !== pk && inBounds(p) && !isWall(p),
+    (p) => keyOf(p) !== pk && inBounds(p) && !isBlocked(p),
   );
 
   const rank = (p, kindBonus = 0) => {
@@ -1242,7 +1312,7 @@ function pickForcedShoveDest(c) {
     const dr = Math.sign(c.playerPos.r - c.enemyPos.r);
     const dc = Math.sign(c.playerPos.c - c.enemyPos.c);
     const past = { r: c.playerPos.r + dr, c: c.playerPos.c + dc };
-    if (inBounds(past) && !isWall(past) && keyOf(past) !== keyOf(c.enemyPos)) {
+    if (inBounds(past) && !isBlocked(past) && keyOf(past) !== keyOf(c.enemyPos)) {
       const s = rank(past, 35);
       if (cellTrapScore(past) > 0 && s > bestScore) {
         bestScore = s;
@@ -1367,23 +1437,35 @@ function resolveShove(inst) {
   return true;
 }
 
-/** 格子视线：墙遮挡；中间更高的脊也遮挡；邻接始终可见 */
+/** 格子视线：墙/空洞遮挡；中间更高的脊也遮挡；邻接始终可见（山屋图还需有门） */
 function hasLoS(a, b) {
   if (!a || !b) return false;
   if (keyOf(a) === keyOf(b)) return true;
-  if (manhattan(a, b) === 1) return isPassable(a) && isPassable(b);
+  if (manhattan(a, b) === 1) {
+    return isPassable(a) && isPassable(b) && canStepBetween(a, b);
+  }
 
   const n = Math.max(Math.abs(b.r - a.r), Math.abs(b.c - a.c));
   const hEye = Math.max(tileHeight(a), tileHeight(b));
+  let prev = a;
   for (let i = 1; i < n; i += 1) {
     const r = Math.round(a.r + ((b.r - a.r) * i) / n);
     const c = Math.round(a.c + ((b.c - a.c) * i) / n);
     const p = { r, c };
     if (!inBounds(p)) return false;
-    if (isWall(p)) return false;
+    if (isBlocked(p)) return false;
     if (tileHeight(p) > hEye) return false;
+    if (state.combat?.houseGraph) {
+      // 山屋图：直线路径上的格必须可走，且相邻格有门
+      if (!isPassable(p)) return false;
+      if (isOrthoAdjacent(prev, p) && !canStepBetween(prev, p)) return false;
+      prev = p;
+    }
   }
-  return true;
+  if (state.combat?.houseGraph && isOrthoAdjacent(prev, b) && !canStepBetween(prev, b)) {
+    return false;
+  }
+  return isPassable(b);
 }
 
 function isEnemyBlinded(c) {
@@ -1524,7 +1606,10 @@ function beginLabCombat(room, enc, isBoss) {
       playerHpEnd: null,
       enemyHpEnd: null,
       durationMs: null,
-      anchorsTotal: isBoss ? (roomDef("altar")?.arena?.anchors || []).length : 0,
+      anchorsTotal: isBoss
+        ? Object.keys(state.combat?.anchors || {}).length ||
+          (roomDef("altar")?.arena?.anchors || []).length
+        : 0,
       anchorsCleared: 0,
       anchorsClearedByBoss: 0,
       broadcastEnd: null,
@@ -2313,25 +2398,9 @@ function skipToBossTest() {
   localStorage.removeItem(SAVE_KEY);
   localStorage.removeItem("cabin-run-v2");
   localStorage.removeItem("cabin-run-v1");
-  const path = [
-    "foyer",
-    "living",
-    "kitchen",
-    "hall",
-    "gallery",
-    "study",
-    "attic",
-    "loft",
-    "cellar",
-    "ritual",
-  ];
-  state.roomId = "ritual";
   state.speed = 5;
   state.maxHp = 8;
   state.hp = 8;
-  state.visitPath = [...path];
-  state.resolvedRooms = new Set(path);
-  state.knownRooms = new Set(Object.keys(state.data.rooms.rooms));
   // 约一局期望牌库：起手 + 战斗/静室加牌（只保留数据里存在的 id）
   const grown = [
     ...state.data.cards.starter,
@@ -2362,17 +2431,47 @@ function skipToBossTest() {
   state.rewardRolls = {};
   state.midRelicDone = true;
   state.labTag = "boss_test";
-  state.roomLayout = null;
-  state.runSeed = 0;
+  // 掷一张大地图，Boss 决战用「一房一格」编译这张图
+  const seed = (Date.now() ^ 0xb0557e57) >>> 0;
+  rollRoomLayout(seed);
+  const layout = state.roomLayout;
+  const startId = state.data.rooms.startRoom || "foyer";
+  const path = buildHouseVisitPath(layout, startId, state.data.rooms.runLength || 12);
+  state.roomId = path[path.length - 1] || startId;
+  state.visitPath = path;
+  state.resolvedRooms = new Set(path);
+  state.knownRooms = new Set(Object.keys(layout || { [startId]: 1 }));
   $("log").innerHTML = "";
   show("screen-game");
   showModal(null);
   const boss = bossDef(state.chosenBoss);
+  const roomN = Object.keys(layout || {}).length;
   log("【测 Boss】行程已满 · 满血 8/8 · 速度 5 · 强化牌库。", "ok");
-  log(`决战对手：${boss.name}（偏硬壳，方便测强度）。`);
+  log(`决战对手：${boss.name} · 场地=本集山屋平面（${roomN} 间，一房一格，空洞不可站）。`);
   renderAll();
   saveGame();
   openBoss();
+}
+
+/** 沿门走一条够长的行程路径（Boss 测试用） */
+function buildHouseVisitPath(layout, startId, need) {
+  if (!layout || !layout[startId]) {
+    return Array.from({ length: need }, (_, i) => (i === 0 ? startId : startId));
+  }
+  const path = [startId];
+  const seen = new Set([startId]);
+  let guard = need * 4;
+  while (path.length < need && guard-- > 0) {
+    const here = path[path.length - 1];
+    const exits = (layout[here]?.exits || []).filter((id) => layout[id]);
+    const fresh = exits.filter((id) => !seen.has(id));
+    const next = (fresh.length ? fresh : exits)[0];
+    if (!next) break;
+    path.push(next);
+    seen.add(next);
+  }
+  while (path.length < need) path.push(path[path.length - 1]);
+  return path;
 }
 
 function discoverNeighbors(roomId) {
@@ -2609,6 +2708,24 @@ function renderMap() {
 
       if (visited) btn.classList.add("visited");
       if (exits.has(room.id) && room.id !== state.roomId) btn.classList.add("reachable");
+
+      // 门朝向缺口（山屋惊魂 northDoor/eastDoor/southDoor/westDoor）
+      const doors = room.doors || doorsFromExits(state.roomLayout?.[room.id], state.roomLayout);
+      for (const d of ["N", "E", "S", "W"]) {
+        if (!doors[d]) continue;
+        const notch = document.createElement("span");
+        notch.className = `map-door map-door-${d.toLowerCase()}`;
+        notch.setAttribute("aria-hidden", "true");
+        if (
+          (d === "N" && exits.has(exitIdToward(room, 0, -1))) ||
+          (d === "S" && exits.has(exitIdToward(room, 0, 1))) ||
+          (d === "E" && exits.has(exitIdToward(room, 1, 0))) ||
+          (d === "W" && exits.has(exitIdToward(room, -1, 0)))
+        ) {
+          notch.classList.add("is-live");
+        }
+        btn.appendChild(notch);
+      }
 
       if (room.id === state.roomId) {
         btn.classList.add("current");
@@ -3284,7 +3401,7 @@ function slamRectCells(c) {
   for (const r of rows) {
     for (const col of cols) {
       const pos = { r, c: col };
-      if (inBounds(pos) && !isWall(pos)) cells.push(pos);
+      if (inBounds(pos) && !isBlocked(pos)) cells.push(pos);
     }
   }
   return cells;
@@ -3301,7 +3418,7 @@ function beamLineCells(c) {
     if (!step) return [];
     for (let i = 1; i <= 3; i += 1) {
       const pos = { r: e.r, c: e.c + step * i };
-      if (!inBounds(pos) || isWall(pos)) break;
+      if (!inBounds(pos) || isBlocked(pos)) break;
       cells.push(pos);
     }
   } else {
@@ -3309,7 +3426,7 @@ function beamLineCells(c) {
     if (!step) return [];
     for (let i = 1; i <= 3; i += 1) {
       const pos = { r: e.r + step * i, c: e.c };
-      if (!inBounds(pos) || isWall(pos)) break;
+      if (!inBounds(pos) || isBlocked(pos)) break;
       cells.push(pos);
     }
   }
@@ -4142,6 +4259,15 @@ function buildEncounter(room, isBoss) {
 
 function resolveArena(room, isBoss) {
   const fallback = state.data.rooms.defaultArena || state.data.cards.grid;
+  if (isBoss) {
+    // Boss：本局大地图一房一格；无布局时先掷一张平面图
+    if (!isSpatialLayout(state.roomLayout)) {
+      rollRoomLayout((Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0);
+    }
+    if (isSpatialLayout(state.roomLayout)) {
+      return buildHouseGraphArena(state.roomLayout);
+    }
+  }
   const raw = isBoss
     ? roomDef("altar")?.arena || fallback
     : room.arena || fallback;
@@ -4149,12 +4275,14 @@ function resolveArena(room, isBoss) {
   const cols = raw.cols || fallback.cols || 5;
   const player = raw.player || [Math.floor(rows / 2), 0];
   const enemy = raw.enemy || [Math.floor(rows / 2), cols - 1];
-  const walls = new Set([...(raw.walls || [])]);
+  // 普通房仍可用墙；Boss 回退场把旧墙改成空洞
+  const wallList = [...(raw.walls || [])];
+  const walls = new Set(isBoss ? [] : wallList);
+  const voids = new Set(isBoss ? wallList : []);
   const heights = { ...(raw.heights || {}) };
   const playerPos = { r: player[0], c: player[1] };
   const enemyPos = { r: enemy[0], c: enemy[1] };
-  // 防死局：墙不能把玩家与敌人完全切开；必要时拆掉挡路的墙格
-  ensureArenaPath(rows, cols, walls, playerPos, enemyPos);
+  if (!isBoss) ensureArenaPath(rows, cols, walls, playerPos, enemyPos);
   const portals = {};
   for (const pair of raw.portals || []) {
     if (!pair || pair.length < 2) continue;
@@ -4168,12 +4296,260 @@ function resolveArena(room, isBoss) {
     playerPos,
     enemyPos,
     walls,
+    voids,
     heights,
     portals,
+    links: null,
+    houseGraph: false,
+    roomAt: null,
     ambush: !!raw.ambush,
     spawnNote: raw.spawnNote || "",
     anchors: [...(raw.anchors || [])],
   };
+}
+
+/**
+ * Boss 决战场：本局 roomLayout → 棋盘。
+ * 有房间的坐标 = 可站格；没有房间的坐标 = 空洞（不是墙）；只沿 exits/门通行。
+ */
+function buildHouseGraphArena(layout) {
+  const size = state.data.rooms.mapSize || { cols: 17, rows: 17 };
+  const rows = size.rows;
+  const cols = size.cols;
+  const voids = new Set();
+  const roomAt = {};
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      voids.add(`${r},${c}`);
+    }
+  }
+  for (const [id, loc] of Object.entries(layout)) {
+    const r = (loc.row | 0) - 1;
+    const c = (loc.col | 0) - 1;
+    if (r < 0 || c < 0 || r >= rows || c >= cols) continue;
+    const k = `${r},${c}`;
+    voids.delete(k);
+    roomAt[k] = id;
+  }
+
+  const links = new Set();
+  for (const [id, loc] of Object.entries(layout)) {
+    const a = { r: (loc.row | 0) - 1, c: (loc.col | 0) - 1 };
+    if (voids.has(keyOf(a))) continue;
+    for (const eid of loc.exits || []) {
+      const other = layout[eid];
+      if (!other) continue;
+      const b = { r: (other.row | 0) - 1, c: (other.col | 0) - 1 };
+      if (voids.has(keyOf(b))) continue;
+      if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) continue;
+      links.add(doorEdgeKey(a, b));
+    }
+  }
+
+  const startId =
+    (state.roomId && layout[state.roomId] && state.roomId) ||
+    state.data.rooms.startRoom ||
+    "foyer";
+  const startLoc = layout[startId] || Object.values(layout)[0];
+  const playerPos = { r: (startLoc.row | 0) - 1, c: (startLoc.col | 0) - 1 };
+
+  const enemyPos =
+    farthestHousePos(layout, links, playerPos, voids) || {
+      r: playerPos.r,
+      c: playerPos.c,
+    };
+  // 若碰巧重合，再找任意其它房
+  if (keyOf(enemyPos) === keyOf(playerPos)) {
+    for (const loc of Object.values(layout)) {
+      const p = { r: (loc.row | 0) - 1, c: (loc.col | 0) - 1 };
+      if (keyOf(p) !== keyOf(playerPos) && !voids.has(keyOf(p))) {
+        enemyPos.r = p.r;
+        enemyPos.c = p.c;
+        break;
+      }
+    }
+  }
+
+  // 兜圈：给正交相邻但未接线的房间补捷径，形成局部环
+  weaveHouseLoops(layout, links, voids);
+  // 高度 / 传送门：对齐小场地机关语汇
+  const heights = assignHouseHeights(layout, voids);
+  const portals = assignHousePortals(layout, links, voids, playerPos, enemyPos);
+
+  const anchors = pickHouseAnchorKeys(layout, voids, playerPos, enemyPos, 4);
+  const roomN = Object.keys(layout).length;
+  const portalN = Object.keys(portals).length / 2;
+  const highN = Object.keys(heights).length;
+  return {
+    rows,
+    cols,
+    playerPos,
+    enemyPos,
+    walls: new Set(),
+    voids,
+    heights,
+    portals,
+    links,
+    houseGraph: true,
+    roomAt,
+    ambush: false,
+    spawnNote: `决战场：本集山屋平面（${roomN} 间）。一房一格 · 空洞不画格 · 沿门走 · 高台 ${highN} · 传送门 ${Math.floor(portalN)} 对 · 已补环路可兜圈。`,
+    anchors,
+  };
+}
+
+/** 正交贴邻但没门的房间，按概率开门，方便 Boss 战兜圈子 */
+function weaveHouseLoops(layout, links, voids) {
+  const occupied = [];
+  for (const loc of Object.values(layout)) {
+    const p = { r: (loc.row | 0) - 1, c: (loc.col | 0) - 1 };
+    if (!voids.has(keyOf(p))) occupied.push(p);
+  }
+  const candidates = [];
+  for (let i = 0; i < occupied.length; i += 1) {
+    for (let j = i + 1; j < occupied.length; j += 1) {
+      const a = occupied[i];
+      const b = occupied[j];
+      if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) continue;
+      const edge = doorEdgeKey(a, b);
+      if (links.has(edge)) continue;
+      candidates.push([a, b, edge]);
+    }
+  }
+  // 至少补 2 条环，其余约 45% 概率
+  let added = 0;
+  for (const [a, b, edge] of candidates) {
+    const force = added < 2;
+    if (force || Math.random() < 0.45) {
+      links.add(edge);
+      added += 1;
+    }
+  }
+  return added;
+}
+
+function assignHouseHeights(layout, voids) {
+  const heights = {};
+  for (const [id, loc] of Object.entries(layout)) {
+    const p = { r: (loc.row | 0) - 1, c: (loc.col | 0) - 1 };
+    if (voids.has(keyOf(p))) continue;
+    let h = 0;
+    if (/attic|loft|gallery|塔|阁|廊顶/.test(id) || /阁|塔|画廊/.test(roomDef(id)?.name || "")) h = 2;
+    else if (/study|bedroom|upper|西厢|主卧|书房|客房/.test(id + (roomDef(id)?.name || ""))) h = 1;
+    else if (/cellar|boiler|mud|basement|地窖|锅炉|泥/.test(id + (roomDef(id)?.name || ""))) h = 0;
+    else if (Math.random() < 0.28) h = 1;
+    if (h > 0) heights[keyOf(p)] = h;
+  }
+  return heights;
+}
+
+/** 挑两个较远的末梢房做一对传送门（可再补一对） */
+function assignHousePortals(layout, links, voids, playerPos, enemyPos) {
+  const tips = [];
+  for (const [id, loc] of Object.entries(layout)) {
+    const p = { r: (loc.row | 0) - 1, c: (loc.col | 0) - 1 };
+    const k = keyOf(p);
+    if (voids.has(k)) continue;
+    if (k === keyOf(playerPos) || k === keyOf(enemyPos)) continue;
+    let deg = 0;
+    for (const n of [
+      { r: p.r - 1, c: p.c },
+      { r: p.r + 1, c: p.c },
+      { r: p.r, c: p.c - 1 },
+      { r: p.r, c: p.c + 1 },
+    ]) {
+      if (links.has(doorEdgeKey(p, n))) deg += 1;
+    }
+    tips.push({ id, p, k, deg, spread: manhattan(p, playerPos) + manhattan(p, enemyPos) });
+  }
+  tips.sort((a, b) => a.deg - b.deg || b.spread - a.spread);
+  const portals = {};
+  const used = new Set();
+  const pool = tips.length >= 4 ? tips : tips;
+  for (let i = 0; i < pool.length && Object.keys(portals).length < 4; i += 1) {
+    const a = pool[i];
+    if (used.has(a.k)) continue;
+    let best = null;
+    let bestD = -1;
+    for (let j = i + 1; j < pool.length; j += 1) {
+      const b = pool[j];
+      if (used.has(b.k)) continue;
+      const d = manhattan(a.p, b.p);
+      if (d < 3) continue;
+      if (d > bestD) {
+        bestD = d;
+        best = b;
+      }
+    }
+    if (!best) continue;
+    portals[a.k] = best.k;
+    portals[best.k] = a.k;
+    used.add(a.k);
+    used.add(best.k);
+  }
+  return portals;
+}
+
+function farthestHousePos(layout, links, from, voids) {
+  const start = keyOf(from);
+  const q = [{ ...from }];
+  const dist = new Map([[start, 0]]);
+  while (q.length) {
+    const cur = q.shift();
+    for (const n of [
+      { r: cur.r - 1, c: cur.c },
+      { r: cur.r + 1, c: cur.c },
+      { r: cur.r, c: cur.c - 1 },
+      { r: cur.r, c: cur.c + 1 },
+    ]) {
+      const nk = keyOf(n);
+      if (voids.has(nk) || dist.has(nk)) continue;
+      if (!links.has(doorEdgeKey(cur, n))) continue;
+      dist.set(nk, (dist.get(keyOf(cur)) || 0) + 1);
+      q.push(n);
+    }
+  }
+  let best = null;
+  let bestD = -1;
+  for (const [k, d] of dist) {
+    if (k === start) continue;
+    if (d > bestD) {
+      bestD = d;
+      best = parseKey(k);
+    }
+  }
+  return best;
+}
+
+function pickHouseAnchorKeys(layout, voids, playerPos, enemyPos, want = 4) {
+  const forbidden = new Set([keyOf(playerPos), keyOf(enemyPos)]);
+  const cells = [];
+  for (const loc of Object.values(layout)) {
+    const p = { r: (loc.row | 0) - 1, c: (loc.col | 0) - 1 };
+    const k = keyOf(p);
+    if (voids.has(k) || forbidden.has(k)) continue;
+    const degree = (loc.exits || []).length;
+    const spread = manhattan(p, playerPos) + manhattan(p, enemyPos);
+    cells.push({ k, degree, spread });
+  }
+  // 偏好末梢 + 远离双方出生点
+  cells.sort((a, b) => a.degree - b.degree || b.spread - a.spread);
+  const picked = [];
+  for (const cell of cells) {
+    if (picked.length >= want) break;
+    // 锚之间不要贴太近
+    if (picked.some((pk) => manhattan(parseKey(pk), parseKey(cell.k)) <= 1)) continue;
+    picked.push(cell.k);
+  }
+  // 不够就放宽间距再补
+  if (picked.length < want) {
+    for (const cell of cells) {
+      if (picked.length >= want) break;
+      if (picked.includes(cell.k)) continue;
+      picked.push(cell.k);
+    }
+  }
+  return picked;
 }
 
 /** BFS：若玩家到不了敌人格，逐格拆墙直到通路存在 */
@@ -4268,6 +4644,10 @@ function startCombat(room, isBoss) {
     wireBrokenBoost: false,
     grid: { rows: arena.rows, cols: arena.cols },
     walls: arena.walls,
+    voids: arena.voids || new Set(),
+    links: arena.links || null,
+    houseGraph: !!arena.houseGraph,
+    roomAt: arena.roomAt || null,
     heights: arena.heights,
     portals: arena.portals || {},
     playerPos: arena.playerPos,
@@ -4589,8 +4969,12 @@ function tryMovePlayer(pos) {
     log("只能上下左右移动，不能斜向。", "bad");
     return false;
   }
+  if (c.houseGraph && !hasDoorLink(c.playerPos, pos)) {
+    log("这边没有门，穿不过去。", "bad");
+    return false;
+  }
   if (!isPassable(pos)) {
-    log("遮挡物无法通过。", "bad");
+    log(isVoid(pos) ? "那是空洞，站不住。" : "遮挡物无法通过。", "bad");
     return false;
   }
   if (keyOf(pos) === keyOf(c.playerPos)) return false;
@@ -4638,8 +5022,12 @@ function tryPlace(pos) {
     log("只能放到上下左右邻格，不能斜向。", "bad");
     return false;
   }
+  if (c.houseGraph && !hasDoorLink(c.playerPos, pos)) {
+    log("只能放到有门通向的邻房。", "bad");
+    return false;
+  }
   if (!isPassable(pos) && keyOf(pos) !== keyOf(c.enemyPos)) {
-    log("不能放在遮挡物上。", "bad");
+    log(isVoid(pos) ? "不能放到空洞上。" : "不能放在遮挡物上。", "bad");
     return false;
   }
   if (keyOf(pos) === keyOf(c.playerPos)) {
@@ -5586,11 +5974,220 @@ function renderCombat() {
   }
 }
 
-function renderBattleGrid() {
+/**
+ * Boss 山屋决战 UI：和大地图同一套节点+连线，空洞不画格（露出底图）。
+ */
+function renderHouseGraphBattle() {
   const c = state.combat;
   const g = combatGrid();
+  const wrap = $("battle-grid")?.parentElement;
+  if (wrap) wrap.classList.add("house-battle-wrap");
   const box = $("battle-grid");
-  box.style.gridTemplateColumns = `repeat(${g.cols}, minmax(40px, 1fr))`;
+  box.className = "battle-grid house-graph-map";
+  box.style.gridTemplateColumns = `repeat(${g.cols}, minmax(0, 1fr))`;
+  box.style.gridTemplateRows = `repeat(${g.rows}, minmax(0, 1fr))`;
+  box.innerHTML = "";
+
+  const linksSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  linksSvg.classList.add("battle-map-links");
+  linksSvg.setAttribute("aria-hidden", "true");
+  linksSvg.setAttribute("viewBox", `0 0 ${g.cols} ${g.rows}`);
+  linksSvg.setAttribute("preserveAspectRatio", "none");
+  box.appendChild(linksSvg);
+
+  const sees = c.playerSeesEnemy;
+  c.intent = predictIntent(c);
+  const threats = threatMapFromIntent(c.intent);
+
+  if (c.links) {
+    const drawn = new Set();
+    for (const edge of c.links) {
+      if (drawn.has(edge)) continue;
+      drawn.add(edge);
+      const [a, b] = edge.split("|");
+      const pa = parseKey(a);
+      const pb = parseKey(b);
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", String(pa.c + 0.5));
+      line.setAttribute("y1", String(pa.r + 0.5));
+      line.setAttribute("x2", String(pb.c + 0.5));
+      line.setAttribute("y2", String(pb.r + 0.5));
+      const live =
+        keyOf(c.playerPos) === a ||
+        keyOf(c.playerPos) === b;
+      line.setAttribute("class", live ? "map-link map-link-live" : "map-link");
+      linksSvg.appendChild(line);
+    }
+  }
+
+  for (let r = 0; r < g.rows; r += 1) {
+    for (let cidx = 0; cidx < g.cols; cidx += 1) {
+      const pos = { r, c: cidx };
+      const k = keyOf(pos);
+      if (isVoid(pos)) continue;
+
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = "battle-cell map-node-battle";
+      cell.style.gridColumn = String(cidx + 1);
+      cell.style.gridRow = String(r + 1);
+
+      const h = tileHeight(pos);
+      const isP = keyOf(c.playerPos) === k;
+      const isE = keyOf(c.enemyPos) === k;
+      const item = c.floor[k];
+      const roomId = c.roomAt?.[k];
+      const roomName = roomId ? roomDef(roomId)?.name || roomId : `格${r + 1},${cidx + 1}`;
+      const adjP = canStepBetween(pos, c.playerPos) && isPassable(pos) && !isP;
+      const threat = threats.get(k);
+      const anchor = c.anchors?.[k];
+      const isDecoy = decoyAlive(c) && keyOf(c.decoy.pos) === k;
+
+      if (h === 1) cell.classList.add("h1");
+      if (h >= 2) cell.classList.add("h2");
+      if (isP) cell.classList.add("has-player", "current");
+      if (isE && sees) cell.classList.add("has-enemy");
+      if (isE && !sees) cell.classList.add("enemy-fog");
+      if (item) cell.classList.add("has-item");
+      if (c.portals?.[k]) cell.classList.add("is-portal");
+      if (isDecoy) cell.classList.add("has-decoy");
+      if (c.lastSeen && keyOf(c.lastSeen) === k && !sees) cell.classList.add("last-seen");
+      if (anchor?.lit) cell.classList.add("anchor-lit");
+      else if (anchor && !anchor.lit) cell.classList.add("anchor-dead");
+      if (adjP) cell.classList.add("reachable");
+
+      if (threat?.kind === "hurt") {
+        cell.classList.add("threat-hurt");
+        if (threat.attackKind === "charge") cell.classList.add("threat-charge");
+        if (threat.pending) cell.classList.add("pending-hurt");
+        if (isP) cell.classList.add("threat-on-you");
+      } else if (threat?.kind === "move") {
+        cell.classList.add("threat-move");
+      }
+      if (c.ready && adjP) cell.classList.add("ready-zone");
+
+      const canPlaceEnemy = isE && sees && hasLoS(c.playerPos, c.enemyPos);
+      const placingDecoy =
+        c.placeUid && cardDef(c.hand.find((x) => x.uid === c.placeUid)?.id || "")?.place?.decoy;
+      if (
+        c.placeUid &&
+        adjP &&
+        ((isE && canPlaceEnemy && !placingDecoy) || (!isE && !item && (!isDecoy || placingDecoy)))
+      ) {
+        cell.classList.add("place-ok");
+      }
+      if (c.placeUid && adjP && canPlaceEnemy) cell.classList.add("place-enemy");
+      if (!c.placeUid && adjP && threat?.kind !== "hurt") {
+        const moveCost = playerMoveCost(c.playerPos, pos);
+        if (c.energy >= moveCost) {
+          cell.classList.add("move-ok");
+          if (isE) cell.classList.add("move-hostile");
+        }
+      }
+
+      for (const [d, dc, dr] of [
+        ["n", 0, -1],
+        ["s", 0, 1],
+        ["e", 1, 0],
+        ["w", -1, 0],
+      ]) {
+        const nb = { r: r + dr, c: cidx + dc };
+        if (!hasDoorLink(pos, nb)) continue;
+        const notch = document.createElement("span");
+        notch.className = `map-door map-door-${d}`;
+        if (isP || (adjP && keyOf(nb) === keyOf(c.playerPos))) notch.classList.add("is-live");
+        cell.appendChild(notch);
+      }
+
+      const label = document.createElement("span");
+      label.className = "map-node-label";
+      label.textContent = isP ? "" : roomName;
+      if (!isP) cell.appendChild(label);
+
+      const bits = [];
+      if (c.portals?.[k]) bits.push("门");
+      if (anchor?.lit) bits.push(`烛${anchor.hp}`);
+      else if (anchor && !anchor.lit) bits.push("灰");
+      if (item) bits.push(item.glyph || "物");
+      if (isDecoy) bits.push("影");
+      if (h) bits.push(`↑${h}`);
+
+      let pawnHtml = "";
+      if (isP) {
+        pawnHtml =
+          `<span class="map-pawn battle-pawn player-pawn"><img class="char-token map-token" src="assets/ui/chars/SP_Lili_MapToken.png" alt="你" width="36" height="36" draggable="false" /></span>`;
+      }
+      if (isE && sees) {
+        pawnHtml +=
+          `<span class="battle-pawn enemy-pawn"><img class="char-token" src="assets/ui/chars/SP_Enemy_Pixel.png" alt="敌" width="28" height="28" draggable="false" /></span>`;
+      } else if (isE && !sees) {
+        pawnHtml += `<span class="battle-pawn fog-pawn" aria-label="未知">?</span>`;
+      }
+      if (isDecoy) pawnHtml += `<span class="battle-pawn decoy-pawn" aria-label="纸影">影</span>`;
+
+      const shots = threat?.hits > 1 ? `${threat.damage}×${threat.hits}` : `${threat?.damage}`;
+      const dmgHtml =
+        threat?.kind === "hurt" && threat.damage
+          ? `<span class="threat-dmg${threat.pending ? " pending" : ""}">${
+              threat.net !== threat.total ? `${shots}→${threat.net}` : shots
+            }</span>`
+          : "";
+      const meta = bits.length ? `<span class="cell-meta">${bits.join(" ")}</span>` : "";
+      const body = document.createElement("span");
+      body.className = "map-battle-body";
+      body.innerHTML = `${dmgHtml}${pawnHtml}${meta}`;
+      cell.appendChild(body);
+
+      cell.title = [
+        roomName,
+        "山屋格 · 沿门移动",
+        h ? `高度 ${h}` : null,
+        c.portals?.[k] ? "传送门" : null,
+        anchor?.lit ? `信号锚（亮 · 耐久 ${anchor.hp}）` : null,
+        isP ? "你在这里" : null,
+        isE && sees ? c.enemy.name : null,
+        adjP && !c.placeUid ? "可移动" : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      cell.onclick = () => onTileClick(pos);
+      box.appendChild(cell);
+    }
+  }
+
+  syncBattleIntentBanner();
+  if (state.tutorial?.active) updateBattleTutorialCoach();
+}
+
+function syncBattleIntentBanner() {
+  const c = state.combat;
+  const banner = $("enemy-intent");
+  if (!banner || !c) return;
+  const label = c.intent?.label || "观望";
+  banner.textContent = label;
+  banner.className = `intent-banner intent-banner-wide intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
+  banner.title = c.intent?.detail || "";
+  const intentShort = $("enemy-intent-short");
+  if (intentShort) {
+    intentShort.textContent = label.length > 4 ? `${label.slice(0, 3)}…` : label;
+    intentShort.title = c.intent?.detail || label;
+  }
+}
+
+function renderBattleGrid() {
+  const c = state.combat;
+  if (!c) return;
+  const wrap = $("battle-grid")?.parentElement;
+  if (wrap) wrap.classList.remove("house-battle-wrap");
+  if (c.houseGraph) {
+    renderHouseGraphBattle();
+    return;
+  }
+  const g = combatGrid();
+  const box = $("battle-grid");
+  box.className = "battle-grid";
+  box.style.gridTemplateColumns = `repeat(${g.cols}, minmax(56px, 1fr))`;
+  box.style.gridTemplateRows = "";
   box.innerHTML = "";
   const sees = c.playerSeesEnemy;
   // 意图刷新：玩家走位后威胁区跟着变
@@ -5605,12 +6202,28 @@ function renderBattleGrid() {
       cell.className = "battle-cell";
       const k = keyOf(pos);
       const wall = isWall(pos);
+      const hole = isVoid(pos);
       const h = tileHeight(pos);
       const isP = keyOf(c.playerPos) === k;
       const isE = keyOf(c.enemyPos) === k;
       const item = c.floor[k];
-      const adjP = isOrthoAdjacent(pos, c.playerPos) && !wall;
+      const roomId = c.roomAt?.[k];
+      const roomName = roomId ? roomDef(roomId)?.name : null;
+      const adjP =
+        isOrthoAdjacent(pos, c.playerPos) &&
+        !wall &&
+        !hole &&
+        canStepBetween(pos, c.playerPos);
       const threat = threats.get(k);
+
+      if (hole) {
+        cell.classList.add("is-void");
+        cell.disabled = true;
+        cell.title = "空洞";
+        cell.innerHTML = `<span class="void-mark" aria-hidden="true"></span>`;
+        box.appendChild(cell);
+        continue;
+      }
 
       if (wall) {
         cell.classList.add("is-wall");
@@ -5668,6 +6281,7 @@ function renderBattleGrid() {
       }
 
       const bits = [];
+      if (roomName && c.houseGraph) bits.push(roomName.length > 2 ? roomName.slice(0, 2) : roomName);
       if (c.portals?.[k]) bits.push("门");
       if (anchor?.lit) bits.push(`烛${anchor.hp}`);
       else if (anchor && !anchor.lit) bits.push("灰");
@@ -5677,7 +6291,7 @@ function renderBattleGrid() {
       let pawnHtml = "";
       if (isP) {
         pawnHtml +=
-          `<span class="battle-pawn player-pawn"><img class="char-token" src="assets/ui/chars/SP_Lili_Pixel.png" alt="你" width="28" height="28" draggable="false" /></span>`;
+          `<span class="battle-pawn player-pawn"><img class="char-token map-token" src="assets/ui/chars/SP_Lili_MapToken.png" alt="你" width="34" height="34" draggable="false" /></span>`;
       }
       if (isE && sees) {
         pawnHtml +=
@@ -5700,7 +6314,8 @@ function renderBattleGrid() {
       const meta = bits.length ? `<span class="cell-meta">${bits.join(" ")}</span>` : "";
       cell.innerHTML = `${dmgHtml}${pawnHtml}${meta || (!isP && !isE && !isDecoy && !dmgHtml ? "<span>·</span>" : "")}`;
       cell.title = [
-        wall ? "墙" : "空地",
+        roomName || (wall ? "墙" : "空地"),
+        c.houseGraph ? "山屋格（沿门移动）" : null,
         h ? `高度 ${h}` : null,
         c.portals?.[k] ? "传送门" : null,
         anchor?.lit ? `信号锚（亮 · 耐久 ${anchor.hp} · 站上拆 / 砸牌 / 引怪砸）` : null,
@@ -5737,19 +6352,7 @@ function renderBattleGrid() {
       box.appendChild(cell);
     }
   }
-  // 同步意图条（保留 pending 样式）
-  const banner = $("enemy-intent");
-  if (banner) {
-    const label = c.intent?.label || "观望";
-    banner.textContent = label;
-    banner.className = `intent-banner intent-banner-wide intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
-    banner.title = c.intent?.detail || "";
-    const intentShort = $("enemy-intent-short");
-    if (intentShort) {
-      intentShort.textContent = label.length > 4 ? `${label.slice(0, 3)}…` : label;
-      intentShort.title = c.intent?.detail || label;
-    }
-  }
+  syncBattleIntentBanner();
   if (state.tutorial?.active) updateBattleTutorialCoach();
 }
 
@@ -6052,11 +6655,11 @@ function openBoss() {
   showModal("screen-boss");
   $("boss-name").textContent = boss.name;
   $("boss-phase-text").textContent = boss.intro;
-  $("boss-hp").textContent = `生命 ${preview.hp} · 伤害 ${preview.damage} · 韧性 ${preview.toughness} · 仪式双轨（熄锚/击杀）`;
+  $("boss-hp").textContent = `生命 ${preview.hp} · 伤害 ${preview.damage} · 韧性 ${preview.toughness} · 场地=本集山屋平面（一房一格）`;
   fillBossKit(preview);
   const actions = $("boss-actions");
   actions.innerHTML = "";
-  addChoice(actions, "进入场地决战", "primary", () => {
+  addChoice(actions, "进入山屋决战", "primary", () => {
     startCombat({ id: "altar", enemy: boss }, true);
   });
   addChoice(actions, "先回去", "", () => {
