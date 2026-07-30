@@ -81,7 +81,7 @@ body.landscape {
 .app {
   position: relative;
   z-index: 1;
-  width: min(1240px, 100%);
+  width: min(1460px, 100%);
   margin: 0 auto;
   min-height: calc(100vh - 46px);
   display: flex;
@@ -579,7 +579,7 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 
 .explore-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 280px);
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 220px);
   gap: 14px;
   align-items: start;
 }
@@ -686,8 +686,8 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 .map-shell {
   position: relative;
   flex: 0 0 auto;
-  height: min(46vh, 400px);
-  max-height: 420px;
+  height: min(70vh, 660px);
+  max-height: 700px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -761,17 +761,17 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   padding: 10px;
   width: 100%;
   height: 100%;
-  max-height: 360px;
+  max-height: 620px;
   align-content: center;
   justify-content: center;
 }
 
 .map-board {
   position: relative;
-  width: min(100%, 680px);
+  width: min(100%, 860px);
   margin: 0 auto;
   height: 100%;
-  max-height: 360px;
+  max-height: 620px;
   border-radius: 16px;
   overflow: hidden;
   isolation: isolate;
@@ -1418,19 +1418,15 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   align-items: center;
   min-height: 88px;
   padding: 8px 12px 8px 8px;
-  border: 4px solid var(--ink);
+  border: 3px solid var(--ink);
   border-radius: 18px;
-  box-shadow: var(--shadow);
-  background:
-    url("../assets/ui/SP_Character_HUD.png") center / 100% 100% no-repeat,
-    linear-gradient(90deg, #f6d35a 0 42%, #3db8b0 42% 72%, #3d85c6 72%);
+  box-shadow: 0 3px 0 rgba(42, 34, 28, 0.12);
+  background: #f6f8fb;
   overflow: hidden;
 }
 
 .strip-banner.strip-foe {
-  background:
-    url("../assets/ui/SP_Character_HUD.png") center / 100% 100% no-repeat,
-    linear-gradient(90deg, #ef6ea8 0 42%, #e86a2c 42% 72%, #3d85c6 72%);
+  background: #f8f4f6;
 }
 
 .strip-portrait {
@@ -1448,16 +1444,7 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 .strip-portrait.foe { object-position: center top; }
 
 .strip-starburst {
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 76px;
-  height: 76px;
-  background: url("../assets/ui/SP_Turn.png") center / contain no-repeat;
-  opacity: 0.92;
-  pointer-events: none;
-  z-index: 1;
+  display: none;
 }
 
 .strip-body { min-width: 0; position: relative; z-index: 2; }
@@ -1482,13 +1469,13 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border: 3px solid var(--ink);
+  border: 2px solid #4c4239;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
+  background: #fff;
   font-size: 0.72rem;
   font-weight: 800;
   line-height: 1.1;
-  box-shadow: 0 2px 0 rgba(42, 34, 28, 0.12);
+  box-shadow: none;
 }
 
 .stat-chip strong {
@@ -1529,9 +1516,9 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   display: grid;
   grid-template-columns: 56px 1fr;
   min-height: 88px;
-  border: 4px solid var(--ink);
+  border: 3px solid var(--ink);
   border-radius: 16px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 3px 0 rgba(42, 34, 28, 0.12);
   overflow: hidden;
   background: #fff;
 }
@@ -1547,23 +1534,22 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   justify-content: center;
   gap: 2px;
   padding: 6px 4px;
-  background:
-    linear-gradient(180deg, #ffb347, #e86a2c),
-    url("../assets/ui/UI_HUD_Panel_ActionPanel_Normal.png") left center / cover;
-  border-right: 3px dashed rgba(255, 255, 255, 0.85);
+  background: #2f455a;
+  border-right: 2px dashed rgba(255, 255, 255, 0.5);
   text-align: center;
 }
 
 .ticket-stub.foe {
   border-right: none;
-  border-left: 3px dashed rgba(255, 255, 255, 0.85);
-  background: linear-gradient(180deg, #ff8a9a, #d12e7b);
+  border-left: 2px dashed rgba(255, 255, 255, 0.5);
+  background: #6b3a47;
 }
 
 .ticket-stub-icon {
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   line-height: 1;
-  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.2));
+  opacity: 0.78;
+  filter: none;
 }
 
 .ticket-stub-label {
@@ -1593,16 +1579,12 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   justify-content: center;
   gap: 2px;
   padding: 6px 10px 8px;
-  background:
-    url("../assets/ui/UI_HUD_Panel_ActionPanel_Normal.png") center / cover no-repeat,
-    linear-gradient(180deg, #ffe8c8, #ffd4a0);
+  background: #fff;
   position: relative;
 }
 
 .action-ticket-foe .ticket-main {
-  background:
-    url("../assets/ui/Front_Red.png") center / cover no-repeat,
-    linear-gradient(180deg, #ffd0d0, #ffb0b0);
+  background: #fff;
 }
 
 .ticket-kicker {
@@ -1613,10 +1595,11 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   font-size: 0.62rem;
   font-weight: 800;
   letter-spacing: 0.12em;
-  color: rgba(209, 46, 123, 0.75);
+  color: rgba(42, 34, 28, 0.45);
 }
 
 .ticket-kicker.foe { color: rgba(138, 16, 8, 0.75); right: 8px; left: auto; }
+.ticket-kicker.foe { color: rgba(42, 34, 28, 0.45); }
 
 .ticket-label {
   font-size: 0.72rem;
@@ -1631,9 +1614,7 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   font-weight: 800;
   line-height: 0.95;
   color: var(--ink);
-  text-shadow:
-    0 2px 0 #fff,
-    0 4px 0 rgba(42, 34, 28, 0.18);
+  text-shadow: none;
 }
 
 .ticket-value.foe { color: #8a1008; }
@@ -1661,6 +1642,14 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   text-align: center;
 }
 
+.ticket-preview {
+  min-height: 1.2em;
+  font-weight: 800;
+}
+
+.ticket-preview.ok { color: #1f7b46; }
+.ticket-preview.warn { color: #8a3a10; }
+
 .energy-dice-promo {
   display: flex;
   flex-wrap: wrap;
@@ -1670,15 +1659,15 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 }
 
 .energy-dice-promo .pip {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  border: 3px solid var(--ink);
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 2px solid #4c4239;
   font-family: var(--font-display);
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   font-weight: 800;
-  background: var(--yellow);
-  box-shadow: 0 2px 0 rgba(42, 34, 28, 0.2);
+  background: #f3f0e8;
+  box-shadow: none;
 }
 
 .intent-banner-wide {
@@ -1690,7 +1679,7 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  box-shadow: var(--shadow);
+  box-shadow: 0 2px 0 rgba(42, 34, 28, 0.1);
 }
 
 .battle-foot .btn-primary {
@@ -1769,16 +1758,16 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 }
 
 .trait-chip.trait-arch {
-  background: #ffe08a;
+  background: #f1ede2;
 }
 .trait-chip.trait-blind {
-  background: #fff3a8;
-  color: #6a4a00;
+  background: #f1ede2;
+  color: #5e564e;
 }
 .trait-chip.trait-hot {
-  background: #ffd0c4;
-  border-color: #c02818;
-  color: #8a1008;
+  background: #f1ede2;
+  border-color: #6a6158;
+  color: #4f473f;
 }
 
 .boss-kit {
@@ -2107,6 +2096,41 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.action-hints {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0 2px;
+}
+
+.action-hint-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 4px 8px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.action-hint-chip.is-on {
+  background: #e9eef5;
+  color: var(--ink);
+  border-color: #5b6774;
+}
+
+.action-hint-chip.is-hot {
+  background: #eceff3;
+  color: #394757;
+  border-color: #627488;
 }
 
 .card-wrap { width: 100%; }

@@ -219,6 +219,7 @@
                     <span class="ticket-kicker">ACTION</span>
                     <span class="ticket-label">行动力</span>
                     <strong id="card-energy" class="ticket-value">0</strong>
+                    <p id="energy-preview" class="ticket-sub ticket-preview">待机</p>
                     <div id="energy-dice" class="energy-dice energy-dice-promo" title="本回合骰面"></div>
                   </div>
                 </div>
@@ -286,6 +287,11 @@
           <aside class="battle-right">
             <p class="hand-label">道具卡 <span id="card-hint" class="hint-inline">悬停听旁白</span></p>
             <div id="hand-cards" class="hand-col"></div>
+            <div class="action-hints" aria-label="动作提示">
+              <span id="hint-move" class="action-hint-chip">Move</span>
+              <span id="hint-search" class="action-hint-chip">Search</span>
+              <span id="hint-discard" class="action-hint-chip">Discard</span>
+            </div>
             <footer class="battle-foot">
               <button id="btn-dismantle" class="btn btn-secondary btn-ticket hidden" type="button">拆信号（1）</button>
               <button id="btn-cancel-place" class="btn btn-ghost btn-ticket hidden">取消放置</button>

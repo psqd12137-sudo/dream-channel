@@ -5431,6 +5431,11 @@ function renderCombat() {
   }
   const speedEl = $("player-speed");
   if (speedEl) speedEl.textContent = `S${state.speed}`;
+  const energyPreview = $("energy-preview");
+  if (energyPreview) {
+    energyPreview.textContent = "待机";
+    energyPreview.className = "ticket-sub ticket-preview";
+  }
   $("enemy-stamina").textContent = `${c.enemyStamina}/${c.staminaMax}`;
   const stamEl = $("enemy-stamina");
   if (stamEl) {
@@ -5491,13 +5496,27 @@ function renderCombat() {
 
   const hint = $("place-hint");
   const cardHint = $("card-hint");
+  const hintMove = $("hint-move");
+  const hintSearch = $("hint-search");
+  const hintDiscard = $("hint-discard");
+  if (hintMove) hintMove.className = `action-hint-chip${c.energy > 0 ? " is-on" : ""}`;
+  if (hintSearch) hintSearch.className = `action-hint-chip${!c.playerSeesEnemy ? " is-hot" : ""}`;
+  if (hintDiscard) hintDiscard.className = `action-hint-chip${(c.hand?.length || 0) >= 4 ? " is-on" : ""}`;
   if (c.placeUid) {
     const inst = c.hand.find((x) => x.uid === c.placeUid);
+    const def = inst ? cardDef(inst.id) : null;
+    const cost = def ? Math.max(0, def.cost - c.discount) : 0;
     const msg = inst
       ? `放置「${cardDef(inst.id).name}」：点高亮邻格放下；有视线可点敌人砸击`
       : "";
     hint.textContent = msg;
     if (cardHint) cardHint.textContent = "放置模式";
+    if (energyPreview) {
+      const remain = Math.max(0, c.energy - cost);
+      energyPreview.textContent = `消耗 ${cost} → 余 ${remain}`;
+      energyPreview.className = `ticket-sub ticket-preview ${remain <= 1 ? "warn" : "ok"}`;
+    }
+    if (hintMove) hintMove.className = "action-hint-chip is-hot";
     $("btn-cancel-place").classList.remove("hidden");
   } else {
     hint.textContent = c.isBoss
@@ -5508,6 +5527,15 @@ function renderCombat() {
           : `预备·${c.ready.name}：亮边十字格是触发带——它走进来才结算（不取消其行动）`
         : "实线红数字=本回合必伤 · 虚线红=锁定/走进才挨 · 蓝=它要走的路 · 横幅「惊吓/当心突脸」=突脸词条";
     if (cardHint) cardHint.textContent = c.archetypeDesc;
+    if (energyPreview) {
+      if (c.energy <= 1) {
+        energyPreview.textContent = "建议：先保留 1 点走位";
+        energyPreview.className = "ticket-sub ticket-preview warn";
+      } else {
+        energyPreview.textContent = "可先移动再出牌";
+        energyPreview.className = "ticket-sub ticket-preview ok";
+      }
+    }
     $("btn-cancel-place").classList.add("hidden");
   }
 
