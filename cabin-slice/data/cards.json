@@ -6,7 +6,7 @@
   "moveCost": 1,
   "hostilePassCost": 1,
   "starter": ["jab", "jab", "jab", "guard", "guard", "guard", "keepsake", "focus", "tonic", "flare"],
-  "rewardPool": ["jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline", "plans", "stash", "keepsake", "snare", "shove"],
+  "rewardPool": ["jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline", "plans", "stash", "keepsake", "snare", "shove", "brace", "riposte", "fling"],
   "cards": {
     "jab": {
       "id": "jab",
@@ -115,8 +115,32 @@
       "name": "推撞",
       "type": "skill",
       "cost": 1,
-      "text": "需与敌人邻接：把它推开 1 格并触发落点机关；撞墙则削韧 1。",
+      "text": "需与敌人邻接：立刻推开 1 格并触发落点（优先甩向机关）。你回合布景用；敌回合结算请挂「甩开」。撞墙削韧 1。",
       "shove": true
+    },
+    "brace": {
+      "id": "brace",
+      "name": "绷紧",
+      "type": "ready",
+      "cost": 1,
+      "text": "预备（同时只能挂一个）。敌方回合走进你相邻十字格时：获得 2 格挡，然后解除。不取消对方行动——只奖励你把它引进来。",
+      "ready": { "gainBlock": 2 }
+    },
+    "riposte": {
+      "id": "riposte",
+      "name": "迎击",
+      "type": "ready",
+      "cost": 1,
+      "text": "预备（同时只能挂一个）。敌方回合走进你相邻十字格时：造成 2 伤并削韧 1，然后解除。推开再引回可再挂。",
+      "ready": { "damage": 2, "tough": 1 }
+    },
+    "fling": {
+      "id": "fling",
+      "name": "甩开",
+      "type": "ready",
+      "cost": 1,
+      "text": "预备（同时只能挂一个）。敌方走进你相邻十字格时：强制甩开 1 格——优先甩进邻接刺/盐，贴脸时也可甩进你身后的机关；没有机关才推空地。空地落点保底 1 伤并削韧。",
+      "ready": { "shove": true }
     }
   }
 }

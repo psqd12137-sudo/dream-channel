@@ -50,5 +50,5 @@ python3 -m http.server 8787
 
 ## 自测
 
-- 手动：开新局 → 换平面图看种子号 → 进战看红格 → 主页/音乐按钮  
+- 手动：开新局 → 重开看种子号 → 进战看红格 → 主页/音乐按钮  
 - 脚本（需 Playwright）：`cabin-slice/scripts/full_selftest.py`、`boss_selftest.py`

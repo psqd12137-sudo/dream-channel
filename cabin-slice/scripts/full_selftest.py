@@ -15,7 +15,7 @@ OUT = Path(__file__).resolve().parent.parent / "lab-full-selftest.json"
 MAX_STEPS = 250
 MAX_COMBAT_ACTIONS = 60
 
-# 5 条不同路线偏好
+# 5 条不同路线偏好（含预备体系）
 STRATEGIES = [
     {
         "id": "combat_rush",
@@ -24,8 +24,11 @@ STRATEGIES = [
         "prefer_quiet": 0.0,
         "boss_style": "kill",
         "relic_prefer": ["omen_flint", "omen_salt", "omen_signal", "omen_decoy"],
+        "card_prefer": ["heavy", "flare", "jab", "shove"],
         "take_cards": True,
         "heal_bias": False,
+        "prefer_ready": 0.25,
+        "seed_ready": False,
     },
     {
         "id": "quiet_path",
@@ -34,8 +37,12 @@ STRATEGIES = [
         "prefer_quiet": 1.0,
         "boss_style": "ritual",
         "relic_prefer": ["omen_signal", "omen_boots", "omen_bell", "omen_decoy"],
+        "card_prefer": ["brace", "tonic", "keepsake", "guard"],
         "take_cards": True,
         "heal_bias": True,
+        "prefer_ready": 0.45,
+        "seed_ready": True,
+        "seed_ready_ids": ["brace", "riposte"],
     },
     {
         "id": "mixed_heal",
@@ -44,8 +51,12 @@ STRATEGIES = [
         "prefer_quiet": 0.55,
         "boss_style": "ritual",
         "relic_prefer": ["omen_decoy", "omen_salt", "omen_signal", "omen_flint"],
+        "card_prefer": ["brace", "riposte", "tonic", "guard"],
         "take_cards": True,
         "heal_bias": True,
+        "prefer_ready": 0.55,
+        "seed_ready": True,
+        "seed_ready_ids": ["brace", "fling"],
     },
     {
         "id": "late_heavy",
@@ -54,24 +65,32 @@ STRATEGIES = [
         "prefer_quiet": 0.3,
         "boss_style": "kill",
         "relic_prefer": ["omen_flint", "omen_decoy", "omen_salt", "omen_signal"],
+        "card_prefer": ["riposte", "fling", "heavy", "shove"],
         "take_cards": True,
         "heal_bias": False,
         "late_combat_push": True,
+        "prefer_ready": 0.5,
+        "seed_ready": True,
+        "seed_ready_ids": ["riposte", "fling"],
     },
     {
-        "id": "bait_boss",
-        "label": "引砸仪式",
-        "prefer_combat": 0.5,
-        "prefer_quiet": 0.5,
+        "id": "ready_bait",
+        "label": "预备引怪",
+        "prefer_combat": 0.55,
+        "prefer_quiet": 0.45,
         "boss_style": "bait",
         "relic_prefer": ["omen_decoy", "omen_salt", "omen_flint", "omen_signal"],
+        "card_prefer": ["fling", "riposte", "brace", "shove", "jab", "snare"],
         "take_cards": True,
         "heal_bias": True,
+        "prefer_ready": 0.95,
+        "seed_ready": True,
+        "seed_ready_ids": ["fling", "fling", "riposte", "brace", "shove"],
     },
 ]
 
 CLICK_CHOICE_JS = r"""
-({ preferHeal, takeCards, relicPrefer }) => {
+({ preferHeal, takeCards, relicPrefer, cardPrefer }) => {
   const event = document.getElementById("screen-event");
   const boss = document.getElementById("screen-boss");
   const end = document.getElementById("screen-end");
@@ -107,8 +126,27 @@ CLICK_CHOICE_JS = r"""
       if (take) { take.click(); return { clicked: true, phase: "opening-relic" }; }
     }
     if (takeCards) {
-      rewardBtns[0].click();
-      return { clicked: true, phase: "take-card" };
+      // 优先收下预备 / 策略偏好牌
+      const prefer = cardPrefer || [];
+      let bestI = 0;
+      let bestS = 99;
+      cards.forEach((card, i) => {
+        const t = card.textContent || "";
+        let s = 20;
+        prefer.forEach((id, rank) => {
+          const names = {
+            fling: /甩开/, riposte: /迎击/, brace: /绷紧/, shove: /推撞/,
+            jab: /地刺/, snare: /坠物|捕|网/, heavy: /重击|砸/, guard: /盐/,
+            tonic: /补剂/, keepsake: /护身/, flare: /闪/,
+          };
+          if (names[id] && names[id].test(t)) s = Math.min(s, rank);
+        });
+        if (/甩开|迎击|绷紧/.test(t)) s = Math.min(s, 0);
+        if (s < bestS) { bestS = s; bestI = i; }
+      });
+      const take = (cards[bestI] && cards[bestI].querySelector("button")) || rewardBtns[0];
+      take.click();
+      return { clicked: true, phase: "take-card", preferScore: bestS };
     }
   }
 
@@ -139,7 +177,7 @@ CLICK_CHOICE_JS = r"""
 """
 
 COMBAT_STEP_JS = r"""
-({ bossStyle }) => {
+({ bossStyle, preferReady }) => {
   const D = window.CabinDebug;
   const st = D.getState();
   const c = st.combat;
@@ -151,6 +189,7 @@ COMBAT_STEP_JS = r"""
   const manh = D.manhattan;
   const isPassable = D.isPassable;
   const isOrtho = D.isOrthoAdjacent;
+  const readyBias = Math.max(0, Math.min(1, preferReady == null ? 0.4 : preferReady));
 
   const pk = keyOf(c.playerPos);
   if (c.isBoss && c.anchors?.[pk]?.lit) {
@@ -191,13 +230,160 @@ COMBAT_STEP_JS = r"""
     return false;
   }
 
+  function stepAway(avoidThreat) {
+    const opts = neighbors(c.playerPos)
+      .filter(p => isPassable(p) && keyOf(p) !== keyOf(c.enemyPos))
+      .map(p => ({ p, d: manh(p, c.enemyPos), k: keyOf(p) }))
+      .sort((a, b) => b.d - a.d);
+    for (const o of opts) {
+      if (avoidThreat && (pendingHurt.has(o.k) || threatNow.has(o.k))) continue;
+      if (D.tryMovePlayer(o.p)) return true;
+    }
+    return false;
+  }
+
+  function floorTrapCountNear(pos) {
+    return neighbors(pos).filter(p => {
+      const f = c.floor[keyOf(p)];
+      return f && (f.onStep?.damage || f.enterTax);
+    }).length + (c.floor[keyOf(pos)] ? 1 : 0);
+  }
+
+  function placeSideTrap() {
+    const traps = [...c.hand].filter(inst => {
+      const d = cardDef(inst.id);
+      return d && d.type === "place" && (d.place?.onStep?.damage || d.place?.enterTax);
+    });
+    if (!traps.length) return null;
+    // 侧面优先：相对敌人方向的正交旁格
+    const er = c.enemyPos.r - c.playerPos.r;
+    const ec = c.enemyPos.c - c.playerPos.c;
+    const sidePrefs = neighbors(c.playerPos)
+      .filter(p => isPassable(p) && keyOf(p) !== keyOf(c.enemyPos) && !c.floor[keyOf(p)])
+      .filter(p => !(c.decoy?.pos && keyOf(p) === keyOf(c.decoy.pos)))
+      .filter(p => !pendingHurt.has(keyOf(p)))
+      .map(p => {
+        const dr = p.r - c.playerPos.r;
+        const dc = p.c - c.playerPos.c;
+        const toward = (er && dr === Math.sign(er) && !dc) || (ec && dc === Math.sign(ec) && !dr);
+        const away = (er && dr === -Math.sign(er) && !dc) || (ec && dc === -Math.sign(ec) && !dr);
+        const lateral = !toward && !away;
+        const nearEnemy = manh(p, c.enemyPos);
+        return { p, score: (lateral ? 0 : toward ? 2 : 1) + nearEnemy * 0.1 };
+      })
+      .sort((a, b) => a.score - b.score);
+    for (const inst of traps) {
+      const def = cardDef(inst.id);
+      const cost = Math.max(0, def.cost - (c.discount || 0));
+      if (cost > c.energy) continue;
+      D.selectCard(inst.uid);
+      for (const o of sidePrefs) {
+        if (D.tryPlace(o.p)) return { done: false, action: "place-side:" + def.name };
+      }
+      c.placeUid = null;
+    }
+    return null;
+  }
+
+  function pickReadyCard() {
+    const order = ["fling", "riposte", "brace"];
+    const scored = [];
+    for (const inst of c.hand) {
+      const def = cardDef(inst.id);
+      if (!def || def.type !== "ready") continue;
+      const cost = Math.max(0, def.cost - (c.discount || 0));
+      if (cost > c.energy) continue;
+      let rank = order.indexOf(inst.id);
+      if (rank < 0) rank = 9;
+      // 低血优先绷紧
+      if (inst.id === "brace" && st.hp <= 4) rank = -1;
+      scored.push({ inst, def, rank });
+    }
+    scored.sort((a, b) => a.rank - b.rank);
+    return scored[0] || null;
+  }
+
+  const dist = manh(c.playerPos, c.enemyPos);
+  const armed = c.ready;
+  const hasReadyInHand = !!pickReadyCard();
+  const wantReadyPlay = readyBias >= 0.3 && (readyBias >= 0.5 || hasReadyInHand || Math.random() < readyBias);
+
+  // —— 已挂预备：引怪 / 侧刺 / 推开再引 ——
+  if (armed) {
+    const isShoveReady = !!armed.effect?.shove;
+    const trapsNear = floorTrapCountNear(c.playerPos);
+    if (trapsNear < 1 && c.energy > 0) {
+      const placed = placeSideTrap();
+      if (placed) return placed;
+    }
+    // 贴脸且 awaitStep：结束回合等它挪步；或推开再等走进来
+    if (dist === 1) {
+      if (armed.awaitStep) {
+        // 有推撞则先推开布景（甩开更吃落点）
+        if (isShoveReady) {
+          for (const inst of c.hand) {
+            const def = cardDef(inst.id);
+            if (!def?.shove) continue;
+            const cost = Math.max(0, def.cost - (c.discount || 0));
+            if (cost > c.energy) continue;
+            D.selectCard(inst.uid);
+            return { done: false, action: "shove-for-ready" };
+          }
+        }
+        D.endTurn();
+        return { done: false, action: "end-await-ready" };
+      }
+      // 标准预备在贴脸时已不该还挂着（走进来应已触发）；拉开再引
+      if (stepAway(true)) return { done: false, action: "pull-for-ready" };
+      D.endTurn();
+      return { done: false, action: "end-ready-adj" };
+    }
+    // 距离 2：停住让它走进触发带
+    if (dist === 2 && c.playerSeesEnemy) {
+      D.endTurn();
+      return { done: false, action: "end-lure-ready" };
+    }
+    // 更远：靠近到 2
+    if (dist > 2 && c.playerSeesEnemy && stepToward(c.enemyPos, true)) {
+      return { done: false, action: "close-for-ready" };
+    }
+  }
+
+  // —— 未挂预备：先侧刺再挂 ——
+  if (wantReadyPlay && !armed) {
+    const pick = pickReadyCard();
+    if (pick) {
+      const needTrap = pick.inst.id === "fling" || pick.inst.id === "riposte";
+      if (needTrap && floorTrapCountNear(c.playerPos) < 1) {
+        const placed = placeSideTrap();
+        if (placed) return placed;
+      }
+      // 贴脸时：先拉开或推开，再挂（避免废挂）
+      if (dist === 1 && pick.inst.id !== "brace") {
+        for (const inst of c.hand) {
+          const def = cardDef(inst.id);
+          if (!def?.shove) continue;
+          const cost = Math.max(0, def.cost - (c.discount || 0));
+          if (cost > c.energy) continue;
+          D.selectCard(inst.uid);
+          return { done: false, action: "shove-before-arm" };
+        }
+        if (stepAway(true)) return { done: false, action: "step-before-arm" };
+      }
+      D.selectCard(pick.inst.uid);
+      return { done: false, action: "arm-ready:" + pick.def.name };
+    }
+  }
+
+  // 技能 / 推撞（非预备）
   for (const inst of [...c.hand]) {
     const def = cardDef(inst.id);
-    if (!def || def.type === "place") continue;
+    if (!def || def.type === "place" || def.type === "ready") continue;
     const cost = Math.max(0, def.cost - (c.discount || 0));
     if (cost > c.energy) continue;
     if (def.shove) {
-      if (manh(c.playerPos, c.enemyPos) === 1 && c.playerSeesEnemy) {
+      // 高预备偏好时，贴脸推撞留给预备链路；低偏好照旧
+      if (manh(c.playerPos, c.enemyPos) === 1 && c.playerSeesEnemy && readyBias < 0.7) {
         D.selectCard(inst.uid);
         return { done: false, action: "shove" };
       }
@@ -210,6 +396,7 @@ COMBAT_STEP_JS = r"""
     }
   }
 
+  // 放置 / 砸击：高预备偏好时减少直接砸脚，优先侧放
   for (const inst of [...c.hand]) {
     const def = cardDef(inst.id);
     if (!def || def.type !== "place") continue;
@@ -219,8 +406,9 @@ COMBAT_STEP_JS = r"""
 
     const wantKill = bossStyle === "kill" || !c.isBoss;
     const wantBait = bossStyle === "bait" && c.isBoss;
+    const allowSmash = readyBias < 0.7 || !pickReadyCard() || !!armed;
 
-    if (def.place?.onStep?.damage && c.playerSeesEnemy && isOrtho(c.playerPos, c.enemyPos) && (wantKill || !c.isBoss)) {
+    if (allowSmash && def.place?.onStep?.damage && c.playerSeesEnemy && isOrtho(c.playerPos, c.enemyPos) && (wantKill || !c.isBoss)) {
       if (D.tryPlace(c.enemyPos)) return { done: false, action: "smash-enemy" };
     }
     if (c.isBoss && litAnchors.length) {
@@ -260,10 +448,14 @@ COMBAT_STEP_JS = r"""
   }
 
   if (c.playerSeesEnemy && (bossStyle === "kill" || !c.isBoss)) {
+    // 预备偏好：停在距离 2 挂引，而不是贴脸硬砸
+    if (readyBias >= 0.55 && !armed && pickReadyCard() && dist <= 2) {
+      D.endTurn();
+      return { done: false, action: "end-hold-for-ready" };
+    }
     if (stepToward(c.enemyPos, true)) return { done: false, action: "move-enemy" };
   }
 
-  // 无视线时朝 lastSeen / 任意可走格靠近
   if (!c.playerSeesEnemy) {
     const goal = c.lastSeen || c.enemyPos;
     if (stepToward(goal, false)) return { done: false, action: "search" };
@@ -379,6 +571,25 @@ def play_full(page, strategy: dict):
     page.click("#btn-start")
     page.wait_for_function("() => window.CabinDebug.getState().roomId", timeout=10000)
 
+    # 预备体系测试：把预备牌塞进牌库（不改 cards.json 正式数值）
+    if strategy.get("seed_ready"):
+        ids = strategy.get("seed_ready_ids") or ["fling", "riposte", "brace"]
+        page.evaluate(
+            """(ids) => {
+          const st = window.CabinDebug.getState();
+          const make = (id) => {
+            const def = window.CabinDebug.cardDef(id);
+            if (!def) return null;
+            return { id, uid: 'seed-' + id + '-' + Math.random().toString(36).slice(2, 8) };
+          };
+          for (const id of ids) {
+            const card = make(id);
+            if (card) st.deck.push(card);
+          }
+        }""",
+            ids,
+        )
+
     log = []
     combat_logs = []
     steps = 0
@@ -401,6 +612,7 @@ def play_full(page, strategy: dict):
                 "preferHeal": strategy.get("heal_bias", False),
                 "takeCards": strategy.get("take_cards", True),
                 "relicPrefer": strategy.get("relic_prefer", []),
+                "cardPrefer": strategy.get("card_prefer", []),
             },
         )
         if clicked.get("clicked"):
@@ -431,7 +643,8 @@ def play_full(page, strategy: dict):
                   const c = window.CabinDebug.getState().combat;
                   if (!c) return 'none';
                   return [c.energy, c.enemy.hp, c.toughness, c.broadcast||0, (c.hand||[]).length,
-                          c.playerPos.r, c.playerPos.c, !!(c.placeUid)].join('|');
+                          c.playerPos.r, c.playerPos.c, !!(c.placeUid),
+                          c.ready ? c.ready.cardId : '-', c.enemyPos.r, c.enemyPos.c].join('|');
                 }"""
                 )
                 if sig == last_sig:
@@ -445,7 +658,13 @@ def play_full(page, strategy: dict):
                     idle = 0
                     page.wait_for_timeout(80)
                     continue
-                res = page.evaluate(COMBAT_STEP_JS, {"bossStyle": strategy.get("boss_style", "ritual")})
+                res = page.evaluate(
+                    COMBAT_STEP_JS,
+                    {
+                        "bossStyle": strategy.get("boss_style", "ritual"),
+                        "preferReady": float(strategy.get("prefer_ready", 0.4)),
+                    },
+                )
                 combat_logs.append(res)
                 log.append({"t": "combat", **res})
                 if res.get("done"):
@@ -496,12 +715,22 @@ def analyze(results):
     for r in results:
         f = r.get("final") or {}
         labs = r.get("labs") or []
-        # pick labs that look like this run: newest until visit matches? Use all newest until boss/non
         boss_lab = next((x for x in labs if x.get("enemy", {}).get("isBoss")), None)
         normal_labs = [x for x in labs if not x.get("enemy", {}).get("isBoss")]
-        # approximate: if we cleared lab store per run we'd only have this run — we didn't clear between.
-        # So attach by reading from a cleared-per-run approach in main.
         s = (boss_lab or {}).get("summary") or {}
+
+        ready_arms = 0
+        ready_trigs = 0
+        ready_names = {}
+        for lab in labs:
+            for ev in lab.get("events") or []:
+                if ev.get("type") == "ready_arm":
+                    ready_arms += 1
+                if ev.get("type") == "ready_trigger":
+                    ready_trigs += 1
+                    name = ev.get("name") or ev.get("cardId") or "?"
+                    ready_names[name] = ready_names.get(name, 0) + 1
+
         rows.append(
             {
                 "strategy": r["strategy"],
@@ -530,6 +759,9 @@ def analyze(results):
                 "normal_fights": len(normal_labs),
                 "normal_wins": sum(1 for x in normal_labs if x.get("outcome") == "win"),
                 "normal_losses": sum(1 for x in normal_labs if x.get("outcome") == "lose"),
+                "ready_arms": ready_arms,
+                "ready_triggers": ready_trigs,
+                "ready_trigger_names": ready_names,
                 "error": r.get("error"),
             }
         )
@@ -570,6 +802,15 @@ def main():
                 )
                 print(f"  visitPath={f.get('visitPath')}", flush=True)
                 print(f"  relics={f.get('relics')} deck={f.get('deckSize')} hp={f.get('hp')}/{f.get('maxHp')} speed={f.get('speed')}", flush=True)
+                # ready stats from this run's labs
+                arms = trigs = 0
+                for lab in labs:
+                    for ev in lab.get("events") or []:
+                        if ev.get("type") == "ready_arm":
+                            arms += 1
+                        if ev.get("type") == "ready_trigger":
+                            trigs += 1
+                print(f"  ready: arm={arms} trigger={trigs}", flush=True)
             except Exception as e:
                 print(f"  FAIL: {e}", flush=True)
                 results.append({"strategy": strat["id"], "label": strat["label"], "error": str(e), "final": {}, "labs": []})
@@ -595,7 +836,9 @@ def main():
     print(
         f"\n总览: 完成 {len(finished)}/{len(summary)} · 通关文案胜 {len(wins)} · "
         f"Boss胜 {sum(1 for x in summary if x.get('boss_outcome')=='win')} · "
-        f"Boss负 {sum(1 for x in summary if x.get('boss_outcome')=='lose')}"
+        f"Boss负 {sum(1 for x in summary if x.get('boss_outcome')=='lose')} · "
+        f"预备挂起 {sum(x.get('ready_arms') or 0 for x in summary)} · "
+        f"预备触发 {sum(x.get('ready_triggers') or 0 for x in summary)}"
     )
 
 

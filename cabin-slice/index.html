@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>织梦频道 channel dream · 山屋</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=20260730intent1" />
 </head>
 <body class="landscape">
   <div class="app">
@@ -40,24 +40,33 @@
             <p class="lede">拧开织梦频道的旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪把行动力花在追你身上——邪典儿童节目，别站桩硬刚。</p>
             <div class="title-actions">
               <button id="btn-start" class="btn btn-primary btn-ticket btn-start">打开电视机</button>
-              <button id="btn-tutorial" class="btn btn-secondary btn-ticket" type="button">新手教学</button>
+              <button id="btn-tutorial" class="btn btn-primary btn-ticket" type="button">新手教学</button>
               <button id="btn-continue" class="btn btn-secondary btn-ticket hidden">接着看上集</button>
-              <button id="btn-boss-test" class="btn btn-ghost btn-ticket" type="button">跳到 Boss（测强度）</button>
-              <button id="btn-sideview-test" class="btn btn-ghost btn-ticket" type="button">测 WASD 手感（临时）</button>
-              <button id="btn-qte-test" class="btn btn-ghost btn-ticket" type="button">测 QTE 解谜占位</button>
             </div>
+            <details class="debug-fold">
+              <summary>调试入口</summary>
+              <div class="title-actions debug-actions">
+                <button id="btn-fling-test" class="btn btn-ghost btn-ticket" type="button">测预备·甩开</button>
+                <button id="btn-boss-test" class="btn btn-ghost btn-ticket" type="button">跳到 Boss（测强度）</button>
+                <button id="btn-sideview-test" class="btn btn-ghost btn-ticket" type="button">测 WASD 手感（临时）</button>
+                <button id="btn-qte-test" class="btn btn-ghost btn-ticket" type="button">测 QTE 解谜占位</button>
+              </div>
+            </details>
             <p id="boot-status" class="boot-status">电视机预热中…</p>
-            <section class="lab-panel folder-panel" aria-label="实验记录">
-              <header class="lab-head">
-                <h3>实验记录</h3>
-                <div class="lab-actions">
-                  <button id="btn-lab-export" class="btn btn-ticket btn-ghost" type="button">导出 JSON</button>
-                  <button id="btn-lab-clear" class="btn btn-ticket btn-ghost" type="button">清空</button>
-                </div>
-              </header>
-              <p id="lab-meta" class="lab-meta"></p>
-              <ul id="lab-list" class="lab-list"></ul>
-            </section>
+            <details class="lab-fold folder-panel">
+              <summary>实验记录（可展开）</summary>
+              <section class="lab-panel" aria-label="实验记录">
+                <header class="lab-head">
+                  <h3>实验记录</h3>
+                  <div class="lab-actions">
+                    <button id="btn-lab-export" class="btn btn-ticket btn-ghost" type="button">导出 JSON</button>
+                    <button id="btn-lab-clear" class="btn btn-ticket btn-ghost" type="button">清空</button>
+                  </div>
+                </header>
+                <p id="lab-meta" class="lab-meta"></p>
+                <ul id="lab-list" class="lab-list"></ul>
+              </section>
+            </details>
           </div>
           <ol class="rules folder-panel">
             <li><img src="assets/ui/cards/SP_Card_IconT_Trap.png" alt="" /><span>走位引怪踩机关，削掉韧性</span></li>
@@ -77,7 +86,7 @@
                 <p class="map-seed" id="map-seed" aria-live="polite"></p>
               </div>
               <div class="map-tools">
-                <button id="btn-reroll-map" class="btn btn-ticket btn-ghost" type="button" title="放弃本集，换一张新平面图">换平面图</button>
+                <button id="btn-restart-run" class="btn btn-ticket btn-ghost" type="button" title="放弃本集进度，重开一局（新平面图）">重开</button>
                 <button id="btn-home" class="btn btn-ticket btn-ghost" type="button" title="回到标题">回首页</button>
                 <span id="room-tag" class="chip">散步时间</span>
               </div>
@@ -185,6 +194,7 @@
                   <div class="hud-row"><span>生命</span><strong id="player-hp">—</strong></div>
                   <div class="hud-row"><span>行动力</span><strong id="card-energy">0</strong></div>
                   <div class="hud-row"><span>护盾</span><strong id="player-block">0</strong></div>
+                  <div class="hud-row ready-hud-row"><span>预备</span><strong id="player-ready">—</strong></div>
                   <div id="energy-dice" class="energy-dice"></div>
                 </div>
               </div>
@@ -209,6 +219,7 @@
                 <span><i class="dot dot-wall"></i>墙</span>
                 <span><i class="dot dot-high"></i>高台</span>
                 <span><i class="dot dot-move"></i>能走</span>
+                <span><i class="dot dot-ready"></i>预备带</span>
                 <span><i class="dot dot-anchor"></i>锚</span>
               </div>
               <div id="battle-grid" class="battle-grid" aria-label="战斗场地"></div>
@@ -300,9 +311,9 @@
     <div id="card-tooltip" class="card-tooltip hidden" role="tooltip"></div>
   </div>
 
-  <script src="js/audio.js"></script>
-  <script src="js/sideview.js"></script>
-  <script src="js/qte.js"></script>
-  <script src="js/game.js"></script>
+  <script src="js/audio.js?v=20260730flingfix"></script>
+  <script src="js/sideview.js?v=20260730flingfix"></script>
+  <script src="js/qte.js?v=20260730flingfix"></script>
+  <script src="js/game.js?v=20260730fling2"></script>
 </body>
 </html>

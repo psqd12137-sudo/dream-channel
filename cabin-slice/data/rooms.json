@@ -1,6 +1,6 @@
 {
   "startRoom": "foyer",
-  "runLength": 10,
+  "runLength": 12,
   "rewardOdds": {
     "relic": 0.3,
     "item": 0.35,
@@ -29,19 +29,19 @@
     "spawnNote": "默认场地：对峙开场。"
   },
   "mapSize": {
-    "cols": 6,
-    "rows": 7
+    "cols": 11,
+    "rows": 11
   },
   "layoutRoll": {
     "enabled": true,
     "mode": "map",
-    "placeCount": [10, 16],
+    "placeCount": [12, 22],
+    "topologies": ["tree", "mesh", "hybrid", "spine", "wings"],
     "start": {
       "id": "foyer",
-      "col": 3,
-      "row": 7
+      "col": 6,
+      "row": 6
     },
-    "startColRange": [2, 5],
     "exclude": ["altar", "ritual"]
   },
   "rooms": {
