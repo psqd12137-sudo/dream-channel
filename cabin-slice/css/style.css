@@ -1392,6 +1392,335 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   gap: 8px;
 }
 
+/* ── 战斗 HUD v2：票券行动力 + 原版横幅 ── */
+.battle-hud-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.combat-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(148px, 220px);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.combat-strip-foe {
+  grid-template-columns: minmax(148px, 220px) minmax(0, 1fr);
+}
+
+.strip-banner {
+  position: relative;
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+  align-items: center;
+  min-height: 88px;
+  padding: 8px 12px 8px 8px;
+  border: 4px solid var(--ink);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  background:
+    url("../assets/ui/SP_Character_HUD.png") center / 100% 100% no-repeat,
+    linear-gradient(90deg, #f6d35a 0 42%, #3db8b0 42% 72%, #3d85c6 72%);
+  overflow: hidden;
+}
+
+.strip-banner.strip-foe {
+  background:
+    url("../assets/ui/SP_Character_HUD.png") center / 100% 100% no-repeat,
+    linear-gradient(90deg, #ef6ea8 0 42%, #e86a2c 42% 72%, #3d85c6 72%);
+}
+
+.strip-portrait {
+  position: relative;
+  z-index: 2;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  object-fit: cover;
+  background: #f0e6d8;
+  box-shadow: 0 3px 0 rgba(42, 34, 28, 0.28);
+}
+
+.strip-portrait.foe { object-position: center top; }
+
+.strip-starburst {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 76px;
+  height: 76px;
+  background: url("../assets/ui/SP_Turn.png") center / contain no-repeat;
+  opacity: 0.92;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.strip-body { min-width: 0; position: relative; z-index: 2; }
+
+.strip-name {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--ink);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.stat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.1;
+  box-shadow: 0 2px 0 rgba(42, 34, 28, 0.12);
+}
+
+.stat-chip strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.stat-chip.stat-hp strong { color: #b81818; }
+.stat-chip.stat-block strong { color: #1d6f8a; }
+.stat-chip.stat-ready strong.is-armed,
+.stat-chip.stat-ready strong { color: #2f7a3a; }
+
+.chip-label {
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+.stat-chip.stat-tough {
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 88px;
+  border-radius: 12px;
+}
+
+.bar-mini {
+  width: 100%;
+  height: 8px;
+  margin-top: 2px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 2px solid var(--ink);
+  overflow: hidden;
+}
+
+.action-ticket {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  min-height: 88px;
+  border: 4px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  background: #fff;
+}
+
+.action-ticket-foe {
+  grid-template-columns: 1fr 56px;
+}
+
+.ticket-stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 4px;
+  background:
+    linear-gradient(180deg, #ffb347, #e86a2c),
+    url("../assets/ui/UI_HUD_Panel_ActionPanel_Normal.png") left center / cover;
+  border-right: 3px dashed rgba(255, 255, 255, 0.85);
+  text-align: center;
+}
+
+.ticket-stub.foe {
+  border-right: none;
+  border-left: 3px dashed rgba(255, 255, 255, 0.85);
+  background: linear-gradient(180deg, #ff8a9a, #d12e7b);
+}
+
+.ticket-stub-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.2));
+}
+
+.ticket-stub-label {
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ticket-stub-value {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(42, 34, 28, 0.35);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 10px 8px;
+  background:
+    url("../assets/ui/UI_HUD_Panel_ActionPanel_Normal.png") center / cover no-repeat,
+    linear-gradient(180deg, #ffe8c8, #ffd4a0);
+  position: relative;
+}
+
+.action-ticket-foe .ticket-main {
+  background:
+    url("../assets/ui/Front_Red.png") center / cover no-repeat,
+    linear-gradient(180deg, #ffd0d0, #ffb0b0);
+}
+
+.ticket-kicker {
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: rgba(209, 46, 123, 0.75);
+}
+
+.ticket-kicker.foe { color: rgba(138, 16, 8, 0.75); right: 8px; left: auto; }
+
+.ticket-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: rgba(42, 34, 28, 0.72);
+  letter-spacing: 0.08em;
+}
+
+.ticket-value {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4.5vw, 2.75rem);
+  font-weight: 800;
+  line-height: 0.95;
+  color: var(--ink);
+  text-shadow:
+    0 2px 0 #fff,
+    0 4px 0 rgba(42, 34, 28, 0.18);
+}
+
+.ticket-value.foe { color: #8a1008; }
+
+.ticket-value.is-low {
+  color: var(--danger);
+  animation: pulse-energy 0.8s ease-in-out infinite alternate;
+}
+
+.ticket-value.is-zero {
+  color: #888;
+  opacity: 0.65;
+}
+
+@keyframes pulse-energy {
+  from { transform: scale(1); }
+  to { transform: scale(1.06); }
+}
+
+.ticket-sub {
+  margin: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: rgba(42, 34, 28, 0.55);
+  text-align: center;
+}
+
+.energy-dice-promo {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.energy-dice-promo .pip {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 3px solid var(--ink);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  background: var(--yellow);
+  box-shadow: 0 2px 0 rgba(42, 34, 28, 0.2);
+}
+
+.intent-banner-wide {
+  width: 100%;
+  max-width: none;
+  text-align: center;
+  padding: 10px 16px;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: var(--shadow);
+}
+
+.battle-foot .btn-primary {
+  position: relative;
+  font-size: 1rem;
+  padding: 12px 16px;
+  background:
+    url("../assets/ui/SP_Turn.png") center / 120% 180% no-repeat,
+    linear-gradient(180deg, #5ec8d8, #28b4a1);
+  border-width: 4px;
+}
+
+.battle-foot .btn-primary::before {
+  content: "▶";
+  margin-right: 6px;
+}
+
+@media (max-width: 820px) {
+  .combat-strip,
+  .combat-strip-foe {
+    grid-template-columns: 1fr;
+  }
+  .action-ticket-foe {
+    order: -1;
+  }
+  .ticket-value {
+    font-size: 2.2rem;
+  }
+}
+
 .hud-card {
   border: 4px solid var(--ink);
   border-radius: 16px;
@@ -1420,6 +1749,10 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 6px;
+}
+
+.strip-foe .trait-chips {
+  margin-top: 4px;
 }
 
 .trait-chip {

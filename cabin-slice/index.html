@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>织梦频道 channel dream · 山屋</title>
-  <link rel="stylesheet" href="css/style.css?v=20260730bossSoft" />
+  <link rel="stylesheet" href="css/style.css?v=20260730battleUi" />
 </head>
 <body class="landscape">
   <div class="app">
@@ -176,7 +176,6 @@
                 <div class="battle-menu">
                   <button id="btn-combat-home" class="btn btn-ticket btn-ghost" type="button" title="回到标题（可接着看上集）">主页</button>
                 </div>
-                <div id="enemy-intent" class="intent-banner">它想做 —</div>
               </div>
             </header>
             <div id="boss-ritual-hud" class="boss-ritual-hud hidden" aria-label="仪式状态">
@@ -187,32 +186,80 @@
                 <span id="broadcast-label" class="broadcast-label">播出 0/12</span>
               </div>
             </div>
-            <div class="battle-hud">
-              <div class="hud-card hud-you hud-banner">
-                <img class="hud-portrait" src="assets/ui/chars/SP_Lili_Profile.png" alt="" />
-                <div class="hud-body">
-                  <p class="hud-label">小主角</p>
-                  <div class="hud-row"><span>生命</span><strong id="player-hp">—</strong></div>
-                  <div class="hud-row"><span>行动力</span><strong id="card-energy">0</strong></div>
-                  <div class="hud-row"><span>护盾</span><strong id="player-block">0</strong></div>
-                  <div class="hud-row ready-hud-row"><span>预备</span><strong id="player-ready">—</strong></div>
-                  <div id="energy-dice" class="energy-dice"></div>
+            <div class="battle-hud battle-hud-v2">
+              <div class="combat-strip combat-strip-you">
+                <div class="strip-banner strip-you" aria-label="小主角状态">
+                  <img class="strip-portrait" src="assets/ui/chars/SP_Lili_Profile.png" alt="" />
+                  <div class="strip-starburst" aria-hidden="true"></div>
+                  <div class="strip-body">
+                    <p class="strip-name">小主角</p>
+                    <div class="stat-chips">
+                      <div class="stat-chip stat-hp" title="生命">
+                        <span class="chip-label">HP</span>
+                        <strong id="player-hp">—</strong>
+                      </div>
+                      <div class="stat-chip stat-block" title="格挡">
+                        <span class="chip-label">盾</span>
+                        <strong id="player-block">0</strong>
+                      </div>
+                      <div class="stat-chip stat-ready ready-hud-row" title="预备机关">
+                        <span class="chip-label">预备</span>
+                        <strong id="player-ready">—</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="action-ticket action-ticket-you" aria-label="你的行动力">
+                  <div class="ticket-stub">
+                    <span class="ticket-stub-icon" aria-hidden="true">脚</span>
+                    <span class="ticket-stub-label">速度</span>
+                    <strong id="player-speed" class="ticket-stub-value">S3</strong>
+                  </div>
+                  <div class="ticket-main">
+                    <span class="ticket-kicker">ACTION</span>
+                    <span class="ticket-label">行动力</span>
+                    <strong id="card-energy" class="ticket-value">0</strong>
+                    <div id="energy-dice" class="energy-dice energy-dice-promo" title="本回合骰面"></div>
+                  </div>
                 </div>
               </div>
-              <div class="hud-card hud-foe hud-banner">
-                <img class="hud-portrait foe" src="assets/ui/chars/SP_Yellow_idle_1.png" alt="" />
-                <div class="hud-body">
-                  <p class="hud-label">怪家伙</p>
-                  <div class="hud-row"><span>生命</span><strong id="enemy-hp">—</strong></div>
-                  <div class="hud-row"><span>行动力</span><strong id="enemy-stamina">—</strong></div>
-                  <div class="tough-block">
-                    <div class="hud-row"><span>韧性</span><strong id="kite-meter">—</strong></div>
-                    <div class="bar"><div id="tough-fill" class="bar-fill"></div></div>
+
+              <div class="combat-strip combat-strip-foe">
+                <div class="action-ticket action-ticket-foe" aria-label="怪行动力">
+                  <div class="ticket-main">
+                    <span class="ticket-kicker foe">THREAT</span>
+                    <span class="ticket-label">怪行动力</span>
+                    <strong id="enemy-stamina" class="ticket-value foe">—</strong>
+                    <p class="ticket-sub" id="enemy-stamina-note">追你 / 出手 共用</p>
                   </div>
-                  <div id="enemy-traits" class="trait-chips" aria-label="敌人机制"></div>
+                  <div class="ticket-stub foe">
+                    <span class="ticket-stub-icon" aria-hidden="true">!</span>
+                    <span class="ticket-stub-label">意图</span>
+                    <strong id="enemy-intent-short" class="ticket-stub-value">—</strong>
+                  </div>
+                </div>
+                <div class="strip-banner strip-foe" aria-label="怪家伙状态">
+                  <img class="strip-portrait foe" src="assets/ui/chars/SP_Yellow_idle_1.png" alt="" />
+                  <div class="strip-starburst foe" aria-hidden="true"></div>
+                  <div class="strip-body">
+                    <p class="strip-name">怪家伙</p>
+                    <div class="stat-chips">
+                      <div class="stat-chip stat-hp foe" title="生命">
+                        <span class="chip-label">HP</span>
+                        <strong id="enemy-hp">—</strong>
+                      </div>
+                      <div class="stat-chip stat-tough foe" title="韧性">
+                        <span class="chip-label">韧</span>
+                        <strong id="kite-meter">—</strong>
+                        <div class="bar bar-mini"><div id="tough-fill" class="bar-fill"></div></div>
+                      </div>
+                    </div>
+                    <div id="enemy-traits" class="trait-chips" aria-label="敌人机制"></div>
+                  </div>
                 </div>
               </div>
             </div>
+            <div id="enemy-intent" class="intent-banner intent-banner-wide">它想做 —</div>
             <div class="grid-wrap">
               <div class="map-legend battle-legend">
                 <span><i class="dot dot-you"></i>你</span>
@@ -342,6 +389,6 @@
   <script src="js/sideview.js?v=20260730chase"></script>
   <script src="js/qte.js?v=20260730chase"></script>
   <script src="js/puzzle.js?v=20260730chase"></script>
-  <script src="js/game.js?v=20260730decoy"></script>
+  <script src="js/game.js?v=20260730battleUi"></script>
 </body>
 </html>

@@ -5424,9 +5424,27 @@ function renderCombat() {
     ? `${c.roomName} · ${c.phaseName || "开场"} · 锚 ${anchorsClearedCount(c)}/${Object.keys(c.anchors || {}).length}`
     : `${c.roomName} · ${c.archetypeLabel} · 难度档 ${c.tier}`;
   $("card-energy").textContent = String(c.energy);
+  const energyEl = $("card-energy");
+  if (energyEl) {
+    energyEl.classList.toggle("is-zero", c.energy <= 0);
+    energyEl.classList.toggle("is-low", c.energy > 0 && c.energy <= 2);
+  }
+  const speedEl = $("player-speed");
+  if (speedEl) speedEl.textContent = `S${state.speed}`;
   $("enemy-stamina").textContent = `${c.enemyStamina}/${c.staminaMax}`;
-  $("enemy-intent").textContent = c.intent?.label || "观望";
-  $("enemy-intent").className = `intent-banner intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
+  const stamEl = $("enemy-stamina");
+  if (stamEl) {
+    stamEl.classList.toggle("is-zero", c.enemyStamina <= 0);
+    stamEl.classList.toggle("is-low", c.enemyStamina > 0 && c.enemyStamina <= 1);
+  }
+  const intentLabel = c.intent?.label || "观望";
+  $("enemy-intent").textContent = intentLabel;
+  const intentShort = $("enemy-intent-short");
+  if (intentShort) {
+    intentShort.textContent = intentLabel.length > 4 ? `${intentLabel.slice(0, 3)}…` : intentLabel;
+    intentShort.title = c.intent?.detail || intentLabel;
+  }
+  $("enemy-intent").className = `intent-banner intent-banner-wide intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
   $("enemy-intent").title = c.intent?.detail || c.intent?.label || "";
   $("enemy-hp").textContent = c.playerSeesEnemy ? String(c.enemy.hp) : "??";
   $("player-block").textContent = String(c.block + coverBlockAtPlayer());
@@ -5691,12 +5709,18 @@ function renderBattleGrid() {
       box.appendChild(cell);
     }
   }
-  // 同步短 banner（保留 pending 样式）
+  // 同步意图条（保留 pending 样式）
   const banner = $("enemy-intent");
   if (banner) {
-    banner.textContent = c.intent?.label || "观望";
-    banner.className = `intent-banner intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
+    const label = c.intent?.label || "观望";
+    banner.textContent = label;
+    banner.className = `intent-banner intent-banner-wide intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
     banner.title = c.intent?.detail || "";
+    const intentShort = $("enemy-intent-short");
+    if (intentShort) {
+      intentShort.textContent = label.length > 4 ? `${label.slice(0, 3)}…` : label;
+      intentShort.title = c.intent?.detail || label;
+    }
   }
   if (state.tutorial?.active) updateBattleTutorialCoach();
 }
