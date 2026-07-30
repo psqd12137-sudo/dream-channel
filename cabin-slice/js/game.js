@@ -774,12 +774,14 @@ const LAST_SEEN_MEMORY_TURNS = 5;
 function getEnemyGoal(c) {
   const sees = hasLoS(c.enemyPos, c.playerPos) && !isEnemyBlinded(c);
 
-  // 纸影：无视线时吸怪；邻接时顺手砸。有视线且不在旁 → 回追玩家，禁止无限吸怪
+  // 纸影傀儡：嘲讽优先（有视线也要去砸，这才是诱饵意义）
+  // 仅当此刻完全走不到纸影时，才回追玩家，避免卡死空转
   if (decoyAlive(c)) {
-    const nextToDecoy = manhattan(c.enemyPos, c.decoy.pos) <= 1;
-    if (!sees || nextToDecoy) {
+    const decoyGoal = { ...c.decoy.pos };
+    const nextToDecoy = manhattan(c.enemyPos, decoyGoal) <= 1;
+    if (nextToDecoy || stepEnemyToward(decoyGoal, c)) {
       c.patrolGoal = null;
-      return { ...c.decoy.pos };
+      return decoyGoal;
     }
   }
 
