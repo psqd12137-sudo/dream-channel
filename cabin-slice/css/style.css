@@ -635,15 +635,90 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   display: flex;
   flex-direction: column;
   justify-content: stretch;
-  border-radius: 24px;
-  border: 6px solid var(--teal);
+  border-radius: 28px;
+  border: 7px solid #1fb5a4;
   background:
-    linear-gradient(180deg, rgba(12, 48, 58, 0.55), rgba(12, 48, 58, 0.72)),
-    url("assets/ui/SP_LittleMap.png") center / cover no-repeat,
-    var(--teal-deep);
-  padding: 20px 12px 14px;
-  box-shadow: inset 0 0 0 3px #fff, 0 8px 0 rgba(0, 0, 0, 0.18);
+    radial-gradient(ellipse at 50% 35%, rgba(60, 160, 155, 0.35), transparent 55%),
+    linear-gradient(180deg, #0c3840 0%, #083038 55%, #062428 100%);
+  padding: 28px 14px 16px;
+  box-shadow:
+    inset 0 0 0 4px #fff8e8,
+    inset 0 0 0 7px #1a8f84,
+    0 10px 0 rgba(0, 0, 0, 0.22);
   overflow: hidden;
+}
+
+/* CRT 顶栏行程票根 —— 对齐规范稿 */
+.map-progress-ticket {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 6;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 22px 7px;
+  min-width: min(280px, 70%);
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  border: 3px solid var(--ink);
+  border-radius: 4px 14px 10px 4px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 10px,
+      rgba(42, 34, 28, 0.07) 10px,
+      rgba(42, 34, 28, 0.07) 11px
+    ),
+    linear-gradient(180deg, #fff9ec, #ffe2a8);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+.map-progress-ticket::before,
+.map-progress-ticket::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #1a4a48;
+  border: 2px solid var(--ink);
+  transform: translateY(-50%);
+}
+.map-progress-ticket::before { left: 8px; }
+.map-progress-ticket::after { right: 8px; }
+
+.pane-map .pane-kicker {
+  /* 行程改挂 CRT 票根，头栏只留房间名 */
+  display: none;
+}
+
+body.is-map-building .map-legend,
+body.is-map-building .map-ops,
+body.is-map-building .tutorial-coach:not(.hidden) {
+  display: none;
+}
+body.is-map-building .pane-map {
+  min-height: min(88vh, 900px);
+}
+body.is-map-building .map-shell {
+  height: min(78vh, 820px);
+  max-height: 860px;
+}
+body.is-map-building .pane-head {
+  margin-bottom: 0;
+}
+body.is-map-building .map-board {
+  padding-bottom: min(46%, 260px);
+  align-items: start;
+}
+body.is-map-building .house-map.house-map-abs {
+  margin-top: 8px;
 }
 
 .map-antenna {
@@ -694,8 +769,11 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   background-repeat: no-repeat;
   background-position: 0 0, 25% 0, 50% 0, 75% 0, 100% 0;
 }
-.map-teeth-top { top: 4px; }
+.map-teeth-top { top: 22px; }
 .map-teeth-bot { bottom: 4px; transform: scaleY(-1); }
+body.is-map-building .map-teeth-bot {
+  opacity: 0.25;
+}
 
 .house-map {
   --map-cols: 9;
@@ -747,30 +825,32 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   height: 100%;
   max-height: none;
   border-radius: 16px;
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
   container-type: size;
   display: grid;
   place-items: center;
 }
 
-/* 盖屋选房坞：贴在 CRT 屏内底部，与地图格同语汇 */
+/* 盖屋选房坞：规范稿 —— CRT 底票根手牌 + 三钮 */
 .map-build-dock {
   position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
   z-index: 8;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px 10px 10px;
-  border-radius: 12px;
-  border: 3px solid rgba(255, 255, 255, 0.55);
+  gap: 10px;
+  padding: 14px 16px 12px;
+  border-radius: 16px;
+  border: 3px solid rgba(255, 248, 220, 0.35);
   background:
-    linear-gradient(180deg, rgba(18, 56, 62, 0.92), rgba(10, 36, 42, 0.96));
-  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(43, 179, 165, 0.35);
+    linear-gradient(180deg, rgba(6, 36, 40, 0.15), rgba(4, 24, 28, 0.72));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   pointer-events: auto;
+  max-height: min(52%, 300px);
+  overflow: visible;
 }
 .map-build-dock.hidden {
   display: none;
@@ -779,14 +859,14 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px 10px;
-  color: #e8f6f4;
+  gap: 4px 10px;
+  color: #e8f6f2;
 }
 .map-build-kicker {
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #7ec8c0;
+  letter-spacing: 0.08em;
+  color: #ffb45c;
   text-transform: uppercase;
 }
 .map-build-head strong {
@@ -795,92 +875,296 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   color: #fff8e0;
 }
 .map-build-hint {
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 700;
-  color: rgba(210, 232, 228, 0.72);
+  color: rgba(210, 232, 228, 0.7);
 }
 .map-build-offers {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-start;
+  gap: 12px;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: stretch;
+  padding: 2px 0 0;
 }
+
+/* 外层不打 mask，门标挂这里 */
+.build-offer-wrap {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 110px;
+  max-width: 180px;
+  min-height: 110px;
+  display: flex;
+}
+.build-offer-wrap.is-pick {
+  z-index: 2;
+  transform: translateY(-4px) scale(1.04);
+  filter:
+    drop-shadow(0 0 0 2px #fff8e0)
+    drop-shadow(0 0 0 5px rgba(255, 140, 50, 0.95));
+}
+
+/* 锯齿票根：更密的左右波浪（对齐规范稿） */
+.build-offer,
+.map-build-btn {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 100' preserveAspectRatio='none'%3E%3Cpath fill='%23000' d='M8,0 H152 C152,0 160,6.25 152,12.5 C160,18.75 152,25 152,25 C152,25 160,31.25 152,37.5 C160,43.75 152,50 152,50 C152,50 160,56.25 152,62.5 C160,68.75 152,75 152,75 C152,75 160,81.25 152,87.5 C160,93.75 152,100 152,100 H8 C8,100 0,93.75 8,87.5 C0,81.25 8,75 8,75 C8,75 0,68.75 8,62.5 C0,56.25 8,50 8,50 C8,50 0,43.75 8,37.5 C0,31.25 8,25 8,25 C8,25 0,18.75 8,12.5 C0,6.25 8,0 8,0 Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 100' preserveAspectRatio='none'%3E%3Cpath fill='%23000' d='M8,0 H152 C152,0 160,6.25 152,12.5 C160,18.75 152,25 152,25 C152,25 160,31.25 152,37.5 C160,43.75 152,50 152,50 C152,50 160,56.25 152,62.5 C160,68.75 152,75 152,75 C152,75 160,81.25 152,87.5 C160,93.75 152,100 152,100 H8 C8,100 0,93.75 8,87.5 C0,81.25 8,75 8,75 C8,75 0,68.75 8,62.5 C0,56.25 8,50 8,50 C8,50 0,43.75 8,37.5 C0,31.25 8,25 8,25 C8,25 0,18.75 8,12.5 C0,6.25 8,0 8,0 Z'/%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* 分色票根：橙 stub + 角色色 body + 米黄内卡 */
 .build-offer {
   position: relative;
-  flex: 1 1 88px;
-  min-width: 84px;
-  max-width: 120px;
-  min-height: 72px;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 118px;
   margin: 0;
-  padding: 10px 8px 12px;
-  border: 3px solid var(--ink);
-  border-radius: 10px;
-  background: #fffdf6;
-  color: var(--ink);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #3a2a1c;
   cursor: pointer;
+  display: grid;
+  grid-template-columns: 28% 1fr;
+  align-items: stretch;
+  gap: 0;
+  filter:
+    drop-shadow(0 0 0.75px #fff)
+    drop-shadow(0 0 0.75px #fff)
+    drop-shadow(0 0 0.75px #fff)
+    drop-shadow(0 4px 0 rgba(0, 0, 0, 0.35));
+  box-shadow: none;
+  transition: transform 0.12s ease, filter 0.12s ease;
+  overflow: hidden;
+}
+.build-offer::after {
+  display: none;
+}
+.build-offer-stub {
+  display: block;
+  background: linear-gradient(180deg, #ffc04e, #f08c18);
+  border-right: 2.5px dashed #fff;
+  min-height: 100%;
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.08);
+}
+.build-offer-body {
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 8px;
+  min-width: 0;
+}
+.build-offer.combat-known .build-offer-body {
+  background: #e8457a;
+}
+.build-offer.safe-known .build-offer-body {
+  background: #2bb3a5;
+}
+.build-offer.event-known .build-offer-body {
+  background: #e8a020;
+}
+.build-offer-face {
+  position: relative;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  gap: 4px;
+  padding: 14px 12px 12px;
+  border-radius: 10px;
+  border: 2.5px solid #fff;
+  background: #f3e2c8;
+  color: #3a2a1c;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  overflow: hidden;
 }
-.build-offer:hover {
-  transform: translateY(-1px);
+.build-offer-wrap:hover .build-offer {
+  transform: translateY(-2px);
 }
-.build-offer.combat-known { border-color: #e26b7a; background: #fff0f2; }
-.build-offer.safe-known { border-color: #4caf82; background: #eefaf3; }
-.build-offer.event-known { border-color: #c4a035; background: #fff8e6; }
 .build-offer.is-pick {
-  box-shadow:
-    0 0 0 2px rgba(43, 179, 165, 0.85),
-    0 3px 0 rgba(0, 0, 0, 0.22);
-  outline: 2px dashed rgba(255, 246, 200, 0.9);
-  outline-offset: 2px;
+  filter:
+    drop-shadow(0 0 0.75px #fff)
+    drop-shadow(0 0 0.75px #fff)
+    drop-shadow(0 5px 0 rgba(0, 0, 0, 0.35));
+}
+.build-offer-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 2px solid #fff;
+  background: #ef5a92;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.15);
+}
+.build-offer.safe-known .build-offer-icon {
+  background: #1a8f84;
+}
+.build-offer.event-known .build-offer-icon {
+  background: #c47e00;
 }
 .build-offer-name {
   font-family: var(--font-display);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 800;
   line-height: 1.1;
   text-align: center;
+  color: #3a2a1c;
 }
 .build-offer-meta {
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 700;
-  color: var(--muted);
   text-align: center;
+  color: #6a574c;
+  opacity: 0.9;
 }
-.build-offer .map-door {
-  opacity: 0.95;
+
+/* Door notches inside cream face */
+.build-offer-face > .map-door {
+  z-index: 2;
+  opacity: 1;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  background: #1a1a1a;
 }
+.build-offer-face > .map-door-n,
+.build-offer-face > .map-door-s {
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28%;
+  max-width: 28px;
+  height: 5px;
+  background: linear-gradient(90deg, #111 0 42%, #f3e2c8 42% 58%, #111 58%);
+}
+.build-offer-face > .map-door-n {
+  top: 0;
+  border-radius: 0 0 3px 3px;
+}
+.build-offer-face > .map-door-s {
+  bottom: 0;
+  top: auto;
+  border-radius: 3px 3px 0 0;
+}
+.build-offer-face > .map-door-e,
+.build-offer-face > .map-door-w {
+  top: 50%;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 28%;
+  max-height: 28px;
+  background: linear-gradient(180deg, #111 0 42%, #f3e2c8 42% 58%, #111 58%);
+}
+.build-offer-face > .map-door-e {
+  right: 0;
+  left: auto;
+  border-radius: 3px 0 0 3px;
+}
+.build-offer-face > .map-door-w {
+  left: 0;
+  right: auto;
+  border-radius: 0 3px 3px 0;
+}
+
 .map-build-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1.55fr 1fr;
+  gap: 12px;
+  align-items: stretch;
 }
 .map-build-btn {
-  padding: 5px 12px !important;
-  min-height: 0 !important;
-  font-size: 0.72rem !important;
-  border-color: rgba(255, 255, 255, 0.65) !important;
-  background: rgba(255, 255, 255, 0.12) !important;
-  color: #eef8f6 !important;
+  position: relative;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 18px 12px 22px !important;
+  min-height: 50px !important;
+  font-size: 0.98rem !important;
+  font-family: var(--font-display) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em;
+  border: none !important;
+  border-radius: 0 !important;
   box-shadow: none !important;
+  filter:
+    drop-shadow(0 0 0.7px #fff)
+    drop-shadow(0 0 0.7px #fff)
+    drop-shadow(0 4px 0 rgba(0, 0, 0, 0.35));
+  overflow: hidden;
+}
+.map-build-btn::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 20%;
+  bottom: 20%;
+  border-left: 2px dashed rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+.map-build-btn-ico {
+  font-size: 1.15rem;
+  line-height: 1;
+  font-weight: 900;
 }
 .map-build-btn:hover {
-  background: rgba(255, 255, 255, 0.22) !important;
+  transform: translateY(-2px);
+  filter:
+    drop-shadow(0 0 0.7px #fff)
+    drop-shadow(0 0 0.7px #fff)
+    drop-shadow(0 6px 0 rgba(0, 0, 0, 0.36));
+}
+.map-build-btn-rot {
+  background: #2aa896 !important;
+  color: #fff !important;
 }
 .map-build-btn-ok {
-  background: #2bb3a5 !important;
-  border-color: #fff !important;
-  color: #062a28 !important;
-  font-weight: 800 !important;
+  min-height: 58px !important;
+  font-size: 1.18rem !important;
+  letter-spacing: 0.12em;
+  background: linear-gradient(180deg, #ff9f3a, #e87820) !important;
+  color: #5a2a08 !important;
+  padding-left: 26px !important;
+}
+.map-build-btn-ok::before {
+  left: 18px;
+}
+.map-build-btn-stamp {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 55% 48%, transparent 26%, rgba(160, 70, 10, 0.22) 27%, rgba(160, 70, 10, 0.22) 33%, transparent 34%);
+}
+.map-build-btn-ok > span:not(.map-build-btn-stamp) {
+  position: relative;
+  z-index: 1;
 }
 .map-build-btn-cancel {
-  border-style: dashed !important;
-  opacity: 0.9;
+  background: #1a2744 !important;
+  color: #fff !important;
+  opacity: 1;
+}
+.map-build-btn-cancel::before {
+  left: auto;
+  right: 16px;
+  border-left: none;
+  border-right: 2px dashed rgba(255, 255, 255, 0.55);
+}
+.map-build-btn-x {
+  color: #ff4f9a;
+  font-size: 1.25rem;
 }
 
 .map-board-wash {
@@ -940,7 +1224,8 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   min-width: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden;
+  /* 门朝向标要露在格外，勿裁切 */
+  overflow: visible;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -988,87 +1273,106 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   animation: reach-pulse 1.6s ease-in-out infinite;
 }
 
-/* 玩家摆房：可建空位 */
+/* 玩家摆房：可建空位 —— 规范稿霓虹虚线 + */
 .map-slot {
   position: absolute;
   z-index: 1;
   margin: 0;
   padding: 0;
-  border: 2px dashed rgba(46, 140, 132, 0.65);
-  border-radius: 10px;
-  background: rgba(180, 230, 222, 0.35);
-  color: rgba(20, 80, 74, 0.75);
+  border: 2px dashed rgba(255, 120, 180, 0.85);
+  border-radius: 12px;
+  background: rgba(255, 80, 160, 0.12);
+  color: #ff9ec8;
   font-family: var(--font-display);
-  font-size: clamp(1rem, 32cqmin, 1.6rem);
-  font-weight: 700;
+  font-size: clamp(1.1rem, 34cqmin, 1.75rem);
+  font-weight: 800;
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition: background 0.15s ease, transform 0.15s ease;
+  text-shadow: 0 0 8px rgba(255, 120, 180, 0.65);
+  box-shadow: 0 0 12px rgba(255, 90, 160, 0.35);
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.map-slot:nth-child(even) {
+  border-color: rgba(255, 170, 60, 0.9);
+  color: #ffc078;
+  background: rgba(255, 150, 40, 0.12);
+  text-shadow: 0 0 8px rgba(255, 160, 50, 0.55);
+  box-shadow: 0 0 12px rgba(255, 150, 40, 0.3);
 }
 .map-slot:hover {
-  background: rgba(160, 220, 210, 0.55);
-  transform: translateY(-1px);
+  background: rgba(255, 200, 120, 0.28);
+  transform: translateY(-1px) scale(1.04);
 }
 .map-slot.is-picking {
   border-style: solid;
-  border-color: #2bb3a5;
-  background: rgba(255, 246, 200, 0.7);
-  box-shadow: 0 0 0 2px rgba(43, 179, 165, 0.45);
+  border-color: #ffe28a;
+  background: rgba(255, 230, 120, 0.35);
+  color: #fff8e0;
+  box-shadow:
+    0 0 0 2px rgba(255, 200, 80, 0.8),
+    0 0 18px rgba(255, 180, 60, 0.55);
 }
 
-/* 山屋惊魂式门朝向：房间边缘缺口 */
+/* 门朝向：黑白门标（对齐规范稿；勿用细条缺口以免被裁切看不见） */
 .map-door {
   position: absolute;
-  z-index: 2;
+  z-index: 5;
   pointer-events: none;
-  background: #1a3a3c;
+  width: 12px;
+  height: 14px;
+  border: 1.5px solid #111;
   border-radius: 2px;
-  opacity: 0.72;
+  opacity: 1;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
+  background: linear-gradient(90deg, #111 50%, #fff 50%);
 }
 .map-door-n {
-  top: -2px;
+  top: -7px;
   left: 50%;
-  width: 34%;
-  height: 5px;
+  width: 14px;
+  height: 12px;
   transform: translateX(-50%);
-  border-radius: 0 0 3px 3px;
+  background: linear-gradient(180deg, #111 50%, #fff 50%);
+  border-radius: 2px;
 }
 .map-door-s {
-  bottom: -2px;
+  bottom: -7px;
   left: 50%;
-  width: 34%;
-  height: 5px;
+  width: 14px;
+  height: 12px;
   transform: translateX(-50%);
-  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, #111 50%, #fff 50%);
+  border-radius: 2px;
 }
 .map-door-e {
-  right: -2px;
+  right: -7px;
   top: 50%;
-  width: 5px;
-  height: 34%;
+  width: 12px;
+  height: 14px;
   transform: translateY(-50%);
-  border-radius: 3px 0 0 3px;
+  background: linear-gradient(90deg, #111 50%, #fff 50%);
+  border-radius: 2px;
 }
 .map-door-w {
-  left: -2px;
+  left: -7px;
   top: 50%;
-  width: 5px;
-  height: 34%;
+  width: 12px;
+  height: 14px;
   transform: translateY(-50%);
-  border-radius: 0 3px 3px 0;
+  background: linear-gradient(90deg, #111 50%, #fff 50%);
+  border-radius: 2px;
 }
 .map-door.is-live {
-  background: #2bb3a5;
-  opacity: 1;
-  box-shadow: 0 0 4px rgba(43, 179, 165, 0.65);
+  outline: 2px solid #2bb3a5;
+  outline-offset: 1px;
+  box-shadow: 0 0 6px rgba(43, 179, 165, 0.75);
 }
 .map-node.current .map-door {
-  background: #0f2426;
+  opacity: 1;
 }
 .map-node.current .map-door.is-live {
-  background: #ffe08a;
-  box-shadow: 0 0 4px rgba(255, 224, 138, 0.7);
+  outline-color: #ffd24a;
 }
 
 @keyframes reach-pulse {
@@ -1259,10 +1563,55 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 .pane-side {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
   max-height: calc(100vh - 140px);
   overflow: auto;
-  padding-right: 2px;
+  position: relative;
+  padding: 12px 10px 12px 16px;
+  border: 4px solid var(--ink);
+  border-radius: 8px 18px 18px 8px;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      transparent,
+      transparent 22px,
+      rgba(42, 34, 28, 0.045) 22px,
+      rgba(42, 34, 28, 0.045) 23px
+    ),
+    linear-gradient(90deg, #e8d5b8 0 11px, #fffaf2 11px);
+  box-shadow:
+    6px 6px 0 rgba(26, 40, 38, 0.14),
+    inset 10px 0 0 rgba(42, 34, 28, 0.06);
+}
+.pane-side::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 16px;
+  bottom: 16px;
+  width: 6px;
+  background:
+    radial-gradient(circle at 50% 9px, #2a221c 0 2px, transparent 2.6px) 0 0 / 100% 16px repeat-y;
+  opacity: 0.5;
+  pointer-events: none;
+}
+.pane-side .side-card {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 8px 4px 10px;
+}
+.pane-side .side-card.folder-panel {
+  border-bottom: 2px dashed rgba(42, 34, 28, 0.16);
+  border-radius: 0;
+  overflow: visible;
+  padding-top: 8px;
+}
+.pane-side .side-card.folder-panel:last-child {
+  border-bottom: none;
+}
+.pane-side .folder-tabs {
+  display: none;
 }
 
 .side-log {
@@ -1324,18 +1673,19 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   padding-top: 18px;
 }
 
+/* 侧栏标题降噪：文件夹签而非满屏品红 pill，避免压过地图主任务 */
 .side-card h3 {
   margin: 0 0 8px;
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   letter-spacing: 0.02em;
-  color: #fff;
+  color: var(--ink);
   font-family: var(--font-display);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px 4px 6px;
-  border-radius: 999px;
-  background: var(--magenta);
+  padding: 3px 10px 3px 5px;
+  border-radius: 8px 8px 4px 4px;
+  background: #ffe9c8;
   border: 3px solid var(--ink);
 }
 

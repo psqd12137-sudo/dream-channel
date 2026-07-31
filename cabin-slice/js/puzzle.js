@@ -7,10 +7,13 @@
   const SHUFFLE_MAX = 26;
   /** 玩家可用步数（略宽于乱步，允许绕路） */
   const MOVE_BUDGET = 42;
+  /** 本局「刷新局面」次数上限 */
+  const REFRESH_MAX = 3;
 
   let active = false;
   let board = [];
   let movesLeft = 0;
+  let refreshesLeft = REFRESH_MAX;
   let onDone = null;
   let ignoreUntil = 0;
 
@@ -60,6 +63,7 @@
     return next;
   }
 
+  /** 从还原态合法滑动打乱 → 奇偶性保持，必可解 */
   function shuffleFromSolved() {
     let b = solvedBoard();
     const steps = SHUFFLE_MIN + Math.floor(Math.random() * (SHUFFLE_MAX - SHUFFLE_MIN + 1));
@@ -90,6 +94,24 @@
     if (meta) meta.textContent = `剩余步数 ${movesLeft}`;
   }
 
+  function updateRefreshBtn() {
+    const btn = $("btn-puzzle-refresh");
+    if (!btn) return;
+    const can = active && refreshesLeft > 0;
+    btn.classList.toggle("hidden", !active);
+    btn.disabled = !can;
+    btn.textContent = can
+      ? `刷新局面（剩 ${refreshesLeft}）`
+      : active
+        ? "刷新已用尽"
+        : "刷新局面";
+    btn.title = can
+      ? `还可刷新 ${refreshesLeft} 次（共 ${REFRESH_MAX} 次）`
+      : active
+        ? "本局刷新次数已用完"
+        : "";
+  }
+
   function renderBoard() {
     const grid = $("puzzle-grid");
     if (!grid) return;
@@ -108,6 +130,7 @@
       grid.appendChild(btn);
     });
     setMeta();
+    updateRefreshBtn();
   }
 
   function tryMove(from) {
@@ -158,10 +181,13 @@
 
   function setRefreshVisible(show) {
     const btn = $("btn-puzzle-refresh");
-    if (btn) {
-      btn.classList.toggle("hidden", !show);
-      btn.disabled = !show;
+    if (!btn) return;
+    if (!show) {
+      btn.classList.add("hidden");
+      btn.disabled = true;
+      return;
     }
+    updateRefreshBtn();
   }
 
   function finish(ok, message) {
@@ -183,13 +209,24 @@
     }, 480);
   }
 
-  /** 重新打乱局面并重置步数（不算失败） */
+  /** 重新打乱局面并重置步数（不算失败）；每局最多 REFRESH_MAX 次 */
   function refresh() {
     if (!active) return;
+    if (refreshesLeft <= 0) {
+      setStatus("刷新次数已用尽，只能继续拼或放弃。", "bad");
+      updateRefreshBtn();
+      return;
+    }
+    refreshesLeft -= 1;
     board = shuffleFromSolved();
     movesLeft = MOVE_BUDGET;
     ignoreUntil = performance.now() + 180;
-    setStatus("局面已刷新，步数重置。", "");
+    setStatus(
+      refreshesLeft > 0
+        ? `局面已刷新，步数重置（还可刷新 ${refreshesLeft} 次）。`
+        : "局面已刷新，步数重置（刷新次数已用尽）。",
+      "",
+    );
     renderBoard();
   }
 
@@ -204,10 +241,11 @@
     if (lead) {
       lead.textContent =
         opts.lead ||
-        "把 1–8 滑回顺序，空格在右下。点邻格或用方向键/WASD。可「刷新局面」重洗并重置步数；步数用尽或放弃都算失手——成功才能翻静室奖励。";
+        `把 1–8 滑回顺序，空格在右下。点邻格或用方向键/WASD。「刷新局面」可重洗并重置步数，每局最多 ${REFRESH_MAX} 次；步数用尽或放弃都算失手——成功才能翻静室奖励。`;
     }
     board = shuffleFromSolved();
     movesLeft = MOVE_BUDGET;
+    refreshesLeft = REFRESH_MAX;
     onDone = opts.onDone || null;
     active = true;
     ignoreUntil = performance.now() + 220;

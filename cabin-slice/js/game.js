@@ -46,7 +46,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 async function loadData() {
-  const bust = "v=20260731buildDock";
+  const bust = "v=20260731doorIn";
   const [rooms, cards, relics, bosses, pressure] = await Promise.all([
     fetch(`data/rooms.json?${bust}`).then((r) => r.json()),
     fetch(`data/cards.json?${bust}`).then((r) => r.json()),
@@ -802,6 +802,7 @@ function appendDoorNotches(el, doors, liveDirs = null) {
     notch.className = `map-door map-door-${d.toLowerCase()}`;
     if (liveDirs?.has(d)) notch.classList.add("is-live");
     notch.setAttribute("aria-hidden", "true");
+    notch.title = { N: "北门", E: "东门", S: "南门", W: "西门" }[d];
     el.appendChild(notch);
   }
 }
@@ -810,7 +811,9 @@ function renderMapBuildDock() {
   const dock = $("map-build-dock");
   if (!dock) return;
   const b = state.mapBuild;
-  if (!b?.offers?.length) {
+  const open = Boolean(b?.offers?.length);
+  document.body.classList.toggle("is-map-building", open);
+  if (!open) {
     dock.classList.add("hidden");
     dock.innerHTML = "";
     return;
@@ -820,7 +823,7 @@ function renderMapBuildDock() {
 
   const head = document.createElement("div");
   head.className = "map-build-head";
-  head.innerHTML = `<span class="map-build-kicker">盖屋</span><strong>扩建 (${b.col},${b.row})</strong><span class="map-build-hint">选房 · 旋转对齐门 · 走进去才算行程</span>`;
+  head.innerHTML = `<span class="map-build-kicker">盖屋</span><strong>扩建 (${b.col},${b.row})</strong><span class="map-build-hint">选票根 · 旋转对门 · 内卡缺口=门朝向 · 走进去才算行程</span>`;
   dock.appendChild(head);
 
   const row = document.createElement("div");
@@ -828,6 +831,12 @@ function renderMapBuildDock() {
   b.offers.forEach((offer, i) => {
     const roleLabel =
       offer.role === "combat" ? "惊吓" : offer.role === "event" ? "考验" : "静室";
+    const glyph = offer.role === "combat" ? "口" : offer.role === "event" ? "?" : "书";
+
+    const wrap = document.createElement("div");
+    wrap.className = "build-offer-wrap";
+    if (i === b.pick) wrap.classList.add("is-pick");
+
     const card = document.createElement("button");
     card.type = "button";
     card.className = "build-offer";
@@ -835,16 +844,33 @@ function renderMapBuildDock() {
     else if (offer.role === "event") card.classList.add("event-known");
     else card.classList.add("safe-known");
     if (i === b.pick) card.classList.add("is-pick");
+
+    const stub = document.createElement("span");
+    stub.className = "build-offer-stub";
+    stub.setAttribute("aria-hidden", "true");
+
+    const body = document.createElement("span");
+    body.className = "build-offer-body";
+    const face = document.createElement("span");
+    face.className = "build-offer-face";
+    const icon = document.createElement("span");
+    icon.className = "build-offer-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = glyph;
     const name = document.createElement("span");
     name.className = "build-offer-name";
     name.textContent = offer.name;
     const meta = document.createElement("span");
     meta.className = "build-offer-meta";
     meta.textContent = `${roleLabel} · ${offer.patternLabel}`;
-    card.append(name, meta);
-    appendDoorNotches(card, offer.doors);
-    card.onclick = () => selectMapBuildPick(i);
-    row.appendChild(card);
+    face.append(icon, name, meta);
+    // 门朝向放进米黄内卡四边，不挂票外
+    appendDoorNotches(face, offer.doors);
+    body.appendChild(face);
+    card.append(stub, body);
+    wrap.appendChild(card);
+    wrap.onclick = () => selectMapBuildPick(i);
+    row.appendChild(wrap);
   });
   dock.appendChild(row);
 
@@ -852,18 +878,18 @@ function renderMapBuildDock() {
   actions.className = "map-build-actions";
   const rot = document.createElement("button");
   rot.type = "button";
-  rot.className = "btn btn-ticket map-build-btn";
-  rot.textContent = "旋转";
+  rot.className = "btn map-build-btn map-build-btn-rot";
+  rot.innerHTML = `<span class="map-build-btn-ico" aria-hidden="true">↻</span><span>旋转</span>`;
   rot.onclick = () => rotateMapBuildOffer(1);
   const ok = document.createElement("button");
   ok.type = "button";
-  ok.className = "btn btn-ticket map-build-btn map-build-btn-ok";
-  ok.textContent = "摆下";
+  ok.className = "btn map-build-btn map-build-btn-ok";
+  ok.innerHTML = `<span class="map-build-btn-stamp" aria-hidden="true"></span><span>摆下</span>`;
   ok.onclick = () => commitMapBuild();
   const cancel = document.createElement("button");
   cancel.type = "button";
-  cancel.className = "btn btn-ticket map-build-btn map-build-btn-cancel";
-  cancel.textContent = "取消";
+  cancel.className = "btn map-build-btn map-build-btn-cancel";
+  cancel.innerHTML = `<span class="map-build-btn-ico map-build-btn-x" aria-hidden="true">✕</span><span>取消</span>`;
   cancel.onclick = () => cancelMapBuild();
   actions.append(rot, ok, cancel);
   dock.appendChild(actions);
@@ -3491,7 +3517,10 @@ function renderStats() {
       state.deck.length + state.discard.length
     }`;
   }
-  $("run-progress").textContent = `今天的行程 ${state.visitPath.length} / ${state.data.rooms.runLength}`;
+  const progressText = `今天的行程 ${state.visitPath.length} / ${state.data.rooms.runLength}`;
+  $("run-progress").textContent = progressText;
+  const crtTicket = $("map-progress-ticket");
+  if (crtTicket) crtTicket.textContent = progressText;
   const seedEl = $("map-seed");
   if (seedEl) {
     if (state.tutorial?.active) {
@@ -4087,7 +4116,7 @@ function beginPuzzleForRoom(room) {
   }
   CabinPuzzle.start({
     title: room.name,
-    lead: "空相框要你把 1–8 拼回顺序（空格右下）。点邻格或方向键/WASD。卡住可「刷新局面」重洗并重置步数。成功翻静室奖励；步数用尽或放弃只丢奖励。",
+    lead: "空相框要你把 1–8 拼回顺序（空格右下）。点邻格或方向键/WASD。卡住可「刷新局面」重洗并重置步数（每局 3 次）。成功翻静室奖励；步数用尽或放弃只丢奖励。",
     onDone: (result) => {
       const prev = state.rewardRolls[room.id] || {};
       state.rewardRolls[room.id] = { ...prev, puzzleResolved: true, puzzleOk: !!result.ok };
