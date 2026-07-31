@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>织梦频道 channel dream · 山屋</title>
-  <link rel="stylesheet" href="css/style.css?v=20260731handFixed" />
+  <link rel="stylesheet" href="css/style.css?v=20260731buildDock" />
 </head>
 <body class="landscape">
   <div class="app">
@@ -95,7 +95,7 @@
               <span><i class="dot dot-you"></i>你在这儿</span>
               <span><i class="dot dot-fight"></i>有惊吓</span>
               <span><i class="dot dot-safe"></i>安静屋</span>
-              <span><i class="dot dot-fog"></i>还没看清</span>
+              <span><i class="dot dot-build"></i>可扩建</span>
             </div>
             <div class="map-shell">
               <div class="map-antenna" aria-hidden="true"></div>
@@ -104,6 +104,7 @@
                 <div class="map-board-wash" aria-hidden="true"></div>
                 <svg id="map-links" class="map-links" aria-hidden="true"></svg>
                 <div id="house-map" class="house-map" aria-label="山屋地图"></div>
+                <div id="map-build-dock" class="map-build-dock hidden" aria-label="扩建选房"></div>
               </div>
               <div class="map-teeth map-teeth-bot" aria-hidden="true"></div>
             </div>
@@ -111,7 +112,7 @@
               <div class="ops-top">
                 <p id="room-desc" class="room-desc"></p>
               </div>
-              <div class="ops-label">点地图走动 · 或点下方出口</div>
+              <div class="ops-label" id="map-ops-label">点地图走动 · 或点下方出口</div>
               <div class="control-row">
                 <div id="exits" class="exits" aria-label="出口"></div>
                 <div class="room-actions">
@@ -285,6 +286,7 @@
               <span id="hint-discard" class="action-hint-chip">Discard</span>
             </div>
             <footer class="battle-foot">
+              <button id="btn-use-portal" class="btn btn-secondary btn-ticket hidden" type="button">穿门（1）</button>
               <button id="btn-dismantle" class="btn btn-secondary btn-ticket hidden" type="button">拆信号（1）</button>
               <button id="btn-cancel-place" class="btn btn-ghost btn-ticket hidden">取消放置</button>
               <button id="btn-end-turn" class="btn btn-primary btn-ticket">回合结束</button>
@@ -388,6 +390,6 @@
   <script src="js/sideview.js?v=20260730chase"></script>
   <script src="js/qte.js?v=20260731qteEasy"></script>
   <script src="js/puzzle.js?v=20260731refresh"></script>
-  <script src="js/game.js?v=20260731handFixed"></script>
+  <script src="js/game.js?v=20260731buildDock"></script>
 </body>
 </html>

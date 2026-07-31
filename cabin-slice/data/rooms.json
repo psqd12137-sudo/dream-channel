@@ -34,7 +34,7 @@
   },
   "layoutRoll": {
     "enabled": true,
-    "mode": "map",
+    "mode": "player",
     "placeCount": [16, 28],
     "topologies": ["tree", "mesh", "hybrid", "spine", "wings"],
     "start": {
@@ -42,7 +42,21 @@
       "col": 9,
       "row": 9
     },
-    "exclude": ["altar", "ritual"]
+    "exclude": ["altar", "ritual"],
+    "visitMix": {
+      "combat": 0.4,
+      "quiet": 0.35,
+      "event": 0.25
+    },
+    "eventTypes": ["qte", "puzzle"],
+    "doorPatterns": [
+      { "id": "I", "label": "直通", "doors": { "N": true, "S": true, "E": false, "W": false }, "weight": 2 },
+      { "id": "L", "label": "拐角", "doors": { "N": true, "E": true, "S": false, "W": false }, "weight": 2 },
+      { "id": "T", "label": "三岔", "doors": { "N": true, "E": true, "W": true, "S": false }, "weight": 2 },
+      { "id": "+", "label": "十字", "doors": { "N": true, "E": true, "S": true, "W": true }, "weight": 1 },
+      { "id": "end", "label": "尽端", "doors": { "N": true, "E": false, "S": false, "W": false }, "weight": 1 }
+    ],
+    "offerCount": 3
   },
   "rooms": {
     "foyer": {
@@ -372,8 +386,8 @@
     "pantry": {
       "id": "pantry",
       "name": "储藏间",
-      "desc": "货架挤成巷道。最高层的罐头后面，有东西蹲着。",
-      "combat": true,
+      "desc": "货架挤成巷道。今晚罐头只落灰，没有东西蹲在最高层。",
+      "combat": false,
       "exits": [
         "kitchen",
         "gallery",
@@ -457,8 +471,8 @@
     "shed": {
       "id": "shed",
       "name": "工具棚",
-      "desc": "工具挂满墙。它蹲在最高层搁板上。",
-      "combat": true,
+      "desc": "工具挂满墙。搁板空着，只有锈味。",
+      "combat": false,
       "enemy": {
         "name": "绳结人",
         "hp": 7,
@@ -532,8 +546,8 @@
     "gallery": {
       "id": "gallery",
       "name": "画廊",
-      "desc": "立柱把画廊切成盲区。高处画框后面，瞳孔也许已经睁开。",
-      "combat": true,
+      "desc": "立柱把画廊切成盲区。画框今晚只映出你的脸。",
+      "combat": false,
       "enemy": {
         "name": "画中瞳",
         "hp": 7,

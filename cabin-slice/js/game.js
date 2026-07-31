@@ -36,24 +36,27 @@ const state = {
   tutorial: null,
   /** 预备·甩开沙盒：{ active, layout }，不写正式存档 */
   flingSandbox: null,
-  /** 本局房间类型伪随机：种子 + id→combat|quiet */
+  /** 本局房间行程：player 摆房时 layout 含 doors 门形；map 模式仍可生长 */
   runSeed: 0,
   roomLayout: null,
+  /** 摆房选址中：{ col, row, offers, pick, rot } */
+  mapBuild: null,
 };
 
 const $ = (id) => document.getElementById(id);
 
 async function loadData() {
+  const bust = "v=20260731buildDock";
   const [rooms, cards, relics, bosses, pressure] = await Promise.all([
-    fetch("data/rooms.json").then((r) => r.json()),
-    fetch("data/cards.json").then((r) => r.json()),
-    fetch("data/relics.json").then((r) => r.json()),
-    fetch("data/bosses.json").then((r) => r.json()),
-    fetch("data/pressure.json").then((r) => r.json()),
+    fetch(`data/rooms.json?${bust}`).then((r) => r.json()),
+    fetch(`data/cards.json?${bust}`).then((r) => r.json()),
+    fetch(`data/relics.json?${bust}`).then((r) => r.json()),
+    fetch(`data/bosses.json?${bust}`).then((r) => r.json()),
+    fetch(`data/pressure.json?${bust}`).then((r) => r.json()),
   ]);
   let tutorial = null;
   try {
-    tutorial = await fetch("data/tutorial.json").then((r) => {
+    tutorial = await fetch(`data/tutorial.json?${bust}`).then((r) => {
       if (!r.ok) throw new Error(`tutorial.json ${r.status}`);
       return r.json();
     });
@@ -259,22 +262,35 @@ function clearRewardCards() {
 }
 
 function roomDef(id) {
-  const base = state.data.rooms.rooms[id];
-  if (!base) return null;
-  if (state.tutorial?.active) return base;
   const loc = state.roomLayout?.[id];
-  // 空间布局覆盖：只改地图坐标与出口，内容/战斗/场地仍用原房间数据
+  const baseId = loc?.contentId || id;
+  const base = state.data.rooms.rooms[baseId];
+  if (!base) return null;
+  if (state.tutorial?.active) return { ...base, id: baseId };
+  // 本局行程角色覆盖：惊吓 / 静室 / 事件（房卡自带或 layout.runRole）
+  let roleOverlay = null;
+  if (loc?.runRole) {
+    const role = loc.runRole;
+    roleOverlay = {
+      combat: role === "combat",
+      eventType: role === "event" ? loc.eventType || base.eventType || null : null,
+    };
+  }
+  // 空间布局覆盖：坐标 / 出口 / 门形（玩家摆房）
   if (loc && typeof loc === "object" && loc.col != null) {
     return {
       ...base,
+      ...(roleOverlay || {}),
+      id,
+      contentId: baseId,
       map: { col: loc.col, row: loc.row },
       exits: [...(loc.exits || [])],
-      // 山屋惊魂式门朝向：由邻接推算，渲染用
       doors: loc.doors
-        ? { ...loc.doors }
+        ? { N: !!loc.doors.N, E: !!loc.doors.E, S: !!loc.doors.S, W: !!loc.doors.W }
         : doorsFromExits(loc, state.roomLayout),
     };
   }
+  if (roleOverlay) return { ...base, id: baseId, ...roleOverlay };
   return base;
 }
 
@@ -299,6 +315,107 @@ function assignDoorsToLayout(layout) {
   for (const loc of Object.values(layout)) {
     loc.doors = doorsFromExits(loc, layout);
   }
+}
+
+/** 房间默认行程类型（数据表） */
+function roomBaseKind(room) {
+  if (!room) return "quiet";
+  if (room.eventType) return "event";
+  if (room.combat) return "combat";
+  return "quiet";
+}
+
+/** 能否当惊吓房：需要有敌人数值模板 */
+function roomCanCombat(room) {
+  return !!(room?.enemy && typeof room.enemy.hp === "number");
+}
+
+/** 按目标配比拆成整数格数；余数优先进静室 */
+function splitVisitMix(n, mix = {}) {
+  const cRatio = mix.combat ?? 0.4;
+  const eRatio = mix.event ?? 0.25;
+  let combat = Math.round(n * cRatio);
+  let event = Math.round(n * eRatio);
+  let quiet = n - combat - event;
+  while (quiet < 0 && combat > 0) {
+    combat -= 1;
+    quiet += 1;
+  }
+  while (quiet < 0 && event > 0) {
+    event -= 1;
+    quiet += 1;
+  }
+  if (combat + quiet + event !== n) {
+    quiet = n - combat - event;
+  }
+  return { combat, quiet, event };
+}
+
+/**
+ * 为本局已落位房间打上 runRole（combat|quiet|event），尽量贴近 visitMix。
+ * 原生类型优先保留；缺口从其它房「改职」。事件房复用 qte/puzzle。
+ */
+function assignVisitMix(layout, rooms, rng, cfg, startId) {
+  if (!layout) return { combat: 0, quiet: 0, event: 0 };
+  const mix = cfg?.visitMix || { combat: 0.4, quiet: 0.35, event: 0.25 };
+  const eventTypes = cfg?.eventTypes || ["qte", "puzzle"];
+  const ids = seededShuffle(
+    Object.keys(layout).filter((id) => id !== startId && !rooms[id]?.bossRoom),
+    rng,
+  );
+  const targets = splitVisitMix(ids.length, mix);
+  const assigned = new Map();
+
+  const claim = (role, count) => {
+    let left = count;
+    for (const id of ids) {
+      if (left <= 0) break;
+      if (assigned.has(id)) continue;
+      if (roomBaseKind(rooms[id]) === role) {
+        if (role === "combat" && !roomCanCombat(rooms[id])) continue;
+        assigned.set(id, role);
+        left -= 1;
+      }
+    }
+    for (const id of ids) {
+      if (left <= 0) break;
+      if (assigned.has(id)) continue;
+      if (role === "combat" && !roomCanCombat(rooms[id])) continue;
+      assigned.set(id, role);
+      left -= 1;
+    }
+    // 惊吓位若因缺敌人模板填不满：多出来的改记进 quiet 目标外（落到未分配 → quiet）
+  };
+
+  // 稀缺类型先领原生房
+  claim("event", targets.event);
+  claim("quiet", targets.quiet);
+  claim("combat", targets.combat);
+  for (const id of ids) {
+    if (!assigned.has(id)) assigned.set(id, "quiet");
+  }
+
+  let eventSeq = 0;
+  for (const id of ids) {
+    const role = assigned.get(id) || "quiet";
+    const loc = layout[id];
+    loc.runRole = role;
+    if (role === "event") {
+      loc.eventType = rooms[id]?.eventType || eventTypes[eventSeq % eventTypes.length];
+      eventSeq += 1;
+    } else if (loc.eventType) {
+      delete loc.eventType;
+    }
+  }
+
+  if (layout[startId]) {
+    layout[startId].runRole = "quiet";
+    delete layout[startId].eventType;
+  }
+
+  const counts = { combat: 0, quiet: 0, event: 0 };
+  for (const id of ids) counts[assigned.get(id) || "quiet"] += 1;
+  return counts;
 }
 
 /** 当前房间朝 (dc,dr) 方向的邻接出口 id（若有） */
@@ -351,12 +468,442 @@ function cellKey(c, r) {
   return `${c},${r}`;
 }
 
+const DIR_DELTA = {
+  N: [0, -1],
+  S: [0, 1],
+  E: [1, 0],
+  W: [-1, 0],
+};
+const DIR_OPPOSITE = { N: "S", S: "N", E: "W", W: "E" };
+const DIR_ORDER = ["N", "E", "S", "W"];
+
+function isPlayerLayoutMode() {
+  return state.data?.rooms?.layoutRoll?.mode === "player" && !state.tutorial?.active;
+}
+
+function cloneDoors(doors) {
+  return {
+    N: !!doors?.N,
+    E: !!doors?.E,
+    S: !!doors?.S,
+    W: !!doors?.W,
+  };
+}
+
+/** 顺时针旋转门形 times 次（每次 90°） */
+function rotateDoors(doors, times = 1) {
+  let d = cloneDoors(doors);
+  const n = ((times % 4) + 4) % 4;
+  for (let i = 0; i < n; i += 1) {
+    d = { N: d.W, E: d.N, S: d.E, W: d.S };
+  }
+  return d;
+}
+
+function doorPatterns() {
+  return (
+    state.data?.rooms?.layoutRoll?.doorPatterns || [
+      { id: "I", label: "直通", doors: { N: true, S: true, E: false, W: false }, weight: 2 },
+      { id: "L", label: "拐角", doors: { N: true, E: true, S: false, W: false }, weight: 2 },
+      { id: "T", label: "三岔", doors: { N: true, E: true, W: true, S: false }, weight: 2 },
+      { id: "+", label: "十字", doors: { N: true, E: true, S: true, W: true }, weight: 1 },
+      { id: "end", label: "尽端", doors: { N: true, E: false, S: false, W: false }, weight: 1 },
+    ]
+  );
+}
+
+function roomAtCell(col, row, layout = state.roomLayout) {
+  if (!layout) return null;
+  for (const [id, loc] of Object.entries(layout)) {
+    if (loc?.col === col && loc?.row === row) return id;
+  }
+  return null;
+}
+
+function inMapBounds(col, row) {
+  const size = state.data?.rooms?.mapSize || { cols: 17, rows: 17 };
+  return col >= 1 && row >= 1 && col <= size.cols && row <= size.rows;
+}
+
+/** 与已有邻房：共享边上的门必须同开或同关（双边开门才连通） */
+function doorsAgreeWithNeighbors(col, row, doors, layout = state.roomLayout) {
+  for (const dir of DIR_ORDER) {
+    const [dc, dr] = DIR_DELTA[dir];
+    const nid = roomAtCell(col + dc, row + dr, layout);
+    if (!nid) continue;
+    const theirs = layout[nid]?.doors;
+    if (!theirs) return false;
+    const mine = !!doors[dir];
+    const theirsOpen = !!theirs[DIR_OPPOSITE[dir]];
+    if (mine !== theirsOpen) return false;
+  }
+  return true;
+}
+
+function linkRoomExits(layout, a, b) {
+  if (!layout[a] || !layout[b]) return;
+  if (!layout[a].exits.includes(b)) layout[a].exits.push(b);
+  if (!layout[b].exits.includes(a)) layout[b].exits.push(a);
+}
+
+function unlinkRoomExits(layout, a, b) {
+  if (layout[a]) layout[a].exits = (layout[a].exits || []).filter((x) => x !== b);
+  if (layout[b]) layout[b].exits = (layout[b].exits || []).filter((x) => x !== a);
+}
+
+/** 按门形重算某格与四邻的 exits（仅双边开门） */
+function rewireDoorsAt(layout, id) {
+  const loc = layout[id];
+  if (!loc?.doors) return;
+  for (const dir of DIR_ORDER) {
+    const [dc, dr] = DIR_DELTA[dir];
+    const nid = roomAtCell(loc.col + dc, loc.row + dr, layout);
+    if (!nid) continue;
+    const both =
+      !!loc.doors[dir] && !!layout[nid].doors?.[DIR_OPPOSITE[dir]];
+    if (both) linkRoomExits(layout, id, nid);
+    else unlinkRoomExits(layout, id, nid);
+  }
+}
+
+function contentRole(room) {
+  if (!room) return "quiet";
+  if (room.eventType) return "event";
+  if (room.combat) return "combat";
+  return "quiet";
+}
+
+function pickWeighted(list, rng, weightOf) {
+  const bag = list.filter(Boolean);
+  if (!bag.length) return null;
+  let total = 0;
+  const weights = bag.map((x) => {
+    const w = Math.max(0.01, weightOf(x));
+    total += w;
+    return w;
+  });
+  let r = rng() * total;
+  for (let i = 0; i < bag.length; i += 1) {
+    r -= weights[i];
+    if (r <= 0) return bag[i];
+  }
+  return bag[bag.length - 1];
+}
+
+function contentPoolByRole(role) {
+  const rooms = state.data.rooms.rooms;
+  const cfg = state.data.rooms.layoutRoll || {};
+  const exclude = new Set(cfg.exclude || ["altar", "ritual"]);
+  const startId = cfg.start?.id || state.data.rooms.startRoom || "foyer";
+  return Object.values(rooms).filter((r) => {
+    if (!r || exclude.has(r.id) || r.bossRoom || r.id === startId) return false;
+    return contentRole(r) === role;
+  });
+}
+
+function pickRoleFromBag(rng) {
+  const mix = state.data.rooms.layoutRoll?.visitMix || {
+    combat: 0.4,
+    quiet: 0.35,
+    event: 0.25,
+  };
+  return pickWeighted(
+    ["combat", "quiet", "event"],
+    rng,
+    (k) => mix[k] ?? 0.33,
+  );
+}
+
+/** 为 (col,row) 生成可落位候选：内容自带类型 + 门形可旋转对齐 */
+function rollBuildOffers(col, row, count = 3) {
+  const rng = makeRng((state.runSeed || 1) ^ (col * 73856093) ^ (row * 19349663) ^ ((uidSeq + 1) * 83492791));
+  const patterns = doorPatterns();
+  const offers = [];
+  let guard = 40;
+  while (offers.length < count && guard-- > 0) {
+    const role = pickRoleFromBag(rng);
+    const pool = contentPoolByRole(role);
+    if (!pool.length) continue;
+    const content = pool[Math.floor(rng() * pool.length)];
+    const pattern = pickWeighted(patterns, rng, (p) => p.weight || 1);
+    if (!pattern) continue;
+    let found = null;
+    const rotOrder = seededShuffle([0, 1, 2, 3], rng);
+    for (const rot of rotOrder) {
+      const doors = rotateDoors(pattern.doors, rot);
+      if (!doorsAgreeWithNeighbors(col, row, doors)) continue;
+      // 至少与一侧邻房双向开门，避免「四面墙」孤岛贴上去
+      let linked = false;
+      for (const dir of DIR_ORDER) {
+        const [dc, dr] = DIR_DELTA[dir];
+        const nid = roomAtCell(col + dc, row + dr);
+        if (!nid) continue;
+        if (doors[dir] && state.roomLayout[nid].doors?.[DIR_OPPOSITE[dir]]) {
+          linked = true;
+          break;
+        }
+      }
+      if (!linked) continue;
+      found = { rot, doors };
+      break;
+    }
+    if (!found) continue;
+    const dup = offers.some(
+      (o) => o.contentId === content.id && o.patternId === pattern.id && o.rot === found.rot,
+    );
+    if (dup) continue;
+    offers.push({
+      contentId: content.id,
+      name: content.name,
+      role: contentRole(content),
+      eventType: content.eventType || (contentRole(content) === "event" ? "qte" : null),
+      patternId: pattern.id,
+      patternLabel: pattern.label,
+      rot: found.rot,
+      doors: found.doors,
+    });
+  }
+  return offers;
+}
+
+/** 可建空位：软边界内、邻接已有房且对方有门朝向该格 */
+function listBuildSlots() {
+  if (!isPlayerLayoutMode() || !state.roomLayout) return [];
+  const slots = [];
+  const seen = new Set();
+  for (const [id, loc] of Object.entries(state.roomLayout)) {
+    if (!loc?.doors) continue;
+    for (const dir of DIR_ORDER) {
+      if (!loc.doors[dir]) continue;
+      const [dc, dr] = DIR_DELTA[dir];
+      const c = loc.col + dc;
+      const r = loc.row + dr;
+      const k = cellKey(c, r);
+      if (!inMapBounds(c, r) || seen.has(k)) continue;
+      if (roomAtCell(c, r)) continue;
+      seen.add(k);
+      slots.push({ col: c, row: r, fromId: id, dir });
+    }
+  }
+  return slots;
+}
+
+function cancelMapBuild() {
+  state.mapBuild = null;
+  renderMapBuildDock();
+  renderAll();
+}
+
+function openMapBuildAt(col, row) {
+  if (!isPlayerLayoutMode()) return;
+  if (state.nodePending) {
+    log("先解决当前房间，再扩建。", "bad");
+    return;
+  }
+  if (runReadyForBoss()) {
+    log("行程已满，去开启祭坛决战。", "bad");
+    return;
+  }
+  if (roomAtCell(col, row)) {
+    log("这里已经有房间了。", "bad");
+    return;
+  }
+  if (!listBuildSlots().some((s) => s.col === col && s.row === row)) {
+    log("只能从已有房的开门朝向扩建。", "bad");
+    return;
+  }
+  const n = state.data.rooms.layoutRoll?.offerCount || 3;
+  const offers = rollBuildOffers(col, row, n);
+  if (!offers.length) {
+    log("这格暂时抽不到能对上门的房间，换一边试试。", "bad");
+    return;
+  }
+  state.mapBuild = { col, row, offers, pick: 0 };
+  renderMapBuildDock();
+  renderMap();
+}
+
+function rotateMapBuildOffer(delta = 1) {
+  const b = state.mapBuild;
+  if (!b?.offers?.length) return;
+  const offer = b.offers[b.pick];
+  const patterns = doorPatterns();
+  const pattern = patterns.find((p) => p.id === offer.patternId) || patterns[0];
+  for (let step = 1; step <= 4; step += 1) {
+    const rot = (offer.rot + delta * step + 4) % 4;
+    const doors = rotateDoors(pattern.doors, rot);
+    if (!doorsAgreeWithNeighbors(b.col, b.row, doors)) continue;
+    let linked = false;
+    for (const dir of DIR_ORDER) {
+      const [dc, dr] = DIR_DELTA[dir];
+      const nid = roomAtCell(b.col + dc, b.row + dr);
+      if (nid && doors[dir] && state.roomLayout[nid].doors?.[DIR_OPPOSITE[dir]]) {
+        linked = true;
+        break;
+      }
+    }
+    if (!linked) continue;
+    offer.rot = rot;
+    offer.doors = doors;
+    renderMapBuildDock();
+    renderMap();
+    return;
+  }
+  log("这个门形再转也对不上邻房的门。", "bad");
+}
+
+function selectMapBuildPick(index) {
+  const b = state.mapBuild;
+  if (!b?.offers?.[index]) return;
+  b.pick = index;
+  renderMapBuildDock();
+  renderMap();
+}
+
+function commitMapBuild() {
+  const b = state.mapBuild;
+  if (!b?.offers?.length) return;
+  const offer = b.offers[b.pick];
+  if (!doorsAgreeWithNeighbors(b.col, b.row, offer.doors)) {
+    log("门对不上，转一转或换一张。", "bad");
+    return;
+  }
+  const id = `r${uidSeq++}`;
+  const role = offer.role;
+  state.roomLayout[id] = {
+    col: b.col,
+    row: b.row,
+    contentId: offer.contentId,
+    exits: [],
+    doors: cloneDoors(offer.doors),
+    runRole: role,
+    eventType: role === "event" ? offer.eventType || "qte" : undefined,
+  };
+  rewireDoorsAt(state.roomLayout, id);
+  state.knownRooms.add(id);
+  discoverNeighbors(state.roomId);
+  discoverNeighbors(id);
+  const kind =
+    role === "combat" ? "惊吓" : role === "event" ? "考验" : "静室";
+  log(
+    `摆下「${offer.name}」·${offer.patternLabel}（${kind}）。走进去结算才算行程。`,
+    "ok",
+  );
+  state.mapBuild = null;
+  renderMapBuildDock();
+  renderAll();
+  saveGame();
+}
+
+function appendDoorNotches(el, doors, liveDirs = null) {
+  for (const d of DIR_ORDER) {
+    if (!doors?.[d]) continue;
+    const notch = document.createElement("span");
+    notch.className = `map-door map-door-${d.toLowerCase()}`;
+    if (liveDirs?.has(d)) notch.classList.add("is-live");
+    notch.setAttribute("aria-hidden", "true");
+    el.appendChild(notch);
+  }
+}
+
+function renderMapBuildDock() {
+  const dock = $("map-build-dock");
+  if (!dock) return;
+  const b = state.mapBuild;
+  if (!b?.offers?.length) {
+    dock.classList.add("hidden");
+    dock.innerHTML = "";
+    return;
+  }
+  dock.classList.remove("hidden");
+  dock.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.className = "map-build-head";
+  head.innerHTML = `<span class="map-build-kicker">盖屋</span><strong>扩建 (${b.col},${b.row})</strong><span class="map-build-hint">选房 · 旋转对齐门 · 走进去才算行程</span>`;
+  dock.appendChild(head);
+
+  const row = document.createElement("div");
+  row.className = "map-build-offers";
+  b.offers.forEach((offer, i) => {
+    const roleLabel =
+      offer.role === "combat" ? "惊吓" : offer.role === "event" ? "考验" : "静室";
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "build-offer";
+    if (offer.role === "combat") card.classList.add("combat-known");
+    else if (offer.role === "event") card.classList.add("event-known");
+    else card.classList.add("safe-known");
+    if (i === b.pick) card.classList.add("is-pick");
+    const name = document.createElement("span");
+    name.className = "build-offer-name";
+    name.textContent = offer.name;
+    const meta = document.createElement("span");
+    meta.className = "build-offer-meta";
+    meta.textContent = `${roleLabel} · ${offer.patternLabel}`;
+    card.append(name, meta);
+    appendDoorNotches(card, offer.doors);
+    card.onclick = () => selectMapBuildPick(i);
+    row.appendChild(card);
+  });
+  dock.appendChild(row);
+
+  const actions = document.createElement("div");
+  actions.className = "map-build-actions";
+  const rot = document.createElement("button");
+  rot.type = "button";
+  rot.className = "btn btn-ticket map-build-btn";
+  rot.textContent = "旋转";
+  rot.onclick = () => rotateMapBuildOffer(1);
+  const ok = document.createElement("button");
+  ok.type = "button";
+  ok.className = "btn btn-ticket map-build-btn map-build-btn-ok";
+  ok.textContent = "摆下";
+  ok.onclick = () => commitMapBuild();
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn btn-ticket map-build-btn map-build-btn-cancel";
+  cancel.textContent = "取消";
+  cancel.onclick = () => cancelMapBuild();
+  actions.append(rot, ok, cancel);
+  dock.appendChild(actions);
+}
+
+/** 玩家摆房：只放玄关，门形全开便于扩建 */
+function initPlayerLayout(seed) {
+  const cfg = state.data.rooms.layoutRoll || {};
+  const size = state.data.rooms.mapSize || { cols: 17, rows: 17 };
+  const startId = cfg.start?.id || state.data.rooms.startRoom || "foyer";
+  const col = cfg.start?.col || Math.ceil(size.cols / 2);
+  const row = cfg.start?.row || Math.ceil(size.rows / 2);
+  const layout = {
+    [startId]: {
+      col,
+      row,
+      contentId: startId,
+      exits: [],
+      doors: { N: true, E: true, S: true, W: true },
+      runRole: "quiet",
+    },
+  };
+  state.runSeed = seed;
+  state.roomLayout = layout;
+  state.layoutTopology = "player";
+  state.mapBuild = null;
+  log(
+    `本集由你盖屋 · 平面 #${seed >>> 0} · 可建范围 ${size.cols}×${size.rows}。点开门朝向的空格摆房；双边开门才连通。`,
+    "ok",
+  );
+  return layout;
+}
+
 /**
  * 开局掷大地图布局：房间内容固定，落位 + 邻接伪随机。
  * 拓扑可树/网/混合/主轴/翼楼；生成后把团块居中到 mapSize。
  * 祭坛/仪式不进随机图（仍走 Boss 按钮）。
+ * mode=player：只放玄关，由玩家扩建。
  */
-function rollRoomLayout(seed = (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0) {
+function rollRoomLayout(seed = (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, opts = {}) {
   const cfg = state.data.rooms.layoutRoll;
   const rooms = state.data.rooms.rooms;
   const size = state.data.rooms.mapSize || { cols: 9, rows: 9 };
@@ -365,6 +912,10 @@ function rollRoomLayout(seed = (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0
     state.runSeed = seed;
     state.roomLayout = null;
     return null;
+  }
+
+  if (cfg.mode === "player" && !opts.forceGrow) {
+    return initPlayerLayout(seed);
   }
 
   const rng = makeRng(seed);
@@ -628,6 +1179,7 @@ function rollRoomLayout(seed = (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0
 
   // 邻接定稿后再写门朝向（正交边才开对应墙门）
   assignDoorsToLayout(layout);
+  const mixCounts = assignVisitMix(layout, rooms, rng, cfg, startId);
 
   const topoLabel = {
     tree: "树状",
@@ -640,9 +1192,11 @@ function rollRoomLayout(seed = (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0
   state.runSeed = seed;
   state.roomLayout = layout;
   state.layoutTopology = topo;
-  const combatN = Object.keys(layout).filter((id) => rooms[id]?.combat).length;
+  const placed = Object.keys(layout).length;
+  const mixN = mixCounts.combat + mixCounts.quiet + mixCounts.event;
+  const pct = (n) => (mixN ? Math.round((n / mixN) * 100) : 0);
   log(
-    `本集山屋平面图 #${seed >>> 0} · ${topoLabel[topo] || topo} · ${Object.keys(layout).length} 间（惊吓 ${combatN}）`,
+    `本集山屋平面图 #${seed >>> 0} · ${topoLabel[topo] || topo} · ${placed} 间 · 行程配比 惊吓${mixCounts.combat}(${pct(mixCounts.combat)}%) / 静室${mixCounts.quiet}(${pct(mixCounts.quiet)}%) / 事件${mixCounts.event}(${pct(mixCounts.event)}%)`,
     "ok",
   );
   return layout;
@@ -1074,7 +1628,7 @@ function damageAnchorsInCells(c, cells, amount, source) {
           state.lab.summary.anchorsClearedByBoss = (state.lab.summary.anchorsClearedByBoss || 0) + 1;
         }
       }
-      relieveBroadcast(c, bossFightCfg().anchorClockRelief || 3, "熄灭锚点");
+      relieveBroadcast(c, bossFightCfg().anchorClockRelief || 2, "熄灭锚点");
       checkBossPhaseUp(c);
       if (allAnchorsOut(c)) {
         winCombat("ritual");
@@ -1252,14 +1806,14 @@ function portalMate(pos) {
   return dest ? parseKey(dest) : null;
 }
 
-/** 踏入传送格：移到对端。返回是否传送。落地后由调用方 triggerFloor。 */
-function tryPortal(who, fromPos) {
+/** 站在传送格上主动穿门（玩家），或被甩进门（强制）。落地后由调用方 triggerFloor。 */
+function tryPortal(who, fromPos, opts = {}) {
   const c = state.combat;
   const dest = portalMate(fromPos);
   if (!dest) return false;
   // 单位可叠格，仅墙/越界挡住传送
   if (isBlocked(dest) || !inBounds(dest)) {
-    log("传送门嗡了一下，但对端被挡住了。");
+    log("隧道门嗡了一下，但对端被挡住了。");
     return false;
   }
   if (who === "player") c.playerPos = { ...dest };
@@ -1267,9 +1821,83 @@ function tryPortal(who, fromPos) {
     c.enemyPos = { ...dest };
     resolveEnemyLandOverlap(c);
   }
-  log(who === "player" ? `你跌进隧道，出现在 (${dest.r + 1},${dest.c + 1})。` : `${c.enemy.name}跌进隧道，出现在 (${dest.r + 1},${dest.c + 1})。`, who === "player" ? "ok" : "bad");
+  if (!opts.silent) {
+    log(
+      who === "player"
+        ? `你钻进隧道，出现在 (${dest.r + 1},${dest.c + 1})。`
+        : `${c.enemy.name}钻进隧道，出现在 (${dest.r + 1},${dest.c + 1})。`,
+      who === "player" ? "ok" : "bad",
+    );
+  }
   c.portalLanded = true;
   return true;
+}
+
+/** 玩家花行动力穿门：站在门上点「穿门」或点对端格。踩上「门」格本身不再强制传送。 */
+function tryUsePortal() {
+  const c = state.combat;
+  if (!c || c.placeUid) return false;
+  const from = { ...c.playerPos };
+  const dest = portalMate(from);
+  if (!dest) {
+    log("这里没有可穿的门。", "bad");
+    return false;
+  }
+  const cost = state.data.cards.moveCost;
+  if (c.energy < cost) {
+    log(`行动力不足（穿门需 ${cost}）。`, "bad");
+    return false;
+  }
+  if (isBlocked(dest) || !inBounds(dest)) {
+    log("隧道门嗡了一下，但对端被挡住了。");
+    return false;
+  }
+  const wasSeen = hasLoS(c.enemyPos, c.playerPos);
+  c.energy -= cost;
+  c.portalLanded = false;
+  if (!tryPortal("player", from, { silent: true })) {
+    c.energy += cost;
+    return false;
+  }
+  const h = tileHeight(c.playerPos);
+  log(`你推开门，出现在 (${c.playerPos.r + 1},${c.playerPos.c + 1})${h ? ` · 高${h}` : ""}（耗${cost}）。`, "ok");
+  playTone("ui");
+  const vis = refreshVision();
+  if (vis.faceReveal) {
+    log(`转过遮挡——突脸！${c.enemy.name}就在视线里。`, "bad");
+    playTone("bad");
+    if (c.traits?.includes("faceShock")) {
+      c.playerExposed = true;
+      log("它盯上你了——贴身会被吓 1 下；够不着只喊。可先缩回遮挡。", "bad");
+    }
+  } else if (wasSeen && !vis.enemySees) {
+    log("你缩进遮挡/高差后，暂时脱离目击。", "ok");
+  }
+  c.intent = predictIntent(c);
+  renderCombat();
+  return true;
+}
+
+function portalStepCost(c, from, dest) {
+  const leaveTax = c.floor[keyOf(from)]?.enterTax || 0;
+  const enterTax = c.floor[keyOf(dest)]?.enterTax || 0;
+  let cost = 1 + leaveTax + enterTax;
+  if (c.traits?.includes("trapAware")) {
+    const item = c.floor[keyOf(dest)];
+    if (item?.onStep?.damage) cost += 8;
+    else if (item?.enterTax) cost += 2;
+  }
+  return cost;
+}
+
+/** 敌人落地结算：不自动穿门（穿门由寻路 viaPortal / 甩门 tryPortal 显式触发） */
+function settleEnemyLand(c, prev, viaPortal = false) {
+  resolveEnemyLandOverlap(c);
+  c.portalLanded = !!viaPortal;
+  checkReadyOnEnemyEnter(prev);
+  if (!state.combat || c.enemy.hp <= 0) return false;
+  triggerFloor(c.enemyPos, "enemy");
+  return !!(state.combat && c.enemy.hp > 0);
 }
 
 function adjacentTrapBonus(c, enemyPos) {
@@ -1460,7 +2088,7 @@ function forceEnemyShove(reason = "推撞", opts = {}) {
       : cellTrapScore(dest) > 0
         ? "，甩进机关"
         : cellIsPortal(dest)
-          ? "（落在隧道门上——可能被送走）"
+          ? "（落在隧道门上——被甩时会强制送走）"
           : "（附近没有可踩的机关）";
   c.enemyPos = { ...dest };
   log(`${reason}：把${c.enemy.name}甩到 (${dest.r + 1},${dest.c + 1})${via}。`, "ok");
@@ -1561,9 +2189,6 @@ function resolveClimbToHigher(inst) {
   const dest = opts[0];
   c.playerPos = { ...dest };
   c.portalLanded = false;
-  if (tryPortal("player", c.playerPos)) {
-    /* teleported */
-  }
   const h = tileHeight(c.playerPos);
   log(`登台至 (${c.playerPos.r + 1},${c.playerPos.c + 1}) · 高${h}。`, "ok");
   comboPop("高台砸击");
@@ -1980,10 +2605,33 @@ function loadGame() {
     state.midRelicDone = !!p.midRelicDone;
     state.runSeed = p.runSeed || 0;
     state.roomLayout = p.roomLayout || null;
+    state.mapBuild = null;
     uidSeq = p.uidSeq || 100;
     // 旧存档若是「类型翻转」格式或缺失空间布局：按种子重掷平面图 / 或沿用 json
     if (state.roomLayout && !isSpatialLayout(state.roomLayout)) {
       rollRoomLayout(state.runSeed || ((Date.now() ^ 0x9e3779b9) >>> 0));
+    } else if (state.roomLayout && isSpatialLayout(state.roomLayout)) {
+      // 补门形：旧生长图可能只有 exits
+      for (const loc of Object.values(state.roomLayout)) {
+        if (loc && loc.col != null && !loc.doors) {
+          loc.doors = doorsFromExits(loc, state.roomLayout);
+        }
+      }
+      // 旧平面图没有 runRole：按同一种子补行程配比（不重掷拓扑）
+      const needsMix = Object.values(state.roomLayout).some(
+        (loc) => loc && loc.col != null && loc.runRole == null,
+      );
+      if (needsMix && !isPlayerLayoutMode()) {
+        const cfg = state.data.rooms.layoutRoll || {};
+        const startId = cfg.start?.id || state.data.rooms.startRoom || "foyer";
+        assignVisitMix(
+          state.roomLayout,
+          state.data.rooms.rooms,
+          makeRng((state.runSeed || 1) ^ 0x4d4958),
+          cfg,
+          startId,
+        );
+      }
     }
     return true;
   } catch {
@@ -2709,7 +3357,7 @@ function skipToBossTest(deckId = "grown") {
   state.bossTestDeck = preset.id;
   // 掷一张大地图，Boss 决战用「一房一格」编译这张图
   const seed = (Date.now() ^ 0xb0557e57) >>> 0;
-  rollRoomLayout(seed);
+  rollRoomLayout(seed, { forceGrow: true });
   const layout = state.roomLayout;
   const startId = state.data.rooms.startRoom || "foyer";
   const path = buildHouseVisitPath(layout, startId, state.data.rooms.runLength || 12);
@@ -2849,7 +3497,10 @@ function renderStats() {
     if (state.tutorial?.active) {
       seedEl.textContent = "教学片 · 固定小地图";
     } else if (isSpatialLayout(state.roomLayout)) {
-      seedEl.textContent = `平面图 #${state.runSeed >>> 0} · ${Object.keys(state.roomLayout).length} 间`;
+      const n = Object.keys(state.roomLayout).length;
+      seedEl.textContent = isPlayerLayoutMode()
+        ? `盖屋 #${state.runSeed >>> 0} · 已摆 ${n} 间 · 点空格扩建`
+        : `平面图 #${state.runSeed >>> 0} · ${n} 间`;
     } else {
       seedEl.textContent = "平面图：手摆固定稿";
     }
@@ -2919,7 +3570,8 @@ function mapDisplayFrame() {
   const rooms = placedRoomIds()
     .map((id) => roomDef(id))
     .filter((r) => r?.map);
-  if (!rooms.length) {
+  const slots = isPlayerLayoutMode() ? listBuildSlots() : [];
+  if (!rooms.length && !slots.length) {
     return { cols: Math.min(9, size.cols), rows: Math.min(9, size.rows), col0: 1, row0: 1 };
   }
   let minC = Infinity;
@@ -2931,6 +3583,19 @@ function mapDisplayFrame() {
     maxC = Math.max(maxC, r.map.col);
     minR = Math.min(minR, r.map.row);
     maxR = Math.max(maxR, r.map.row);
+  }
+  for (const s of slots) {
+    minC = Math.min(minC, s.col);
+    maxC = Math.max(maxC, s.col);
+    minR = Math.min(minR, s.row);
+    maxR = Math.max(maxR, s.row);
+  }
+  // 摆房时略扩一圈，方便看见可建格
+  if (isPlayerLayoutMode()) {
+    minC = Math.max(1, minC - 1);
+    minR = Math.max(1, minR - 1);
+    maxC = Math.min(size.cols, maxC + 1);
+    maxR = Math.min(size.rows, maxR + 1);
   }
   const col0 = Math.max(1, minC);
   const row0 = Math.max(1, minR);
@@ -3055,6 +3720,9 @@ function renderMap() {
       } else if (room.combat) {
         kind.innerHTML = `<img src="assets/ui/EventIcon.png" alt="" />`;
         btn.classList.add("combat-known");
+      } else if (room.eventType) {
+        kind.innerHTML = `<img src="assets/ui/OmenIcon.png" alt="" />`;
+        btn.classList.add("event-known");
       } else {
         kind.innerHTML = `<img src="assets/ui/OmenIcon.png" alt="" />`;
         btn.classList.add("safe-known");
@@ -3094,7 +3762,9 @@ function renderMap() {
           `<img class="char-token map-token" src="assets/ui/chars/SP_Lili_MapToken.png" alt="你" width="40" height="40" draggable="false" />`;
         btn.appendChild(pawn);
       } else {
-        btn.title = room.name + (room.combat ? " · 惊吓" : " · 静室");
+        btn.title =
+          room.name +
+          (room.combat ? " · 惊吓" : room.eventType ? " · 考验" : " · 静室");
       }
 
       if (room.bossRoom) {
@@ -3129,6 +3799,28 @@ function renderMap() {
     box.appendChild(btn);
   }
 
+  // 玩家摆房：只画可建邻格（不开灰问号骨架）
+  if (isPlayerLayoutMode() && !state.nodePending && !runReadyForBoss()) {
+    const building = state.mapBuild;
+    for (const slot of listBuildSlots()) {
+      const cell = {
+        col: slot.col - frame.col0 + 1,
+        row: slot.row - frame.row0 + 1,
+      };
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "map-slot";
+      if (building && building.col === slot.col && building.row === slot.row) {
+        btn.classList.add("is-picking");
+      }
+      placeAbs(btn, cell);
+      btn.title = "点这里摆一间房";
+      btn.textContent = "+";
+      btn.onclick = () => openMapBuildAt(slot.col, slot.row);
+      box.appendChild(btn);
+    }
+  }
+
   requestAnimationFrame(() => fitHouseMapBox(box, frame));
 }
 
@@ -3146,7 +3838,9 @@ function renderRoom() {
       ? "大结局"
       : room.combat
         ? "惊吓时间"
-        : "安静角落";
+        : room.eventType
+          ? "考验"
+          : "安静角落";
 
   const exits = $("exits");
   exits.innerHTML = "";
@@ -3164,7 +3858,11 @@ function renderRoom() {
   const resolveBtn = $("btn-resolve");
   if (state.nodePending && !room.bossRoom) {
     resolveBtn.classList.remove("hidden");
-    resolveBtn.textContent = room.combat ? "打开惊吓时间" : "看看房间里有什么";
+    resolveBtn.textContent = room.combat
+      ? "打开惊吓时间"
+      : room.eventType
+        ? "接受考验"
+        : "看看房间里有什么";
   } else {
     resolveBtn.classList.add("hidden");
   }
@@ -3174,6 +3872,15 @@ function renderRoom() {
   else bossBtn.classList.add("hidden");
 
   renderMap();
+  renderMapBuildDock();
+  const opsLabel = $("map-ops-label");
+  if (opsLabel) {
+    opsLabel.textContent = isPlayerLayoutMode()
+      ? state.mapBuild
+        ? "在地图底栏选房 · 旋转对齐门后摆下"
+        : "点「+」空格摆房 · 点邻房走动 · 进房结算才算行程"
+      : "点地图走动 · 或点下方出口";
+  }
 }
 
 function moveTo(targetId) {
@@ -3702,7 +4409,7 @@ function gainRelic(id) {
 
 function combatTier(atCount = state.combatCount || 1) {
   // 末段不再跳档 5；残血再压一档，避免 1 血硬吃尖峰
-  const curve = state.data.pressure?.combatCurve || [1, 1, 2, 3, 2, 3];
+  const curve = state.data.pressure?.combatCurve || [1, 2, 2, 3, 3, 3];
   const idx = Math.min(Math.max(0, atCount - 1), curve.length - 1);
   let tier = curve[idx];
   if (state.hp <= 1) tier = Math.min(tier, 2);
@@ -4416,7 +5123,7 @@ function threatMapFromIntent(intent) {
   return map;
 }
 
-function beginPlayerTurn(kept = []) {
+function beginPlayerTurn(kept = [], opts = {}) {
   const c = state.combat;
   const dice = rollSpeedDice();
   c.rolls = dice.rolls;
@@ -4455,7 +5162,9 @@ function beginPlayerTurn(kept = []) {
   }
   c.intent = predictIntent(c);
   c.hand = kept;
-  const need = Math.max(0, state.data.cards.handSize - c.hand.length);
+  // 手牌上限固定 4；开局若要塞纸影傀儡，先预留空位，避免变成「抽 5」
+  const handCap = Math.max(0, (state.data.cards.handSize || 4) - (opts.reserveSlots || 0));
+  const need = Math.max(0, handCap - c.hand.length);
   c.hand.push(...drawHand(need));
   labNotePlayerTurn(c.energy, c.rolls);
 }
@@ -4605,14 +5314,15 @@ function buildEncounter(room, isBoss) {
   }
   const src = isBoss
     ? state.data.bosses.bosses[state.chosenBoss]
-    : room.enemy;
+    : room.enemy || { name: "剪影", hp: 6, damage: 1 };
+  const contentKey = room.contentId || room.id;
   const archId = isBoss
     ? P.boss.archetype
-    : P.roomArchetype[room.id] || "execute";
+    : P.roomArchetype[contentKey] || P.roomArchetype[room.id] || "execute";
   const arch = P.archetypes[archId];
   const traits = isBoss
     ? [...(P.boss.traits || [])]
-    : [...(P.roomTraits[room.id] || [])];
+    : [...(P.roomTraits[contentKey] || P.roomTraits[room.id] || [])];
   const tier = isBoss ? 5 : combatTier();
   const scale = tierScale(tier);
   const hp = src.hp + scale.hp + (isBoss ? 2 : 0);
@@ -4774,7 +5484,7 @@ function buildHouseGraphArena(layout) {
     houseGraph: true,
     roomAt,
     ambush: false,
-    spawnNote: `决战场：本集山屋平面（${roomN} 间）。一房一格 · 空洞不画格 · 沿门走 · 高台 ${highN} · 传送门 ${Math.floor(portalN)} 对 · 已补环路可兜圈。`,
+    spawnNote: `决战场：本集山屋平面（${roomN} 间）。一房一格 · 空洞不画格 · 沿门走 · 高台 ${highN} · 隧道门 ${Math.floor(portalN)} 对（站上点穿门） · 已补环路可兜圈。`,
     anchors,
   };
 }
@@ -5127,9 +5837,10 @@ function startCombat(room, isBoss) {
     state.combat.setupBonusEnergy = 1;
     log("它已经贴上来了——这一拍它只靠近不下手，先摆机关。", "ok");
   }
-  beginPlayerTurn([]);
+  const decoySlot = hasRelicEffect("combatDecoy") ? 1 : 0;
+  beginPlayerTurn([], { reserveSlots: decoySlot });
   if (!state.combat) return;
-  if (hasRelicEffect("combatDecoy")) {
+  if (decoySlot) {
     state.combat.hand.push(makeCard("decoy"));
     log("预兆·纸影：手牌加入「纸影傀儡」。", "ok");
   }
@@ -5547,11 +6258,13 @@ function tryMovePlayer(pos) {
   c.energy -= cost;
   c.playerPos = { ...pos };
   c.portalLanded = false;
-  if (tryPortal("player", c.playerPos)) {
-    /* teleported */
-  }
   const h = tileHeight(c.playerPos);
-  log(`你移到 (${c.playerPos.r + 1},${c.playerPos.c + 1})${h ? ` · 高${h}` : ""}（耗${cost}）。`);
+  const onDoor = cellIsPortal(c.playerPos);
+  log(
+    `你移到 (${c.playerPos.r + 1},${c.playerPos.c + 1})${h ? ` · 高${h}` : ""}（耗${cost}）${
+      onDoor ? " · 站在门上，可点「穿门」或点对端" : ""
+    }。`,
+  );
   if (passTax > 0) log(`擦身而过，多耗 ${passTax} 行动力。`);
   playTone("ui");
   const vis = refreshVision();
@@ -5718,8 +6431,16 @@ function tryPlace(pos) {
 function onTileClick(pos) {
   const c = state.combat;
   if (!c) return;
-  if (c.placeUid) tryPlace(pos);
-  else tryMovePlayer(pos);
+  if (c.placeUid) {
+    tryPlace(pos);
+    return;
+  }
+  const mate = portalMate(c.playerPos);
+  if (mate && keyOf(pos) === keyOf(mate)) {
+    tryUsePortal();
+    return;
+  }
+  tryMovePlayer(pos);
 }
 
 /** 绊线：九宫格内收束伤害道具，合并为集束陷阱（有件数/伤害上限）。 */
@@ -5805,16 +6526,13 @@ function triggerFloor(pos, who) {
           const prev = { ...c.enemyPos };
           c.enemyPos = { ...step.p };
           c.enemyMovesThisTurn = (c.enemyMovesThisTurn || 0) + 1;
-          log(`${c.enemy.name}被绊线拽向目标 (${step.p.r + 1},${step.p.c + 1})。`, "ok");
-          c.portalLanded = false;
-          checkReadyOnEnemyEnter(prev);
-          if (!state.combat || c.enemy.hp <= 0) return { tax: 0 };
-          const beforePortal = { ...c.enemyPos };
-          if (tryPortal("enemy", c.enemyPos)) {
-            checkReadyOnEnemyEnter(beforePortal);
-            if (!state.combat || c.enemy.hp <= 0) return { tax: 0 };
-          }
-          triggerFloor(c.enemyPos, "enemy");
+          log(
+            `${c.enemy.name}被绊线拽向目标 (${step.p.r + 1},${step.p.c + 1})${
+              step.viaPortal ? "·穿门" : ""
+            }。`,
+            "ok",
+          );
+          settleEnemyLand(c, prev, !!step.viaPortal);
         }
       }
     }
@@ -5877,7 +6595,7 @@ function enemyEdgeCost(c, from, to) {
 }
 
 /**
- * 朝目标走一步：Dijkstra 最短路首步（可绕墙），不踩玩家格。
+ * 朝目标走一步：Dijkstra 最短路首步（可绕墙 / 穿隧道门），不踩玩家格。
  * 目标是玩家时，走到邻接格即视为抵达。
  */
 function stepEnemyToward(goal, c = state.combat) {
@@ -5895,10 +6613,22 @@ function stepEnemyToward(goal, c = state.combat) {
 
   const startKey = keyOf(c.enemyPos);
   const bestG = new Map([[startKey, 0]]);
+  // prev: key -> { from, viaPortal }
   const prev = new Map();
   const pq = [{ p: { ...c.enemyPos }, g: 0 }];
-  let guard = 200;
+  let guard = 400;
   let found = null;
+
+  const consider = (cur, n, viaPortal) => {
+    const nk = keyOf(n);
+    if (nk === playerKey) return;
+    if (!isPassable(n) || isBlocked(n) || !inBounds(n)) return;
+    const g2 = cur.g + (viaPortal ? portalStepCost(c, cur.p, n) : enemyEdgeCost(c, cur.p, n));
+    if (bestG.has(nk) && bestG.get(nk) <= g2) return;
+    bestG.set(nk, g2);
+    prev.set(nk, { from: { ...cur.p }, viaPortal: !!viaPortal });
+    pq.push({ p: { ...n }, g: g2 });
+  };
 
   while (pq.length && guard-- > 0) {
     pq.sort((a, b) => a.g - b.g || (vault ? tileHeight(b.p) - tileHeight(a.p) : 0));
@@ -5909,27 +6639,34 @@ function stepEnemyToward(goal, c = state.combat) {
       found = cur.p;
       break;
     }
-    for (const n of neighbors(cur.p)) {
-      const nk = keyOf(n);
-      if (nk === playerKey) continue;
-      const g2 = cur.g + enemyEdgeCost(c, cur.p, n);
-      if (bestG.has(nk) && bestG.get(nk) <= g2) continue;
-      bestG.set(nk, g2);
-      prev.set(nk, { ...cur.p });
-      pq.push({ p: { ...n }, g: g2 });
-    }
+    for (const n of neighbors(cur.p)) consider(cur, n, false);
+    const mate = portalMate(cur.p);
+    if (mate) consider(cur, mate, true);
   }
 
   if (!found) {
-    // 无通路时退回邻格贪心，尽量靠近目标
-    const opts = neighbors(c.enemyPos)
-      .filter((p) => keyOf(p) !== playerKey)
-      .map((p) => ({
+    // 无通路时退回邻格贪心，尽量靠近目标（含穿门）
+    const opts = [];
+    for (const p of neighbors(c.enemyPos)) {
+      if (keyOf(p) === playerKey) continue;
+      opts.push({
         p,
         dist: manhattan(p, goal),
         cost: stepCostTo(c, p),
         height: tileHeight(p),
-      }));
+        viaPortal: false,
+      });
+    }
+    const mate = portalMate(c.enemyPos);
+    if (mate && keyOf(mate) !== playerKey && isPassable(mate) && !isBlocked(mate)) {
+      opts.push({
+        p: mate,
+        dist: manhattan(mate, goal),
+        cost: portalStepCost(c, c.enemyPos, mate),
+        height: tileHeight(mate),
+        viaPortal: true,
+      });
+    }
     if (!opts.length) return null;
     opts.sort((a, b) => a.dist - b.dist || (vault ? b.height - a.height : 0) || a.cost - b.cost);
     return opts[0];
@@ -5940,15 +6677,16 @@ function stepEnemyToward(goal, c = state.combat) {
   while (backGuard-- > 0) {
     const pr = prev.get(keyOf(stepPos));
     if (!pr) break;
-    if (keyOf(pr) === startKey) {
+    if (keyOf(pr.from) === startKey) {
       return {
         p: { ...stepPos },
-        cost: stepCostTo(c, stepPos),
-        climb: climbCost(c.enemyPos, stepPos),
+        cost: pr.viaPortal ? portalStepCost(c, c.enemyPos, stepPos) : stepCostTo(c, stepPos),
+        climb: pr.viaPortal ? 0 : climbCost(c.enemyPos, stepPos),
         height: tileHeight(stepPos),
+        viaPortal: !!pr.viaPortal,
       };
     }
-    stepPos = pr;
+    stepPos = pr.from;
   }
   return null;
 }
@@ -5962,17 +6700,13 @@ function freeStepToward(c, goal, label) {
   c.enemyMovesThisTurn = (c.enemyMovesThisTurn || 0) + 1;
   c.chasingDecoy = !!(decoyAlive(c) && goal && keyOf(goal) === keyOf(c.decoy.pos));
   const h = tileHeight(c.enemyPos);
-  log(`${c.enemy.name}${label}至 (${step.p.r + 1},${step.p.c + 1})${h ? `高${h}` : ""}。`, "bad");
-  resolveEnemyLandOverlap(c);
-  c.portalLanded = false;
-  checkReadyOnEnemyEnter(prev);
-  if (!state.combat || c.enemy.hp <= 0) return true;
-  const beforePortal = { ...c.enemyPos };
-  if (tryPortal("enemy", c.enemyPos)) {
-    checkReadyOnEnemyEnter(beforePortal);
-    if (!state.combat || c.enemy.hp <= 0) return true;
-  }
-  triggerFloor(c.enemyPos, "enemy");
+  log(
+    `${c.enemy.name}${label}至 (${step.p.r + 1},${step.p.c + 1})${h ? `高${h}` : ""}${
+      step.viaPortal ? "·穿门" : ""
+    }。`,
+    "bad",
+  );
+  settleEnemyLand(c, prev, !!step.viaPortal);
   return true;
 }
 
@@ -6051,17 +6785,8 @@ function executeEnemyAttack(c, atk, hitKind) {
     c.enemyPos = { ...atk.land.p };
     c.enemyMovesThisTurn += 1;
     log(`${c.enemy.name}突进贴近至 (${atk.land.p.r + 1},${atk.land.p.c + 1})。`, "bad");
-    c.portalLanded = false;
-    checkReadyOnEnemyEnter(prev);
+    settleEnemyLand(c, prev, false);
     if (!state.combat) return "done";
-    if (c.enemy.hp <= 0) return "win";
-    const beforePortal = { ...c.enemyPos };
-    if (tryPortal("enemy", c.enemyPos)) {
-      checkReadyOnEnemyEnter(beforePortal);
-      if (!state.combat) return "done";
-      if (c.enemy.hp <= 0) return "win";
-    }
-    triggerFloor(c.enemyPos, "enemy");
     if (c.enemy.hp <= 0) return "win";
   }
   c.enemyStamina = Math.max(0, c.enemyStamina - atk.cost);
@@ -6222,29 +6947,12 @@ function enemyTurn() {
             `${c.enemy.name}攀上高台 (${best.p.r + 1},${best.p.c + 1})高${best.height}（耗${best.cost}）。`,
             "bad",
           );
-          resolveEnemyLandOverlap(c);
-          c.portalLanded = false;
-          checkReadyOnEnemyEnter(prev);
+          settleEnemyLand(c, prev, false);
           if (!state.combat) return;
           if (c.enemy.hp <= 0) {
             winCombat("kill");
             return;
           }
-          const beforePortal = { ...c.enemyPos };
-          if (tryPortal("enemy", c.enemyPos)) {
-            checkReadyOnEnemyEnter(beforePortal);
-            if (!state.combat) return;
-            if (c.enemy.hp <= 0) {
-              winCombat("kill");
-              return;
-            }
-          }
-          triggerFloor(c.enemyPos, "enemy");
-          if (c.enemy.hp <= 0) {
-            winCombat("kill");
-            return;
-          }
-          if (!state.combat) return;
           continue;
         }
       }
@@ -6301,10 +7009,12 @@ function enemyTurn() {
           c.enemyMovesThisTurn += 1;
           const prev = { ...c.enemyPos };
           c.enemyPos = { ...retry.p };
-          log(`${c.enemy.name}巡逻至 (${retry.p.r + 1},${retry.p.c + 1})（耗${retry.cost}）。`);
-          resolveEnemyLandOverlap(c);
-          c.portalLanded = false;
-          checkReadyOnEnemyEnter(prev);
+          log(
+            `${c.enemy.name}巡逻至 (${retry.p.r + 1},${retry.p.c + 1})${
+              retry.viaPortal ? "·穿门" : ""
+            }（耗${retry.cost}）。`,
+          );
+          settleEnemyLand(c, prev, !!retry.viaPortal);
           if (!state.combat) return;
           if (c.enemy.hp <= 0) {
             winCombat("kill");
@@ -6331,31 +7041,16 @@ function enemyTurn() {
             ? "搜索"
             : "巡逻";
     log(
-      `${c.enemy.name}${verb}至 (${step.p.r + 1},${step.p.c + 1})${h ? `高${h}` : ""}（耗${step.cost}）。`,
+      `${c.enemy.name}${verb}至 (${step.p.r + 1},${step.p.c + 1})${h ? `高${h}` : ""}${
+        step.viaPortal ? "·穿门" : ""
+      }（耗${step.cost}）。`,
     );
-    resolveEnemyLandOverlap(c);
-    c.portalLanded = false;
-    checkReadyOnEnemyEnter(prev);
+    settleEnemyLand(c, prev, !!step.viaPortal);
     if (!state.combat) return;
     if (c.enemy.hp <= 0) {
       winCombat("kill");
       return;
     }
-    const beforePortal = { ...c.enemyPos };
-    if (tryPortal("enemy", c.enemyPos)) {
-      checkReadyOnEnemyEnter(beforePortal);
-      if (!state.combat) return;
-      if (c.enemy.hp <= 0) {
-        winCombat("kill");
-        return;
-      }
-    }
-    triggerFloor(c.enemyPos, "enemy");
-    if (c.enemy.hp <= 0) {
-      winCombat("kill");
-      return;
-    }
-    if (!state.combat) return;
   }
 
   if (c.isBoss) {
@@ -6409,6 +7104,16 @@ function renderBossRitualHud(c) {
     btn.disabled = !onAnchor || c.energy < cost;
     btn.textContent = `拆信号（${cost}）`;
   }
+}
+
+function syncPortalButton(c) {
+  const portalBtn = $("btn-use-portal");
+  if (!portalBtn || !c) return;
+  const onPortal = cellIsPortal(c.playerPos);
+  const pCost = state.data?.cards?.moveCost ?? 1;
+  portalBtn.classList.toggle("hidden", !onPortal);
+  portalBtn.disabled = !onPortal || c.energy < pCost || !!c.placeUid;
+  portalBtn.textContent = `穿门（${pCost}）`;
 }
 
 function toggleHold(uid) {
@@ -6477,6 +7182,7 @@ function renderCombat() {
   $("player-hp").textContent = `${state.hp}/${state.maxHp}`;
   renderTraitChips(c);
   renderBossRitualHud(c);
+  syncPortalButton(c);
 
   const toughEl = $("kite-meter");
   const fill = $("tough-fill");
@@ -6536,8 +7242,12 @@ function renderCombat() {
     $("btn-cancel-place").classList.remove("hidden");
   } else {
     hint.textContent = c.isBoss
-      ? "金格「烛」=信号锚 · 站上点拆信号 · 实线红=必伤/蓄力"
-      : c.ready
+      ? cellIsPortal(c.playerPos)
+        ? "站在门上：点「穿门」或点对端亮格 · 金格「烛」=信号锚"
+        : "金格「烛」=信号锚 · 站上点拆信号 · 实线红=必伤/蓄力"
+      : cellIsPortal(c.playerPos)
+        ? "站在门上：点「穿门」或点对端亮格（不会自动传送）"
+        : c.ready
         ? c.ready.awaitStep
           ? `预备·${c.ready.name}未生效：橙虚线=贴脸挂上——它在邻格挪一步才触发（站桩砍不会触发）`
           : c.ready.effect?.shove
@@ -6722,6 +7432,15 @@ function renderHouseGraphBattle() {
           if (isE) cell.classList.add("move-hostile");
         }
       }
+      const portalHere = portalMate(c.playerPos);
+      if (
+        !c.placeUid &&
+        portalHere &&
+        keyOf(pos) === keyOf(portalHere) &&
+        c.energy >= (state.data.cards.moveCost || 1)
+      ) {
+        cell.classList.add("move-ok", "portal-ok");
+      }
 
       for (const [d, dc, dr] of [
         ["n", 0, -1],
@@ -6793,12 +7512,21 @@ function renderHouseGraphBattle() {
         roomName,
         "山屋格 · 沿门移动",
         h ? `高度 ${h}` : null,
-        c.portals?.[k] ? "传送门" : null,
+        c.portals?.[k]
+          ? isP
+            ? "隧道门 · 站上后点「穿门」或点对端格"
+            : portalMate(c.playerPos) && keyOf(pos) === keyOf(portalMate(c.playerPos))
+              ? "对端门 · 点此穿过去"
+              : "隧道门（踩上不会自动传送）"
+          : null,
         anchor?.lit ? `信号锚（亮 · 耐久 ${anchor.hp} · 站上点「拆信号」/砸牌）` : null,
         anchor && !anchor.lit ? "信号锚（已熄）" : null,
         isP ? "你在这里" : null,
         isE && sees ? c.enemy.name : null,
         adjP && !c.placeUid ? "可移动" : null,
+        portalMate(c.playerPos) && keyOf(pos) === keyOf(portalMate(c.playerPos)) && !c.placeUid
+          ? "可穿门"
+          : null,
       ]
         .filter(Boolean)
         .join(" · ");
@@ -6959,6 +7687,15 @@ function renderBattleGrid() {
           if (isE) cell.classList.add("move-hostile");
         }
       }
+      const portalHere = portalMate(c.playerPos);
+      if (
+        !c.placeUid &&
+        portalHere &&
+        keyOf(pos) === keyOf(portalHere) &&
+        c.energy >= (state.data.cards.moveCost || 1)
+      ) {
+        cell.classList.add("move-ok", "portal-ok");
+      }
 
       const bits = [];
       if (roomName && c.houseGraph) bits.push(roomName.length > 2 ? roomName.slice(0, 2) : roomName);
@@ -7002,7 +7739,13 @@ function renderBattleGrid() {
         roomName || (wall ? "挡路" : "空地"),
         c.houseGraph ? "山屋格（沿门移动）" : null,
         h ? `高度 ${h}` : null,
-        c.portals?.[k] ? "传送门" : null,
+        c.portals?.[k]
+          ? isP
+            ? "隧道门 · 站上后点「穿门」或点对端格"
+            : portalMate(c.playerPos) && keyOf(pos) === keyOf(portalMate(c.playerPos))
+              ? "对端门 · 点此穿过去"
+              : "隧道门（踩上不会自动传送）"
+          : null,
         anchor?.lit ? `信号锚（亮 · 耐久 ${anchor.hp} · 站上拆 / 砸牌 / 引怪砸）` : null,
         anchor && !anchor.lit ? "信号锚（已熄）" : null,
         item ? cardDef(item.cardId)?.name : null,
@@ -7029,6 +7772,9 @@ function renderBattleGrid() {
           : null,
         threat?.kind === "move" ? "它下一步可能到这" : null,
         adjP && !c.placeUid ? "可移动" : null,
+        portalMate(c.playerPos) && keyOf(pos) === keyOf(portalMate(c.playerPos)) && !c.placeUid
+          ? "可穿门"
+          : null,
         adjP && c.placeUid ? "可放置" : null,
       ]
         .filter(Boolean)
@@ -7602,6 +8348,7 @@ function bindUi() {
   $("btn-close-event").onclick = () => {
     hideCardTooltip();
     clearRewardCards();
+    if (state.mapBuild) state.mapBuild = null;
     showModal(null);
     renderAll();
   };
@@ -7622,6 +8369,8 @@ function bindUi() {
   $("btn-cancel-place").onclick = () => cancelPlace();
   const dismantleBtn = $("btn-dismantle");
   if (dismantleBtn) dismantleBtn.onclick = () => tryDismantleAnchor();
+  const portalBtn = $("btn-use-portal");
+  if (portalBtn) portalBtn.onclick = () => tryUsePortal();
   const exportBtn = $("btn-lab-export");
   if (exportBtn) exportBtn.onclick = () => exportLabJson();
   const exportEnd = $("btn-lab-export-end");
