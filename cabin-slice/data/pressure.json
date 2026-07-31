@@ -24,7 +24,7 @@
       "id": "stagger",
       "label": "踉跄影",
       "baseTough": 4,
-      "desc": "破韧后下回合敌体力上限 -2"
+      "desc": "破韧后下回合敌行动力上限 -2"
     },
     "crush": {
       "id": "crush",
@@ -61,10 +61,10 @@
     "kitchen": ["grab", "vault"],
     "west_wing": ["lunge", "cornerCut"],
     "hall": ["lunge", "faceShock", "cornerCut", "beam"],
-    "pantry": ["grab", "vault", "faceShock"],
+    "pantry": ["grab", "vault"],
     "yard": ["relentless", "trapAware", "slam"],
     "shed": ["grab", "vault"],
-    "gallery": ["faceShock", "vault", "beam"],
+    "gallery": ["vault", "beam"],
     "study": ["grab", "trapAware"],
     "nursery": ["faceShock"],
     "darkroom": ["lunge", "faceShock", "cornerCut"],
@@ -75,7 +75,7 @@
   },
   "boss": {
     "archetype": "crush",
-    "traits": ["lunge", "faceShock", "guardBreak", "slam"],
+    "traits": ["lunge", "guardBreak", "slam"],
     "toughBonus": 3
   },
   "bossFight": {
@@ -100,7 +100,7 @@
   },
   "traitLabels": {
     "lunge": "突进贴近",
-    "faceShock": "突脸惊吓（拐角见你就打/吓）",
+    "faceShock": "突脸惊吓（拐角贴身吓1；够不着不伤）",
     "grab": "搜刮",
     "relentless": "穷追",
     "vault": "攀爬",

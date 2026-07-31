@@ -1,32 +1,35 @@
-/** 警察抓小偷 · 打字追逐（金山式节拍玩具，静室考验） */
+/** 警察抓小偷 · 打字追逐（整句容错，静室考验） */
 (function (global) {
-  const WORDS = [
-    "run", "hide", "fog", "door", "key", "lamp", "lock", "step", "dash", "jump",
-    "climb", "escape", "signal", "channel", "dream", "cabin", "mud", "boot",
-    "chase", "quick", "quiet", "shadow", "corner", "attic", "radio", "static",
-    "snow", "frame", "pulse", "ghost", "wire", "rust", "altar", "host",
-    "tape", "reel", "noise", "crawl", "vault", "flare", "guard", "focus",
+  const SENTENCES = [
+    "run for the cabin door now",
+    "keep your boots quiet please",
+    "dash past the rusted gate",
+    "the hallway still bites hard",
+    "slip through the mud and go",
+    "climb the attic stair fast",
+    "hide behind the salt line",
+    "kick open the back door",
   ];
 
   const TRACK_LEN = 14;
-  const PLAYER_START = 3;
+  const PLAYER_START = 5;
   const POLICE_START = 0;
-  const POLICE_SPEED = 0.42; // 格/秒，恒速
-  const WORD_STEP = 1.15; // 打对一词前进
-  const STUN_MS = 1100;
+  const POLICE_SPEED = 0.12; // 格/秒；整句留给打字时间
+  const SENTENCE_STEP = 10; // 打完一句基本到门（偶发第二句）
+  const MISS_FLASH_MS = 220;
   const COUNTDOWN = [3, 2, 1, "跑！"];
 
   let active = false;
   let phase = "idle"; // idle | ready | countdown | race | done
   let onDone = null;
   let raf = 0;
-  let word = "";
+  let sentence = "";
   let typed = 0;
   let playerPos = PLAYER_START;
   let policePos = POLICE_START;
   let lastTs = 0;
-  let stunUntil = 0;
-  let usedWords = new Set();
+  let missUntil = 0;
+  let usedSentences = new Set();
   let countdownIdx = 0;
   let countdownTimer = 0;
 
@@ -34,13 +37,13 @@
     return document.getElementById(id);
   }
 
-  function pickWord() {
-    const pool = WORDS.filter((w) => !usedWords.has(w));
-    const bag = pool.length ? pool : WORDS.slice();
-    const w = bag[Math.floor(Math.random() * bag.length)];
-    usedWords.add(w);
-    if (usedWords.size > WORDS.length - 4) usedWords.clear();
-    return w;
+  function pickSentence() {
+    const pool = SENTENCES.filter((s) => !usedSentences.has(s));
+    const bag = pool.length ? pool : SENTENCES.slice();
+    const s = bag[Math.floor(Math.random() * bag.length)];
+    usedSentences.add(s);
+    if (usedSentences.size >= SENTENCES.length) usedSentences.clear();
+    return s;
   }
 
   function setStatus(msg, tone) {
@@ -50,18 +53,27 @@
     el.className = "qte-status" + (tone ? ` ${tone}` : "");
   }
 
-  function renderWord() {
+  function escapeHtml(ch) {
+    if (ch === " ") return "&nbsp;";
+    if (ch === "<") return "&lt;";
+    if (ch === ">") return "&gt;";
+    if (ch === "&") return "&amp;";
+    return ch;
+  }
+
+  function renderSentence() {
     const el = $("qte-word");
     if (!el) return;
-    if (!word) {
+    if (!sentence) {
       el.innerHTML = "";
       return;
     }
-    el.innerHTML = word
+    el.innerHTML = sentence
       .split("")
       .map((ch, i) => {
-        const cls = i < typed ? "is-done" : i === typed ? "is-next" : "";
-        return `<span class="${cls}">${ch}</span>`;
+        let cls = i < typed ? "is-done" : i === typed ? "is-next" : "";
+        if (i === typed && performance.now() < missUntil) cls += " is-miss";
+        return `<span class="${cls}">${escapeHtml(ch)}</span>`;
       })
       .join("");
   }
@@ -95,17 +107,18 @@
     track.innerHTML = cells.join("");
     if (meta) {
       const gap = Math.max(0, playerPos - policePos).toFixed(1);
-      meta.textContent = `间距 ${gap} · 终点 ${TRACK_LEN}`;
+      const left = Math.max(0, sentence.length - typed);
+      meta.textContent = `间距 ${gap} · 终点 ${TRACK_LEN} · 本句剩 ${left} 字`;
     }
   }
 
-  function setStunVisual(on) {
+  function setMissVisual(on) {
     const stage = $("qte-stage");
     const stun = $("qte-stun");
-    if (stage) stage.classList.toggle("is-stunned", on);
+    if (stage) stage.classList.toggle("is-miss", on);
     if (stun) {
       stun.classList.toggle("hidden", !on);
-      if (on) stun.textContent = "硬直！";
+      if (on) stun.textContent = "错字";
     }
   }
 
@@ -131,10 +144,12 @@
     if (hint) hint.classList.toggle("hidden", !show);
   }
 
-  function nextWord() {
-    word = pickWord();
+  function nextSentence() {
+    sentence = pickSentence();
     typed = 0;
-    renderWord();
+    missUntil = 0;
+    setMissVisual(false);
+    renderSentence();
   }
 
   function finish(ok, message) {
@@ -144,7 +159,7 @@
     cancelAnimationFrame(raf);
     raf = 0;
     window.removeEventListener("keydown", onKey, true);
-    setStunVisual(false);
+    setMissVisual(false);
     setCountdownVisual(null);
     showReady(false);
     setStatus(message, ok ? "ok" : "bad");
@@ -170,10 +185,12 @@
     lastTs = ts;
 
     const now = performance.now();
-    const stunned = now < stunUntil;
-    setStunVisual(stunned);
+    setMissVisual(now < missUntil);
+    if (now >= missUntil) {
+      // 错字闪过后刷新当前字样式
+      renderSentence();
+    }
 
-    // 警察恒速前进（硬直时警察不停——这才叫惩罚）
     policePos = Math.min(TRACK_LEN, policePos + POLICE_SPEED * dt);
     if (policePos >= playerPos - 0.05) {
       renderTrack();
@@ -188,14 +205,14 @@
     phase = "countdown";
     showReady(false);
     countdownIdx = 0;
-    setStatus("盯着倒计时，准备打字。", "");
+    setStatus("盯着倒计时，准备打一整句。", "");
     const step = () => {
       if (phase !== "countdown") return;
       if (countdownIdx >= COUNTDOWN.length) {
         setCountdownVisual(null);
         phase = "race";
-        nextWord();
-        setStatus("打出单词往前跑！打错会硬直。", "");
+        nextSentence();
+        setStatus("打完整句往前跑。打错只闪一下，进度不清空。", "");
         lastTs = 0;
         raf = requestAnimationFrame(raceTick);
         return;
@@ -210,35 +227,43 @@
   function onKey(e) {
     if (!active || phase !== "race") return;
     if (["Tab", "Escape"].includes(e.key)) return;
+    // 空格要吃掉；忽略组合修饰单独按下
     if (e.key.length !== 1) return;
     e.preventDefault();
 
-    if (performance.now() < stunUntil) return;
-
-    const expect = word[typed];
+    const now = performance.now();
+    const expect = sentence[typed];
     if (!expect) return;
-    const got = e.key.toLowerCase();
-    if (got === expect.toLowerCase()) {
+    const got = e.key;
+    const match =
+      expect === " "
+        ? got === " "
+        : got.toLowerCase() === expect.toLowerCase();
+
+    if (match) {
       typed += 1;
-      renderWord();
-      if (typed >= word.length) {
-        playerPos = Math.min(TRACK_LEN, playerPos + WORD_STEP);
+      missUntil = 0;
+      setMissVisual(false);
+      renderSentence();
+      renderTrack();
+      if (typed >= sentence.length) {
+        playerPos = Math.min(TRACK_LEN, playerPos + SENTENCE_STEP);
         renderTrack();
         if (playerPos >= TRACK_LEN - 0.01) {
           escaped();
           return;
         }
-        nextWord();
+        nextSentence();
+        setStatus("一句打完，继续下一句！", "ok");
       }
       return;
     }
 
-    // 打错：明显硬直，当前词进度清零
-    typed = 0;
-    renderWord();
-    stunUntil = performance.now() + STUN_MS;
-    setStunVisual(true);
-    setStatus("打错了——腿一软！", "bad");
+    // 打错：进度保留，仅短闪提示，可马上再打当前字
+    missUntil = now + MISS_FLASH_MS;
+    setMissVisual(true);
+    renderSentence();
+    setStatus("打错了——进度还在，再打这个字。", "bad");
     const stage = $("qte-stage");
     if (stage) {
       stage.classList.remove("qte-shake");
@@ -258,21 +283,21 @@
     if (lead) {
       lead.textContent =
         opts.lead ||
-        "你是小偷：打对单词往门口跑。警察匀速追。打错会硬直停手。先点「开始追逐」，倒计时后再打字。";
+        "你是小偷：打完整句英文往门口跑。警察匀速追（偏慢）。打错只闪一下、不清空进度。先点「开始追逐」，倒计时后再打字。";
     }
     onDone = opts.onDone || null;
     active = true;
     phase = "ready";
     playerPos = PLAYER_START;
     policePos = POLICE_START;
-    word = "";
+    sentence = "";
     typed = 0;
-    usedWords = new Set();
-    stunUntil = 0;
-    setStunVisual(false);
+    usedSentences = new Set();
+    missUntil = 0;
+    setMissVisual(false);
     setCountdownVisual(null);
     setStatus("用鼠标点开始——倒计时后再碰键盘。", "");
-    renderWord();
+    renderSentence();
     renderTrack();
     showReady(true);
     const go = $("btn-qte-go");
@@ -294,12 +319,12 @@
     countdownTimer = 0;
     window.removeEventListener("keydown", onKey, true);
     onDone = null;
-    setStunVisual(false);
+    setMissVisual(false);
     setCountdownVisual(null);
     showReady(false);
-    word = "";
+    sentence = "";
     typed = 0;
-    renderWord();
+    renderSentence();
   }
 
   function isRunning() {

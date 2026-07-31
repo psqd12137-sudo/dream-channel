@@ -156,10 +156,19 @@
     if (from >= 0) tryMove(from);
   }
 
+  function setRefreshVisible(show) {
+    const btn = $("btn-puzzle-refresh");
+    if (btn) {
+      btn.classList.toggle("hidden", !show);
+      btn.disabled = !show;
+    }
+  }
+
   function finish(ok, message) {
     if (!active) return;
     active = false;
     window.removeEventListener("keydown", onKey, true);
+    setRefreshVisible(false);
     setStatus(message, ok ? "ok" : "bad");
     const grid = $("puzzle-grid");
     if (grid) {
@@ -174,6 +183,16 @@
     }, 480);
   }
 
+  /** 重新打乱局面并重置步数（不算失败） */
+  function refresh() {
+    if (!active) return;
+    board = shuffleFromSolved();
+    movesLeft = MOVE_BUDGET;
+    ignoreUntil = performance.now() + 180;
+    setStatus("局面已刷新，步数重置。", "");
+    renderBoard();
+  }
+
   /**
    * @param {{ title?: string, lead?: string, onDone?: (r:{ok:boolean,message:string})=>void }} opts
    */
@@ -185,7 +204,7 @@
     if (lead) {
       lead.textContent =
         opts.lead ||
-        "把 1–8 滑回顺序，空格在右下。点邻格或用方向键/WASD。步数用尽或放弃都算失手——成功才能翻静室奖励。";
+        "把 1–8 滑回顺序，空格在右下。点邻格或用方向键/WASD。可「刷新局面」重洗并重置步数；步数用尽或放弃都算失手——成功才能翻静室奖励。";
     }
     board = shuffleFromSolved();
     movesLeft = MOVE_BUDGET;
@@ -193,6 +212,9 @@
     active = true;
     ignoreUntil = performance.now() + 220;
     setStatus("拼吧。", "");
+    setRefreshVisible(true);
+    const refreshBtn = $("btn-puzzle-refresh");
+    if (refreshBtn) refreshBtn.onclick = () => refresh();
     renderBoard();
     window.addEventListener("keydown", onKey, true);
   }
@@ -201,6 +223,7 @@
     active = false;
     window.removeEventListener("keydown", onKey, true);
     onDone = null;
+    setRefreshVisible(false);
     const grid = $("puzzle-grid");
     if (grid) grid.innerHTML = "";
   }
@@ -215,5 +238,5 @@
     finish(false, message || "你把雪花屏推回了雪花。");
   }
 
-  global.CabinPuzzle = { start, stop, isRunning, forfeit, keyOf };
+  global.CabinPuzzle = { start, stop, isRunning, forfeit, refresh, keyOf };
 })(window);

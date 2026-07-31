@@ -6,7 +6,15 @@
   "moveCost": 1,
   "hostilePassCost": 1,
   "starter": ["jab", "jab", "jab", "guard", "guard", "guard", "keepsake", "focus", "tonic", "flare"],
-  "rewardPool": ["jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline", "plans", "stash", "keepsake", "snare", "shove", "brace", "riposte", "fling"],
+  "rewardPool": [
+    "jab", "guard", "focus", "flare", "heavy", "tonic", "adrenaline",
+    "plans", "stash", "keepsake", "snare", "shove", "brace", "riposte", "fling",
+    "glare", "afterimage", "strobe",
+    "foothold", "drop_hammer", "topple",
+    "usher", "rift_fling", "warp_trap",
+    "chisel", "rupture", "breach",
+    "puppet_bang", "salt_lash", "poise"
+  ],
   "cards": {
     "jab": {
       "id": "jab",
@@ -21,7 +29,7 @@
       "name": "盐圈",
       "type": "place",
       "cost": 1,
-      "text": "放在邻格。敌人进入多耗 1 体力；你站在上面受击时格挡 +2。",
+      "text": "放在邻格。敌人进入多耗 1 行动力；你站在上面受击时格挡 +2。",
       "place": { "enterTax": 1, "coverBlock": 2, "glyph": "盐" }
     },
     "focus": {
@@ -78,7 +86,7 @@
       "name": "补剂",
       "type": "medicine",
       "cost": 0,
-      "text": "立刻体力 +2。可被偷。",
+      "text": "立刻行动力 +2。可被偷。",
       "gainEnergy": 2,
       "stealable": true
     },
@@ -87,7 +95,7 @@
       "name": "肾上腺素",
       "type": "medicine",
       "cost": 1,
-      "text": "立刻体力 +3，自伤 1。可被偷。",
+      "text": "立刻行动力 +3，自伤 1。可被偷。",
       "gainEnergy": 3,
       "selfDamage": 1,
       "stealable": true
@@ -107,8 +115,11 @@
       "name": "绊线",
       "type": "place",
       "cost": 1,
-      "text": "邻格放置。敌人踩上后朝当前嘲讽目标（傀儡优先）再被迫走 1 步。",
-      "place": { "onStep": { "forceStepTowardGoal": true }, "glyph": "绊" }
+      "text": "邻格放置：立刻把周围九宫格内最多 2 件伤害道具（刺/闪/坠）收束到此格，合并为集束陷阱——伤害合计上限 5，含闪光则保留致盲。若无可收束，留下 1 伤绊索。不拉盐圈与纸影。",
+      "place": {
+        "glyph": "绊",
+        "gather": { "maxItems": 2, "damageCap": 5, "fallbackDamage": 1 }
+      }
     },
     "shove": {
       "id": "shove",
@@ -141,6 +152,132 @@
       "cost": 1,
       "text": "预备（同时只能挂一个）。敌方走进你相邻十字格时：强制甩开 1 格——优先甩进邻接刺/盐，贴脸时也可甩进你身后的机关；没有机关才推空地。空地落点保底 1 伤并削韧。",
       "ready": { "shove": true }
+    },
+    "glare": {
+      "id": "glare",
+      "name": "眩光粉",
+      "type": "place",
+      "cost": 1,
+      "text": "邻格放置，或砸敌人脚下立刻 1 伤并闪瞎 1 敌回合。比闪光雷便宜的控场入口。",
+      "place": { "onStep": { "damage": 1, "blind": true }, "glyph": "眩" }
+    },
+    "afterimage": {
+      "id": "afterimage",
+      "name": "残像",
+      "type": "skill",
+      "cost": 1,
+      "text": "若敌正被闪瞎：造成 2 伤并削韧 1。否则立刻闪瞎它 1 敌回合（无伤害）。",
+      "ifBlinded": { "damage": 2, "tough": 1 },
+      "elseBlind": 1
+    },
+    "foothold": {
+      "id": "foothold",
+      "name": "登台",
+      "type": "skill",
+      "cost": 1,
+      "text": "若上下左右邻格有更高处：立刻移过去（不另耗行动力）。没有更高邻格则打不出。",
+      "climbToHigher": true
+    },
+    "drop_hammer": {
+      "id": "drop_hammer",
+      "name": "落锤",
+      "type": "place",
+      "cost": 2,
+      "text": "邻格放置，或砸敌人脚下立刻 3 伤。若你所在格高于目标，改为高台加成 +2（普通砸击是 +1）。",
+      "place": { "onStep": { "damage": 3 }, "glyph": "锤", "heightSmashExtra": 2 }
+    },
+    "usher": {
+      "id": "usher",
+      "name": "引渡",
+      "type": "skill",
+      "cost": 1,
+      "text": "需与敌人邻接：立刻推开 1 格——优先甩向传送格（与「推撞」相反）。若因此传送：抽 1。撞墙削韧 1。",
+      "shove": true,
+      "preferPortal": true,
+      "drawOnPortal": 1
+    },
+    "rift_fling": {
+      "id": "rift_fling",
+      "name": "穿堂",
+      "type": "ready",
+      "cost": 1,
+      "text": "预备。敌方走进相邻十字时强制甩开——优先甩向传送格；若传送成功抽 1。无传送门时行为近似「甩开」。",
+      "ready": { "shove": true, "preferPortal": true, "drawOnPortal": 1 }
+    },
+    "chisel": {
+      "id": "chisel",
+      "name": "凿钉",
+      "type": "place",
+      "cost": 1,
+      "text": "邻格放置，或砸敌人脚下立刻 1 伤并削韧 2。踩上则 1 伤并削韧 1。打血前半专用。",
+      "place": { "onStep": { "damage": 1, "tough": 1 }, "glyph": "凿", "smashTough": 2 }
+    },
+    "rupture": {
+      "id": "rupture",
+      "name": "崩裂",
+      "type": "skill",
+      "cost": 1,
+      "text": "立刻削韧 2。若因此破韧：抽 1。若本来就已破韧：下一件放置费用 -1。",
+      "drainTough": 2,
+      "drawOnBreak": 1,
+      "discountIfBroken": 1
+    },
+    "strobe": {
+      "id": "strobe",
+      "name": "长闪",
+      "type": "place",
+      "cost": 2,
+      "text": "邻格放置，或砸敌人脚下立刻 2 伤，并闪瞎 2 个敌方回合。比闪光雷控场更久、伤害略低。",
+      "place": { "onStep": { "damage": 2, "blind": true, "blindTurns": 2 }, "glyph": "长" }
+    },
+    "topple": {
+      "id": "topple",
+      "name": "击落",
+      "type": "skill",
+      "cost": 1,
+      "text": "需你所在格高于敌人：立刻造成 2 伤并削韧 1。不在高位则打不出。",
+      "topple": true
+    },
+    "warp_trap": {
+      "id": "warp_trap",
+      "name": "隙刺",
+      "type": "place",
+      "cost": 1,
+      "text": "邻格放置，或砸敌人脚下立刻 2 伤。若敌人刚经传送落到此格（隧道连击），再 +2 伤。",
+      "place": { "onStep": { "damage": 2, "portalBonus": 2 }, "glyph": "隙" }
+    },
+    "breach": {
+      "id": "breach",
+      "name": "破壳",
+      "type": "place",
+      "cost": 2,
+      "text": "邻格放置，或砸敌人脚下立刻 2 伤并削韧 3。若目标已破韧：砸击额外 +2。",
+      "place": { "onStep": { "damage": 2 }, "glyph": "破", "smashTough": 3, "smashBonusIfBroken": 2 }
+    },
+    "puppet_bang": {
+      "id": "puppet_bang",
+      "name": "影爆",
+      "type": "skill",
+      "cost": 1,
+      "text": "消耗。场上需有纸影：立刻造成 3 伤，并引爆消散该傀儡。",
+      "exhaust": true,
+      "puppetBang": { "damage": 3 }
+    },
+    "salt_lash": {
+      "id": "salt_lash",
+      "name": "盐鞭",
+      "type": "skill",
+      "cost": 1,
+      "text": "若敌人正站在盐圈上：造成 2 伤并削韧 1。否则打不出。",
+      "saltLash": { "damage": 2, "tough": 1 }
+    },
+    "poise": {
+      "id": "poise",
+      "name": "蓄势",
+      "type": "ready",
+      "cost": 1,
+      "text": "预备。敌方走进相邻十字时：获得 1 格挡并抽 1，然后解除。",
+      "ready": { "gainBlock": 1, "draw": 1 }
     }
   }
 }

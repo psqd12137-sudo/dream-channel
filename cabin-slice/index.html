@@ -4,24 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>织梦频道 channel dream · 山屋</title>
-  <link rel="stylesheet" href="css/style.css?v=20260730battleCalm" />
+  <link rel="stylesheet" href="css/style.css?v=20260731handFixed" />
 </head>
 <body class="landscape">
   <div class="app">
     <div class="bg-grid" aria-hidden="true"></div>
     <div class="bg-blobs" aria-hidden="true"></div>
 
-    <header class="app-header">
-      <div class="brand">
-        <img class="brand-avatar" src="assets/ui/chars/SP_Lili_Profile.png" alt="" width="56" height="56" />
-        <div class="brand-text">
-          <p class="brand-mark">channel dream</p>
-          <h1 class="brand-title">织梦频道</h1>
-        </div>
-      </div>
-      <div id="stats" class="stat-strip" aria-label="状态"></div>
-      <button id="btn-mute" class="btn btn-ticket btn-ghost" type="button">音乐：开</button>
-    </header>
+    <!-- 顶栏已撤：静音/生命迁到各屏面板头，避免占版 -->
+    <div id="stats" class="stat-strip visually-hidden" aria-hidden="true"></div>
 
     <main class="app-main">
       <section id="screen-title" class="panel panel-title active">
@@ -42,12 +33,13 @@
               <button id="btn-start" class="btn btn-primary btn-ticket btn-start">打开电视机</button>
               <button id="btn-tutorial" class="btn btn-primary btn-ticket" type="button">新手教学</button>
               <button id="btn-continue" class="btn btn-secondary btn-ticket hidden">接着看上集</button>
+              <button id="btn-mute" class="btn btn-ghost btn-ticket" type="button">音乐：开</button>
             </div>
             <details class="debug-fold">
               <summary>调试入口</summary>
               <div class="title-actions debug-actions">
                 <button id="btn-fling-test" class="btn btn-ghost btn-ticket" type="button">测预备·甩开</button>
-                <button id="btn-boss-test" class="btn btn-ghost btn-ticket" type="button">跳到 Boss（测强度）</button>
+                <button id="btn-boss-test" class="btn btn-ghost btn-ticket" type="button">测 Boss · 选体系牌组</button>
                 <button id="btn-sideview-test" class="btn btn-ghost btn-ticket" type="button">测 WASD 手感（临时）</button>
                 <button id="btn-qte-test" class="btn btn-ghost btn-ticket" type="button">测警察抓小偷</button>
                 <button id="btn-puzzle-test" class="btn btn-ghost btn-ticket" type="button">测八数码拼图</button>
@@ -85,8 +77,10 @@
                 <p class="pane-kicker" id="run-progress">今天的行程 0 / 10</p>
                 <h2 id="room-name">玄关</h2>
                 <p class="map-seed" id="map-seed" aria-live="polite"></p>
+                <p id="pane-vitals" class="pane-vitals" aria-live="polite"></p>
               </div>
               <div class="map-tools">
+                <button id="btn-mute-map" class="btn btn-ticket btn-ghost" type="button">音乐：开</button>
                 <button id="btn-restart-run" class="btn btn-ticket btn-ghost" type="button" title="放弃本集进度，重开一局（新平面图）">重开</button>
                 <button id="btn-home" class="btn btn-ticket btn-ghost" type="button" title="回到标题">回首页</button>
                 <span id="room-tag" class="chip">散步时间</span>
@@ -174,6 +168,7 @@
               </div>
               <div class="battle-top-right">
                 <div class="battle-menu">
+                  <button id="btn-mute-battle" class="btn btn-ticket btn-ghost" type="button">音乐：开</button>
                   <button id="btn-combat-home" class="btn btn-ticket btn-ghost" type="button" title="回到标题（可接着看上集）">主页</button>
                 </div>
               </div>
@@ -269,10 +264,6 @@
                 <span><i class="dot dot-pending"></i>预告</span>
                 <span><i class="dot dot-intent-move"></i>它走</span>
                 <span><i class="dot dot-move"></i>能走</span>
-                <span><i class="dot dot-void"></i>空洞(不画)</span>
-                <span><i class="dot dot-high"></i>高台</span>
-                <span><i class="dot dot-ready"></i>预备</span>
-                <span><i class="dot dot-anchor"></i>锚</span>
               </div>
               <div id="battle-grid" class="battle-grid" aria-label="战斗场地"></div>
               <div id="combo-toast" class="combo-toast" aria-live="polite"></div>
@@ -356,11 +347,11 @@
           <p id="qte-lead" class="qte-lead"></p>
           <div id="qte-stage" class="qte-stage" aria-live="polite">
             <div id="qte-countdown" class="qte-countdown hidden" aria-hidden="true"></div>
-            <div id="qte-stun" class="qte-stun hidden" aria-live="assertive">硬直！</div>
+            <div id="qte-stun" class="qte-stun hidden" aria-live="assertive">错字</div>
             <div id="qte-track" class="qte-track" aria-label="追逐赛道"></div>
             <p id="qte-meta" class="qte-meta"></p>
-            <div id="qte-word" class="qte-word" aria-label="当前单词"></div>
-            <p id="qte-ready-hint" class="qte-ready-hint">先点下面的按钮，倒计时结束后再打字。</p>
+            <div id="qte-word" class="qte-word" aria-label="当前句子"></div>
+            <p id="qte-ready-hint" class="qte-ready-hint">先点下面的按钮，倒计时结束后再打完整句。</p>
             <p id="qte-status" class="qte-status">准备…</p>
           </div>
           <div class="qte-actions">
@@ -382,6 +373,7 @@
             <p id="puzzle-status" class="puzzle-status">准备…</p>
           </div>
           <div class="puzzle-actions">
+            <button id="btn-puzzle-refresh" class="btn btn-secondary btn-ticket" type="button">刷新局面</button>
             <button id="btn-puzzle-forfeit" class="btn btn-ghost btn-ticket" type="button">放弃考验</button>
             <button id="btn-puzzle-exit" class="btn btn-secondary btn-ticket hidden" type="button">回到标题</button>
           </div>
@@ -394,8 +386,8 @@
 
   <script src="js/audio.js?v=20260730chase"></script>
   <script src="js/sideview.js?v=20260730chase"></script>
-  <script src="js/qte.js?v=20260730chase"></script>
-  <script src="js/puzzle.js?v=20260730chase"></script>
-  <script src="js/game.js?v=20260730battleCalm"></script>
+  <script src="js/qte.js?v=20260731qteEasy"></script>
+  <script src="js/puzzle.js?v=20260731refresh"></script>
+  <script src="js/game.js?v=20260731handFixed"></script>
 </body>
 </html>

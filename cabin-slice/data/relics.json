@@ -3,7 +3,7 @@
     "omen_signal": {
       "id": "omen_signal",
       "name": "预兆·串台",
-      "desc": "战斗开始时体力骰结果 +1（总池）。不可被偷。",
+      "desc": "战斗开始时行动力骰结果 +1（总池）。不可被偷。",
       "effect": { "energyBonus": 1 }
     },
     "omen_salt": {
@@ -39,7 +39,7 @@
     "omen_boots": {
       "id": "omen_boots",
       "name": "预兆·胶靴",
-      "desc": "攀爬不额外耗体力。不可被偷。",
+      "desc": "攀爬不额外耗行动力。不可被偷。",
       "effect": { "ignoreClimb": true }
     },
     "omen_bell": {
