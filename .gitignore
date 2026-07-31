@@ -30,4 +30,5 @@ node_modules/
 .cache/
 cabin-slice/lab-selftest.json
 cabin-slice/lab-full-selftest.json
+cabin-slice/lab-hunt-selftest.json
 

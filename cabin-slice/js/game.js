@@ -5343,15 +5343,15 @@ function buildEncounter(room, isBoss) {
   }
   const src = isBoss
     ? state.data.bosses.bosses[state.chosenBoss]
-    : room.enemy || { name: "剪影", hp: 6, damage: 1 };
-  const contentKey = room.contentId || room.id;
+    : room?.enemy || { name: "剪影", hp: 6, damage: 1 };
+  const contentKey = room?.contentId || room?.id;
   const archId = isBoss
     ? P.boss.archetype
-    : P.roomArchetype[contentKey] || P.roomArchetype[room.id] || "execute";
+    : P.roomArchetype[contentKey] || P.roomArchetype[room?.id] || "execute";
   const arch = P.archetypes[archId];
   const traits = isBoss
     ? [...(P.boss.traits || [])]
-    : [...(P.roomTraits[contentKey] || P.roomTraits[room.id] || [])];
+    : [...(P.roomTraits[contentKey] || P.roomTraits[room?.id] || [])];
   const tier = isBoss ? 5 : combatTier();
   const scale = tierScale(tier);
   const hp = src.hp + scale.hp + (isBoss ? 2 : 0);
