@@ -56,6 +56,48 @@ python3 -m http.server 8787
 
 细则： [cabin-slice/README.md](./cabin-slice/README.md)、[data/run-scheme.md](./cabin-slice/data/run-scheme.md)、[data/cards-rules.md](./cabin-slice/data/cards-rules.md)
 
+## 技术方案（当前）
+
+**纯前端原型**：HTML/CSS/JS + JSON 数据驱动，无框架、无构建步骤，`python3 -m http.server` 即可跑。正式单机样片预计 Godot 4.x，数据保持 JSON/Resource 驱动以利规则迁移。
+
+### 架构
+
+| 文件 | 职责 |
+| --- | --- |
+| `index.html` | 单页多屏（标题 / 探索 / 战斗 / 沙盒），挂 CSS + 5 个 JS 模块 |
+| `js/game.js` | 核心（约 8.5k 行）：状态机、探索、战斗、Boss、存档、遥测 |
+| `js/audio.js` | Web Audio 程序化音效（振荡器 + 滤波合成，无音频文件） |
+| `js/sideview.js` | 2D WASD 横版手感沙盒（临时占位，3D 微缩前） |
+| `js/qte.js` | 打字追逐 QTE（警察抓小偷，整句容错） |
+| `js/puzzle.js` | 八数码滑块拼图（保证可解滑乱 + 每局 3 次刷新） |
+| `data/*.json` | 内容数据：rooms / cards / relics / bosses / pressure / tutorial |
+
+### 关键系统
+
+| 系统 | 实现 |
+| --- | --- |
+| 伪随机平面图 | mulberry32 种子 PRNG（`makeRng(seed)`）；`runSeed` 落盘可复现；拓扑：树 / 网 / 混合 / 脊 / 翼 |
+| 摆房盖屋 | `layoutRoll.mode=player`：抽房 → 旋转门形 → 双边开门连通 |
+| 行程配比 | `visitMix` ≈ 惊吓 40% / 静室 35% / 事件 25%，按种子分配 `runRole` |
+| 战斗寻路 | 网格 + 墙挡视线（LoS）；敌人绕墙追击 / 巡逻 / `lastSeen` 搜索 |
+| 意图预告 | 每回合模拟敌行动力预算 → 红格 = 会受伤；蓝虚线 = 它下一步 |
+| 空间连击 | 盐道 / 闪瞎 / 夹击 / 纸影 / 追击踩踏 / 高台砸击 / 隧道 |
+| Boss 仪式 | 双轨：熄锚 or 打血；播出进度满失败；蓄力砸地可灭锚 |
+| 存档 | `localStorage` `cabin-run-v3`：进度 + `runSeed` + `roomLayout`；旧档兼容补门形 / 行程 |
+| 实验遥测 | `cabin-lab-v1`：胜负 / 回合 / 输出 / 受伤 / 破韧 / 连击 / 牌库 / 遗物快照，最多 40 场可导出 JSON |
+| 事件小游戏 | QTE 打字追逐 + 八数码拼图，作为节拍器不替代主战斗 |
+
+### 自测与工具
+
+| 脚本 | 用途 |
+| --- | --- |
+| `scripts/full_selftest.py` | Playwright 全流程：开局→探索→战斗→Boss，5 条路线策略汇总 |
+| `scripts/boss_selftest.py` | Boss 仪式多场自测，汇总 lab |
+| `scripts/hunt_selftest.py` | 躲藏空转 5 场，检测「怪不找人」回归 |
+| `scripts/dump_lab_server.py` | 静态服务器 + `/__dump-lab` 把浏览器 lab JSON 落盘 |
+| `scripts/gen_ui_mock.py` | AI 生成 UI 概念 mock（多模态 hub） |
+| `scripts/ark_chat.py` | 火山方舟 LLM 聊天辅助（Key 放仓库根 `.env`，勿提交） |
+
 ## 文档入口
 
 | 文档 | 用途 |
