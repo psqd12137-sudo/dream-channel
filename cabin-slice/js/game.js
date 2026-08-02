@@ -46,7 +46,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 async function loadData() {
-  const bust = "v=20260802beamCharge";
+  const bust = "v=20260802bossPick";
   const [rooms, cards, relics, bosses, pressure] = await Promise.all([
     fetch(`data/rooms.json?${bust}`).then((r) => r.json()),
     fetch(`data/cards.json?${bust}`).then((r) => r.json()),
@@ -3954,19 +3954,49 @@ const BOSS_TEST_DECKS = {
   },
 };
 
+/** 调试：测 Boss 菜单当前选中的对手（auto = 按指纹分配） */
+let bossTestPick = "auto";
+
 function offerBossTestMenu() {
   show("screen-title");
   showModal("screen-event");
-  $("event-title").textContent = "测 Boss · 选体系牌组";
+  $("event-title").textContent = "测 Boss · 选对手与牌组";
   $("event-text").textContent =
-    "满血 8 · 速度 5 · 锈锁优先。场地=本集山屋平面（一房一格）。\n选一套体系预设牌库进决战；不覆盖正式存档流程（会清档开测）。";
+    "满血 8 · 速度 5 · 场地=本集山屋平面（一房一格）。\n先选对手（新剧本 Boss 带 ★；「按指纹」=按前/后段战斗数自动收束），再选体系牌库进决战；会清档开测。";
   $("btn-close-event").classList.add("hidden");
   clearRewardCards();
   hideCardTooltip();
   const box = $("event-choices");
   box.innerHTML = "";
+
+  const NEW_IDS = new Set(["director_cut", "hide_and_seek", "stars_align"]);
+  const opts = [
+    ["auto", "按指纹"],
+    ...Object.entries(state.data.bosses.bosses).map(([id, b]) => [
+      id,
+      NEW_IDS.has(id) ? `★${b.name}` : b.name,
+    ]),
+  ];
+  const pick = document.createElement("div");
+  pick.className = "event-boss-pick";
+  const draw = () => {
+    pick.innerHTML = "";
+    for (const [id, label] of opts) {
+      const b = document.createElement("button");
+      b.className = "btn boss-pick-btn" + (bossTestPick === id ? " chosen" : "");
+      b.textContent = label;
+      b.onclick = () => {
+        bossTestPick = id;
+        draw();
+      };
+      pick.appendChild(b);
+    }
+  };
+  draw();
+  box.appendChild(pick);
+
   for (const deck of Object.values(BOSS_TEST_DECKS)) {
-    addChoice(box, deck.name, "primary", () => skipToBossTest(deck.id));
+    addChoice(box, deck.name, "primary", () => skipToBossTest(deck.id, bossTestPick));
   }
   addChoice(box, "回标题", "", () => {
     showModal(null);
@@ -3982,7 +4012,7 @@ function offerBossTestMenu() {
 }
 
 /** 调试：模拟一局成长结束 + 满血，直接进 Boss 决战测强度 */
-function skipToBossTest(deckId = "grown") {
+function skipToBossTest(deckId = "grown", bossPick = null) {
   if (state.tutorial?.active) exitTutorialMode({ startReal: false });
   if (!state.data?.bosses?.bosses) {
     throw new Error("Boss 数据未加载，请刷新页面后再试。");
@@ -4001,11 +4031,6 @@ function skipToBossTest(deckId = "grown") {
   state.deck = shuffle(grown.map((id) => makeCard(id)));
   state.discard = [];
   state.relics = (preset.relics || []).filter((id) => !!relicDef(id));
-  // 优先硬壳锈锁；没有则退回规则锁定
-  state.chosenBoss = bossDef("rust_keeper") ? "rust_keeper" : pickBossId();
-  if (!bossDef(state.chosenBoss)) {
-    state.chosenBoss = Object.keys(state.data.bosses.bosses)[0];
-  }
   state.nodePending = false;
   state.combat = null;
   state.combatCount = 6;
@@ -4023,6 +4048,12 @@ function skipToBossTest(deckId = "grown") {
   state.visitPath = path;
   state.resolvedRooms = new Set(path);
   state.knownRooms = new Set(Object.keys(layout || { [startId]: 1 }));
+  // 指定对手优先；否则按指纹分配（含新剧本 Boss）
+  const want = bossPick && bossPick !== "auto" && bossDef(bossPick) ? bossPick : null;
+  state.chosenBoss = want || pickBossId();
+  if (!bossDef(state.chosenBoss)) {
+    state.chosenBoss = Object.keys(state.data.bosses.bosses)[0];
+  }
   $("log").innerHTML = "";
   show("screen-game");
   showModal(null);

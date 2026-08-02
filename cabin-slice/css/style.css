@@ -4080,6 +4080,25 @@ body.is-map-building .map-teeth-bot {
   border-radius: 4px;
 }
 
+.event-boss-pick {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0.4rem 0 0.15rem;
+}
+
+.event-boss-pick .boss-pick-btn {
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  min-height: 0;
+  box-shadow: 0 2px 0 var(--ink);
+}
+
+.event-boss-pick .boss-pick-btn.chosen {
+  background: linear-gradient(180deg, #ffe27a, var(--gold));
+}
+
 .lab-fold {
   margin-top: 14px;
   text-align: left;

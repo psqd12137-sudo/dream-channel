@@ -43,6 +43,39 @@
       "ritualVictory": "四枚信号锚熄灭。祭坛失去播出权，锈锁空转。",
       "defeat": "铁门在身后合上，节目重播。",
       "endingId": "end_rust"
+    },
+    "director_cut": {
+      "id": "director_cut",
+      "name": "疯狂导演",
+      "intro": "前段混入片场的喧闹，后段只剩剪刀声。导演说：今晚演不好，就把你剪掉。",
+      "hp": 17,
+      "damage": 2,
+      "victory": "你把场记板摔在导演脚边。他第一次喊了「过」，然后消失进黑暗。",
+      "ritualVictory": "信号锚全部熄灭，片场断电。导演在黑暗里咆哮着找备用胶片。",
+      "defeat": "你按导演的剧本倒下，镜头给了你一个特写。",
+      "endingId": "end_director"
+    },
+    "hide_and_seek": {
+      "id": "hide_and_seek",
+      "name": "躲猫猫小姐",
+      "intro": "前段飘着童谣，后段响起数数声。她说：数到十，找到你，你就当鬼。",
+      "hp": 15,
+      "damage": 2,
+      "victory": "你数到十回头，身后空无一人。她赌气说不玩了，溜回床底。",
+      "ritualVictory": "你把所有信号锚都「找到」了。她终于承认：这轮算你赢，下轮再玩。",
+      "defeat": "她在你背后轻轻说「找到了」。你成了下一个「它」。",
+      "endingId": "end_hide"
+    },
+    "stars_align": {
+      "id": "stars_align",
+      "name": "星位司仪",
+      "intro": "前段混入五芒星的烛火，后段血味渐重。司仪在等你凑满十三点祭品。",
+      "hp": 19,
+      "damage": 2,
+      "victory": "你打翻了祭坛。司仪尖叫着看邪神的光芒熄灭在阵心。",
+      "ritualVictory": "锚点尽灭，法阵缺了四角。邪神在最后一刻没能就位。",
+      "defeat": "你被放上祭坛。司仪念完最后一句，星光替你应了一声。",
+      "endingId": "end_stars"
     }
   },
   "endings": {
@@ -50,6 +83,9 @@
     "end_whisper": { "title": "结局·静音", "text": "墙内不再说话。你学会了沉默。" },
     "end_fog": { "title": "结局·散雾", "text": "山屋轮廓从未知变成已读。" },
     "end_rust": { "title": "结局·开锁", "text": "锈屑落下，像一场过期的雪。" },
+    "end_director": { "title": "结局·杀青", "text": "片场熄灯。最后一镜里，椅子还在，人已不在。" },
+    "end_hide": { "title": "结局·轮到你", "text": "整座山屋安静下来，只有她数到十。" },
+    "end_stars": { "title": "结局·就位", "text": "群星归位的那一晚，山屋的灯比任何时候都暗。" },
     "end_fail": { "title": "结局·被播映", "text": "你成为山屋频道的固定节目。" }
   },
   "rules": [
@@ -64,9 +100,24 @@
       "boss": "whisper_wall"
     },
     {
+      "id": "director",
+      "when": { "earlyCombat": 2, "lateCombatMax": 1 },
+      "boss": "director_cut"
+    },
+    {
+      "id": "hide",
+      "when": { "earlyCombat": 1, "lateCombatMax": 1 },
+      "boss": "hide_and_seek"
+    },
+    {
       "id": "fog",
-      "when": { "earlyCombatMax": 1, "lateCombatMax": 1 },
+      "when": { "earlyCombat": 0, "lateCombatMax": 1 },
       "boss": "fog_walker"
+    },
+    {
+      "id": "stars",
+      "when": { "earlyCombat": 0, "lateCombatMin": 2, "lateCombatMax": 2 },
+      "boss": "stars_align"
     },
     {
       "id": "rust_default",
