@@ -11,7 +11,8 @@ dream-channel/
   docs/                     # 策划、存疑、安装说明
     open-questions.md
     setup/
-    design/                 # 现行招标书 + archive/
+    design/                 # 现行招标书 + 玩法概念 + archive/
+    tech/                   # 技术方案与自测
   cabin-slice/              # 可玩竖切片（HTML/CSS/JS）
     data/                   # JSON + 切片内设计短稿
     js/ css/ assets/ scripts/

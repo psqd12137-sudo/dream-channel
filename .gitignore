@@ -28,6 +28,10 @@ node_modules/
 *.log
 .tmp/
 .cache/
+
+# 大型压缩包 / 资料库原件（已解压到临时目录，不入库）
+*.rar
+*.7z
 # 自测 lab 产物（不入库）
 cabin-slice/lab-*.json
 cabin-slice/cabin-lab-*.json

@@ -312,11 +312,12 @@ cd cabin-slice && python3 -m http.server 8787
 
 | 路径 | 用途 |
 | --- | --- |
-| [README.md](./README.md) | 仓库入口与正式名 |
-| [cabin-slice/README.md](./cabin-slice/README.md) | 切片玩法与节奏 |
-| [cabin-slice/data/run-scheme.md](./cabin-slice/data/run-scheme.md) | 战斗与成长细则 |
-| [cabin-slice/data/multiplayer-haunt-sketch.md](./cabin-slice/data/multiplayer-haunt-sketch.md) | 多人/终局短稿 |
-| [cabin-slice/](./cabin-slice/) | 可玩原型 |
+| [README.md](../../README.md) | 仓库入口与正式名 |
+| [docs/design/玩法拓展概念与设计轴.md](./玩法拓展概念与设计轴.md) | 玩法概念（设计轴 / 多人本质） |
+| [cabin-slice/README.md](../../cabin-slice/README.md) | 切片玩法与节奏 |
+| [cabin-slice/data/run-scheme.md](../../cabin-slice/data/run-scheme.md) | 战斗与成长细则 |
+| [cabin-slice/data/multiplayer-haunt-sketch.md](../../cabin-slice/data/multiplayer-haunt-sketch.md) | 多人/终局短稿 |
+| [cabin-slice/](../../cabin-slice/) | 可玩原型 |
 
 ---
 
