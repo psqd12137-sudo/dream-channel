@@ -33,7 +33,19 @@ python3 -m http.server 8787
 - **实验记录** `cabin-lab-v1`：每场战斗的胜负、回合、输出/受伤、破韧、连击、牌库与遗物快照会保留，标题页可导出 JSON（最多 40 场）
 - 自测脚本：`scripts/boss_selftest.py`、`scripts/full_selftest.py`（需 Playwright）
 
-新开一局请点「打开电视机」。没玩过尖塔/山屋可用「新手教学」。调试入口有「测预备·甩开」（走廊/小房独立切片，不写存档）、Boss / WASD / QTE 沙盒。
+新开一局请点「打开电视机」。没玩过可用「新手教学」（与正式局同一流程：盖屋 → 进门 → 开战，含放置 / 看格 / 预备甩开）。调试入口有「测预备·甩开」、Boss / WASD / QTE 沙盒。
+
+## 桌面版（Windows 单机 exe）
+
+- **分发包**：仓库根 `CabinSlice_织梦频道_Windows.zip`（双击 exe 即玩，内嵌全部资源，无需安装 / 联网）
+- **源码**：`desktop/launcher/`（Go 启动器：内嵌 web → 本地 127.0.0.1:17887 → 自动开浏览器）+ `desktop/build.sh`
+- **重新打包**（macOS 上，需 Go 1.21+）：
+
+```bash
+cd cabin-slice && ./desktop/build.sh
+```
+
+> 端口被占自动顺延；关掉控制台窗口即退出服务；首次运行如遇 SmartScreen，点「更多信息」→「仍要运行」。
 
 ## 一局怎么玩
 

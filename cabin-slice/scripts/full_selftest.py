@@ -101,6 +101,17 @@ CLICK_CHOICE_JS = r"""
     if (btn) { btn.click(); return { clicked: true, phase: "boss-enter" }; }
     return { clicked: false, phase: "boss" };
   }
+  // 八数码 / 警察追逐：直接放弃，保住流程推进（丢奖励但不卡死）
+  if (document.getElementById("screen-puzzle")?.classList.contains("active")) {
+    const f = document.getElementById("btn-puzzle-forfeit");
+    if (f) { f.click(); return { clicked: true, phase: "puzzle-forfeit" }; }
+    return { clicked: false, phase: "puzzle" };
+  }
+  if (document.getElementById("screen-qte")?.classList.contains("active")) {
+    const f = document.getElementById("btn-qte-forfeit");
+    if (f) { f.click(); return { clicked: true, phase: "qte-forfeit" }; }
+    return { clicked: false, phase: "qte" };
+  }
   if (!(event && event.classList.contains("active"))) return { clicked: false, phase: "none" };
 
   // 奖励卡上的「带上 / 收下」
@@ -308,8 +319,13 @@ COMBAT_STEP_JS = r"""
   const hasReadyInHand = !!pickReadyCard();
   const wantReadyPlay = readyBias >= 0.3 && (readyBias >= 0.5 || hasReadyInHand || Math.random() < readyBias);
 
+  // 蹲守超时：挂预备后连等 3 拍怪物不踩触发带 → 放弃引怪，转主动输出
+  window.__sw_wait = window.__sw_wait || 0;
+  const stallBroke = window.__sw_wait >= 3;
+  if (stallBroke) window.__sw_wait = 0;
+
   // —— 已挂预备：引怪 / 侧刺 / 推开再引 ——
-  if (armed) {
+  if (armed && !stallBroke) {
     const isShoveReady = !!armed.effect?.shove;
     const trapsNear = floorTrapCountNear(c.playerPos);
     if (trapsNear < 1 && c.energy > 0) {
@@ -331,16 +347,19 @@ COMBAT_STEP_JS = r"""
           }
         }
         D.endTurn();
+        window.__sw_wait += 1;
         return { done: false, action: "end-await-ready" };
       }
       // 标准预备在贴脸时已不该还挂着（走进来应已触发）；拉开再引
       if (stepAway(true)) return { done: false, action: "pull-for-ready" };
       D.endTurn();
+      window.__sw_wait += 1;
       return { done: false, action: "end-ready-adj" };
     }
     // 距离 2：停住让它走进触发带
     if (dist === 2 && c.playerSeesEnemy) {
       D.endTurn();
+      window.__sw_wait += 1;
       return { done: false, action: "end-lure-ready" };
     }
     // 更远：靠近到 2
@@ -488,6 +507,80 @@ EXPLORE_STEP_JS = r"""
   if (st.nodePending) {
     D.resolveCurrentNode();
     return { action: "resolve-node", room: st.roomId };
+  }
+
+  // 玩家摆房模式：盖房 → 走进 → 结算交替推进；当前房没空位则 BFS 导航去可建房
+  if (D.isPlayerLayoutMode && D.isPlayerLayoutMode()) {
+    const hereR = D.roomDef(st.roomId);
+    if (st.mapBuild) {
+      const offers = st.mapBuild.offers || [];
+      if (!offers.length) {
+        D.cancelMapBuild();
+        return { action: "build-cancel" };
+      }
+      let best = 0;
+      let bestScore = -1e9;
+      offers.forEach((o, i) => {
+        let s = Math.random() * 0.2;
+        if (o.role === "combat") s += preferCombat;
+        else if (o.role === "quiet") s += preferQuiet;
+        else s += (preferCombat + preferQuiet) * 0.5;
+        // 专项验证长廊/画廊的蓄力激光房
+        if (o.contentId && /hall|gallery/.test(o.contentId)) s += 0.25;
+        if (s > bestScore) { bestScore = s; best = i; }
+      });
+      D.selectMapBuildPick(best);
+      D.commitMapBuild();
+      return { action: "build", room: offers[best]?.name, role: offers[best]?.role };
+    }
+    const bfsNext = (pred) => {
+      const seen = new Set([st.roomId]);
+      const q = [[st.roomId, null]];
+      while (q.length) {
+        const [id, hop] = q.shift();
+        if (id !== st.roomId && pred(id)) return hop;
+        for (const eid of D.roomDef(id)?.exits || []) {
+          if (seen.has(eid)) continue;
+          seen.add(eid);
+          q.push([eid, hop === null ? eid : hop]);
+        }
+      }
+      return null;
+    };
+    // 1) 有未结算邻房 → 走进去
+    const unvisited = (hereR?.exits || []).filter((id) => !st.resolvedRooms.has(id));
+    if (unvisited.length) {
+      const id = unvisited[0];
+      D.moveTo(id);
+      return { action: "move", to: id, name: D.roomDef(id)?.name };
+    }
+    // 2) 当前房有可建位 → 盖
+    const slots = D.listBuildSlots();
+    if (slots.length) {
+      const pool = slots.filter((s) => s.fromId === st.roomId);
+      if (pool.length) {
+        const slot = pool[Math.floor(Math.random() * pool.length)];
+        D.openMapBuildAt(slot.col, slot.row);
+        return { action: "open-build", col: slot.col, row: slot.row };
+      }
+      // 3) 走到最近的能盖房
+      const withSlots = new Set(slots.map((s) => s.fromId));
+      const hop = bfsNext((id) => withSlots.has(id));
+      if (hop) {
+        D.moveTo(hop);
+        return { action: "walk-build", to: hop, name: D.roomDef(hop)?.name };
+      }
+    }
+    // 4) 兜底：去任意可走房（通常不会到这）
+    const anyExit = (hereR?.exits || []).filter((id) => !D.roomDef(id)?.bossRoom);
+    if (anyExit.length) {
+      const hop = bfsNext((id) => id !== st.roomId);
+      if (hop) {
+        D.moveTo(hop);
+        return { action: "wander", to: hop };
+      }
+    }
+    return { action: "stuck", room: st.roomId };
   }
 
   const here = D.roomDef(st.roomId);

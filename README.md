@@ -2,13 +2,14 @@
 
 多人协作仓库：**设计文档在 `docs/`，可玩竖切片在 `cabin-slice/`。**
 
-远程：https://github.com/psqd12137-sudo/dream-channel  
+远程：https://github.com/psqd12137-sudo/dream-channel
 
 ## 这是什么
 
-- **产品名**：织梦频道（channel dream）  
-- **玩法方向**：梦境探索 · 战棋走位 · 卡牌（放置 / 移动 / 连击），**不做**山屋惊魂式力量拼点  
+- **产品名**：织梦频道（channel dream）
+- **玩法方向**：梦境探索 · 战棋走位 · 卡牌（放置 / 移动 / 连击），**不做**山屋惊魂式力量拼点
 - **当前可玩**：`cabin-slice/` —— 浏览器竖切片（地图、战斗、存档、伪随机平面图等）
+- **Windows 单机版**：`CabinSlice_织梦频道_Windows.zip`（双击即玩，见 [cabin-slice/README.md](./cabin-slice/README.md) 的「桌面版」小节）
 
 成长主轴是否从「牌库构筑」改成「能力值」仍在 **存疑**，见 [docs/open-questions.md](./docs/open-questions.md)。先别按新轴大改代码。
 
@@ -16,21 +17,24 @@
 
 ```text
 dream-channel/
-├── README.md                 ← 你在这里
-├── CONTRIBUTING.md           ← 分支 / PR / 改哪份文件
-├── docs/
-│   ├── README.md             ← 文档索引
-│   ├── open-questions.md     ← 存疑议题
-│   ├── setup/                ← 新机器拉取
-│   └── design/               ← 现行策划 + archive/
-└── cabin-slice/              ← 可玩切片（HTML / CSS / JS）
-    ├── index.html
-    ├── data/                 ← JSON + 切片规则短稿
-    ├── js/ css/ assets/
-    └── scripts/              ← 自测脚本
+├── README.md                  ← 你在这里（仓库导航 + 文档总览）
+├── CONTRIBUTING.md            ← 分支 / PR / 改哪份文件
+├── CabinSlice_织梦频道_Windows.zip   ← Windows 单机版分发包
+├── apps/                      ← 预留：多端 / 多切片工程（含 README）
+├── docs/                      ← 设计文档（含 README 索引）
+│   ├── README.md              ← 文档索引
+│   ├── open-questions.md      ← 存疑议题
+│   ├── design/                ← 现行策划 + archive/ 历史稿
+│   └── setup/                 ← 环境接入 / 新机器拉取
+├── cabin-slice/               ← 可玩切片（HTML / CSS / JS）
+│   ├── README.md              ← 切片说明 + 桌面版打包
+│   ├── index.html
+│   ├── data/                  ← JSON 内容 + 规则短稿（*.md）
+│   ├── js/ css/ assets/ scripts/
+│   └── desktop/               ← Windows exe 启动器源码（launcher + build.sh）
+├── downloads/                 ← 本地下载 / 临时文件（不入库）
+└── Quark_Magnet_Search/       ← 无关本地实验（不入库）
 ```
-
-> 原计划把切片迁到 `apps/cabin-slice/`，本机有进程锁目录暂未完成；协作路径以 **`cabin-slice/`** 为准。迁完会改 README。
 
 ## 快速开始
 
@@ -44,11 +48,65 @@ python3 -m http.server 8787
 
 详细： [docs/setup/另一台电脑一键拉取.md](./docs/setup/另一台电脑一键拉取.md) · 协作： [CONTRIBUTING.md](./CONTRIBUTING.md)
 
+## 文档总览（按层级）
+
+### L0 · 仓库导航
+
+| 文档 | 用途 |
+| --- | --- |
+| [README.md](./README.md) | 本文件：仓库导航 + 全部文档索引 |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | 多人协作约定（分支 / PR / 文件分工） |
+
+### L1 · 设计与文档库 `docs/`
+
+| 文档 | 用途 |
+| --- | --- |
+| [docs/README.md](./docs/README.md) | 文档索引（协作先读） |
+| [docs/open-questions.md](./docs/open-questions.md) | **存疑 / 未决设计**（能力值 vs 牌库等） |
+
+#### L1.1 · 现行设计 `docs/design/`
+
+| 文档 | 用途 |
+| --- | --- |
+| [织梦频道_channel_dream_策划案与招标书.md](./docs/design/织梦频道_channel_dream_策划案与招标书.md) | **现行主策划 / 协作招标书** |
+
+#### L1.2 · 历史稿与旁支 `docs/design/archive/`
+
+| 文档 | 用途 |
+| --- | --- |
+| [Dream Channel 游戏策划案.md](./docs/design/archive/Dream%20Channel%20游戏策划案.md) | 早期策划案（历史稿） |
+| [Dream Channel - 阈限秘境 游戏策划案.md](./docs/design/archive/Dream%20Channel%20-%20阈限秘境%20游戏策划案.md) | 「阈限秘境」支线版本（历史稿） |
+| [个人片库 WebUI 技术方案.md](./docs/design/archive/个人片库%20WebUI%20技术方案.md) | 旁支技术笔记 |
+
+#### L1.3 · 环境接入 `docs/setup/`
+
+| 文档 | 用途 |
+| --- | --- |
+| [另一台电脑一键拉取.md](./docs/setup/另一台电脑一键拉取.md) | 新机器克隆与启动 |
+| [Cursor接入DeepSeek.md](./docs/setup/Cursor接入DeepSeek.md) | Cursor 接 DeepSeek 配置 |
+| [Cursor接入火山方舟.md](./docs/setup/Cursor接入火山方舟.md) | Cursor 接火山方舟配置 |
+
+### L1 · 可玩切片 `cabin-slice/`
+
+| 文档 | 用途 |
+| --- | --- |
+| [cabin-slice/README.md](./cabin-slice/README.md) | 切片说明：运行、一局怎么玩、Boss、卡牌、打包 |
+| [data/run-scheme.md](./cabin-slice/data/run-scheme.md) | 设计锚点、连击、意图规则 |
+| [data/cards-rules.md](./cabin-slice/data/cards-rules.md) | 出牌与奖励规则 |
+| [data/multiplayer-haunt-sketch.md](./cabin-slice/data/multiplayer-haunt-sketch.md) | 多人分头等设想短稿 |
+| [lab-5run-report.md](./cabin-slice/lab-5run-report.md) | 自测报告（5 局数据分析） |
+
+### L1 · 预留工程 `apps/`
+
+| 文档 | 用途 |
+| --- | --- |
+| [apps/README.md](./apps/README.md) | 多端 / 多切片工程预留说明 |
+
 ## 切片现状（摘要）
 
 | 模块 | 状态 |
 | --- | --- |
-| 大地图 / 房间 | 种子伪随机连通平面图；局内「重开」；祭坛/仪式不进随机图 |
+| 大地图 / 房间 | 玩家摆房（`layoutRoll.mode=player`）；局内「重开」；祭坛/仪式不进随机图 |
 | 战斗 | 走位 + 卡牌；意图红格；STS 风格结束层；战斗内「主页」回菜单（不记败） |
 | 恢复 / 曲线 | 软化战斗曲线；战后/静室回血；低血慎战与撤退 |
 | 音频 | 顶栏「音乐：开/关」 |
@@ -98,19 +156,11 @@ python3 -m http.server 8787
 | `scripts/gen_ui_mock.py` | AI 生成 UI 概念 mock（多模态 hub） |
 | `scripts/ark_chat.py` | 火山方舟 LLM 聊天辅助（Key 放仓库根 `.env`，勿提交） |
 
-## 文档入口
-
-| 文档 | 用途 |
-| --- | --- |
-| [docs/design/织梦频道_channel_dream_策划案与招标书.md](./docs/design/织梦频道_channel_dream_策划案与招标书.md) | 主策划 / 招标书 |
-| [docs/open-questions.md](./docs/open-questions.md) | 存疑（能力值、视野预警等） |
-| [docs/design/archive/](./docs/design/archive/) | 历史稿 |
-
 ## 协作约定（最短版）
 
-1. 从 `main` 开 `feature/` 或 `fix/` 分支，PR 合入  
-2. 新长文进 `docs/`，不要堆仓库根  
-3. 大玩法改动先更新 `docs/open-questions.md`  
-4. 勿提交密钥与本机大文件  
+1. 从 `main` 开 `feature/` 或 `fix/` 分支，PR 合入
+2. 新长文进 `docs/`，不要堆仓库根
+3. 大玩法改动先更新 `docs/open-questions.md`
+4. 勿提交密钥与本机大文件
 
 完整约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)。

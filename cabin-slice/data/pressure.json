@@ -60,11 +60,11 @@
     "living": ["faceShock", "cornerCut"],
     "kitchen": ["grab", "vault"],
     "west_wing": ["lunge", "cornerCut"],
-    "hall": ["lunge", "faceShock", "cornerCut", "beam"],
+    "hall": ["beam"],
     "pantry": ["grab", "vault"],
     "yard": ["relentless", "trapAware", "slam"],
     "shed": ["grab", "vault"],
-    "gallery": ["vault", "beam"],
+    "gallery": ["beam"],
     "study": ["grab", "trapAware"],
     "nursery": ["faceShock"],
     "darkroom": ["lunge", "faceShock", "cornerCut"],
@@ -108,7 +108,7 @@
     "trapAware": "避陷阱",
     "guardBreak": "破防",
     "slam": "砸地AoE（须邻接）",
-    "beam": "激光线",
+    "beam": "蓄力激光（隔回合 1×4 射线 · 保持约 4 格）",
     "flurry": "连击（有视线时多段；Boss 不含）"
   }
 }
