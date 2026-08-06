@@ -674,24 +674,24 @@ function rollBuildOffers(col, row, count = 3) {
   return offers;
 }
 
-/** 可建空位：软边界内、邻接已有房且对方有门朝向该格 */
+/** 可建空位：仅从「当前所在房」的开门方向伸出（无门方向不可摆） */
 function listBuildSlots() {
   if (!isPlayerLayoutMode() || !state.roomLayout) return [];
+  const curId = state.roomId;
+  const loc = curId ? state.roomLayout[curId] : null;
+  if (!loc?.doors) return [];
   const slots = [];
   const seen = new Set();
-  for (const [id, loc] of Object.entries(state.roomLayout)) {
-    if (!loc?.doors) continue;
-    for (const dir of DIR_ORDER) {
-      if (!loc.doors[dir]) continue;
-      const [dc, dr] = DIR_DELTA[dir];
-      const c = loc.col + dc;
-      const r = loc.row + dr;
-      const k = cellKey(c, r);
-      if (!inMapBounds(c, r) || seen.has(k)) continue;
-      if (roomAtCell(c, r)) continue;
-      seen.add(k);
-      slots.push({ col: c, row: r, fromId: id, dir });
-    }
+  for (const dir of DIR_ORDER) {
+    if (!loc.doors[dir]) continue;
+    const [dc, dr] = DIR_DELTA[dir];
+    const c = loc.col + dc;
+    const r = loc.row + dr;
+    const k = cellKey(c, r);
+    if (!inMapBounds(c, r) || seen.has(k)) continue;
+    if (roomAtCell(c, r)) continue;
+    seen.add(k);
+    slots.push({ col: c, row: r, fromId: curId, dir });
   }
   return slots;
 }
@@ -1862,7 +1862,7 @@ function spawnMoveFx(fx, layer) {
   ghost.style.top = `${a.y}px`;
   ghost.innerHTML =
     fx.who === "player"
-      ? `<img class="char-token" src="assets/ui/chars/SP_Lili_MapToken.png" alt="" width="34" height="34" draggable="false" />`
+      ? `<img class="char-token" data-lili-anim="idle" src="assets/ui/chars/lili_idle/frame_01.png" alt="" width="72" height="72" draggable="false" />`
       : `<img class="char-token" src="assets/ui/chars/SP_Enemy_Pixel.png" alt="" width="28" height="28" draggable="false" />`;
   layer.appendChild(ghost);
   void ghost.offsetWidth;
@@ -1907,7 +1907,7 @@ function spawnPortalFx(fx, layer) {
   ghost.style.top = `${a.y}px`;
   ghost.innerHTML =
     fx.who === "player"
-      ? `<img class="char-token" src="assets/ui/chars/SP_Lili_MapToken.png" alt="" width="34" height="34" draggable="false" />`
+      ? `<img class="char-token" data-lili-anim="idle" src="assets/ui/chars/lili_idle/frame_01.png" alt="" width="72" height="72" draggable="false" />`
       : `<img class="char-token" src="assets/ui/chars/SP_Enemy_Pixel.png" alt="" width="28" height="28" draggable="false" />`;
   layer.appendChild(ghost);
   window.setTimeout(() => {
@@ -4451,7 +4451,7 @@ function renderMap() {
         pawn.className = "map-pawn";
         pawn.setAttribute("aria-label", `你在${room.name}`);
         pawn.innerHTML =
-          `<img class="char-token map-token" src="assets/ui/chars/SP_Lili_MapToken.png" alt="你" width="40" height="40" draggable="false" />`;
+          `<img class="char-token map-token" data-lili-anim="idle" src="assets/ui/chars/lili_idle/frame_01.png" alt="你" width="40" height="40" draggable="false" />`;
         btn.appendChild(pawn);
       } else {
         btn.title =
@@ -4494,7 +4494,16 @@ function renderMap() {
   // 玩家摆房：只画可建邻格（不开灰问号骨架）
   if (isPlayerLayoutMode() && !state.nodePending && !runReadyForBoss()) {
     const building = state.mapBuild;
-    for (const slot of listBuildSlots()) {
+    const slots = listBuildSlots();
+    // 若正在选的空位已不合法（例如换了所在房），关掉选房坞
+    if (
+      building &&
+      !slots.some((s) => s.col === building.col && s.row === building.row)
+    ) {
+      state.mapBuild = null;
+      renderMapBuildDock();
+    }
+    for (const slot of slots) {
       const cell = {
         col: slot.col - frame.col0 + 1,
         row: slot.row - frame.row0 + 1,
@@ -4502,11 +4511,11 @@ function renderMap() {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "map-slot";
-      if (building && building.col === slot.col && building.row === slot.row) {
+      if (state.mapBuild && state.mapBuild.col === slot.col && state.mapBuild.row === slot.row) {
         btn.classList.add("is-picking");
       }
       placeAbs(btn, cell);
-      btn.title = "点这里摆一间房";
+      btn.title = "点这里摆一间房（须从当前房开门方向）";
       btn.textContent = "+";
       btn.onclick = () => openMapBuildAt(slot.col, slot.row);
       box.appendChild(btn);
@@ -6255,7 +6264,8 @@ function resolveArena(room, isBoss) {
 
 /**
  * Boss 决战场：本局 roomLayout → 棋盘。
- * 有房间的坐标 = 可站格；没有房间的坐标 = 空洞（不是墙）；只沿 exits/门通行。
+ * 有房间的坐标 = 可站格；没有房间的坐标 = 空洞（不是墙）；
+ * 通行边 = 大地图门形（双边开门），不随机补门。
  */
 function buildHouseGraphArena(layout) {
   const size = state.data.rooms.mapSize || { cols: 17, rows: 17 };
@@ -6277,19 +6287,7 @@ function buildHouseGraphArena(layout) {
     roomAt[k] = id;
   }
 
-  const links = new Set();
-  for (const [id, loc] of Object.entries(layout)) {
-    const a = { r: (loc.row | 0) - 1, c: (loc.col | 0) - 1 };
-    if (voids.has(keyOf(a))) continue;
-    for (const eid of loc.exits || []) {
-      const other = layout[eid];
-      if (!other) continue;
-      const b = { r: (other.row | 0) - 1, c: (other.col | 0) - 1 };
-      if (voids.has(keyOf(b))) continue;
-      if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) continue;
-      links.add(doorEdgeKey(a, b));
-    }
-  }
+  const links = buildHouseLinksFromLayout(layout, voids);
 
   const startId =
     (state.roomId && layout[state.roomId] && state.roomId) ||
@@ -6315,9 +6313,7 @@ function buildHouseGraphArena(layout) {
     }
   }
 
-  // 兜圈：给正交相邻但未接线的房间补捷径，形成局部环
-  weaveHouseLoops(layout, links, voids);
-  // 高度 / 传送门：对齐小场地机关语汇
+  // 高度 / 传送门：对齐小场地机关语汇（不改门拓扑）
   const heights = assignHouseHeights(layout, voids);
   const portals = assignHousePortals(layout, links, voids, playerPos, enemyPos);
 
@@ -6325,6 +6321,7 @@ function buildHouseGraphArena(layout) {
   const roomN = Object.keys(layout).length;
   const portalN = Object.keys(portals).length / 2;
   const highN = Object.keys(heights).length;
+  const doorN = links.size;
   return {
     rows,
     cols,
@@ -6338,12 +6335,53 @@ function buildHouseGraphArena(layout) {
     houseGraph: true,
     roomAt,
     ambush: false,
-    spawnNote: `决战场：本集山屋平面（${roomN} 间）。一房一格 · 空洞不画格 · 沿门走 · 高台 ${highN} · 隧道门 ${Math.floor(portalN)} 对（站上点穿门） · 已补环路可兜圈。`,
+    spawnNote: `决战场：本集山屋平面（${roomN} 间 · ${doorN} 道门）。一房一格 · 空洞不画格 · 门朝向同大地图 · 高台 ${highN} · 隧道门 ${Math.floor(portalN)} 对（站上点穿门）。`,
     anchors,
   };
 }
 
-/** 正交贴邻但没门的房间，按概率开门，方便 Boss 战兜圈子 */
+/** 由大地图门形生成战斗连通边：须双边开门且正交邻接 */
+function buildHouseLinksFromLayout(layout, voids) {
+  const links = new Set();
+  for (const [id, loc] of Object.entries(layout)) {
+    if (!loc) continue;
+    const a = { r: (loc.row | 0) - 1, c: (loc.col | 0) - 1 };
+    if (voids.has(keyOf(a))) continue;
+    const doors = loc.doors || doorsFromExits(loc, layout);
+    for (const dir of DIR_ORDER) {
+      if (!doors?.[dir]) continue;
+      const [dc, dr] = DIR_DELTA[dir];
+      const nid = roomAtCell(loc.col + dc, loc.row + dr, layout);
+      if (!nid) continue; // 门朝空地：大地图可画缺口，战斗无邻格
+      const other = layout[nid];
+      if (!other) continue;
+      const theirs = other.doors || doorsFromExits(other, layout);
+      if (!theirs?.[DIR_OPPOSITE[dir]]) continue;
+      const b = { r: (other.row | 0) - 1, c: (other.col | 0) - 1 };
+      if (voids.has(keyOf(b))) continue;
+      if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) continue;
+      links.add(doorEdgeKey(a, b));
+    }
+  }
+  // 无 doors 字段的旧布局：退回 exits
+  if (links.size === 0) {
+    for (const [id, loc] of Object.entries(layout)) {
+      const a = { r: (loc.row | 0) - 1, c: (loc.col | 0) - 1 };
+      if (voids.has(keyOf(a))) continue;
+      for (const eid of loc.exits || []) {
+        const other = layout[eid];
+        if (!other) continue;
+        const b = { r: (other.row | 0) - 1, c: (other.col | 0) - 1 };
+        if (voids.has(keyOf(b))) continue;
+        if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) continue;
+        links.add(doorEdgeKey(a, b));
+      }
+    }
+  }
+  return links;
+}
+
+/** @deprecated 曾随机补门，会破坏大地图门朝向；保留函数供调试，默认不再调用 */
 function weaveHouseLoops(layout, links, voids) {
   const occupied = [];
   for (const loc of Object.values(layout)) {
@@ -6361,7 +6399,6 @@ function weaveHouseLoops(layout, links, voids) {
       candidates.push([a, b, edge]);
     }
   }
-  // 至少补 2 条环，其余约 45% 概率
   let added = 0;
   for (const [a, b, edge] of candidates) {
     const force = added < 2;
@@ -8423,7 +8460,7 @@ function renderHouseGraphBattle() {
       let pawnHtml = "";
       if (isP) {
         pawnHtml =
-          `<span class="map-pawn battle-pawn player-pawn"><img class="char-token map-token" src="assets/ui/chars/SP_Lili_MapToken.png" alt="你" width="36" height="36" draggable="false" /></span>`;
+          `<span class="map-pawn battle-pawn player-pawn"><img class="char-token map-token" data-lili-anim="idle" src="assets/ui/chars/lili_idle/frame_01.png" alt="你" width="72" height="72" draggable="false" /></span>`;
       }
       if (isE && sees) {
         pawnHtml +=
@@ -8648,7 +8685,7 @@ function renderBattleGrid() {
       let pawnHtml = "";
       if (isP) {
         pawnHtml +=
-          `<span class="battle-pawn player-pawn"><img class="char-token map-token" src="assets/ui/chars/SP_Lili_MapToken.png" alt="你" width="34" height="34" draggable="false" /></span>`;
+          `<span class="battle-pawn player-pawn"><img class="char-token map-token" data-lili-anim="idle" src="assets/ui/chars/lili_idle/frame_01.png" alt="你" width="72" height="72" draggable="false" /></span>`;
       }
       if (isE && sees) {
         pawnHtml +=

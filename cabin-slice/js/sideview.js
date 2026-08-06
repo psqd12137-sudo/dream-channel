@@ -1,9 +1,9 @@
 /** Side-view keyboard sandbox (WASD / arrows). Decoupled from run save. */
 (function (global) {
-  const SPRITE_IDLE = "assets/ui/chars/SP_Lili_Idle_01.png";
+  const SPRITE_IDLE = "assets/ui/chars/SP_Lili_Stand.png";
   /** Drop walk frames into assets/sideview/lili/ and list paths here later. */
   const FRAME_PATHS = {
-    idle: [SPRITE_IDLE],
+    idle: (window.LiliAnim && window.LiliAnim.FRAMES) || [SPRITE_IDLE],
     walk: [],
   };
 

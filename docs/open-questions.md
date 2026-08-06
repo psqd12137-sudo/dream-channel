@@ -33,3 +33,17 @@
 **已落地**：开局按种子生长连通平面图（玄关固定出生；祭坛/仪式不进随机图）。局内「重开」会弃局并换新种子。
 
 **仍可调**：房间数量区间、是否显示全图雾格、是否把仪式房编进图。
+
+## 4. 美术方向：纸盒微缩叙事 vignette（**已锁定**）
+
+**结论**：立绘身份主锁 = `概念/角色/`（设计+比例正确）。  
+Lili **当前最佳立绘** = `gpt2_lili_stand_rolefolder_0.png`（锁：`lili_stand_best_lock.png` / `SP_Lili_Stand.png`）。  
+Lili 脸配方用 `clay_style_standard_lock`；Idle 只锁身/服/比例。  
+黏土气氛只借材质，不叠 orangesoda/极乐/描边。细则：`STAND_TEMPLATE.md`。
+
+锁定图与细则：
+
+- `概念/design_refs/style_direction/approved_lili_cardboard_diorama_lock.png`
+- `概念/design_refs/style_direction/README.md`
+
+主视觉 / 一镜故事走本公式；旧黏土 remap 仅作单人资产分流。

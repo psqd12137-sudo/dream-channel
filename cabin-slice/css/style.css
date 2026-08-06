@@ -254,10 +254,18 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 .mouth-frame-lg .title-portrait {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center top;
+  object-fit: contain;
+  object-position: center center;
   display: block;
-  background: #2aa3b0;
+  background: #c5ccd1;
+}
+
+/* Lili idle frame anim — 透明底，勿再铺灰底（移动幽灵会变成「未抠图大方块」） */
+img[data-lili-anim="idle"].char-token,
+.lili-anim-token img.char-token {
+  object-fit: cover;
+  object-position: center 10%;
+  background: transparent;
 }
 
 .mouth-teeth {
@@ -1434,8 +1442,9 @@ body.is-map-building .map-teeth-bot {
 
 .map-pawn {
   position: static;
-  width: clamp(28px, 55cqmin, 44px);
-  height: clamp(28px, 55cqmin, 44px);
+  /* 占满当前房间格大半，全身 Idle 才看得清 */
+  width: clamp(56px, 86cqmin, 120px);
+  height: clamp(56px, 86cqmin, 120px);
   border: none;
   outline: none;
   background: none;
@@ -1453,10 +1462,20 @@ body.is-map-building .map-teeth-bot {
   height: 100%;
   image-rendering: auto;
   object-fit: contain;
+  object-position: center bottom;
   border: none;
-  border-radius: 50%;
+  border-radius: 10px;
   background: transparent;
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.28));
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.32));
+}
+
+/* 探索地图用全身，不要套头像裁切 */
+.map-pawn img[data-lili-anim="idle"].char-token,
+.map-pawn img[data-lili-anim="idle"].map-token {
+  object-fit: contain;
+  object-position: center bottom;
+  border-radius: 10px;
+  background: transparent;
 }
 
 @keyframes pawn-bob {
@@ -2031,7 +2050,8 @@ body.is-map-building .map-teeth-bot {
   border-radius: 50%;
   border: 4px solid #fff;
   object-fit: cover;
-  background: #f0e6d8;
+  object-position: center 12%;
+  background: #8b9499;
   box-shadow: 0 3px 0 rgba(42, 34, 28, 0.28);
 }
 
@@ -2536,7 +2556,8 @@ body.is-map-building .map-teeth-bot {
   color: var(--ink);
   font-size: 0.8rem;
   font-weight: 800;
-  padding: 8px 5px 16px;
+  padding: 2px;
+  container-type: size;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.75),
     0 3px 0 rgba(0, 0, 0, 0.16);
@@ -2548,6 +2569,7 @@ body.is-map-building .map-teeth-bot {
   align-items: center;
   justify-content: center;
   overflow: visible;
+  z-index: 3;
 }
 .battle-grid.house-graph-map .map-node-battle.ready-zone {
   box-shadow: inset 0 0 0 2px rgba(42, 138, 90, 0.85);
@@ -2577,9 +2599,17 @@ body.is-map-building .map-teeth-bot {
   color: var(--ink);
   font-size: 0.78rem;
 }
-.battle-grid.house-graph-map .map-pawn .map-token {
-  width: 40px;
-  height: 40px;
+.battle-grid.house-graph-map .map-pawn {
+  width: clamp(56px, 86cqmin, 120px);
+  height: clamp(56px, 86cqmin, 120px);
+}
+.battle-grid.house-graph-map .map-pawn .map-token,
+.battle-grid.house-graph-map .map-pawn .char-token {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  border-radius: 10px;
 }
 .battle-grid.house-graph-map .map-battle-body {
   position: absolute;
@@ -2629,10 +2659,11 @@ body.is-map-building .map-teeth-bot {
   font-size: 0.78rem;
   font-weight: 800;
   cursor: pointer;
-  padding: 4px 2px 12px;
+  padding: 2px;
   display: grid;
   place-items: center;
-  overflow: hidden;
+  overflow: visible;
+  container-type: size;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.75),
     0 3px 0 rgba(0, 0, 0, 0.14);
@@ -2641,6 +2672,7 @@ body.is-map-building .map-teeth-bot {
   color: var(--ink);
   border-color: var(--ink);
   background: #ffe08a;
+  z-index: 2;
 }
 .battle-cell.has-enemy {
   color: var(--ink);
@@ -2670,9 +2702,26 @@ body.is-map-building .map-teeth-bot {
   transform: none;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.25));
 }
+/* 与探索地图 .map-pawn 同规格：占格 ~86% */
+.battle-pawn.player-pawn {
+  width: clamp(56px, 86cqmin, 120px);
+  height: clamp(56px, 86cqmin, 120px);
+  animation: pawn-bob 1.2s ease-in-out infinite;
+}
 .battle-pawn.player-pawn .char-token {
-  width: 34px;
-  height: 34px;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  border-radius: 10px;
+  background: transparent;
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.32));
+}
+.battle-pawn.player-pawn img[data-lili-anim="idle"].char-token {
+  object-fit: contain;
+  object-position: center bottom;
+  border-radius: 10px;
+  background: transparent;
 }
 .battle-pawn.fog-pawn {
   width: 28px;
@@ -3135,13 +3184,14 @@ body.is-map-building .map-teeth-bot {
 
 .battle-fx-mover {
   position: absolute;
-  width: 36px;
-  height: 36px;
-  margin: -18px 0 0 -18px;
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 -36px;
   display: grid;
   place-items: center;
   pointer-events: none;
   z-index: 11;
+  overflow: visible;
   transition: left 0.18s ease-out, top 0.18s ease-out, opacity 0.18s ease, transform 0.18s ease;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
 }
@@ -3151,11 +3201,28 @@ body.is-map-building .map-teeth-bot {
   height: 28px;
   border-radius: 50%;
   object-fit: contain;
+  background: transparent;
 }
 
+/* 移动幽灵：固定格内尺寸，勿用 cqmin（幽灵不在 cell 容器内会爆大） */
+.battle-fx-mover.mover-player {
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 -36px;
+}
 .battle-fx-mover.mover-player .char-token {
-  width: 34px;
-  height: 34px;
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  object-position: center bottom;
+  border-radius: 0;
+  background: transparent !important;
+}
+.battle-fx-mover.mover-player img[data-lili-anim="idle"].char-token {
+  object-fit: contain;
+  object-position: center bottom;
+  border-radius: 0;
+  background: transparent !important;
 }
 
 .battle-fx-mover.is-portal-warp {
