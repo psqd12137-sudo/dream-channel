@@ -14,6 +14,29 @@
 
 成长主轴是否从「牌库构筑」改成「能力值」仍是**存疑议题**，见 [docs/open-questions.md](./docs/open-questions.md)。在拍板前，先别按新轴大改代码。
 
+## 分 · 共用 Skill / 资产生成（概念仓）
+
+角色黏土立绘、像素载具、序列帧绿幕跑循环等 **内容生产** 不在本仓维护 skill，统一走旁仓 **概念**（shared）。
+
+| 项 | 说明 |
+|----|------|
+| **高权限入口（必读）** | `概念/AGENT_SKILL_ROUTER.md` |
+| **工作区地图** | `概念/README.md`（`assets/` 资产 · `tools/` 工具） |
+| **本机绝对路径例** | `C:\Users\Admin\Documents\概念\AGENT_SKILL_ROUTER.md` |
+| **相对关系** | 与本仓并列：`Documents/概念` ↔ `Documents/channel_dream/dream-channel` |
+
+**推荐 Cursor 多根工作区**：同时打开 `概念` + `dream-channel`（需要地编时再加 `jrpg`）。  
+Agent 接到出图 / 跑帧 / 绿幕任务时：**先读 ROUTER**，再开对应 `概念/.cursor/skills/*/SKILL.md`。
+
+| 要做 | 走 shared skill | 勿走 |
+|------|-----------------|------|
+| 黏土立绘 / STAND | `claymation-stopmo-craft` | vignette / 像素锁叠涂 |
+| 跑循环 / 序列帧 / matte | `isometric-sprite-cycle-craft`（默认 dry-run） | 即梦未授权 Generate；AIDP edits 当 matte |
+| 载具像素 remap | `retrofuturism-pixel-craft` | 角色跑帧 |
+| Unity 上传 / 引擎配置 | — | **jrpg** 侧 skill（不是 channel 流程） |
+
+即梦 / Gemini MCP 宿主在概念仓 `tools/jimeng-web-mcp`、`tools/gemini-web-mcp`；路径键见 `概念/paths.local.example.json`。
+
 ## 分 · 快速开始
 
 ```bash
