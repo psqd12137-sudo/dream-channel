@@ -210,6 +210,15 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
   place-items: center;
 }
 
+.mouth-frame-lg .title-portrait {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+  background: #c5ccd1;
+}
+
 .title-antenna {
   position: absolute;
   top: -18px;
@@ -249,15 +258,6 @@ body.sts-overlay-open #screen-cards.panel.modal.active {
 @keyframes floaty {
   0%, 100% { transform: translateY(0) rotate(-1deg); }
   50% { transform: translateY(-8px) rotate(1deg); }
-}
-
-.mouth-frame-lg .title-portrait {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center center;
-  display: block;
-  background: #c5ccd1;
 }
 
 /* Lili idle frame anim — 透明底，勿再铺灰底（移动幽灵会变成「未抠图大方块」） */
