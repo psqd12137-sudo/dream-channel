@@ -1,0 +1,46 @@
+{
+  "generated_at": "2026-08-08T02:15:30.580581+00:00",
+  "model": "gpt-image-2",
+  "quality": "medium",
+  "size": "1024x1024",
+  "results": [
+    {
+      "stem": "gpt2_clay_show_paper_atlas_v1",
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\gpt2_clay_show_paper_atlas_v1.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 902096,
+      "sha256": "d7680a9c2638857de4168c1f147ad9e56619b92ee8e0bcb7e091c369eb437dd7",
+      "log_id": "channel-ui-gpt2-49237d18ff3c",
+      "attempt": 1,
+      "references": [
+        "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\_atlas_green_template_1024.png",
+        "C:\\Users\\Admin\\Documents\\概念\\assets\\design_refs\\style_direction\\approved_lili_cardboard_diorama_lock.png",
+        "C:\\Users\\Admin\\Documents\\概念\\assets\\design_refs\\style_direction\\clay_material_atmosphere_lock.png",
+        "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\downloads\\full-flow-audit\\after_03_explore_build_native_100.png"
+      ],
+      "prompt": "Create a production-ready game UI asset atlas, not a full screen mockup.\n\nImage 1 is the required blank chroma-key layout canvas. Images 2 and 3 are the\napproved handmade cardboard miniature and clay material style references.\nImage 4 is the current game UI only for functional context. Do not reproduce\nthe screenshot and do not include characters or scenery.\n\nFinal canvas must stay 1024 by 1024 with a perfectly flat solid #00FF00\nbackground. Arrange exactly FOUR isolated objects with at least 70 pixels of\npure green separation. No object may touch another object or the canvas edge.\n\nTOP, centered, largest object:\n- a wide 16:9 hand-cut corrugated-cardboard television stage outer frame;\n- visible layered corrugation, rough cream paper face, teal painted edge,\n  tiny magenta and warm-orange paper accents;\n- a completely open #00FF00 center suitable for DOM content;\n- irregular handmade edges but a clear rectangular nine-slice-safe border.\n\nBOTTOM LEFT:\n- a 4:3 rough stacked-cardboard popup frame with a fully open #00FF00 center;\n- thick paper depth, torn fibers, subtle clay fingerprints on corner fasteners;\n- no decorations intruding into the central text-safe area.\n\nBOTTOM CENTER:\n- a portrait 3:4 cream ticket/card base with punched side holes and scalloped\n  paper edges; clean empty center for DOM text; no icon or writing.\n\nBOTTOM RIGHT:\n- one short torn masking-tape strip with fibrous edges, warm cream paper,\n  blank and unmarked.\n\nStyle: creepy-cute cult children's stop-motion TV program, handmade cardboard\ndiorama, tactile paper fibers, matte clay details, practical studio light,\nteal/cream/magenta/ink/warm-orange palette. Not preschool candy art.\n\nHard constraints: no text, no pseudo-text, no letters, no numbers, no runes,\nno meaningful symbols, no logo, no characters, no full-screen interface,\nno black web panels, no glassmorphism, no cyberpunk, no neon green outlines,\nno glossy vinyl, no shadows extending outside each object's isolated boundary."
+    },
+    {
+      "stem": "gpt2_clay_show_controls_atlas_v1",
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\gpt2_clay_show_controls_atlas_v1.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "bytes": 1026343,
+      "sha256": "ec877fb87eaeea759381128a213d8ec13c6dda0d561663c72691b3ab067c311e",
+      "log_id": "channel-ui-gpt2-5a32917b88d3",
+      "attempt": 1,
+      "references": [
+        "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\_atlas_green_template_1024.png",
+        "C:\\Users\\Admin\\Documents\\概念\\assets\\design_refs\\style_direction\\approved_lili_cardboard_diorama_lock.png",
+        "C:\\Users\\Admin\\Documents\\概念\\assets\\design_refs\\style_direction\\clay_material_atmosphere_lock.png",
+        "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\downloads\\full-flow-audit\\after_05_boss_native_100.png"
+      ],
+      "prompt": "Create a production-ready game UI asset atlas, not a full screen mockup.\n\nImage 1 is the required blank chroma-key layout canvas. Images 2 and 3 are the\napproved handmade cardboard miniature and clay material style references.\nImage 4 is the current battle UI only for functional context. Do not reproduce\nthe screenshot and do not include characters, rooms, cards, or scenery.\n\nFinal canvas must stay 1024 by 1024 with a perfectly flat solid #00FF00\nbackground. Arrange exactly SIX isolated tactile UI objects in a clean 3 by 2\nlayout. Keep at least 70 pixels of pure green between objects and at least\n45 pixels to the canvas edge. No shadows may cross into another object's area.\n\nObjects:\n1. A wide 3:1 warm-orange clay push-button base, thick pressed edge and subtle\n   fingerprints, blank center for DOM text.\n2. A wide 3:1 teal clay secondary-button base, same physical family, blank.\n3. A compact 2:1 cream-and-magenta clay status plate for AP or health numbers,\n   blank readable center.\n4. A compact 2:1 teal-and-cream clay status plate, blank readable center.\n5. A small round warm-orange clay stamp/seal base with no emblem or symbol.\n6. A small irregular ink-dark clay riveted tab base with cream paper inset,\n   no icon and no text.\n\nStyle: creepy-cute cult children's stop-motion TV program, hand-sculpted matte\nclay, slight fingerprints and tool marks, cardboard miniature prop language,\npractical soft spotlight, teal/cream/magenta/ink/warm-orange palette. The forms\nmust feel like physical props a puppet can press, not flat website buttons.\n\nHard constraints: no text, no pseudo-text, no letters, no numbers, no runes,\nno meaningful symbols, no logo, no characters, no full-screen interface,\nno metallic sci-fi panel, no glassmorphism, no cyberpunk, no neon outlines,\nno glossy vinyl, no black rectangular web container, no overlapping objects."
+    }
+  ]
+}

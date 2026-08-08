@@ -1,0 +1,444 @@
+{
+  "assets": [
+    {
+      "name": "paper_stage_frame",
+      "source": "gpt2_clay_show_paper_atlas_v1.png",
+      "source_component": {
+        "x": 67,
+        "y": 47,
+        "w": 899,
+        "h": 460,
+        "area": 128917,
+        "touches_edge": false
+      },
+      "crop_box": [
+        49,
+        29,
+        935,
+        496
+      ],
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\slices\\paper_stage_frame.png",
+      "size": [
+        935,
+        496
+      ],
+      "visible_pixel_ratio": 0.27999,
+      "semi_transparent_pixel_ratio": 0.01643,
+      "usage": "9-slice",
+      "recommended_for": [
+        "battle stage outer frame",
+        "large dialog panel"
+      ],
+      "slice_insets": [
+        110,
+        86,
+        110,
+        86
+      ]
+    },
+    {
+      "name": "paper_popup_frame",
+      "source": "gpt2_clay_show_paper_atlas_v1.png",
+      "source_component": {
+        "x": 51,
+        "y": 602,
+        "w": 358,
+        "h": 321,
+        "area": 62954,
+        "touches_edge": false
+      },
+      "crop_box": [
+        33,
+        584,
+        394,
+        357
+      ],
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\slices\\paper_popup_frame.png",
+      "size": [
+        394,
+        357
+      ],
+      "visible_pixel_ratio": 0.4509,
+      "semi_transparent_pixel_ratio": 0.12693,
+      "usage": "9-slice",
+      "recommended_for": [
+        "omen modal",
+        "inventory or portrait panel"
+      ],
+      "slice_insets": [
+        58,
+        54,
+        58,
+        54
+      ]
+    },
+    {
+      "name": "paper_ticket_card",
+      "source": "gpt2_clay_show_paper_atlas_v1.png",
+      "source_component": {
+        "x": 466,
+        "y": 555,
+        "w": 235,
+        "h": 413,
+        "area": 89575,
+        "touches_edge": false
+      },
+      "crop_box": [
+        448,
+        537,
+        271,
+        449
+      ],
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\slices\\paper_ticket_card.png",
+      "size": [
+        271,
+        449
+      ],
+      "visible_pixel_ratio": 0.73885,
+      "semi_transparent_pixel_ratio": 0.0063,
+      "usage": "fixed",
+      "recommended_for": [
+        "reward card",
+        "name or item ticket"
+      ],
+      "slice_insets": null
+    },
+    {
+      "name": "paper_tape_strip",
+      "source": "gpt2_clay_show_paper_atlas_v1.png",
+      "source_component": {
+        "x": 748,
+        "y": 792,
+        "w": 232,
+        "h": 108,
+        "area": 20813,
+        "touches_edge": false
+      },
+      "crop_box": [
+        730,
+        774,
+        268,
+        144
+      ],
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\slices\\paper_tape_strip.png",
+      "size": [
+        268,
+        144
+      ],
+      "visible_pixel_ratio": 0.54265,
+      "semi_transparent_pixel_ratio": 0.00687,
+      "usage": "fixed",
+      "recommended_for": [
+        "temporary hint",
+        "decorative state label"
+      ],
+      "slice_insets": null
+    },
+    {
+      "name": "clay_button_primary",
+      "source": "gpt2_clay_show_controls_atlas_v1.png",
+      "source_component": {
+        "x": 56,
+        "y": 129,
+        "w": 547,
+        "h": 224,
+        "area": 119460,
+        "touches_edge": false
+      },
+      "crop_box": [
+        38,
+        111,
+        583,
+        260
+      ],
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\slices\\clay_button_primary.png",
+      "size": [
+        583,
+        260
+      ],
+      "visible_pixel_ratio": 0.78991,
+      "semi_transparent_pixel_ratio": 0.00321,
+      "usage": "9-slice",
+      "recommended_for": [
+        "place room",
+        "end turn",
+        "primary CTA"
+      ],
+      "slice_insets": [
+        78,
+        58,
+        78,
+        58
+      ]
+    },
+    {
+      "name": "clay_status_magenta",
+      "source": "gpt2_clay_show_controls_atlas_v1.png",
+      "source_component": {
+        "x": 639,
+        "y": 154,
+        "w": 335,
+        "h": 171,
+        "area": 53467,
+        "touches_edge": false
+      },
+      "crop_box": [
+        621,
+        136,
+        371,
+        207
+      ],
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\slices\\clay_status_magenta.png",
+      "size": [
+        371,
+        207
+      ],
+      "visible_pixel_ratio": 0.69857,
+      "semi_transparent_pixel_ratio": 0.00335,
+      "usage": "9-slice",
+      "recommended_for": [
+        "enemy status",
+        "special action label"
+      ],
+      "slice_insets": [
+        54,
+        42,
+        54,
+        42
+      ]
+    },
+    {
+      "name": "clay_button_secondary",
+      "source": "gpt2_clay_show_controls_atlas_v1.png",
+      "source_component": {
+        "x": 56,
+        "y": 414,
+        "w": 548,
+        "h": 224,
+        "area": 120098,
+        "touches_edge": false
+      },
+      "crop_box": [
+        38,
+        396,
+        584,
+        260
+      ],
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\slices\\clay_button_secondary.png",
+      "size": [
+        584,
+        260
+      ],
+      "visible_pixel_ratio": 0.79454,
+      "semi_transparent_pixel_ratio": 0.01035,
+      "usage": "9-slice",
+      "recommended_for": [
+        "rotate room",
+        "secondary CTA"
+      ],
+      "slice_insets": [
+        78,
+        58,
+        78,
+        58
+      ]
+    },
+    {
+      "name": "clay_status_teal",
+      "source": "gpt2_clay_show_controls_atlas_v1.png",
+      "source_component": {
+        "x": 639,
+        "y": 441,
+        "w": 335,
+        "h": 171,
+        "area": 53159,
+        "touches_edge": false
+      },
+      "crop_box": [
+        621,
+        423,
+        371,
+        207
+      ],
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\slices\\clay_status_teal.png",
+      "size": [
+        371,
+        207
+      ],
+      "visible_pixel_ratio": 0.69471,
+      "semi_transparent_pixel_ratio": 0.00629,
+      "usage": "9-slice",
+      "recommended_for": [
+        "player AP",
+        "health or shield status"
+      ],
+      "slice_insets": [
+        54,
+        42,
+        54,
+        42
+      ]
+    },
+    {
+      "name": "clay_stamp_round",
+      "source": "gpt2_clay_show_controls_atlas_v1.png",
+      "source_component": {
+        "x": 174,
+        "y": 692,
+        "w": 226,
+        "h": 228,
+        "area": 40758,
+        "touches_edge": false
+      },
+      "crop_box": [
+        156,
+        674,
+        262,
+        264
+      ],
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\slices\\clay_stamp_round.png",
+      "size": [
+        262,
+        264
+      ],
+      "visible_pixel_ratio": 0.59202,
+      "semi_transparent_pixel_ratio": 0.00447,
+      "usage": "fixed",
+      "recommended_for": [
+        "AP counter",
+        "round indicator",
+        "small CTA"
+      ],
+      "slice_insets": null
+    },
+    {
+      "name": "clay_tab_dark",
+      "source": "gpt2_clay_show_controls_atlas_v1.png",
+      "source_component": {
+        "x": 540,
+        "y": 717,
+        "w": 334,
+        "h": 193,
+        "area": 51966,
+        "touches_edge": false
+      },
+      "crop_box": [
+        522,
+        699,
+        370,
+        229
+      ],
+      "output": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\cabin-slice\\assets\\ui\\generated\\gpt2_clay_show_v1\\slices\\clay_tab_dark.png",
+      "size": [
+        370,
+        229
+      ],
+      "visible_pixel_ratio": 0.61481,
+      "semi_transparent_pixel_ratio": 0.00356,
+      "usage": "9-slice",
+      "recommended_for": [
+        "name plate",
+        "dark hint label"
+      ],
+      "slice_insets": [
+        54,
+        44,
+        54,
+        44
+      ]
+    }
+  ],
+  "source_quality": {
+    "gpt2_clay_show_paper_atlas_v1.png": {
+      "major_component_count": 4,
+      "components": [
+        {
+          "x": 67,
+          "y": 47,
+          "w": 899,
+          "h": 460,
+          "area": 128917,
+          "touches_edge": false
+        },
+        {
+          "x": 466,
+          "y": 555,
+          "w": 235,
+          "h": 413,
+          "area": 89575,
+          "touches_edge": false
+        },
+        {
+          "x": 51,
+          "y": 602,
+          "w": 358,
+          "h": 321,
+          "area": 62954,
+          "touches_edge": false
+        },
+        {
+          "x": 748,
+          "y": 792,
+          "w": 232,
+          "h": 108,
+          "area": 20813,
+          "touches_edge": false
+        }
+      ]
+    },
+    "gpt2_clay_show_controls_atlas_v1.png": {
+      "major_component_count": 6,
+      "components": [
+        {
+          "x": 56,
+          "y": 129,
+          "w": 547,
+          "h": 224,
+          "area": 119460,
+          "touches_edge": false
+        },
+        {
+          "x": 639,
+          "y": 154,
+          "w": 335,
+          "h": 171,
+          "area": 53467,
+          "touches_edge": false
+        },
+        {
+          "x": 56,
+          "y": 414,
+          "w": 548,
+          "h": 224,
+          "area": 120098,
+          "touches_edge": false
+        },
+        {
+          "x": 639,
+          "y": 441,
+          "w": 335,
+          "h": 171,
+          "area": 53159,
+          "touches_edge": false
+        },
+        {
+          "x": 174,
+          "y": 692,
+          "w": 226,
+          "h": 228,
+          "area": 40758,
+          "touches_edge": false
+        },
+        {
+          "x": 540,
+          "y": 717,
+          "w": 334,
+          "h": 193,
+          "area": 51966,
+          "touches_edge": false
+        }
+      ]
+    }
+  },
+  "contact_sheet": "C:\\Users\\Admin\\Documents\\channel_dream\\dream-channel\\downloads\\clay-cartoon-ui-audit\\gpt2_clay_show_slices_contact_sheet.png"
+}

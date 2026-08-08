@@ -1,6 +1,6 @@
 # 织梦频道 · channel dream
 
-> **总述**：梦境探索 · 战棋走位 · 卡牌（放置 / 移动 / 连击）——一款邪典荒诞风格的 roguelike。多人协作仓库：**设计文档在 `docs/`，可玩竖切片在 `cabin-slice/`。**
+> **总述**：梦境探索 · 战棋走位 · 卡牌（放置 / 移动 / 连击）——一款邪典荒诞风格的 roguelike。AI OC 作为节目演员与局外记忆层，不是独立产品。**唯一主策划在 `docs/design/织梦频道_channel_dream_策划案与招标书.md`，可玩竖切片在 `cabin-slice/`。**
 
 远程：https://github.com/psqd12137-sudo/dream-channel
 
@@ -8,8 +8,10 @@
 
 - **产品名**：织梦频道（channel dream）
 - **玩法方向**：梦境探索 · 战棋走位 · 卡牌（放置 / 移动 / 连击），**不做**山屋惊魂式力量拼点
+- **角色方向**：官方角色或玩家 OC 进入山屋；AI 根据真实战局生成本集回顾、后台日常与长期记忆，但不裁定玩法
 - **参考系**：山屋惊魂的流程骨架 × 杀戮尖塔的构筑循环 × 以撒的「空间化战斗」——详见 [docs/design/玩法拓展概念与设计轴.md](./docs/design/玩法拓展概念与设计轴.md)
 - **当前可玩**：`cabin-slice/` —— 浏览器竖切片（地图、战斗、存档、伪随机平面图等）
+- **AI OC 现状**：已并入唯一主策划，尚未实现；首期用 Lili 验证「事件日志 → 本集回顾 → 记忆碎片」
 - **Windows 单机版**：`CabinSlice_织梦频道_Windows.zip`（双击即玩，见 [cabin-slice/README.md](./cabin-slice/README.md) 的「桌面版」小节）
 
 成长主轴是否从「牌库构筑」改成「能力值」仍是**存疑议题**，见 [docs/open-questions.md](./docs/open-questions.md)。在拍板前，先别按新轴大改代码。
@@ -58,7 +60,7 @@ dream-channel/
 ├── CabinSlice_织梦频道_Windows.zip   ← Windows 单机版分发包
 ├── apps/                      ← 预留：多端 / 多切片工程
 ├── docs/                      ← 设计文档（策划 / 玩法概念 / 技术 / 环境接入）
-│   ├── design/                ← 现行策划 + 玩法概念 + archive/ 历史稿
+│   ├── design/                ← 唯一主策划 + 玩法概念 + archive/ 历史稿
 │   ├── tech/                  ← 技术方案与自测
 │   └── setup/                 ← 环境接入 / 新机器拉取
 ├── cabin-slice/               ← 可玩切片（HTML / CSS / JS）
@@ -82,9 +84,9 @@ dream-channel/
 
 | 文档 | 职能 |
 | --- | --- |
-| [docs/design/织梦频道_channel_dream_策划案与招标书.md](./docs/design/织梦频道_channel_dream_策划案与招标书.md) | 现行主策划 / 协作招标书 |
+| [docs/design/织梦频道_channel_dream_策划案与招标书.md](./docs/design/织梦频道_channel_dream_策划案与招标书.md) | **唯一主策划** / 协作招标书；含 AI OC 整合口径 |
 | [docs/design/玩法拓展概念与设计轴.md](./docs/design/玩法拓展概念与设计轴.md) | 玩法新意来源、设计轴、多人本质、三作参考系 |
-| [docs/design/archive/](./docs/design/archive/) | 历史稿（早期策划案 / 旁支笔记） |
+| [docs/design/archive/](./docs/design/archive/) | 历史稿（无决策权；冲突时一律以唯一主策划为准） |
 
 ### 技术（docs/tech/）
 
@@ -120,15 +122,17 @@ dream-channel/
 | 恢复 / 曲线 | 软化战斗曲线；战后/静室回血；低血慎战与撤退 |
 | 音频 | 顶栏「音乐：开/关」 |
 | 存档 | localStorage；含 `runSeed` / `roomLayout` |
+| AI OC | 已完成产品合并与边界设计；代码未实现 |
 
 技术实现与自测见 [docs/tech/技术方案与自测.md](./docs/tech/技术方案与自测.md)；玩法细则见 [cabin-slice/README.md](./cabin-slice/README.md)。
 
 ### 路线
 
 - 一局单机流程已打通；解谜事件、恢复曲线在持续迭代
+- 下一条产品验证链：Lili 事实日志 → 本集回顾 → 记忆碎片；AI 不可用时必须能模板降级
 - **存疑大项**：成长轴（能力值 vs 牌库）、视野与意图预警口径 —— 见 [docs/open-questions.md](./docs/open-questions.md)
 - **愿景层（未开工）**：整图终局 Boss、多人分头 / 半场奸徒 / 联机 —— 见 [cabin-slice/data/multiplayer-haunt-sketch.md](./cabin-slice/data/multiplayer-haunt-sketch.md) 与 [玩法拓展概念与设计轴](./docs/design/玩法拓展概念与设计轴.md)
 
 ---
 
-**总结**：先做透一集单机节目（可玩竖切片已通），再谈整图终局与多人。新玩法先对齐设计轴与存疑议题，避免方向打架。
+**总结**：先做透一集单机节目，再让 Lili / 玩家 OC 真正记住这集；之后才扩自由 OC、整图终局与多人。项目只有一份主策划，旧 AI OC 文档仅供溯源。

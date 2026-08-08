@@ -8,6 +8,7 @@ let uidSeq = 1;
 const SAVE_KEY = "cabin-run-v3";
 const LAB_KEY = "cabin-lab-v1";
 const LAB_MAX_RUNS = 40;
+const MAP_VIEW_KEY = "cabin-map-view-v1";
 
 const state = {
   data: null,
@@ -41,6 +42,8 @@ const state = {
   roomLayout: null,
   /** 摆房选址中：{ col, row, offers, pick, rot } */
   mapBuild: null,
+  /** 主探索地图测试视角；平面模式继续保留给小玩法与回退 */
+  mapView: "iso",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -484,6 +487,48 @@ function isPlayerLayoutMode() {
   // 教学整段与正式局相同：玩家盖屋
   if (state.tutorial?.active) return true;
   return state.data?.rooms?.layoutRoll?.mode === "player";
+}
+
+function isIsoMapView() {
+  return state.mapView !== "plan";
+}
+
+function updateMapViewButton() {
+  const iso = isIsoMapView();
+  const mapBtn = $("btn-map-view");
+  if (mapBtn) {
+    mapBtn.textContent = iso ? "视角：等距" : "视角：平面";
+    mapBtn.setAttribute("aria-pressed", iso ? "true" : "false");
+    mapBtn.title = iso
+      ? "当前为等距大地图测试；点击切回原平面布局"
+      : "当前为原平面布局；点击切到等距大地图测试";
+  }
+  const battleBtn = $("btn-battle-view");
+  if (battleBtn) {
+    battleBtn.textContent = iso ? "战场：等距" : "战场：平面";
+    battleBtn.setAttribute("aria-pressed", iso ? "true" : "false");
+    battleBtn.title = iso
+      ? "当前为等距战场测试；点击切回原平面棋盘"
+      : "当前为原平面棋盘；点击切到等距战场测试";
+  }
+}
+
+function setMapViewMode(mode, { persist = true, rerender = true } = {}) {
+  state.mapView = mode === "plan" ? "plan" : "iso";
+  if (persist) {
+    try {
+      localStorage.setItem(MAP_VIEW_KEY, state.mapView);
+    } catch (_) {}
+  }
+  updateMapViewButton();
+  if (rerender && state.data) {
+    if (state.combat) renderCombat();
+    else if ($("screen-game")?.classList.contains("active")) renderMap();
+  }
+}
+
+function toggleMapView() {
+  setMapViewMode(isIsoMapView() ? "plan" : "iso");
 }
 
 function cloneDoors(doors) {
@@ -948,9 +993,10 @@ function renderMapBuildDock() {
 
   const head = document.createElement("div");
   head.className = "map-build-head";
+  const isoHint = isIsoMapView() ? "等距门向：北↗ 东↘ 南↙ 西↖ · " : "";
   const tutHint = state.tutorial?.active
-    ? "内卡四边缺口 = 门朝向 · 旋转到缺口对着邻房的门才能摆下"
-    : "选票根 · 旋转对门 · 内卡缺口=门朝向 · 走进去才算行程";
+    ? `${isoHint}内卡四边缺口 = 门朝向 · 旋转到缺口对着邻房的门才能摆下`
+    : `${isoHint}选票根 · 旋转对门 · 内卡缺口=门朝向 · 走进去才算行程`;
   head.innerHTML = `<span class="map-build-kicker">盖屋</span><strong>扩建 (${b.col},${b.row})</strong><span class="map-build-hint">${tutHint}</span>`;
   dock.appendChild(head);
 
@@ -972,6 +1018,13 @@ function renderMapBuildDock() {
     else if (offer.role === "event") card.classList.add("event-known");
     else card.classList.add("safe-known");
     if (i === b.pick) card.classList.add("is-pick");
+    const doorsFit =
+      doorsAgreeWithNeighbors(b.col, b.row, offer.doors) &&
+      offerLinksNeighbors(b.col, b.row, offer.doors);
+    wrap.classList.toggle("doors-fit", doorsFit);
+    wrap.classList.toggle("door-mismatch", !doorsFit);
+    card.classList.toggle("doors-fit", doorsFit);
+    card.classList.toggle("door-mismatch", !doorsFit);
 
     const stub = document.createElement("span");
     stub.className = "build-offer-stub";
@@ -1467,6 +1520,101 @@ function battleHouseFrame() {
     col0: minC,
     row0: minR,
   };
+}
+
+function battleGridFrame() {
+  const g = combatGrid();
+  return { cols: g.cols, rows: g.rows, col0: 0, row0: 0 };
+}
+
+function battleIsoProjection(frame) {
+  const top = state.combat?.houseGraph ? 1.15 : 0.65;
+  const bottom = state.combat?.houseGraph ? 0.35 : 0.15;
+  return {
+    width: frame.cols + frame.rows,
+    baseHeight: (frame.cols + frame.rows) / 2,
+    top,
+    bottom,
+    get height() {
+      return this.baseHeight + this.top + this.bottom;
+    },
+  };
+}
+
+function battleIsoCellCenter(pos, frame, projection = battleIsoProjection(frame)) {
+  const col = pos.c - frame.col0 + 1;
+  const row = pos.r - frame.row0 + 1;
+  return {
+    x: col - row + frame.rows,
+    y: projection.top + (col + row - 1) / 2,
+  };
+}
+
+function setupBattleIsoBox(box, frame) {
+  const projection = battleIsoProjection(frame);
+  const wrap = box?.parentElement;
+  const availableWidth = Math.max(320, (wrap?.clientWidth || 920) - 24);
+  const availableHeight = Math.max(
+    220,
+    (wrap?.clientHeight || (state.combat?.houseGraph ? 500 : 440)) - 58,
+  );
+  const maxUnit = state.combat?.houseGraph ? 60 : 84;
+  const unit = Math.min(
+    maxUnit,
+    availableWidth / projection.width,
+    availableHeight / projection.height,
+  );
+  box.style.gridTemplateColumns = "";
+  box.style.gridTemplateRows = "";
+  box.style.width = `${Math.max(1, Math.floor(projection.width * unit))}px`;
+  box.style.height = `${Math.max(1, Math.floor(projection.height * unit))}px`;
+  box.style.gap = "0";
+  box.style.justifyContent = "";
+  box.style.setProperty("--battle-iso-unit", `${unit}px`);
+  return { ...projection, unit };
+}
+
+function placeBattleIsoCell(cell, pos, frame, projection, depthOffset = 0) {
+  const center = battleIsoCellCenter(pos, frame, projection);
+  const unit = projection.unit;
+  cell.style.position = "absolute";
+  cell.style.left = `${(center.x - 1) * unit}px`;
+  cell.style.top = `${(center.y - 0.5) * unit}px`;
+  cell.style.width = `${2 * unit}px`;
+  cell.style.height = `${unit}px`;
+  cell.style.zIndex = String(
+    20 + Math.round(center.y * 100) + tileHeight(pos) * 30 + depthOffset,
+  );
+}
+
+function prependBattleIsoFloor(cell) {
+  const leftSide = document.createElement("span");
+  leftSide.className = "battle-cell-side battle-cell-side-left";
+  leftSide.setAttribute("aria-hidden", "true");
+  const rightSide = document.createElement("span");
+  rightSide.className = "battle-cell-side battle-cell-side-right";
+  rightSide.setAttribute("aria-hidden", "true");
+  const floor = document.createElement("span");
+  floor.className = "battle-cell-floor";
+  floor.setAttribute("aria-hidden", "true");
+  cell.prepend(leftSide, rightSide, floor);
+}
+
+function syncBattleStageLighting(c = state.combat) {
+  const wrap = $("battle-grid")?.parentElement;
+  if (!wrap || !c) return;
+  const wrapRect = wrap.getBoundingClientRect();
+  const setSpot = (name, pos, fallbackX, fallbackY) => {
+    const cell = battleCellEl(pos);
+    const rect = cell?.getBoundingClientRect();
+    const x = rect ? rect.left - wrapRect.left + rect.width / 2 : fallbackX;
+    const y = rect ? rect.top - wrapRect.top + rect.height / 2 : fallbackY;
+    wrap.style.setProperty(`--${name}-spot-x`, `${Math.round(x)}px`);
+    wrap.style.setProperty(`--${name}-spot-y`, `${Math.round(y)}px`);
+  };
+  setSpot("player", c.playerPos, wrapRect.width * 0.42, wrapRect.height * 0.55);
+  setSpot("enemy", c.enemyPos, wrapRect.width * 0.58, wrapRect.height * 0.42);
+  wrap.classList.toggle("boss-stage", !!c.isBoss);
 }
 
 function inBounds(pos) {
@@ -4191,7 +4339,7 @@ function renderStats() {
     } else if (isSpatialLayout(state.roomLayout)) {
       const n = Object.keys(state.roomLayout).length;
       seedEl.textContent = isPlayerLayoutMode()
-        ? `盖屋 #${state.runSeed >>> 0} · 已摆 ${n} 间 · 点空格扩建`
+        ? `${isIsoMapView() ? "等距盖屋" : "平面盖屋"} #${state.runSeed >>> 0} · 已摆 ${n} 间 · 点空格扩建`
         : `平面图 #${state.runSeed >>> 0} · ${n} 间`;
     } else {
       seedEl.textContent = "平面图：手摆固定稿";
@@ -4301,15 +4449,34 @@ function mapDisplayFrame() {
   };
 }
 
+function mapProjectionFrame(frame, iso = isIsoMapView()) {
+  if (!iso) return { width: frame.cols, height: frame.rows };
+  return {
+    width: frame.cols + frame.rows,
+    height: (frame.cols + frame.rows) / 2,
+  };
+}
+
+function mapCellCenter(cell, frame, iso = isIsoMapView()) {
+  if (!iso) {
+    return { x: cell.col - 0.5, y: cell.row - 0.5 };
+  }
+  return {
+    x: cell.col - cell.row + frame.rows,
+    y: (cell.col + cell.row - 1) / 2,
+  };
+}
+
 function fitHouseMapBox(box, frame) {
   const board = box?.parentElement;
   if (!box || !board || !frame) return;
   const bw = board.clientWidth || 0;
   const bh = board.clientHeight || 0;
   if (bw < 8 || bh < 8) return;
-  const scale = Math.min(bw / frame.cols, bh / frame.rows);
-  const w = Math.max(1, Math.floor(scale * frame.cols));
-  const h = Math.max(1, Math.floor(scale * frame.rows));
+  const projection = mapProjectionFrame(frame, box.classList.contains("house-map-iso"));
+  const scale = Math.min(bw / projection.width, bh / projection.height);
+  const w = Math.max(1, Math.floor(scale * projection.width));
+  const h = Math.max(1, Math.floor(scale * projection.height));
   box.style.width = `${w}px`;
   box.style.height = `${h}px`;
 }
@@ -4318,7 +4485,11 @@ function renderMap() {
   const box = $("house-map");
   const links = $("map-links");
   const frame = mapDisplayFrame();
+  const iso = isIsoMapView();
+  const projection = mapProjectionFrame(frame, iso);
   box.classList.add("house-map-abs");
+  box.classList.toggle("house-map-iso", iso);
+  document.body.classList.toggle("map-view-iso", iso);
   box.style.gridTemplateColumns = "";
   box.style.gridTemplateRows = "";
   box.style.setProperty("--map-cols", String(frame.cols));
@@ -4332,8 +4503,8 @@ function renderMap() {
   if (links) {
     box.appendChild(links);
     links.innerHTML = "";
-    links.setAttribute("viewBox", `0 0 ${frame.cols} ${frame.rows}`);
-    links.setAttribute("preserveAspectRatio", "none");
+    links.setAttribute("viewBox", `0 0 ${projection.width} ${projection.height}`);
+    links.setAttribute("preserveAspectRatio", iso ? "xMidYMid meet" : "none");
     links.className = "map-links map-links-inmap";
   }
   const here = roomDef(state.roomId);
@@ -4344,8 +4515,19 @@ function renderMap() {
     col: map.col - frame.col0 + 1,
     row: map.row - frame.row0 + 1,
   });
-  const placeAbs = (el, cell) => {
+  const placeAbs = (el, cell, depthOffset = 0) => {
     const gap = 0.06;
+    if (iso) {
+      const center = mapCellCenter(cell, frame, true);
+      const tileWidth = 2 * (1 - gap);
+      const tileHeight = 1 * (1 - gap);
+      el.style.left = `${((center.x - tileWidth / 2) / projection.width) * 100}%`;
+      el.style.top = `${((center.y - tileHeight / 2) / projection.height) * 100}%`;
+      el.style.width = `${(tileWidth / projection.width) * 100}%`;
+      el.style.height = `${(tileHeight / projection.height) * 100}%`;
+      el.style.zIndex = String(20 + Math.round(center.y * 100) + depthOffset);
+      return;
+    }
     el.style.left = `${((cell.col - 1 + gap) / frame.cols) * 100}%`;
     el.style.top = `${((cell.row - 1 + gap) / frame.rows) * 100}%`;
     el.style.width = `${((1 - gap * 2) / frame.cols) * 100}%`;
@@ -4369,11 +4551,13 @@ function renderMap() {
         const to = room.id < eid ? other : room;
         const fc = toCell(from.map);
         const tc = toCell(to.map);
+        const fp = mapCellCenter(fc, frame, iso);
+        const tp = mapCellCenter(tc, frame, iso);
         const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("x1", String(fc.col - 0.5));
-        line.setAttribute("y1", String(fc.row - 0.5));
-        line.setAttribute("x2", String(tc.col - 0.5));
-        line.setAttribute("y2", String(tc.row - 0.5));
+        line.setAttribute("x1", String(fp.x));
+        line.setAttribute("y1", String(fp.y));
+        line.setAttribute("x2", String(tp.x));
+        line.setAttribute("y2", String(tp.y));
         const live =
           (room.id === state.roomId && exits.has(eid)) ||
           (eid === state.roomId && exits.has(room.id));
@@ -4389,7 +4573,11 @@ function renderMap() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "map-node";
-    placeAbs(btn, cell);
+    placeAbs(btn, cell, 10);
+    const floor = document.createElement("span");
+    floor.className = "map-node-floor";
+    floor.setAttribute("aria-hidden", "true");
+    btn.appendChild(floor);
     const known = state.knownRooms.has(room.id);
     const visited = state.resolvedRooms.has(room.id) || state.visitPath.includes(room.id);
     const isHere = room.id === state.roomId;
@@ -4444,6 +4632,9 @@ function renderMap() {
 
       if (isHere) {
         btn.classList.add("current");
+        if (iso) {
+          btn.style.zIndex = String((Number(btn.style.zIndex) || 0) + 1000);
+        }
         btn.title = state.nodePending
           ? `${room.name}（点这里继续：打开惊吓/查看房间）`
           : `${room.name}（你在这里）`;
@@ -8102,6 +8293,36 @@ function toggleHold(uid) {
   renderCombat();
 }
 
+function setBattleCellDetail(title, parts = []) {
+  const titleEl = $("battle-cell-detail-title");
+  const metaEl = $("battle-cell-detail-meta");
+  if (titleEl) titleEl.textContent = title || "当前格";
+  if (metaEl) metaEl.textContent = parts.filter(Boolean).join(" · ") || "无额外状态";
+}
+
+function showBattleCellDetailFrom(cell) {
+  if (!cell) return;
+  const parts = (cell.dataset.detailMeta || "").split("|").filter(Boolean);
+  setBattleCellDetail(cell.dataset.detailTitle || "当前格", parts);
+}
+
+function restoreBattleCellDetail() {
+  const current =
+    $("battle-grid")?.querySelector(".battle-cell.has-player") ||
+    $("battle-grid")?.querySelector(".battle-cell");
+  if (current) showBattleCellDetailFrom(current);
+  else setBattleCellDetail("当前格", ["悬停房间查看详情"]);
+}
+
+function bindBattleCellDetail(cell, title, parts = []) {
+  cell.dataset.detailTitle = title || "当前格";
+  cell.dataset.detailMeta = parts.filter(Boolean).join("|");
+  cell.addEventListener("mouseenter", () => showBattleCellDetailFrom(cell));
+  cell.addEventListener("focus", () => showBattleCellDetailFrom(cell));
+  cell.addEventListener("mouseleave", () => restoreBattleCellDetail());
+  cell.addEventListener("blur", () => restoreBattleCellDetail());
+}
+
 function renderCombat() {
   const c = state.combat;
   if (!c) return;
@@ -8112,7 +8333,7 @@ function renderCombat() {
   $("card-check-label").textContent = c.isBoss
     ? `${c.roomName} · ${c.phaseName || "开场"} · 锚 ${anchorsClearedCount(c)}/${Object.keys(c.anchors || {}).length}`
     : `${c.roomName} · ${c.archetypeLabel} · 难度档 ${c.tier}`;
-  $("card-energy").textContent = String(c.energy);
+  $("card-energy").textContent = `${c.energy} AP`;
   const energyEl = $("card-energy");
   if (energyEl) {
     energyEl.classList.toggle("is-zero", c.energy <= 0);
@@ -8135,10 +8356,10 @@ function renderCombat() {
   $("enemy-intent").textContent = intentLabel;
   const intentShort = $("enemy-intent-short");
   if (intentShort) {
-    intentShort.textContent = intentLabel.length > 4 ? `${intentLabel.slice(0, 3)}…` : intentLabel;
+    intentShort.textContent = intentLabel;
     intentShort.title = c.intent?.detail || intentLabel;
   }
-  $("enemy-intent").className = `intent-banner intent-banner-wide intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
+  $("enemy-intent").className = `intent-banner intent-banner-compact intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
   $("enemy-intent").title = c.intent?.detail || c.intent?.label || "";
   $("enemy-hp").textContent = c.playerSeesEnemy ? String(c.enemy.hp) : "??";
   $("player-block").textContent = String(c.block + coverBlockAtPlayer());
@@ -8296,24 +8517,36 @@ function renderHouseGraphBattle() {
   const c = state.combat;
   const g = combatGrid();
   const frame = battleHouseFrame();
+  const iso = isIsoMapView();
   const CELL = 96;
   const GAP = 10;
   const wrap = $("battle-grid")?.parentElement;
-  if (wrap) wrap.classList.add("house-battle-wrap");
+  if (wrap) {
+    wrap.classList.add("house-battle-wrap");
+    wrap.classList.toggle("battle-view-iso", iso);
+  }
   const box = $("battle-grid");
-  box.className = "battle-grid house-graph-map";
-  box.style.gridTemplateColumns = `repeat(${frame.cols}, ${CELL}px)`;
-  box.style.gridTemplateRows = `repeat(${frame.rows}, ${CELL}px)`;
-  box.style.width = `${frame.cols * CELL + Math.max(0, frame.cols - 1) * GAP}px`;
-  box.style.height = `${frame.rows * CELL + Math.max(0, frame.rows - 1) * GAP}px`;
-  box.style.gap = `${GAP}px`;
+  box.className = `battle-grid house-graph-map battle-grid-boss${iso ? " battle-grid-iso" : ""}`;
+  const projection = iso ? setupBattleIsoBox(box, frame) : null;
+  if (!iso) {
+    box.style.gridTemplateColumns = `repeat(${frame.cols}, ${CELL}px)`;
+    box.style.gridTemplateRows = `repeat(${frame.rows}, ${CELL}px)`;
+    box.style.width = `${frame.cols * CELL + Math.max(0, frame.cols - 1) * GAP}px`;
+    box.style.height = `${frame.rows * CELL + Math.max(0, frame.rows - 1) * GAP}px`;
+    box.style.gap = `${GAP}px`;
+  }
   box.innerHTML = "";
 
   const linksSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   linksSvg.classList.add("battle-map-links");
   linksSvg.setAttribute("aria-hidden", "true");
-  linksSvg.setAttribute("viewBox", `${frame.col0} ${frame.row0} ${frame.cols} ${frame.rows}`);
-  linksSvg.setAttribute("preserveAspectRatio", "none");
+  linksSvg.setAttribute(
+    "viewBox",
+    iso
+      ? `0 0 ${projection.width} ${projection.height}`
+      : `${frame.col0} ${frame.row0} ${frame.cols} ${frame.rows}`,
+  );
+  linksSvg.setAttribute("preserveAspectRatio", iso ? "xMidYMid meet" : "none");
   box.appendChild(linksSvg);
 
   const sees = c.playerSeesEnemy;
@@ -8328,11 +8561,13 @@ function renderHouseGraphBattle() {
       const [a, b] = edge.split("|");
       const pa = parseKey(a);
       const pb = parseKey(b);
+      const ap = iso ? battleIsoCellCenter(pa, frame, projection) : null;
+      const bp = iso ? battleIsoCellCenter(pb, frame, projection) : null;
       const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute("x1", String(pa.c + 0.5));
-      line.setAttribute("y1", String(pa.r + 0.5));
-      line.setAttribute("x2", String(pb.c + 0.5));
-      line.setAttribute("y2", String(pb.r + 0.5));
+      line.setAttribute("x1", String(iso ? ap.x : pa.c + 0.5));
+      line.setAttribute("y1", String(iso ? ap.y : pa.r + 0.5));
+      line.setAttribute("x2", String(iso ? bp.x : pb.c + 0.5));
+      line.setAttribute("y2", String(iso ? bp.y : pb.r + 0.5));
       const live =
         keyOf(c.playerPos) === a ||
         keyOf(c.playerPos) === b;
@@ -8351,8 +8586,12 @@ function renderHouseGraphBattle() {
       cell.type = "button";
       cell.className = "battle-cell map-node-battle";
       cell.dataset.cellKey = k;
-      cell.style.gridColumn = String(cidx - frame.col0 + 1);
-      cell.style.gridRow = String(r - frame.row0 + 1);
+      if (iso) {
+        placeBattleIsoCell(cell, pos, frame, projection, 10);
+      } else {
+        cell.style.gridColumn = String(cidx - frame.col0 + 1);
+        cell.style.gridRow = String(r - frame.row0 + 1);
+      }
 
       const h = tileHeight(pos);
       const isP = keyOf(c.playerPos) === k;
@@ -8377,6 +8616,11 @@ function renderHouseGraphBattle() {
       if (anchor?.lit) cell.classList.add("anchor-lit");
       else if (anchor && !anchor.lit) cell.classList.add("anchor-dead");
       if (adjP) cell.classList.add("reachable");
+      if (iso && (isP || isE || isDecoy)) {
+        cell.style.zIndex = String(
+          (Number(cell.style.zIndex) || 0) + (isP ? 1000 : isE ? 900 : 800),
+        );
+      }
 
       if (threat?.kind === "hurt") {
         cell.classList.add("threat-hurt");
@@ -8417,6 +8661,7 @@ function renderHouseGraphBattle() {
         cell.classList.add("move-ok", "portal-ok");
       }
 
+      const doorDirs = [];
       for (const [d, dc, dr] of [
         ["n", 0, -1],
         ["s", 0, 1],
@@ -8429,11 +8674,12 @@ function renderHouseGraphBattle() {
         notch.className = `map-door map-door-${d}`;
         if (isP || (adjP && keyOf(nb) === keyOf(c.playerPos))) notch.classList.add("is-live");
         cell.appendChild(notch);
+        doorDirs.push(d);
       }
 
       const label = document.createElement("span");
       label.className = "map-node-label";
-      label.textContent = isP ? "" : roomName;
+      label.textContent = isP ? "" : roomName.length > 2 ? roomName.slice(0, 2) : roomName;
       if (!isP) cell.appendChild(label);
 
       if (anchor?.lit) {
@@ -8464,20 +8710,14 @@ function renderHouseGraphBattle() {
       }
       if (isE && sees) {
         pawnHtml +=
-          `<span class="battle-pawn enemy-pawn"><img class="char-token" src="assets/ui/chars/SP_Enemy_Pixel.png" alt="敌" width="28" height="28" draggable="false" /></span>`;
+          `<span class="battle-pawn enemy-pawn"><img class="char-token" src="assets/ui/chars/SP_Enemy_MapToken.png" alt="敌" width="96" height="96" draggable="false" /></span>`;
       } else if (isE && !sees) {
         pawnHtml += `<span class="battle-pawn fog-pawn" aria-label="未知">?</span>`;
       }
       if (isDecoy) pawnHtml += `<span class="battle-pawn decoy-pawn" aria-label="纸影">影</span>`;
 
-      const shots = threat?.hits > 1 ? `${threat.damage}×${threat.hits}` : `${threat?.damage}`;
-      const dmgHtml =
-        threat?.kind === "hurt" && threat.damage
-          ? `<span class="threat-dmg${threat.pending ? " pending" : ""}">${
-              threat.net !== threat.total ? `${shots}→${threat.net}` : shots
-            }</span>`
-          : "";
-      const meta = bits.length ? `<span class="cell-meta">${bits.join(" ")}</span>` : "";
+      const dmgHtml = threatDamageHtml(threat);
+      const meta = !iso && bits.length ? `<span class="cell-meta">${bits.join(" ")}</span>` : "";
       const body = document.createElement("span");
       body.className = "map-battle-body";
       body.innerHTML = `${dmgHtml}${pawnHtml}${meta}`;
@@ -8505,12 +8745,35 @@ function renderHouseGraphBattle() {
       ]
         .filter(Boolean)
         .join(" · ");
+      const threatDetail =
+        threat?.kind === "hurt"
+          ? `${threat.pending ? "预告" : "必伤"} ${threat.damage || 0}`
+          : threat?.kind === "move"
+            ? "敌人移动路径"
+            : null;
+      const doorArrows = {
+        n: "北↗",
+        e: "东↘",
+        s: "南↙",
+        w: "西↖",
+      };
+      bindBattleCellDetail(cell, isP ? `${roomName} · 你在这里` : roomName, [
+        h ? `高台 +${h}` : "平地",
+        doorDirs.length ? `门 ${doorDirs.map((d) => doorArrows[d]).join(" ")}` : "无门",
+        c.portals?.[k] ? "传送门" : null,
+        anchor?.lit ? `信号锚 ${anchor.hp}` : anchor ? "信号锚已熄" : null,
+        item ? cardDef(item.cardId)?.name || "场上道具" : null,
+        threatDetail,
+      ]);
       cell.onclick = () => onTileClick(pos);
+      if (iso) prependBattleIsoFloor(cell);
       box.appendChild(cell);
     }
   }
 
   syncBattleIntentBanner();
+  restoreBattleCellDetail();
+  syncBattleStageLighting(c);
   if (state.tutorial?.active) updateBattleTutorialCoach();
   flushCombatFx();
 }
@@ -8521,11 +8784,11 @@ function syncBattleIntentBanner() {
   if (!banner || !c) return;
   const label = c.intent?.label || "观望";
   banner.textContent = label;
-  banner.className = `intent-banner intent-banner-wide intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
+  banner.className = `intent-banner intent-banner-compact intent-${c.intent?.type || "chase"}${c.intent?.pending ? " pending" : ""}`;
   banner.title = c.intent?.detail || "";
   const intentShort = $("enemy-intent-short");
   if (intentShort) {
-    intentShort.textContent = label.length > 4 ? `${label.slice(0, 3)}…` : label;
+    intentShort.textContent = label;
     intentShort.title = c.intent?.detail || label;
   }
 }
@@ -8552,24 +8815,43 @@ function paintFlurryCue(cell, threat) {
   cell.appendChild(g);
 }
 
+function threatDamageHtml(threat) {
+  if (threat?.kind !== "hurt" || !threat.damage) return "";
+  const hits = Math.max(1, threat.hits || 1);
+  const total = threat.total != null ? threat.total : threat.damage * hits;
+  const net = threat.net != null ? threat.net : total;
+  const before = hits > 1 ? `${threat.damage}×${hits}=${total}伤` : `${threat.damage}伤`;
+  const after = net !== total ? `<span class="threat-after">盾后 ${net}</span>` : "";
+  const detail = net !== total ? `${before}，格挡后 ${net}` : before;
+  return `<span class="threat-dmg${threat.pending ? " pending" : ""}" title="${detail}"><span>${before}</span>${after}</span>`;
+}
+
 function renderBattleGrid() {
   const c = state.combat;
   if (!c) return;
+  const iso = isIsoMapView();
   const wrap = $("battle-grid")?.parentElement;
-  if (wrap) wrap.classList.remove("house-battle-wrap");
+  if (wrap) {
+    wrap.classList.remove("house-battle-wrap");
+    wrap.classList.toggle("battle-view-iso", iso);
+  }
   if (c.houseGraph) {
     renderHouseGraphBattle();
     return;
   }
   const g = combatGrid();
+  const frame = battleGridFrame();
   const box = $("battle-grid");
-  box.className = "battle-grid";
-  box.style.gridTemplateColumns = `repeat(${g.cols}, 80px)`;
-  box.style.gridTemplateRows = "";
-  box.style.width = "";
-  box.style.height = "";
-  box.style.gap = "";
-  box.style.justifyContent = "center";
+  box.className = `battle-grid${iso ? " battle-grid-iso" : ""}`;
+  const projection = iso ? setupBattleIsoBox(box, frame) : null;
+  if (!iso) {
+    box.style.gridTemplateColumns = `repeat(${g.cols}, 80px)`;
+    box.style.gridTemplateRows = "";
+    box.style.width = "";
+    box.style.height = "";
+    box.style.gap = "";
+    box.style.justifyContent = "center";
+  }
   box.innerHTML = "";
   const sees = c.playerSeesEnemy;
   // 意图刷新：玩家走位后威胁区跟着变
@@ -8584,6 +8866,7 @@ function renderBattleGrid() {
       cell.className = "battle-cell";
       const k = keyOf(pos);
       cell.dataset.cellKey = k;
+      if (iso) placeBattleIsoCell(cell, pos, frame, projection, 10);
       const wall = isWall(pos);
       const hole = isVoid(pos);
       const h = tileHeight(pos);
@@ -8604,6 +8887,7 @@ function renderBattleGrid() {
         cell.disabled = true;
         cell.title = "空洞";
         cell.innerHTML = `<span class="void-mark" aria-hidden="true"></span>`;
+        if (iso) prependBattleIsoFloor(cell);
         box.appendChild(cell);
         continue;
       }
@@ -8615,6 +8899,7 @@ function renderBattleGrid() {
         cell.title = "挡路";
         cell.setAttribute("aria-label", "挡路");
         cell.innerHTML = "";
+        if (iso) prependBattleIsoFloor(cell);
         box.appendChild(cell);
         continue;
       }
@@ -8628,6 +8913,11 @@ function renderBattleGrid() {
       if (c.portals?.[k]) cell.classList.add("is-portal");
       const isDecoy = decoyAlive(c) && keyOf(c.decoy.pos) === k;
       if (isDecoy) cell.classList.add("has-decoy");
+      if (iso && (isP || isE || isDecoy)) {
+        cell.style.zIndex = String(
+          (Number(cell.style.zIndex) || 0) + (isP ? 1000 : isE ? 900 : 800),
+        );
+      }
       if (c.lastSeen && keyOf(c.lastSeen) === k && !sees) cell.classList.add("last-seen");
       const anchor = c.anchors?.[k];
       if (anchor?.lit) cell.classList.add("anchor-lit");
@@ -8689,7 +8979,7 @@ function renderBattleGrid() {
       }
       if (isE && sees) {
         pawnHtml +=
-          `<span class="battle-pawn enemy-pawn"><img class="char-token" src="assets/ui/chars/SP_Enemy_Pixel.png" alt="敌" width="28" height="28" draggable="false" /></span>`;
+          `<span class="battle-pawn enemy-pawn"><img class="char-token" src="assets/ui/chars/SP_Enemy_MapToken.png" alt="敌" width="96" height="96" draggable="false" /></span>`;
       } else if (isE && !sees) {
         pawnHtml += `<span class="battle-pawn enemy-pawn fog-pawn" aria-label="未知">?</span>`;
       }
@@ -8701,17 +8991,15 @@ function renderBattleGrid() {
       } else if (anchor && !anchor.lit) {
         pawnHtml += `<span class="cell-glyph glyph-anchor-dead" aria-hidden="true">灰</span>`;
       }
-      const shots = threat?.hits > 1 ? `${threat.damage}×${threat.hits}` : `${threat?.damage}`;
       const dmgHtml =
         threat?.kind === "hurt" && threat.damage
-          ? `<span class="threat-dmg${threat.pending ? " pending" : ""}">${
-              threat.net !== threat.total ? `${shots}→${threat.net}` : shots
-            }</span>`
+          ? threatDamageHtml(threat)
           : threat?.kind === "hurt" && threat.attackKind === "decoy"
             ? `<span class="threat-dmg">影</span>`
             : "";
-      const meta = bits.length ? `<span class="cell-meta">${bits.join(" ")}</span>` : "";
-      cell.innerHTML = `${dmgHtml}${pawnHtml}${meta || (!isP && !isE && !isDecoy && !dmgHtml ? "<span>·</span>" : "")}`;
+      const meta = !iso && bits.length ? `<span class="cell-meta">${bits.join(" ")}</span>` : "";
+      cell.innerHTML = `${dmgHtml}${pawnHtml}${meta || (!iso && !isP && !isE && !isDecoy && !dmgHtml ? "<span>·</span>" : "")}`;
+      if (iso) prependBattleIsoFloor(cell);
       cell.title = [
         roomName || (wall ? "挡路" : "空地"),
         c.houseGraph ? "山屋格（沿门移动）" : null,
@@ -8756,11 +9044,28 @@ function renderBattleGrid() {
       ]
         .filter(Boolean)
         .join(" · ");
+      const threatDetail =
+        threat?.kind === "hurt"
+          ? `${threat.pending ? "预告" : "必伤"} ${threat.damage || 0}`
+          : threat?.kind === "move"
+            ? "敌人移动路径"
+            : null;
+      bindBattleCellDetail(cell, isP ? "你所在的格" : `格 ${r + 1},${cidx + 1}`, [
+        h ? `高台 +${h}` : "平地",
+        c.portals?.[k] ? "传送门" : null,
+        anchor?.lit ? `信号锚 ${anchor.hp}` : anchor ? "信号锚已熄" : null,
+        item ? cardDef(item.cardId)?.name || "场上道具" : null,
+        isDecoy ? "纸影傀儡" : null,
+        threatDetail,
+        adjP ? (c.placeUid ? "可放置" : "可移动") : null,
+      ]);
       cell.onclick = () => onTileClick(pos);
       box.appendChild(cell);
     }
   }
   syncBattleIntentBanner();
+  restoreBattleCellDetail();
+  syncBattleStageLighting(c);
   if (state.tutorial?.active) updateBattleTutorialCoach();
   flushCombatFx();
 }
@@ -9376,7 +9681,9 @@ function bindUi() {
   window.addEventListener("scroll", hideCardTooltip, true);
   window.addEventListener("resize", () => {
     hideCardTooltip();
-    if ($("screen-game")?.classList.contains("active") && !state.combat) {
+    if (state.combat && $("screen-cards")?.classList.contains("active")) {
+      renderBattleGrid();
+    } else if ($("screen-game")?.classList.contains("active")) {
       const box = $("house-map");
       if (box?.classList.contains("house-map-abs")) fitHouseMapBox(box, mapDisplayFrame());
     }
@@ -9401,6 +9708,8 @@ function bindUi() {
   $("btn-mute")?.addEventListener("click", () => toggleMute());
   $("btn-mute-map")?.addEventListener("click", () => toggleMute());
   $("btn-mute-battle")?.addEventListener("click", () => toggleMute());
+  $("btn-map-view")?.addEventListener("click", () => toggleMapView());
+  $("btn-battle-view")?.addEventListener("click", () => toggleMapView());
   $("btn-restart-run")?.addEventListener("click", () => restartRun());
   $("btn-home")?.addEventListener("click", () => goHome());
   $("btn-combat-home")?.addEventListener("click", () => combatGoHome());
@@ -9410,11 +9719,14 @@ async function main() {
   bindUi();
   try {
     state.muted = localStorage.getItem("cabin-mute") === "1";
+    state.mapView = localStorage.getItem(MAP_VIEW_KEY) === "plan" ? "plan" : "iso";
   } catch (_) {
     state.muted = false;
+    state.mapView = "iso";
   }
   setMuted(state.muted);
   updateMuteButton();
+  updateMapViewButton();
   renderLabPanel();
   const status = $("boot-status");
   try {
@@ -9489,6 +9801,8 @@ window.CabinDebug = {
   combatGoHome,
   // 玩家摆房调试接口（自测脚本驱动用）
   isPlayerLayoutMode,
+  isIsoMapView,
+  setMapViewMode,
   listBuildSlots,
   openMapBuildAt,
   selectMapBuildPick,
