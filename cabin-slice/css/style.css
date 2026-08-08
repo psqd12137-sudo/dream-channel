@@ -981,6 +981,9 @@ body.is-map-building .map-teeth-bot {
 .build-offer.event-known .build-offer-body {
   background: #e8a020;
 }
+.build-offer.role-concealed .build-offer-body {
+  background: #8a7f9c;
+}
 .build-offer-face {
   position: relative;
   flex: 1;
@@ -1026,6 +1029,9 @@ body.is-map-building .map-teeth-bot {
 }
 .build-offer.event-known .build-offer-icon {
   background: #c47e00;
+}
+.build-offer.role-concealed .build-offer-icon {
+  background: #655c78;
 }
 .build-offer-name {
   font-family: var(--font-display);
@@ -1277,6 +1283,7 @@ body.is-map-building .map-teeth-bot {
 .map-node.combat-known { border-color: #e26b7a; background: #fff0f2; }
 .map-node.safe-known { border-color: #4caf82; background: #eefaf3; }
 .map-node.event-known { border-color: #c4a035; background: #fff8e6; }
+.map-node.role-concealed { border-color: #8a7f9c; background: #f3f0f6; }
 .map-node.visited { color: var(--ink); }
 .map-node.reachable:not(.current) {
   box-shadow:

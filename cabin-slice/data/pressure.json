@@ -78,6 +78,15 @@
     "traits": ["lunge", "guardBreak", "slam"],
     "toughBonus": 3
   },
+  "bossProfiles": {
+    "channel_host": { "archetype": "crush", "victoryMode": "mixed", "anchorCount": 4, "broadcastMax": 14, "directives": ["closeup", "spotlight", "mute", "extra"] },
+    "whisper_wall": { "archetype": "stagger", "victoryMode": "ritual", "killable": false, "anchorCount": 3, "broadcastMax": 17, "anchorClockRelief": 3, "directives": ["mute", "spotlight"] },
+    "fog_walker": { "archetype": "stagger", "victoryMode": "ritual", "killable": false, "anchorCount": 3, "broadcastMax": 16, "seenClockBonus": 2, "directives": ["mute", "closeup"] },
+    "rust_keeper": { "archetype": "crush", "victoryMode": "kill", "ritualDisabled": true, "anchorCount": 2, "broadcastMax": 19, "anchorHp": 3, "directives": ["closeup", "extra"] },
+    "director_cut": { "archetype": "execute", "victoryMode": "kill", "ritualDisabled": true, "anchorCount": 2, "broadcastMax": 12, "chargeTurns": 0, "directives": ["closeup", "extra"] },
+    "hide_and_seek": { "archetype": "stagger", "victoryMode": "ritual", "killable": false, "anchorCount": 4, "broadcastMax": 15, "dismantleCost": 2, "directives": ["mute", "spotlight", "closeup"] },
+    "stars_align": { "archetype": "crush", "victoryMode": "ritual", "killable": false, "anchorCount": 5, "broadcastMax": 18, "anchorHp": 1, "directives": ["spotlight", "extra"] }
+  },
   "bossFight": {
     "broadcastMax": 14,
     "seenClockBonus": 1,

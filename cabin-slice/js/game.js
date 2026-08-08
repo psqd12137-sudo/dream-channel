@@ -29,6 +29,8 @@ const state = {
   nodePending: false,
   combatCount: 0,
   rewardRolls: {},
+  /** 尚未揭晓的房间类型配额：让玩家可以选路，但不能整局绕开惊吓。 */
+  roleBag: null,
   /** 当前实验会话（战斗进行中） */
   lab: null,
   /** 本局是否来自「跳到 Boss」测强度入口 */
@@ -655,16 +657,24 @@ function contentPoolByRole(role) {
 }
 
 function pickRoleFromBag(rng) {
+  const bag = arguments.length > 1 && arguments[1] ? arguments[1] : state.roleBag;
   const mix = state.data.rooms.layoutRoll?.visitMix || {
     combat: 0.4,
     quiet: 0.35,
     event: 0.25,
   };
-  return pickWeighted(
-    ["combat", "quiet", "event"],
-    rng,
-    (k) => mix[k] ?? 0.33,
-  );
+  const available = ["combat", "quiet", "event"].filter((k) => !bag || (bag[k] || 0) > 0);
+  const roles = available.length ? available : ["combat", "quiet", "event"];
+  const role = pickWeighted(roles, rng, (k) => mix[k] ?? 0.33);
+  if (bag && Object.prototype.hasOwnProperty.call(bag, role) && bag[role] > 0) {
+    bag[role] -= 1;
+  }
+  return role;
+}
+
+function freshRoleBag() {
+  // 玄关已占 1 格；前 9 个新房固定含 4 惊吓、3 静室、2 事件，剩余房间再自由抽取。
+  return { combat: 4, quiet: 3, event: 2 };
 }
 
 /** 为 (col,row) 生成可落位候选：内容自带类型 + 门形可旋转对齐 */
@@ -672,9 +682,11 @@ function rollBuildOffers(col, row, count = 3) {
   const rng = makeRng((state.runSeed || 1) ^ (col * 73856093) ^ (row * 19349663) ^ ((uidSeq + 1) * 83492791));
   const patterns = doorPatterns();
   const offers = [];
+  // 只在生成候选时消耗副本；真正落位时再从本局配额扣除玩家选中的类型。
+  const previewBag = state.roleBag ? { ...state.roleBag } : null;
   let guard = 40;
   while (offers.length < count && guard-- > 0) {
-    const role = pickRoleFromBag(rng);
+    const role = pickRoleFromBag(rng, previewBag);
     const pool = contentPoolByRole(role);
     if (!pool.length) continue;
     const content = pool[Math.floor(rng() * pool.length)];
@@ -921,6 +933,9 @@ function commitMapBuild() {
   }
   const id = `r${uidSeq++}`;
   const role = offer.role;
+  if (state.roleBag && Object.prototype.hasOwnProperty.call(state.roleBag, role) && state.roleBag[role] > 0) {
+    state.roleBag[role] -= 1;
+  }
   state.roomLayout[id] = {
     col: b.col,
     row: b.row,
@@ -934,10 +949,10 @@ function commitMapBuild() {
   state.knownRooms.add(id);
   discoverNeighbors(state.roomId);
   discoverNeighbors(id);
-  const kind =
-    role === "combat" ? "惊吓" : role === "event" ? "考验" : "静室";
   log(
-    `摆下「${offer.name}」·${offer.patternLabel}（${kind}）。走进去结算才算行程。`,
+    state.tutorial?.active
+      ? `摆下「${offer.name}」·${offer.patternLabel}（${role === "combat" ? "惊吓" : role === "event" ? "考验" : "静室"}）。走进去结算才算行程。`
+      : `摆下「${offer.name}」·${offer.patternLabel}。走进去才知道这里发生什么，也才算行程。`,
     "ok",
   );
   state.mapBuild = null;
@@ -994,9 +1009,10 @@ function renderMapBuildDock() {
   const head = document.createElement("div");
   head.className = "map-build-head";
   const isoHint = isIsoMapView() ? "等距门向：北↗ 东↘ 南↙ 西↖ · " : "";
+  const concealRoomRole = !state.tutorial?.active;
   const tutHint = state.tutorial?.active
     ? `${isoHint}内卡四边缺口 = 门朝向 · 旋转到缺口对着邻房的门才能摆下`
-    : `${isoHint}选票根 · 旋转对门 · 内卡缺口=门朝向 · 走进去才算行程`;
+    : `${isoHint}选票根 · 旋转对门 · 内卡缺口=门朝向 · 走进去才揭晓这一间`;
   head.innerHTML = `<span class="map-build-kicker">盖屋</span><strong>扩建 (${b.col},${b.row})</strong><span class="map-build-hint">${tutHint}</span>`;
   dock.appendChild(head);
 
@@ -1005,7 +1021,7 @@ function renderMapBuildDock() {
   b.offers.forEach((offer, i) => {
     const roleLabel =
       offer.role === "combat" ? "惊吓" : offer.role === "event" ? "考验" : "静室";
-    const glyph = offer.role === "combat" ? "口" : offer.role === "event" ? "?" : "书";
+    const glyph = concealRoomRole ? "?" : offer.role === "combat" ? "口" : offer.role === "event" ? "?" : "书";
 
     const wrap = document.createElement("div");
     wrap.className = "build-offer-wrap";
@@ -1014,7 +1030,8 @@ function renderMapBuildDock() {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "build-offer";
-    if (offer.role === "combat") card.classList.add("combat-known");
+    if (concealRoomRole) card.classList.add("role-concealed");
+    else if (offer.role === "combat") card.classList.add("combat-known");
     else if (offer.role === "event") card.classList.add("event-known");
     else card.classList.add("safe-known");
     if (i === b.pick) card.classList.add("is-pick");
@@ -1043,7 +1060,9 @@ function renderMapBuildDock() {
     name.textContent = offer.name;
     const meta = document.createElement("span");
     meta.className = "build-offer-meta";
-    meta.textContent = `${roleLabel} · ${offer.patternLabel}`;
+    meta.textContent = concealRoomRole
+      ? `未揭示 · ${offer.patternLabel}`
+      : `${roleLabel} · ${offer.patternLabel}`;
     face.append(icon, name, meta);
     // 门朝向放进米黄内卡四边，不挂票外
     appendDoorNotches(face, offer.doors);
@@ -2211,6 +2230,20 @@ function bossFightCfg() {
   return state.data.pressure?.bossFight || {};
 }
 
+function bossProfile(id = state.chosenBoss) {
+  const base = state.data.pressure?.boss || {};
+  const raw = state.data.pressure?.bossProfiles?.[id] || {};
+  const global = bossFightCfg();
+  const directives = raw.directives
+    ? (global.directives || []).filter((d) => raw.directives.includes(d.id))
+    : global.directives;
+  return { ...global, ...raw, traits: raw.traits || base.traits, directives };
+}
+
+function bossFightCfgFor(c) {
+  return c?.bossProfile || bossProfile();
+}
+
 function litAnchorKeys(c) {
   return Object.keys(c.anchors || {}).filter((k) => c.anchors[k]?.lit);
 }
@@ -2225,7 +2258,7 @@ function allAnchorsOut(c) {
 }
 
 function currentBossPhase(c) {
-  const phases = bossFightCfg().phases || [];
+  const phases = bossFightCfgFor(c).phases || [];
   const cleared = anchorsClearedCount(c);
   let best = phases[0] || { cleared: 0, name: "开场", stam: 4, clock: 1 };
   for (const p of phases) {
@@ -2267,7 +2300,7 @@ function chargeCellsAround(center, radius) {
 }
 
 function damageAnchorsInCells(c, cells, amount, source) {
-  if (!c.isBoss || !c.anchors || amount <= 0) return 0;
+  if (!c.isBoss || c.bossProfile?.ritualDisabled || !c.anchors || amount <= 0) return 0;
   let hit = 0;
   for (const pos of cells || []) {
     const k = keyOf(pos);
@@ -2287,7 +2320,7 @@ function damageAnchorsInCells(c, cells, amount, source) {
           state.lab.summary.anchorsClearedByBoss = (state.lab.summary.anchorsClearedByBoss || 0) + 1;
         }
       }
-      relieveBroadcast(c, bossFightCfg().anchorClockRelief || 2, "熄灭锚点");
+      relieveBroadcast(c, bossFightCfgFor(c).anchorClockRelief || 2, "熄灭锚点");
       checkBossPhaseUp(c);
       if (allAnchorsOut(c)) {
         winCombat("ritual");
@@ -2314,7 +2347,7 @@ function tickBroadcast(c) {
   const phase = currentBossPhase(c);
   let add = phase.clock || 1;
   const sees = hasLoS(c.enemyPos, c.playerPos);
-  if (sees) add += bossFightCfg().seenClockBonus || 0;
+  if (sees) add += bossFightCfgFor(c).seenClockBonus || 0;
   if (c.directive?.id === "extra") add += 1;
   c.broadcast = Math.min(c.broadcastMax, (c.broadcast || 0) + add);
   labEvent("broadcast_tick", { add, value: c.broadcast, max: c.broadcastMax, sees });
@@ -2329,7 +2362,7 @@ function tickBroadcast(c) {
 function checkBossPhaseUp(c) {
   if (!c.isBoss) return;
   const phase = currentBossPhase(c);
-  const idx = (bossFightCfg().phases || []).findIndex((p) => p.name === phase.name);
+  const idx = (bossFightCfgFor(c).phases || []).findIndex((p) => p.name === phase.name);
   if (idx > (c.phaseIndex || 0)) {
     c.phaseIndex = idx;
     c.phaseName = phase.name;
@@ -2343,7 +2376,7 @@ function checkBossPhaseUp(c) {
 
 function drawBossDirective(c) {
   if (!c.isBoss) return null;
-  const pool = bossFightCfg().directives || [];
+  const pool = bossFightCfgFor(c).directives || [];
   if (!pool.length) return null;
   const cleared = anchorsClearedCount(c);
   const eligible = pool.filter((d) => (d.minCleared || 0) <= cleared);
@@ -2445,7 +2478,7 @@ function tryDismantleAnchor() {
     log("你脚下没有亮着的信号锚。", "bad");
     return false;
   }
-  const cost = bossFightCfg().dismantleCost || 2;
+  const cost = bossFightCfgFor(c).dismantleCost || 2;
   if (c.energy < cost) {
     log(`拆信号需要 ${cost} 行动力。`, "bad");
     return false;
@@ -3239,6 +3272,7 @@ function saveGame() {
     nodePending: state.nodePending,
     combatCount: state.combatCount || 0,
     rewardRolls: state.rewardRolls || {},
+    roleBag: state.roleBag || freshRoleBag(),
     midRelicDone: !!state.midRelicDone,
     runSeed: state.runSeed || 0,
     roomLayout: state.roomLayout || null,
@@ -3266,6 +3300,7 @@ function loadGame() {
     state.nodePending = !!p.nodePending;
     state.combatCount = p.combatCount || 0;
     state.rewardRolls = p.rewardRolls || {};
+    state.roleBag = p.roleBag || freshRoleBag();
     state.midRelicDone = !!p.midRelicDone;
     state.runSeed = p.runSeed || 0;
     state.roomLayout = p.roomLayout || null;
@@ -3520,6 +3555,7 @@ function startFlingSandbox(layoutId = "corridor") {
   state.combat = null;
   state.combatCount = 0;
   state.rewardRolls = {};
+  state.roleBag = null;
   state.midRelicDone = true;
   state.roomLayout = null;
   state.runSeed = 0;
@@ -3940,6 +3976,7 @@ function startTutorial() {
   state.chosenBoss = null;
   state.combatCount = 0;
   state.rewardRolls = {};
+  state.roleBag = null;
   state.midRelicDone = true;
   state.lab = null;
   uidSeq = 100;
@@ -3996,6 +4033,7 @@ function resetGame() {
   state.combat = null;
   state.combatCount = 0;
   state.rewardRolls = {};
+  state.roleBag = freshRoleBag();
   state.midRelicDone = false;
   state.lab = null;
   state.labTag = "normal";
@@ -4183,6 +4221,7 @@ function skipToBossTest(deckId = "grown", bossPick = null) {
   state.combat = null;
   state.combatCount = 6;
   state.rewardRolls = {};
+  state.roleBag = null;
   state.midRelicDone = true;
   state.labTag = `boss_test:${preset.id}`;
   state.bossTestDeck = preset.id;
@@ -4595,8 +4634,12 @@ function renderMap() {
       const kind = document.createElement("span");
       kind.className = "map-node-kind";
       kind.setAttribute("aria-hidden", "true");
+      const roleRevealed = visited || isHere;
       if (room.bossRoom) {
         kind.innerHTML = `<img src="assets/ui/WarningSign.png" alt="" />`;
+      } else if (!roleRevealed) {
+        kind.textContent = "?";
+        btn.classList.add("role-concealed");
       } else if (room.combat) {
         kind.innerHTML = `<img src="assets/ui/EventIcon.png" alt="" />`;
         btn.classList.add("combat-known");
@@ -4645,9 +4688,9 @@ function renderMap() {
           `<img class="char-token map-token" data-lili-anim="idle" src="assets/ui/chars/lili_idle/frame_01.png" alt="你" width="40" height="40" draggable="false" />`;
         btn.appendChild(pawn);
       } else {
-        btn.title =
-          room.name +
-          (room.combat ? " · 惊吓" : room.eventType ? " · 考验" : " · 静室");
+        btn.title = roleRevealed
+          ? room.name + (room.combat ? " · 惊吓" : room.eventType ? " · 考验" : " · 静室")
+          : `${room.name} · 尚未揭晓`;
       }
 
       if (room.bossRoom) {
@@ -5226,6 +5269,42 @@ function startNonCombatRewards(room) {
     completeRoom();
     finishNodeModal("你空着手离开静室。");
   });
+}
+
+const CARD_FAMILIES = {
+  trap: new Set(["jab", "guard", "snare", "shove", "brace", "riposte", "fling"]),
+  flash: new Set(["glare", "flare", "afterimage", "strobe"]),
+  height: new Set(["foothold", "drop_hammer", "topple"]),
+  portal: new Set(["usher", "rift_fling", "warp_trap"]),
+  break: new Set(["chisel", "rupture", "breach"]),
+  puppet: new Set(["decoy", "puppet_bang"]),
+};
+
+function cardFamily(id) {
+  for (const [family, ids] of Object.entries(CARD_FAMILIES)) {
+    if (ids.has(id)) return family;
+  }
+  return "general";
+}
+
+/** 战斗奖励保留随机性，但至少给一张与现有牌组相连的牌，避免条件牌完全平铺。 */
+function combatRewardOffers(pool, count = 3) {
+  const ownedIds = new Set(allOwnedCards().map((c) => c.id));
+  const ownedFamilies = new Set([...ownedIds].map(cardFamily));
+  const unique = [...new Set(pool)].filter((id) => !!cardDef(id));
+  const scored = unique.map((id) => ({
+    id,
+    score: (ownedFamilies.has(cardFamily(id)) ? 4 : 0) + (cardFamily(id) === "general" ? 1 : 0) + Math.random(),
+  }));
+  scored.sort((a, b) => b.score - a.score);
+  const picked = [];
+  const bestFamily = scored.find((x) => ownedFamilies.has(cardFamily(x.id)));
+  if (bestFamily) picked.push(bestFamily.id);
+  for (const item of scored) {
+    if (picked.length >= count) break;
+    if (!picked.includes(item.id)) picked.push(item.id);
+  }
+  return picked;
 }
 
 function offerCardReward({ title, lead, offers, onDone, overCombat = false }) {
@@ -6271,7 +6350,7 @@ function drainToughness(amount, reason) {
   log(`破韧！【${c.archetypeLabel}】${reason || ""}`, "ok");
   playTone("ok");
   labNoteToughBreak(reason || "");
-  if (c.isBoss) relieveBroadcast(c, bossFightCfg().breakClockRelief || 2, "破韧");
+  if (c.isBoss) relieveBroadcast(c, bossFightCfgFor(c).breakClockRelief || 2, "破韧");
   if (style === "execute") {
     c.executeReady = true;
     log("获得处决：下次砸击/踩踏 +2。", "ok");
@@ -6318,7 +6397,12 @@ function dealToEnemy(rawDmg, source, fx) {
     c.crushReady = false;
   }
 
-  c.enemy.hp -= dmg;
+  if (c.isBoss && c.killable === false) {
+    c.enemy.hp = Math.max(1, c.enemy.hp - dmg);
+    log(`${c.enemy.name}被仪式护住了——只有熄灭信号锚才能结束它。`, "bad");
+  } else {
+    c.enemy.hp -= dmg;
+  }
   c.turnDamageDealt = (c.turnDamageDealt || 0) + dmg;
   labNoteDamageDealt(dmg, source);
   maybeQueueEnemyHitFx(dmg, source, fx);
@@ -6370,21 +6454,22 @@ function buildEncounter(room, isBoss) {
     ? state.data.bosses.bosses[state.chosenBoss]
     : room?.enemy || { name: "剪影", hp: 6, damage: 1 };
   const contentKey = room?.contentId || room?.id;
+  const profile = isBoss ? bossProfile(state.chosenBoss) : null;
   const archId = isBoss
-    ? P.boss.archetype
+    ? profile.archetype || P.boss.archetype
     : P.roomArchetype[contentKey] || P.roomArchetype[room?.id] || "execute";
   const arch = P.archetypes[archId];
   const traits = isBoss
-    ? [...(P.boss.traits || [])]
+    ? [...(profile.traits || P.boss.traits || [])]
     : [...(P.roomTraits[contentKey] || P.roomTraits[room?.id] || [])];
   const tier = isBoss ? 5 : combatTier();
   const scale = tierScale(tier);
-  const hp = src.hp + scale.hp + (isBoss ? 2 : 0);
+  const hp = src.hp + scale.hp + (isBoss ? (profile.hpBonus ?? 2) : 0);
   const damage = src.damage + scale.damage;
   const tough =
     arch.baseTough +
     scale.tough +
-    (isBoss ? P.boss.toughBonus || 0 : 0);
+    (isBoss ? (profile.toughBonus ?? P.boss.toughBonus ?? 0) : 0);
   const staminaMax = (isBoss ? 4 : 3) + scale.stam;
   return {
     name: src.name,
@@ -6399,6 +6484,7 @@ function buildEncounter(room, isBoss) {
     tier,
     staminaMax,
     attackCost: 2,
+    bossProfile: profile,
   };
 }
 
@@ -6873,12 +6959,16 @@ function startCombat(room, isBoss) {
     phaseName: "开场",
     chargePending: null,
     directive: null,
+    bossProfile: enc.bossProfile || null,
+    victoryMode: enc.bossProfile?.victoryMode || "mixed",
+    killable: enc.bossProfile?.killable !== false,
   };
 
   if (isBoss) {
-    const cfg = bossFightCfg();
+    const cfg = bossFightCfgFor(state.combat);
     const hp = cfg.anchorHp || 2;
-    for (const key of arena.anchors || []) {
+    const anchorCount = Math.max(1, cfg.anchorCount || (arena.anchors || []).length);
+    for (const key of (arena.anchors || []).slice(0, anchorCount)) {
       state.combat.anchors[key] = { lit: true, hp };
     }
     state.combat.broadcastMax = cfg.broadcastMax || 12;
@@ -6890,7 +6980,7 @@ function startCombat(room, isBoss) {
     }
     state.combat.phaseName = phase0?.name || "开场";
     log(
-      `仪式开场：场上 ${Object.keys(state.combat.anchors).length} 枚信号锚。熄灭全部 或 打空血条均可通关。播出进度 ${state.combat.broadcastMax} 满则失败。`,
+      `仪式开场：${state.combat.enemy.name}属于「${state.combat.victoryMode === "ritual" ? "仪式目标" : state.combat.victoryMode === "kill" ? "猎杀目标" : "混合目标"}」。场上 ${Object.keys(state.combat.anchors).length} 枚信号锚；${state.combat.victoryMode === "kill" ? "打空血条才能通关" : state.combat.victoryMode === "ritual" ? "必须熄灭全部信号锚" : "熄灭全部信号锚或打空血条均可"}。播出进度 ${state.combat.broadcastMax} 满则失败。`,
       "ok",
     );
   }
@@ -8264,9 +8354,9 @@ function renderBossRitualHud(c) {
   const btn = $("btn-dismantle");
   if (btn) {
     const onAnchor = !!c.anchors?.[keyOf(c.playerPos)]?.lit;
-    const cost = bossFightCfg().dismantleCost || 2;
-    btn.classList.toggle("hidden", !onAnchor);
-    btn.disabled = !onAnchor || c.energy < cost;
+    const cost = bossFightCfgFor(c).dismantleCost || 2;
+    btn.classList.toggle("hidden", !onAnchor || c.bossProfile?.ritualDisabled);
+    btn.disabled = !onAnchor || c.bossProfile?.ritualDisabled || c.energy < cost;
     btn.textContent = `拆信号（${cost}）`;
   }
 }
@@ -9219,8 +9309,8 @@ function winCombat(reason = "kill") {
   shuffle(pool);
   offerCardReward({
     title: "胜利！",
-    lead: "选择一张道具卡作为本场奖励，或跳过。",
-    offers: pool.slice(0, 2),
+    lead: "三选一道具卡；系统会优先给出与你已有牌组相连的方向，也可以跳过。",
+    offers: combatRewardOffers(pool, 3),
     overCombat: true,
     onDone: (msg) => {
       document.body.classList.remove("sts-overlay-open");
