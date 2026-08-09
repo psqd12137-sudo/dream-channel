@@ -1058,11 +1058,14 @@ function renderMapBuildDock() {
     const name = document.createElement("span");
     name.className = "build-offer-name";
     name.textContent = offer.name;
+    name.title = offer.name;
     const meta = document.createElement("span");
     meta.className = "build-offer-meta";
     meta.textContent = concealRoomRole
       ? `未揭示 · ${offer.patternLabel}`
       : `${roleLabel} · ${offer.patternLabel}`;
+    meta.title = meta.textContent;
+    card.title = `${offer.name} · ${meta.textContent}`;
     face.append(icon, name, meta);
     // 门朝向放进米黄内卡四边，不挂票外
     appendDoorNotches(face, offer.doors);
@@ -4761,8 +4764,12 @@ function renderMap() {
 
 function renderRoom() {
   const room = roomDef(state.roomId);
-  $("room-name").textContent = room.name;
-  $("room-desc").textContent = room.desc;
+  const roomName = $("room-name");
+  const roomDesc = $("room-desc");
+  roomName.textContent = room.name;
+  roomName.title = room.name;
+  roomDesc.textContent = room.desc;
+  roomDesc.title = room.desc;
   $("room-tag").textContent = state.tutorial?.active
     ? room.tutorialFight
       ? "教学·惊吓"
@@ -8327,6 +8334,27 @@ function enemyTurn() {
   tickBlind(c);
 }
 
+function bossObjectiveStatus(c) {
+  const total = Object.keys(c.anchors || {}).length;
+  const cleared = anchorsClearedCount(c);
+  if (c.victoryMode === "kill" || c.bossProfile?.ritualDisabled) {
+    return {
+      label: "目标·击败首领",
+      detail: "打空首领生命才能结束战斗。",
+    };
+  }
+  if (c.victoryMode === "ritual") {
+    return {
+      label: `目标·熄锚 ${cleared}/${total}`,
+      detail: `必须熄灭全部 ${total} 枚信号锚。`,
+    };
+  }
+  return {
+    label: "目标·击败或熄锚",
+    detail: `打空首领生命，或熄灭全部 ${total} 枚信号锚。`,
+  };
+}
+
 function renderBossRitualHud(c) {
   const wrap = $("boss-ritual-hud");
   if (!wrap) return;
@@ -8336,7 +8364,12 @@ function renderBossRitualHud(c) {
   }
   wrap.classList.remove("hidden");
   const phase = $("boss-phase-chip");
-  if (phase) phase.textContent = c.phaseName || "开场";
+  const objective = bossObjectiveStatus(c);
+  if (phase) {
+    phase.textContent = objective.label;
+    phase.title = objective.detail;
+  }
+  wrap.setAttribute("aria-label", `${objective.detail} 播出进度满则失败。`);
   const dir = $("program-directive");
   if (dir) {
     dir.textContent = c.directive ? `指令·${c.directive.label}` : "等待导播…";
@@ -8417,12 +8450,14 @@ function renderCombat() {
   const c = state.combat;
   if (!c) return;
   refreshVision();
-  $("combat-title").textContent = c.isBoss
-    ? `${c.enemy.name}`
-    : `${c.enemy.name}`;
-  $("card-check-label").textContent = c.isBoss
+  const combatTitle = $("combat-title");
+  combatTitle.textContent = c.enemy.name;
+  combatTitle.title = c.enemy.name;
+  const combatLabel = c.isBoss
     ? `${c.roomName} · ${c.phaseName || "开场"} · 锚 ${anchorsClearedCount(c)}/${Object.keys(c.anchors || {}).length}`
     : `${c.roomName} · ${c.archetypeLabel} · 难度档 ${c.tier}`;
+  $("card-check-label").textContent = combatLabel;
+  $("card-check-label").title = combatLabel;
   $("card-energy").textContent = `${c.energy} AP`;
   const energyEl = $("card-energy");
   if (energyEl) {

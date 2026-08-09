@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>织梦频道 channel dream · 山屋</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="css/style.css?v=20260807sizeFix2" />
+  <link rel="stylesheet" href="css/style.css?v=20260809mapLinkFix1" />
 </head>
 <body class="landscape">
   <div class="app">
@@ -46,31 +46,33 @@
               <button id="btn-continue" class="btn btn-secondary btn-ticket hidden">接着看上集</button>
               <button id="btn-mute" class="btn btn-ghost btn-ticket" type="button">音乐：开</button>
             </div>
-            <details class="debug-fold">
-              <summary>调试入口</summary>
-              <div class="title-actions debug-actions">
-                <button id="btn-fling-test" class="btn btn-ghost btn-ticket" type="button">测预备·甩开</button>
-                <button id="btn-boss-test" class="btn btn-ghost btn-ticket" type="button">测 Boss · 选对手与牌组</button>
-                <button id="btn-sideview-test" class="btn btn-ghost btn-ticket" type="button">测 WASD 手感（临时）</button>
-                <button id="btn-qte-test" class="btn btn-ghost btn-ticket" type="button">测警察抓小偷</button>
-                <button id="btn-puzzle-test" class="btn btn-ghost btn-ticket" type="button">测八数码拼图</button>
-              </div>
-            </details>
             <p id="boot-status" class="boot-status">电视机预热中…</p>
-            <details class="lab-fold folder-panel">
-              <summary>实验记录（可展开）</summary>
-              <section class="lab-panel" aria-label="实验记录">
-                <header class="lab-head">
-                  <h3>实验记录</h3>
-                  <div class="lab-actions">
-                    <button id="btn-lab-export" class="btn btn-ticket btn-ghost" type="button">导出 JSON</button>
-                    <button id="btn-lab-clear" class="btn btn-ticket btn-ghost" type="button">清空</button>
-                  </div>
-                </header>
-                <p id="lab-meta" class="lab-meta"></p>
-                <ul id="lab-list" class="lab-list"></ul>
-              </section>
-            </details>
+            <div class="title-utility-row">
+              <details class="debug-fold">
+                <summary>节目测试台</summary>
+                <div class="title-actions debug-actions">
+                  <button id="btn-fling-test" class="btn btn-ghost btn-ticket" type="button">测预备·甩开</button>
+                  <button id="btn-boss-test" class="btn btn-ghost btn-ticket" type="button">测 Boss · 选对手与牌组</button>
+                  <button id="btn-sideview-test" class="btn btn-ghost btn-ticket" type="button">测 WASD 手感（临时）</button>
+                  <button id="btn-qte-test" class="btn btn-ghost btn-ticket" type="button">测警察抓小偷</button>
+                  <button id="btn-puzzle-test" class="btn btn-ghost btn-ticket" type="button">测八数码拼图</button>
+                </div>
+              </details>
+              <details class="lab-fold folder-panel">
+                <summary>实验记录</summary>
+                <section class="lab-panel" aria-label="实验记录">
+                  <header class="lab-head">
+                    <h3>实验记录</h3>
+                    <div class="lab-actions">
+                      <button id="btn-lab-export" class="btn btn-ticket btn-ghost" type="button">导出 JSON</button>
+                      <button id="btn-lab-clear" class="btn btn-ticket btn-ghost" type="button">清空</button>
+                    </div>
+                  </header>
+                  <p id="lab-meta" class="lab-meta"></p>
+                  <ul id="lab-list" class="lab-list"></ul>
+                </section>
+              </details>
+            </div>
           </div>
           <ol class="rules folder-panel">
             <li><img src="assets/ui/cards/SP_Card_IconT_Trap.png" alt="" /><span>走位引怪踩机关，削掉韧性</span></li>
@@ -189,7 +191,7 @@
               </div>
             </header>
             <div id="boss-ritual-hud" class="boss-ritual-hud hidden" aria-label="仪式状态">
-              <span id="boss-phase-chip" class="boss-phase-chip">开场</span>
+              <span id="boss-phase-chip" class="boss-phase-chip">目标·—</span>
               <span id="program-directive" class="directive-chip">等待导播…</span>
               <div class="broadcast-bar" title="播出进度满则失败">
                 <div id="broadcast-fill" class="broadcast-fill"></div>
@@ -406,6 +408,6 @@
   <script src="js/sideview.js?v=20260730chase"></script>
   <script src="js/qte.js?v=20260731qteEasy"></script>
   <script src="js/puzzle.js?v=20260731refresh3"></script>
-  <script src="js/game.js?v=20260807sizeFix2"></script>
+  <script src="js/game.js?v=20260809mapLinkFix1"></script>
 </body>
 </html>
