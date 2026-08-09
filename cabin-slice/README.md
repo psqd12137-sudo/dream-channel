@@ -22,6 +22,13 @@
 
 ## 运行
 
+想要一键启动：
+
+- macOS：双击 `一键启动.command`
+- Windows：双击 `一键启动.bat`
+
+脚本会启动本地网页服务并自动打开浏览器；关闭终端窗口即可停止服务。
+
 ```bash
 cd cabin-slice
 python3 -m http.server 8787
