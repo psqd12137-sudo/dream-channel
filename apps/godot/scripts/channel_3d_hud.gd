@@ -1,0 +1,807 @@
+extends Control
+
+const PLAYER_PROFILE = preload("res://assets/web_show/characters/lili/bust.png")
+const ENEMY_PROFILE = preload("res://assets/web_show/characters/enemy/bust.png")
+const OMEN_ICON = preload("res://assets/latest_web/OmenIcon.png")
+
+const INK := Color("171c25")
+const DARK := Color("101820")
+const DARK_2 := Color("1e2834")
+const PAPER := Color("f8e9c7")
+const PAPER_2 := Color("e7cfa4")
+const TEXT := Color("fff5df")
+const MUTED := Color("aac4bf")
+const TEAL := Color("22aa9b")
+const GOLD := Color("f3a51f")
+const MAGENTA := Color("d63b72")
+const GREEN := Color("66b76d")
+const RED := Color("d9574f")
+const BLUE := Color("4c92bd")
+
+const DESIGN_SIZE := Vector2(1280, 800)
+const HOUSE_VIEW_RECT := Rect2(20, 96, 952, 578)
+const BUILD_VIEW_RECT := Rect2(20, 96, 952, 340)
+const COMBAT_VIEW_RECT := Rect2(20, 224, 952, 454)
+
+const RESET_RECT := Rect2(1142, 24, 110, 38)
+const CAMERA_RESET_RECT := Rect2(1040, 22, 94, 34)
+const OMEN_A_RECT := Rect2(300, 570, 260, 46)
+const OMEN_B_RECT := Rect2(720, 570, 260, 46)
+const BUILD_CARD_RECTS := [Rect2(118, 498, 235, 146), Rect2(371, 498, 235, 146), Rect2(624, 498, 235, 146)]
+const BUILD_ROTATE_RECT := Rect2(118, 670, 220, 48)
+const BUILD_PLACE_RECT := Rect2(353, 670, 302, 48)
+const BUILD_CANCEL_RECT := Rect2(670, 670, 189, 48)
+const ROOM_ACTION_RECT := Rect2(1020, 682, 220, 50)
+const ENTER_PENDING_RECT := Rect2(1020, 620, 220, 46)
+const END_TURN_RECT := Rect2(1015, 704, 230, 48)
+const RETURN_RECT := Rect2(1015, 704, 230, 48)
+const CARD_CANCEL_RECT := Rect2(1015, 668, 230, 28)
+const PORTAL_USE_RECT := Rect2(1015, 646, 112, 44)
+const PORTAL_STAY_RECT := Rect2(1135, 646, 110, 44)
+const HOME_START_RECT := Rect2(576, 350, 255, 48)
+const HOME_TUTORIAL_RECT := Rect2(842, 350, 200, 48)
+const HOME_CONTINUE_RECT := Rect2(1052, 350, 180, 48)
+const HOME_TESTS_RECT := Rect2(576, 430, 230, 38)
+const HOME_TEST_COMBAT_RECT := Rect2(585, 480, 205, 42)
+const HOME_TEST_SIDE_RECT := Rect2(800, 480, 205, 42)
+const HOME_TEST_PUZZLE_RECT := Rect2(585, 532, 205, 42)
+const HOME_TEST_SEARCH_RECT := Rect2(800, 532, 205, 42)
+const HOME_TEST_CHASE_RECT := Rect2(585, 584, 205, 42)
+const LAB_EXIT_RECT := Rect2(1100, 28, 150, 40)
+const PUZZLE_REFRESH_RECT := Rect2(850, 650, 190, 44)
+const CHASE_START_RECT := Rect2(480, 590, 190, 48)
+const CHASE_FORFEIT_RECT := Rect2(690, 590, 190, 48)
+const REWARD_CARD_RECTS := [Rect2(205, 280, 260, 250), Rect2(510, 280, 260, 250), Rect2(815, 280, 260, 250)]
+const REWARD_SKIP_RECT := Rect2(520, 570, 240, 48)
+
+var game = null
+var combat_card_rects: Array[Rect2] = []
+var ui_scale := 1.0
+var ui_offset := Vector2.ZERO
+var world_view_rect_screen := HOUSE_VIEW_RECT
+var middle_dragging := false
+var last_layout_size := Vector2.ZERO
+var side_left := false
+var side_right := false
+
+
+func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	set_process_input(true)
+	sync_layout()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		sync_layout()
+
+
+func sync_layout() -> void:
+	var viewport_size := size
+	if viewport_size.x < 1.0 or viewport_size.y < 1.0:
+		viewport_size = get_viewport_rect().size
+	var layout := calculate_layout(viewport_size, game.phase if game != null else "explore")
+	ui_scale = float(layout["scale"])
+	ui_offset = layout["offset"]
+	world_view_rect_screen = layout["board_rect"]
+	last_layout_size = viewport_size
+	if game != null:
+		game.set_world_view_rect(world_view_rect_screen)
+	queue_redraw()
+
+
+func calculate_layout(viewport_size: Vector2, phase_name: String) -> Dictionary:
+	var scale_value := minf(viewport_size.x / DESIGN_SIZE.x, viewport_size.y / DESIGN_SIZE.y)
+	scale_value = maxf(0.1, scale_value)
+	var offset_value := (viewport_size - DESIGN_SIZE * scale_value) * 0.5
+	var board_design := _design_world_rect(phase_name)
+	var coach_design := Rect2(20, 690, 952, 68) if phase_name == "combat" else Rect2(24, 686, 948, 74)
+	return {
+		"scale": scale_value,
+		"offset": offset_value,
+		"board_rect": _scale_rect(board_design, scale_value, offset_value),
+		"top_rect": _scale_rect(Rect2(0, 0, 1280, 84), scale_value, offset_value),
+		"side_rect": _scale_rect(Rect2(996, 96, 268, 672), scale_value, offset_value),
+		"coach_rect": _scale_rect(coach_design, scale_value, offset_value),
+	}
+
+
+func get_world_view_rect() -> Rect2:
+	return world_view_rect_screen
+
+
+func _design_world_rect(phase_name: String) -> Rect2:
+	if phase_name == "combat":
+		return COMBAT_VIEW_RECT
+	if phase_name in ["lab_sideview", "lab_search"]:
+		return Rect2(60, 120, 1160, 520)
+	if phase_name == "lab_puzzle" or phase_name == "home":
+		return Rect2(0, 84, 1280, 716)
+	if phase_name == "build":
+		return BUILD_VIEW_RECT
+	return HOUSE_VIEW_RECT
+
+
+func _scale_rect(rect: Rect2, scale_value: float, offset_value: Vector2) -> Rect2:
+	return Rect2(offset_value + rect.position * scale_value, rect.size * scale_value)
+
+
+func _to_design(point: Vector2) -> Vector2:
+	return (point - ui_offset) / maxf(0.001, ui_scale)
+
+
+func _draw() -> void:
+	if game == null:
+		return
+	if not last_layout_size.is_equal_approx(size):
+		sync_layout()
+	draw_set_transform(ui_offset, 0.0, Vector2(ui_scale, ui_scale))
+	if game.phase == "home":
+		_draw_home()
+		return
+	if game.phase == "reward":
+		_draw_top_bar()
+		_draw_reward_modal()
+		return
+	var board_design := _design_world_rect(game.phase)
+	if game.phase != "lab_puzzle":
+		draw_rect(board_design.grow(4.0), Color("091116"), false, 8.0)
+		draw_rect(board_design, TEAL if game.phase != "combat" else GOLD, false, 2.0)
+	_draw_top_bar()
+	if game.phase == "combat":
+		_draw_combat_hud()
+	elif game.phase.begins_with("lab_"):
+		_draw_lab_hud()
+	else:
+		_draw_house_hud()
+	if game.phase == "omen":
+		_draw_omen_modal()
+
+
+func _draw_top_bar() -> void:
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 84), Color("101820ee"), true)
+	draw_rect(Rect2(0, 80, DESIGN_SIZE.x, 4), TEAL, true)
+	_label("织梦频道 · 3D BRIDGE", Vector2(24, 34), 23, TEXT)
+	_label(game.latest_source_label(), Vector2(24, 60), 12, Color("70cdbf"))
+	_draw_chip(Rect2(560, 22, 112, 34), "速度 %d" % int(game.player_speed), TEAL, TEXT, 12)
+	_draw_chip(Rect2(680, 22, 112, 34), "生命 %d/%d" % [game.player_hp, game.player_max_hp], RED, TEXT, 12)
+	_draw_chip(Rect2(800, 22, 112, 34), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 12)
+	_draw_chip(Rect2(920, 22, 112, 34), "%s" % _phase_label(), MAGENTA if game.phase == "combat" else Color("344751"), TEXT, 11)
+	if game.phase == "combat":
+		_draw_button(CAMERA_RESET_RECT, "镜头复位", TEAL, TEXT)
+	if not game.phase.begins_with("lab_"):
+		_draw_button(RESET_RECT, "重开", Color("394852"), TEXT)
+
+
+func _draw_home() -> void:
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, DESIGN_SIZE.y), Color("315d5c"), true)
+	draw_rect(Rect2(26, 28, 1228, 654), Color("fff3d8"), true)
+	draw_rect(Rect2(26, 28, 1228, 654), Color("244745"), false, 3.0)
+	draw_texture_rect(PLAYER_PROFILE, Rect2(190, 210, 300, 300), false)
+	_label("信号锁定 · CH-198X · channel", Vector2(576, 198), 13, Color("5e503e"))
+	_label("山屋奇妙夜", Vector2(576, 272), 42, Color("18534f"))
+	_draw_wrapped("拧开织梦频道的旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪把行动力花在追你身上。", Vector2(576, 316), 520, 15, Color("5d5043"))
+	_draw_button(HOME_START_RECT, "打开电视机", Color("f28d1b"), INK)
+	_draw_button(HOME_TUTORIAL_RECT, "新手教学", PAPER, INK)
+	if game.has_saved_run():
+		_draw_button(HOME_CONTINUE_RECT, "接着看上集", TEAL, TEXT)
+	_draw_button(HOME_TESTS_RECT, "▼ 节目测试台" if game.home_tests_open else "▶ 节目测试台", Color("f7e8c5"), INK)
+	if game.home_tests_open:
+		draw_rect(Rect2(565, 470, 460, 172), Color("fff8e8"), true)
+		draw_rect(Rect2(565, 470, 460, 172), INK, false, 2.0)
+		_draw_button(HOME_TEST_COMBAT_RECT, "战斗意图实验", MAGENTA, TEXT)
+		_draw_button(HOME_TEST_SIDE_RECT, "WASD 横版手感", TEAL, TEXT)
+		_draw_button(HOME_TEST_PUZZLE_RECT, "八数码拼图", GOLD, INK)
+		_draw_button(HOME_TEST_SEARCH_RECT, "3D 微缩搜物", Color("7863a5"), TEXT)
+		_draw_button(HOME_TEST_CHASE_RECT, "警察抓小偷", RED, TEXT)
+	_label("走位引怪踩机关 · 不同怪物破韧奖励不同 · 悬停卡牌听旁白", Vector2(576, 670), 12, Color("5d5043"))
+
+
+func _draw_lab_hud() -> void:
+	_draw_button(LAB_EXIT_RECT, "回到标题", Color("394852"), TEXT)
+	if game.phase == "lab_sideview":
+		_label("横版手感 · WASD / 方向键 · 空格跳跃", Vector2(78, 108), 18, TEXT)
+		_draw_chip(Rect2(870, 82, 180, 32), "信号 %d/3" % game.lab_collected, GOLD, INK, 12)
+		_draw_coach(Rect2(60, 660, 1160, 96), "手感实验", game.status_message)
+	elif game.phase == "lab_search":
+		_label("3D 微缩搜物 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
+		_draw_chip(Rect2(870, 82, 180, 32), "找到 %d/3" % game.search_found, GOLD, INK, 12)
+		_draw_coach(Rect2(60, 660, 1160, 96), "搜物实验", game.status_message)
+	elif game.phase == "lab_puzzle":
+		_draw_puzzle()
+	elif game.phase == "lab_chase":
+		_draw_chase()
+
+
+func _draw_puzzle() -> void:
+	draw_rect(Rect2(235, 120, 810, 620), Color("f8e9c7"), true)
+	draw_rect(Rect2(235, 120, 810, 620), INK, false, 3.0)
+	_label("雪花拼图", Vector2(285, 174), 30, INK)
+	_label("把 1–8 滑回顺序，空格在右下。", Vector2(285, 210), 14, Color("665746"))
+	var origin := Vector2(385, 245)
+	var tile_size := 118.0
+	for i in range(game.puzzle_board.size()):
+		var value: int = game.puzzle_board[i]
+		var rect := Rect2(origin + Vector2(i % 3, i / 3) * (tile_size + 8.0), Vector2(tile_size, tile_size))
+		draw_rect(rect, Color("355e5d") if value > 0 else Color("d7c7a7"), true)
+		draw_rect(rect, INK, false, 2.0)
+		if value > 0:
+			_draw_centered(str(value), rect, 34, TEXT)
+	_label("剩余步数 %d · 刷新 %d/3" % [game.puzzle_moves_left, game.puzzle_refreshes_left], Vector2(385, 650), 15, INK)
+	_label(game.puzzle_status, Vector2(385, 688), 14, MAGENTA if game.puzzle_moves_left <= 0 else TEAL)
+	_draw_button(PUZZLE_REFRESH_RECT, "刷新局面", GOLD if game.puzzle_refreshes_left > 0 else Color("6a6258"), INK)
+
+
+func _draw_chase() -> void:
+	draw_rect(Rect2(160, 130, 960, 540), PAPER, true)
+	draw_rect(Rect2(160, 130, 960, 540), INK, false, 3.0)
+	_label("警察抓小偷 · 打字追逐", Vector2(210, 185), 28, INK)
+	_label("输入完整英文句子逃向门口；打错不会清空进度。", Vector2(210, 220), 14, Color("665746"))
+	var track := Rect2(220, 285, 840, 64)
+	draw_rect(track, Color("d7c7a7"), true)
+	draw_rect(track, INK, false, 2.0)
+	var police_x := track.position.x + track.size.x * clampf(game.chase_police_progress / 14.0, 0.0, 1.0)
+	var player_x := track.position.x + track.size.x * clampf(game.chase_player_progress / 14.0, 0.0, 1.0)
+	draw_circle(Vector2(police_x, track.get_center().y), 19, RED)
+	draw_circle(Vector2(player_x, track.get_center().y), 19, TEAL)
+	_label("警", Vector2(police_x - 10, track.get_center().y + 7), 17, TEXT)
+	_label("你", Vector2(player_x - 10, track.get_center().y + 7), 17, TEXT)
+	_label("门", Vector2(track.end.x - 28, track.position.y - 12), 18, INK)
+	var typed: String = str(game.chase_sentence).left(int(game.chase_typed))
+	var remaining: String = str(game.chase_sentence).substr(int(game.chase_typed))
+	_label(typed, Vector2(245, 430), 21, TEAL)
+	var typed_width := ThemeDB.fallback_font.get_string_size(typed, HORIZONTAL_ALIGNMENT_LEFT, -1, 21).x
+	_label(remaining, Vector2(245 + typed_width, 430), 21, INK)
+	_label("剩余 %d 字符" % (game.chase_sentence.length() - game.chase_typed), Vector2(245, 472), 13, Color("665746"))
+	if game.chase_countdown > 0.0:
+		_label("%.1f" % game.chase_countdown, Vector2(620, 535), 38, MAGENTA)
+	elif not game.chase_result.is_empty():
+		_label("逃脱成功" if game.chase_result == "success" else "被追上了", Vector2(555, 535), 28, GREEN if game.chase_result == "success" else RED)
+	_draw_button(CHASE_START_RECT, "开始追逐", GOLD, INK)
+	_draw_button(CHASE_FORFEIT_RECT, "举手投降", Color("4f5960"), TEXT)
+	_draw_coach(Rect2(160, 680, 960, 72), "追逐导播", game.status_message)
+
+
+func _draw_reward_modal() -> void:
+	draw_rect(Rect2(0, 84, DESIGN_SIZE.x, DESIGN_SIZE.y - 84), Color("071116f2"), true)
+	_label("节目奖励 · 本局成长", Vector2(475, 180), 28, TEXT)
+	_label("选择一项加入本集；后续战斗会继续使用现在这副牌库。", Vector2(408, 218), 14, MUTED)
+	for i in range(mini(REWARD_CARD_RECTS.size(), game.reward_options.size())):
+		var reward: Dictionary = game.reward_options[i]
+		var rect: Rect2 = REWARD_CARD_RECTS[i]
+		draw_rect(Rect2(rect.position + Vector2(0, 6), rect.size), Color("03070a"), true)
+		draw_rect(rect, PAPER, true)
+		draw_rect(Rect2(rect.position, Vector2(rect.size.x, 12)), [TEAL, GOLD, MAGENTA][i], true)
+		draw_rect(rect, INK, false, 2.0)
+		_label(game.reward_title(reward), rect.position + Vector2(22, 58), 20, INK)
+		_draw_wrapped(game.reward_description(reward), rect.position + Vector2(22, 100), rect.size.x - 44, 13, Color("584d43"))
+		_draw_button(Rect2(rect.position + Vector2(35, 190), Vector2(190, 42)), "收下", [TEAL, GOLD, MAGENTA][i], TEXT if i != 1 else INK)
+	_draw_button(REWARD_SKIP_RECT, "跳过，保持精简", Color("4f5960"), TEXT)
+
+
+func _draw_house_hud() -> void:
+	var room: Dictionary = game.current_room()
+	var revealed := bool(room.get("revealed", false)) or bool(room.get("completed", false))
+	var side := Rect2(996, 96, 268, 672)
+	draw_rect(side, Color("f8e9c7f5"), true)
+	draw_rect(side, INK, false, 3.0)
+	draw_rect(Rect2(996, 96, 10, 672), TEAL, true)
+	_label("当前房间", Vector2(1020, 126), 11, Color("806448"))
+	_label(str(room.get("name", "玄关")) if revealed else "未知房", Vector2(1020, 158), 23, INK)
+	_draw_chip(Rect2(1020, 174, 116, 30), _room_kind_label(room) if revealed else "未揭示", _room_kind_color(room) if revealed else Color("4f5960"), TEXT, 11)
+	_label("今天的行程", Vector2(1020, 234), 11, Color("806448"))
+	_draw_bar(Rect2(1020, 247, 220, 13), game.run_progress, int(game.content.get("run_length", 12)), GOLD, Color("bba781"))
+	_label("%d / %d" % [game.run_progress, int(game.content.get("run_length", 12))], Vector2(1020, 282), 14, INK)
+
+	_label("行前预兆", Vector2(1020, 326), 11, Color("806448"))
+	var omen: Dictionary = game.current_omen()
+	if omen.is_empty():
+		_label("尚未选择", Vector2(1020, 352), 14, Color("8b6b56"))
+	else:
+		draw_texture_rect(OMEN_ICON, Rect2(1018, 340, 36, 36), false)
+		_label(_shorten(str(omen.get("name", "预兆")), 12), Vector2(1062, 361), 14, Color("834b21"))
+		_draw_wrapped(_shorten(str(omen.get("desc", "")), 48), Vector2(1020, 392), 220, 11, Color("594f45"))
+
+	_label("旁白碎碎念", Vector2(1020, 452), 11, Color("806448"))
+	var log_start := maxi(0, game.event_log.size() - 3)
+	var y := 477.0
+	for i in range(log_start, game.event_log.size()):
+		_draw_wrapped("• " + _shorten(str(game.event_log[i]), 30), Vector2(1020, y), 220, 10, Color("554e48"))
+		y += 42.0
+
+	if game.phase == "room_ready":
+		var action_text := "打开惊吓时间" if str(room.get("kind", "")) == "combat" else "接受考验" if str(room.get("kind", "")) == "event" else "搜查房间"
+		_draw_button(ROOM_ACTION_RECT, action_text, MAGENTA if str(room.get("kind", "")) == "combat" else GOLD, INK if str(room.get("kind", "")) != "combat" else TEXT)
+	elif game.phase == "explore" and game.pending_room_pos != game.current_room_pos and game._rooms_connected(game.current_room_pos, game.pending_room_pos):
+		_draw_button(ENTER_PENDING_RECT, "走进新房间", MAGENTA, TEXT)
+
+	_draw_coach(Rect2(24, 686, 948, 74), "导播耳语", game.status_message)
+	if game.phase == "build":
+		_draw_build_dock()
+
+
+func _draw_build_dock() -> void:
+	draw_rect(Rect2(88, 448, 802, 292), Color("111b23ed"), true)
+	draw_rect(Rect2(88, 448, 802, 292), Color("6bbeb1"), false, 3.0)
+	_label("盖屋 · 扩建 %s" % game.selected_frontier, Vector2(112, 478), 16, TEXT)
+	_label("三张票根只显示房名和门型；走进去才知道是安静、事件还是惊吓。", Vector2(335, 478), 11, MUTED)
+	for i in range(mini(3, game.build_offers.size())):
+		var room: Dictionary = game.build_offers[i]
+		var rect: Rect2 = BUILD_CARD_RECTS[i]
+		var selected: bool = i == int(game.selected_offer)
+		draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), Color("050a0e"), true)
+		draw_rect(rect, PAPER, true)
+		draw_rect(Rect2(rect.position, Vector2(38, rect.size.y)), GOLD, true)
+		draw_rect(rect, TEAL if selected else Color("9f7a55"), false, 4.0 if selected else 2.0)
+		if selected and game.can_place_selected_offer():
+			_draw_chip(Rect2(rect.position + Vector2(50, 8), Vector2(96, 24)), "门已对上", GREEN, TEXT, 9)
+		_label("?", rect.position + Vector2(13, 69), 28, MAGENTA)
+		_label(_shorten(str(room.get("name", "房间")), 10), rect.position + Vector2(54, 72), 18, INK)
+		_label("未揭示 · %s" % _door_shape(room.get("doors", [])), rect.position + Vector2(54, 104), 11, Color("776553"))
+		if selected:
+			_label("ROT %d° · %s" % [game.offer_rotation * 90, _door_text(game.room_rules.rotated_doors(room.get("doors", []), game.offer_rotation))], rect.position + Vector2(54, 128), 10, Color("5e5146"))
+	_draw_button(BUILD_ROTATE_RECT, "↻ 旋转 90°", TEAL, TEXT)
+	_draw_button(BUILD_PLACE_RECT, "摆下", GREEN if game.can_place_selected_offer() else Color("6a5554"), TEXT)
+	_draw_button(BUILD_CANCEL_RECT, "× 取消", Color("303947"), TEXT)
+
+
+func _draw_omen_modal() -> void:
+	draw_rect(Rect2(0, 84, DESIGN_SIZE.x, DESIGN_SIZE.y - 84), Color("071116d9"), true)
+	_draw_ticket_panel(Rect2(210, 132, 860, 520), PAPER, GOLD)
+	_label("行前预兆", Vector2(250, 182), 30, INK)
+	_label("拧开旋钮前，频道送来两枚预兆——选一枚随身带走。", Vector2(250, 216), 14, Color("6b5d50"))
+	for i in range(mini(2, game.omen_options.size())):
+		var relic_id: String = game.omen_options[i]
+		var relic: Dictionary = game.content.get("relics", {}).get(relic_id, {})
+		var x := 270.0 + i * 420.0
+		var rect := Rect2(x, 260, 320, 275)
+		draw_rect(Rect2(rect.position + Vector2(0, 5), rect.size), Color("5b432d66"), true)
+		draw_rect(rect, Color("fff4d8"), true)
+		draw_rect(Rect2(rect.position, Vector2(rect.size.x, 12)), TEAL if i == 0 else MAGENTA, true)
+		draw_rect(rect, Color("8f7155"), false, 2.0)
+		draw_texture_rect(OMEN_ICON, Rect2(x + 24, 290, 62, 62), false)
+		_label(str(relic.get("name", relic_id)), Vector2(x + 102, 326), 21, INK)
+		_draw_chip(Rect2(x + 102, 342, 92, 28), "预兆 · 常驻", TEAL if i == 0 else MAGENTA, TEXT, 10)
+		_draw_wrapped(str(relic.get("desc", "")), Vector2(x + 24, 408), 270, 14, Color("584d43"))
+	_draw_button(OMEN_A_RECT, "带上左边预兆", TEAL, TEXT)
+	_draw_button(OMEN_B_RECT, "带上右边预兆", MAGENTA, TEXT)
+
+
+func _draw_combat_hud() -> void:
+	var combat = game.combat
+	var intent: Dictionary = combat.preview_intent()
+	_draw_actor_strip(Rect2(20, 100, 278, 112), PLAYER_PROFILE, "小主角", GREEN, "HP %d/%d" % [combat.player_hp, game.player_max_hp], "盾 %d" % combat.player_block, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
+	_draw_intent_strip(Rect2(310, 100, 330, 112), intent)
+	var enemy_hp_text := "%d/%d" % [combat.enemy_hp, combat.enemy_max_hp] if combat.enemy_revealed else "??"
+	_draw_actor_strip(Rect2(652, 100, 320, 112), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, "HP %s" % enemy_hp_text, "韧 %d/%d" % [combat.enemy_toughness, combat.enemy_max_toughness], "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
+
+	draw_rect(Rect2(996, 96, 268, 672), Color("101820f4"), true)
+	draw_rect(Rect2(996, 96, 268, 672), GOLD, false, 3.0)
+	_draw_action_ticket(Rect2(1010, 112, 240, 120))
+	_label("道具卡", Vector2(1014, 260), 16, TEXT)
+	_label(_shorten(combat.enemy_archetype_desc, 30), Vector2(1014, 280), 10, MUTED)
+	combat_card_rects.clear()
+	var gap := 8.0
+	var available := 290.0 if combat.has_pending_player_portal() else 370.0
+	var card_height := minf(82.0, (available - maxf(0.0, float(combat.hand.size() - 1)) * gap) / maxf(1.0, float(combat.hand.size())))
+	for i in range(combat.hand.size()):
+		var rect := Rect2(1012, 294 + i * (card_height + gap), 238, card_height)
+		combat_card_rects.append(rect)
+		var card: Dictionary = combat.cards.get(combat.hand[i], {})
+		_draw_combat_card(rect, str(combat.hand[i]), card, combat.card_cost(card), i == game.selected_card)
+	if combat.outcome == "":
+		if combat.has_pending_player_portal():
+			draw_rect(Rect2(1008, 596, 244, 102), Color("2c2441ee"), true)
+			draw_rect(Rect2(1008, 596, 244, 102), Color("9a70da"), false, 3.0)
+			_label("传送门等待选择", Vector2(1022, 624), 14, Color("e6d7ff"))
+			_draw_button(PORTAL_USE_RECT, "穿过", Color("7863a5") if combat.can_use_pending_player_portal() else Color("5b515f"), TEXT)
+			_draw_button(PORTAL_STAY_RECT, "留在这里", Color("394852"), TEXT)
+		elif game.selected_card >= 0:
+			_draw_button(CARD_CANCEL_RECT, "取消选牌", Color("4f5960"), TEXT)
+		if not combat.has_pending_player_portal():
+			_draw_button(END_TURN_RECT, "回合结束", GOLD, INK)
+	else:
+		_draw_button(RETURN_RECT, "返回山屋" if combat.outcome == "victory" else "重开本集", GREEN if combat.outcome == "victory" else RED, TEXT)
+	_draw_coach(Rect2(20, 690, 952, 68), "战斗导播", game.status_message)
+
+
+func _draw_actor_strip(rect: Rect2, portrait: Texture2D, title: String, accent: Color, line_a: String, line_b: String, line_c: String, action_state: String = "idle") -> void:
+	draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), Color("03070a"), true)
+	draw_rect(rect, Color("f6e7c4ee"), true)
+	if action_state != "idle":
+		var action_color := _presentation_state_color(action_state)
+		draw_rect(rect.grow(-3.0), Color(action_color, 0.20), true)
+	draw_rect(Rect2(rect.position, Vector2(8, rect.size.y)), accent, true)
+	draw_rect(rect, accent, false, 2.0)
+	draw_texture_rect(portrait, Rect2(rect.position + Vector2(14, 12), Vector2(62, 88)), false)
+	_label(_shorten(title, 14), rect.position + Vector2(88, 29), 17, INK)
+	_label(line_a, rect.position + Vector2(88, 53), 13, Color("823b35"))
+	_label(line_b, rect.position + Vector2(88, 75), 12, Color("28687a"))
+	_label(_shorten(line_c, 24), rect.position + Vector2(88, 96), 11, Color("4a634a"))
+	if action_state != "idle":
+		_draw_chip(Rect2(rect.end.x - 68, rect.position.y + 8, 58, 24), _presentation_state_label(action_state), _presentation_state_color(action_state), TEXT, 10)
+
+
+func _actor_presentation_state(actor_name: String) -> String:
+	var presenter: Node = game.battle_root.get_node_or_null("%s/Presenter" % actor_name)
+	return str(presenter.current_state) if presenter != null else "idle"
+
+
+func _presentation_state_label(state: String) -> String:
+	match state:
+		"move": return "移动"
+		"ready": return "预备"
+		"attack": return "出手"
+		"hurt": return "受击"
+	return "待机"
+
+
+func _presentation_state_color(state: String) -> Color:
+	match state:
+		"move": return TEAL
+		"ready": return GOLD
+		"attack": return Color("ff7d55")
+		"hurt": return Color("ff4f63")
+	return PAPER
+
+
+func _draw_intent_strip(rect: Rect2, intent: Dictionary) -> void:
+	draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), Color("03070a"), true)
+	draw_rect(rect, Color("222a35ef"), true)
+	draw_rect(Rect2(rect.position, Vector2(7, rect.size.y)), RED, true)
+	draw_circle(rect.position + Vector2(33, 34), 19, RED)
+	_draw_centered("!", Rect2(rect.position + Vector2(14, 15), Vector2(38, 38)), 20, TEXT)
+	_label("敌人意图", rect.position + Vector2(64, 24), 10, Color("e3a6a3"))
+	_label(_shorten(str(intent.get("label", "—")), 21), rect.position + Vector2(64, 49), 17, TEXT)
+	var hint := str(intent.get("detail", "蓝格=它走，红格=本回合必伤。"))
+	_label(_shorten(hint, 46), rect.position + Vector2(20, 79), 10, MUTED)
+	_label("怪行动力 %d · 追击/出手共用" % game.combat.enemy_action_points, rect.position + Vector2(20, 100), 11, GOLD)
+
+
+func _draw_action_ticket(rect: Rect2) -> void:
+	draw_rect(rect, PAPER, true)
+	draw_rect(rect, GOLD, false, 2.0)
+	draw_rect(Rect2(rect.position, Vector2(62, rect.size.y)), GOLD, true)
+	draw_dashed_line(rect.position + Vector2(70, 8), rect.position + Vector2(70, rect.size.y - 8), Color("9a7045"), 1.5, 6.0)
+	_label("速度", rect.position + Vector2(12, 26), 10, Color("684719"))
+	_label("S%d" % game.combat.base_speed, rect.position + Vector2(15, 64), 26, INK)
+	_label("行动力", rect.position + Vector2(86, 28), 10, Color("7a6044"))
+	_label("%d AP" % game.combat.energy, rect.position + Vector2(84, 61), 24, INK)
+	var rolls: Array = game.combat.energy_rolls
+	for i in range(mini(4, rolls.size())):
+		var die := Rect2(rect.position + Vector2(86 + i * 32, 76), Vector2(26, 26))
+		draw_rect(die, Color("fffaf0"), true)
+		draw_rect(die, Color("9a7045"), false, 1.5)
+		_draw_centered(str(rolls[i]), die, 13, INK)
+
+
+func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int, selected: bool) -> void:
+	var kind := str(card.get("type", "skill"))
+	var accent := GOLD if kind == "place" else MAGENTA if kind == "ready" else RED if kind == "medicine" else TEAL
+	draw_rect(Rect2(rect.position + Vector2(0, 3), rect.size), Color("03070a"), true)
+	draw_rect(rect, PAPER, true)
+	draw_rect(Rect2(rect.position, Vector2(34, rect.size.y)), accent, true)
+	draw_rect(rect, GOLD if selected else Color("987452"), false, 4.0 if selected else 1.5)
+	_draw_centered(str(cost), Rect2(rect.position + Vector2(2, 4), Vector2(30, 30)), 15, INK if accent.get_luminance() > 0.55 else TEXT)
+	_label(_shorten(str(card.get("name", card_id)), 12), rect.position + Vector2(44, 26), 15, INK)
+	_label(_card_kind_label(kind), rect.position + Vector2(44, 43), 9, accent.darkened(0.25))
+	if rect.size.y >= 68:
+		_label(_shorten(str(card.get("text", "")), 25), rect.position + Vector2(44, 61), 9, Color("64584e"))
+
+
+func _gui_input(event: InputEvent) -> void:
+	if game == null:
+		return
+	if event is InputEventKey:
+		var key_event: InputEventKey = event
+		if key_event.pressed and not key_event.echo and game.phase == "lab_chase" and key_event.unicode > 0:
+			game.chase_type_character(char(key_event.unicode))
+			accept_event()
+			return
+		if key_event.pressed and not key_event.echo and game.phase.begins_with("lab_") and key_event.keycode == KEY_ESCAPE:
+			if not game.event_context.is_empty():
+				game.finish_event_trial(false)
+			else:
+				game.go_home()
+			accept_event()
+			return
+		if key_event.pressed and not key_event.echo and game.phase == "lab_puzzle":
+			var empty: int = game.puzzle_board.find(0)
+			var row: int = empty / 3
+			var col: int = empty % 3
+			if key_event.keycode in [KEY_A, KEY_LEFT] and col < 2:
+				game.puzzle_slide_from_offset(1)
+			elif key_event.keycode in [KEY_D, KEY_RIGHT] and col > 0:
+				game.puzzle_slide_from_offset(-1)
+			elif key_event.keycode in [KEY_W, KEY_UP] and row < 2:
+				game.puzzle_slide_from_offset(3)
+			elif key_event.keycode in [KEY_S, KEY_DOWN] and row > 0:
+				game.puzzle_slide_from_offset(-3)
+			else:
+				return
+			accept_event()
+			return
+		if game.phase == "lab_sideview":
+			if key_event.keycode in [KEY_A, KEY_LEFT]:
+				side_left = key_event.pressed
+			if key_event.keycode in [KEY_D, KEY_RIGHT]:
+				side_right = key_event.pressed
+			var jump := key_event.pressed and key_event.keycode in [KEY_W, KEY_UP, KEY_SPACE]
+			game.set_sideview_input(float(int(side_right) - int(side_left)), jump)
+			accept_event()
+			return
+		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE and game.phase == "combat" and game.selected_card >= 0:
+			game.cancel_selected_card()
+			accept_event()
+		return
+	if event is InputEventMouseMotion:
+		if middle_dragging and game.phase == "combat":
+			game.pan_battle_camera(event.relative)
+			game.clear_battle_hover()
+			accept_event()
+		elif middle_dragging and game.phase == "lab_search":
+			game.orbit_search_camera(event.relative)
+			accept_event()
+		elif game.phase == "combat" and world_view_rect_screen.has_point(event.position):
+			game.set_battle_hover(event.position - world_view_rect_screen.position)
+		else:
+			game.clear_battle_hover()
+		return
+	if not (event is InputEventMouseButton):
+		return
+	var mouse_event: InputEventMouseButton = event
+	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed and game.phase == "combat" and game.selected_card >= 0:
+		game.cancel_selected_card()
+		accept_event()
+		return
+	if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
+		if mouse_event.pressed and game.phase in ["combat", "lab_search"] and world_view_rect_screen.has_point(mouse_event.position):
+			middle_dragging = true
+			if game.phase == "combat":
+				game.clear_battle_hover()
+			accept_event()
+		elif not mouse_event.pressed:
+			middle_dragging = false
+			accept_event()
+		return
+	if mouse_event.pressed and game.phase == "combat" and world_view_rect_screen.has_point(mouse_event.position):
+		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			game.zoom_battle_camera(mouse_event.position - world_view_rect_screen.position, 0.9)
+			accept_event()
+			return
+		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			game.zoom_battle_camera(mouse_event.position - world_view_rect_screen.position, 1.1)
+			accept_event()
+			return
+	if mouse_event.pressed and game.phase == "lab_search" and world_view_rect_screen.has_point(mouse_event.position):
+		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			game.zoom_search_camera(0.9)
+			accept_event()
+			return
+		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			game.zoom_search_camera(1.1)
+			accept_event()
+			return
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+		return
+	var point: Vector2 = _to_design(mouse_event.position)
+	if game.phase == "home":
+		if HOME_START_RECT.has_point(point):
+			game.start_new_run(false)
+		elif HOME_TUTORIAL_RECT.has_point(point):
+			game.start_new_run(true)
+		elif game.has_saved_run() and HOME_CONTINUE_RECT.has_point(point):
+			game.continue_saved_run()
+		elif HOME_TESTS_RECT.has_point(point):
+			game.toggle_home_tests()
+		elif game.home_tests_open and HOME_TEST_COMBAT_RECT.has_point(point):
+			game.start_combat_lab("hall")
+		elif game.home_tests_open and HOME_TEST_SIDE_RECT.has_point(point):
+			game.start_sideview_lab()
+		elif game.home_tests_open and HOME_TEST_PUZZLE_RECT.has_point(point):
+			game.start_puzzle_lab()
+		elif game.home_tests_open and HOME_TEST_SEARCH_RECT.has_point(point):
+			game.start_search_lab()
+		elif game.home_tests_open and HOME_TEST_CHASE_RECT.has_point(point):
+			game.start_chase_lab()
+		return
+	if game.phase.begins_with("lab_"):
+		if LAB_EXIT_RECT.has_point(point):
+			if not game.event_context.is_empty():
+				game.finish_event_trial(false)
+			else:
+				game.go_home()
+			return
+		if game.phase == "lab_puzzle":
+			var origin := Vector2(385, 245)
+			var tile_size := 118.0
+			for i in range(game.puzzle_board.size()):
+				var rect := Rect2(origin + Vector2(i % 3, i / 3) * (tile_size + 8.0), Vector2(tile_size, tile_size))
+				if rect.has_point(point):
+					game.puzzle_slide(i)
+					return
+			if PUZZLE_REFRESH_RECT.has_point(point):
+				game.puzzle_refresh()
+			return
+		if game.phase == "lab_search" and world_view_rect_screen.has_point(mouse_event.position):
+			game.search_pick_from_view(mouse_event.position - world_view_rect_screen.position)
+			return
+		if game.phase == "lab_chase":
+			if CHASE_START_RECT.has_point(point):
+				game.begin_chase()
+			elif CHASE_FORFEIT_RECT.has_point(point):
+				game.forfeit_chase()
+			return
+	if game.phase == "reward":
+		for i in range(mini(REWARD_CARD_RECTS.size(), game.reward_options.size())):
+			if REWARD_CARD_RECTS[i].has_point(point):
+				game.choose_reward(i)
+				return
+		if REWARD_SKIP_RECT.has_point(point):
+			game.skip_reward()
+		return
+	if RESET_RECT.has_point(point):
+		game.start_new_run(false)
+		return
+	if game.phase == "combat" and CAMERA_RESET_RECT.has_point(point):
+		game.reset_battle_camera()
+		return
+	if game.phase == "omen":
+		if OMEN_A_RECT.has_point(point):
+			game.choose_omen(0)
+		elif OMEN_B_RECT.has_point(point):
+			game.choose_omen(1)
+		return
+	if game.phase == "build":
+		for i in range(mini(BUILD_CARD_RECTS.size(), game.build_offers.size())):
+			if BUILD_CARD_RECTS[i].has_point(point):
+				game.select_offer(i)
+				return
+		if BUILD_ROTATE_RECT.has_point(point):
+			game.rotate_offer()
+		elif BUILD_PLACE_RECT.has_point(point):
+			game.place_selected_offer()
+		elif BUILD_CANCEL_RECT.has_point(point):
+			game.cancel_build()
+		return
+	if game.phase == "room_ready" and ROOM_ACTION_RECT.has_point(point):
+		game.resolve_current_room()
+		return
+	if game.phase == "explore" and ENTER_PENDING_RECT.has_point(point) and game._rooms_connected(game.current_room_pos, game.pending_room_pos):
+		game.enter_room(game.pending_room_pos)
+		return
+	if game.phase == "combat":
+		if game.combat.has_pending_player_portal():
+			if PORTAL_USE_RECT.has_point(point):
+				game.resolve_player_portal(true)
+			elif PORTAL_STAY_RECT.has_point(point):
+				game.resolve_player_portal(false)
+			return
+		if game.selected_card >= 0 and CARD_CANCEL_RECT.has_point(point):
+			game.cancel_selected_card()
+			return
+		if game.combat.outcome != "" and RETURN_RECT.has_point(point):
+			game.return_from_combat()
+			return
+		if game.combat.outcome == "" and END_TURN_RECT.has_point(point):
+			game.end_combat_turn()
+			return
+		for i in range(combat_card_rects.size()):
+			if combat_card_rects[i].has_point(point):
+				game.select_or_play_card(i)
+				return
+	if world_view_rect_screen.has_point(mouse_event.position):
+		game.handle_screen_click(mouse_event.position - world_view_rect_screen.position)
+
+
+func _draw_ticket_panel(rect: Rect2, fill: Color, accent: Color) -> void:
+	draw_rect(Rect2(rect.position + Vector2(0, 6), rect.size), Color("080b0f99"), true)
+	draw_rect(rect, fill, true)
+	draw_rect(rect, INK, false, 3.0)
+	draw_line(rect.position + Vector2(14, 10), rect.position + Vector2(rect.size.x - 14, 10), accent, 4.0)
+
+
+func _draw_coach(rect: Rect2, kicker: String, body: String) -> void:
+	draw_rect(rect, Color("101820eb"), true)
+	draw_rect(Rect2(rect.position, Vector2(7, rect.size.y)), GOLD, true)
+	_label(kicker, rect.position + Vector2(20, 23), 10, GOLD)
+	_label(_shorten(body, 92), rect.position + Vector2(20, 49), 13, TEXT)
+
+
+func _draw_button(rect: Rect2, caption: String, fill: Color, text_color: Color) -> void:
+	draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), INK, true)
+	draw_rect(rect, fill, true)
+	draw_rect(rect, INK, false, 2.0)
+	_draw_centered(caption, rect, 14, text_color)
+
+
+func _draw_chip(rect: Rect2, caption: String, fill: Color, text_color: Color, font_size: int) -> void:
+	var radius := rect.size.y * 0.5
+	draw_rect(Rect2(rect.position + Vector2(radius, 0), Vector2(maxf(0.0, rect.size.x - radius * 2.0), rect.size.y)), fill, true)
+	draw_circle(rect.position + Vector2(radius, radius), radius, fill)
+	draw_circle(Vector2(rect.end.x - radius, rect.position.y + radius), radius, fill)
+	_draw_centered(caption, rect, font_size, text_color)
+
+
+func _draw_bar(rect: Rect2, value: int, maximum: int, fill: Color, empty: Color) -> void:
+	draw_rect(rect, empty, true)
+	var ratio := clampf(float(value) / maxf(1.0, float(maximum)), 0.0, 1.0)
+	draw_rect(Rect2(rect.position, Vector2(rect.size.x * ratio, rect.size.y)), fill, true)
+	draw_rect(rect, INK, false, 1.0)
+
+
+func _label(value: String, pos: Vector2, font_size: int, color: Color) -> void:
+	draw_string(ThemeDB.fallback_font, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+
+
+func _draw_centered(value: String, rect: Rect2, font_size: int, color: Color) -> void:
+	var bounds := ThemeDB.fallback_font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	var pos := rect.position + Vector2((rect.size.x - bounds.x) * 0.5, (rect.size.y + bounds.y) * 0.5 - 2.0)
+	_label(value, pos, font_size, color)
+
+
+func _draw_wrapped(value: String, pos: Vector2, width: float, font_size: int, color: Color) -> void:
+	draw_multiline_string(ThemeDB.fallback_font, pos, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, -1, color)
+
+
+func _phase_label() -> String:
+	if game.animation_busy:
+		return "动态演出"
+	if game.phase == "home":
+		return "节目首页"
+	if game.phase.begins_with("lab_"):
+		return "节目测试"
+	if game.phase == "omen":
+		return "行前预兆"
+	if game.phase == "build":
+		return "三选一扩建"
+	if game.phase == "room_ready":
+		return "房间揭示"
+	if game.phase == "reward":
+		return "节目奖励"
+	if game.phase == "combat":
+		return "惊吓时间"
+	return "山屋探索"
+
+
+func _room_kind_label(room: Dictionary) -> String:
+	var kind := str(room.get("kind", "quiet"))
+	return "惊吓时间" if kind == "combat" else "考验" if kind == "event" else "安静角落"
+
+
+func _room_kind_color(room: Dictionary) -> Color:
+	var kind := str(room.get("kind", "quiet"))
+	return MAGENTA if kind == "combat" else Color("7863a5") if kind == "event" else TEAL
+
+
+func _door_shape(raw: Array) -> String:
+	var doors: Array = []
+	for i in range(mini(4, raw.size())):
+		if bool(raw[i]):
+			doors.append(i)
+	if doors.size() == 4:
+		return "十字"
+	if doors.size() == 3:
+		return "三岔"
+	if doors.size() == 2:
+		return "直通" if absi(int(doors[0]) - int(doors[1])) == 2 else "拐角"
+	return "尽端" if doors.size() == 1 else "封闭"
+
+
+func _door_text(doors: Array) -> String:
+	var labels := ["N", "E", "S", "W"]
+	var result: Array[String] = []
+	for i in range(mini(4, doors.size())):
+		if bool(doors[i]):
+			result.append(labels[i])
+	return "-" if result.is_empty() else "/".join(result)
+
+
+func _card_kind_label(kind: String) -> String:
+	return "放置" if kind == "place" else "预备" if kind == "ready" else "药物" if kind == "medicine" else "技巧"
+
+
+func _shorten(value: String, max_chars: int) -> String:
+	if max_chars <= 1 or value.length() <= max_chars:
+		return value
+	return value.left(max_chars - 1) + "…"

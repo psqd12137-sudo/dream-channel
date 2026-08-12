@@ -1,0 +1,122 @@
+﻿[
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_01.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_01.png",
+        "sha256":  "FF397BF41FED5E4D98DCAB910C9B24837FA30195B0EC56FEAB1B6FF73C01E46E"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_02.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_02.png",
+        "sha256":  "610154574F57E5C1DA60B85A40AF1B8DCF5FBDC28592C5D5DEBBF6DF9CE1BE33"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_03.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_03.png",
+        "sha256":  "B87C030177206EB015E83C188DF6D95ECBF22AE5490A7BF918D6DA133F263017"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_04.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_04.png",
+        "sha256":  "6A6EC5F47A763E337935BAB9CA73C087223ECE645566D80427D7A2ED6BF7C80A"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_05.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_05.png",
+        "sha256":  "CFD907CE5B0B7F67C8681ED4DF0607643BE79A5FE45F790D08DF7F71497A10BF"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_06.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_06.png",
+        "sha256":  "E145C152C411903754B3E1FE7EF3380DAC9203B8BA452DF9EAA448DBBA07A63B"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_07.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_07.png",
+        "sha256":  "63696737DE5E0F0648B01974FB49A33836B6561C755912269D905A1FEF65BA56"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_08.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_08.png",
+        "sha256":  "B8622F80383CFA534E89F4B647299CD95F7B2685D01B76D9C4ACCBD154130F1E"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_09.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_09.png",
+        "sha256":  "D090FDD957A7D4280F64CE96240431BACE14EE7BE94B86BF7A5F05561BB3836B"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_10.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_10.png",
+        "sha256":  "4A4FAB16BA1D0F438D2A00A3ACD37292CA08BBE4053206D48513183379E2ABD0"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_11.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_11.png",
+        "sha256":  "9DE269C6AB5242B8DACBBA759BF8BB92E898BE344AEFAF371666125D47E60CBD"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\lili_idle\\frame_12.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\idle\\frame_12.png",
+        "sha256":  "BEC3FC52BEC68012870510865E2FF2628292EEDE50BFFDC9086F592F41B95904"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\SP_Lili_Stand.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\ready.png",
+        "sha256":  "331933C1886F0AA9B591679082B35008F172C2BCEF892B048416078ABD6B6B96"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\SP_Lili_BustToken.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\lili\\bust.png",
+        "sha256":  "ACA386A3E8B9943788E16FDD5C50FF3268D00C257354EDA7206A8D654E281E81"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\SP_Enemy_MapToken.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\enemy\\idle.png",
+        "sha256":  "ABDB65D90BBB3BDBE4A93A7AB5D1F9EB2A5EC81B11D77E086361D6D3D103F81F"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\chars\\SP_Enemy_BustToken.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\characters\\enemy\\bust.png",
+        "sha256":  "D2F90C4E9E9A4089396226E6039E57BBAFDFE9FB52CFB21029857A38704B593A"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\generated\\pv_v1\\scene_signal_anchor.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\decor\\signal_anchor.png",
+        "sha256":  "787B31235609D5CC3466338FCD568BDE4A230FB137FE39C0973F73A5CF5910E4"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\generated\\pv_v1\\scene_pendant_lamp.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\decor\\pendant_lamp.png",
+        "sha256":  "020E50AF428BB36B7A5D2FD340B0CB8B1142ADA1357B9603BE41315646E621D9"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\generated\\pv_v1\\scene_door.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\decor\\door.png",
+        "sha256":  "7192A752C737EFFB64A0D4BD78A1D7A34533063D69893CDEA21E120854F7A4DA"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\generated\\pv_v1\\scene_window.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\decor\\window.png",
+        "sha256":  "F9C8C3FF3F0984C48513201363F7EC603B2D26F04ED4005029362A01E6D86822"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\items\\AnimalTrap.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\items\\AnimalTrap.png",
+        "sha256":  "AF96375A868C15C5C8606F21BBEDDA0925363BDC37E1954B8CA15F200EAC8999"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\items\\TeleportTrap.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\items\\TeleportTrap.png",
+        "sha256":  "33DA07A2BB0716B9774E034B1E7E6FE8294D3399091A14A0EADA5519A50FCC07"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\items\\SignalJammer.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\items\\SignalJammer.png",
+        "sha256":  "9FECB8EB733601919E15F59B41A68BD73A0AD83EE72E27BDCA06BC6E6AB787E0"
+    },
+    {
+        "source":  "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice\\assets\\ui\\items\\ToyBear.png",
+        "target":  "F:\\channel tail\\Channel_Godot_Test\\assets\\web_show\\items\\ToyBear.png",
+        "sha256":  "AC358E6286F7BAC7DE344BCA0143075A3B448D275E9546D2EEB466C5A8C07281"
+    }
+]

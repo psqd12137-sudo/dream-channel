@@ -1,0 +1,17 @@
+{
+  "product": "CabinSlice_织梦频道.exe",
+  "source_path": "\\\\KC90G52G91.local\\SharedFolder\\new channel\\cabin-slice",
+  "captured_at": "2026-08-12T03:50:20+08:00",
+  "exe_last_write_utc": "2026-08-11T19:36:02Z",
+  "exe_size": 37446144,
+  "exe_sha256": "EEC4C574CC227FB966D39265A31E25F4D6875557C6BB09BB771E6760CC11DC03",
+  "runtime_url_verified": "http://127.0.0.1:17887/",
+  "flow_baseline": [
+    "行前二选一预兆",
+    "17x17 等距盖屋",
+    "扩建点三选一隐藏房间票根",
+    "摆下后走入才揭示",
+    "事件/战斗结算后才增加行程",
+    "伏击与视线会隐藏敌人信息"
+  ]
+}

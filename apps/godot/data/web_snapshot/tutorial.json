@@ -1,0 +1,95 @@
+{
+  "startRoom": "tut_foyer",
+  "runLength": 99,
+  "rewardOdds": { "relic": 0, "item": 1, "stat": 0 },
+  "mapSize": { "cols": 7, "rows": 7 },
+  "layoutRoll": {
+    "enabled": true,
+    "mode": "player",
+    "offerCount": 1,
+    "placeCount": [3, 6],
+    "visitMix": { "combat": 0.5, "quiet": 0.5, "event": 0 },
+    "eventTypes": [],
+    "exclude": ["tut_foyer", "altar", "ritual"],
+    "start": { "id": "tut_foyer", "col": 4, "row": 4 },
+    "doorPatterns": [
+      { "id": "I", "label": "直通", "doors": { "N": true, "S": true, "E": false, "W": false }, "weight": 2 },
+      { "id": "L", "label": "拐角", "doors": { "N": true, "E": true, "S": false, "W": false }, "weight": 2 },
+      { "id": "T", "label": "三岔", "doors": { "N": true, "E": true, "W": true, "S": false }, "weight": 1 },
+      { "id": "end", "label": "尽端", "doors": { "N": true, "E": false, "S": false, "W": false }, "weight": 2 }
+    ]
+  },
+  "defaultArena": {
+    "rows": 3,
+    "cols": 5,
+    "player": [1, 0],
+    "enemy": [1, 4],
+    "walls": [],
+    "heights": {},
+    "ambush": false,
+    "spawnNote": "实线红 = 站上去会挨打。蓝虚线 = 它下一步。先看格子再动手。"
+  },
+  "rooms": {
+    "tut_foyer": {
+      "id": "tut_foyer",
+      "name": "玄关",
+      "desc": "正式开局一样：只剩玄关，由你往外盖。北门、东门已开——「+」出现在开门一侧。你盖的平面图后半段就是 Boss 决战棋盘。",
+      "combat": false,
+      "tutorialHub": true,
+      "exits": [],
+      "map": { "col": 4, "row": 4 }
+    },
+    "tut_practice": {
+      "id": "tut_practice",
+      "name": "练习客厅",
+      "desc": "惊吓票根。走进去学：放刺、看红格、引怪踩踏破韧。",
+      "combat": true,
+      "tutorialFight": true,
+      "tutorialBuildCard": true,
+      "enemy": { "name": "练习用雪花剪影", "hp": 5, "damage": 1 },
+      "exits": [],
+      "map": { "col": 5, "row": 4 },
+      "arena": {
+        "rows": 3,
+        "cols": 5,
+        "player": [1, 0],
+        "enemy": [1, 4],
+        "walls": ["0,2"],
+        "heights": { "2,1": 1 },
+        "ambush": false,
+        "spawnNote": "点「地刺」放邻格 → 看红格 → 「回合结束」引它踩。留 1 点行动力走路。"
+      }
+    },
+    "tut_ready": {
+      "id": "tut_ready",
+      "name": "预备过道",
+      "desc": "惊吓票根。走进去学：挂「甩开」，等它走进旁边十字格才触发。",
+      "combat": true,
+      "tutorialReady": true,
+      "tutorialBuildCard": true,
+      "enemy": { "name": "练习用追影", "hp": 4, "damage": 1 },
+      "exits": [],
+      "map": { "col": 4, "row": 3 },
+      "arena": {
+        "rows": 3,
+        "cols": 5,
+        "player": [1, 1],
+        "enemy": [1, 4],
+        "walls": [],
+        "heights": {},
+        "ambush": false,
+        "spawnNote": "先放刺，再挂「甩开」。邻格亮绿边=触发带。结束回合让它走进来。"
+      }
+    },
+    "tut_quiet": {
+      "id": "tut_quiet",
+      "name": "休息角",
+      "desc": "静室票根。正式局里给喘息；教学里用来结业。",
+      "combat": false,
+      "tutorialEnd": true,
+      "tutorialBuildCard": true,
+      "exits": [],
+      "map": { "col": 5, "row": 3 }
+    }
+  }
+}

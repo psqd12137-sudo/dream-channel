@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "source_note": "Curated bridge sample: Unity deterministic room placement plus Web Run Scheme v3 spatial combat.",
+  "start_room": {
+    "id": "foyer",
+    "name": "玄关 / Foyer",
+    "kind": "quiet",
+    "doors": [true, true, true, true]
+  },
+  "rooms": [
+    {
+      "id": "living",
+      "name": "客厅 / Living Room",
+      "kind": "combat",
+      "doors": [true, true, false, false],
+      "arena": {
+        "cols": 5,
+        "rows": 3,
+        "player": [0, 1],
+        "enemy": [4, 1],
+        "walls": ["2,0"],
+        "heights": {"4,0": 1}
+      }
+    },
+    {
+      "id": "kitchen",
+      "name": "厨房 / Kitchen",
+      "kind": "combat",
+      "doors": [true, false, true, true],
+      "arena": {
+        "cols": 5,
+        "rows": 3,
+        "player": [0, 2],
+        "enemy": [4, 0],
+        "walls": ["2,1"],
+        "heights": {"4,0": 2, "1,2": 1}
+      }
+    },
+    {
+      "id": "parlor",
+      "name": "会客室 / Parlor",
+      "kind": "event",
+      "doors": [true, true, true, false]
+    },
+    {
+      "id": "pantry",
+      "name": "储藏间 / Pantry",
+      "kind": "quiet",
+      "doors": [true, false, true, false]
+    },
+    {
+      "id": "hall",
+      "name": "长廊 / Hall",
+      "kind": "combat",
+      "doors": [false, true, false, true],
+      "arena": {
+        "cols": 6,
+        "rows": 3,
+        "player": [0, 2],
+        "enemy": [5, 0],
+        "walls": ["2,0", "3,2"],
+        "heights": {"5,0": 1},
+        "portals": [["1,0", "4,2"]]
+      }
+    }
+  ],
+  "enemy": {
+    "id": "snow_silhouette",
+    "name": "雪花剪影 / Snow Silhouette",
+    "hp": 6,
+    "damage": 1,
+    "toughness": 3,
+    "action_points": 3,
+    "attack_cost": 2
+  },
+  "cards": {
+    "spike": {
+      "id": "spike",
+      "name": "地刺 / Spike",
+      "type": "place",
+      "cost": 1,
+      "text": "相邻放置；敌人踩中受到2伤害。",
+      "place": {"damage": 2, "toughness": 1, "persistent": false}
+    },
+    "salt": {
+      "id": "salt",
+      "name": "盐圈 / Salt Ring",
+      "type": "place",
+      "cost": 1,
+      "text": "相邻放置；敌人进入额外消耗1行动力。",
+      "place": {"damage": 0, "slow": 1, "persistent": true}
+    },
+    "keepsake": {
+      "id": "keepsake",
+      "name": "护身符 / Keepsake",
+      "type": "skill",
+      "cost": 1,
+      "text": "立刻获得2格挡；保留。",
+      "gain_block": 2,
+      "retain": true
+    },
+    "shove": {
+      "id": "shove",
+      "name": "推撞 / Shove",
+      "type": "skill",
+      "cost": 1,
+      "text": "邻接敌人时推开1格并触发落点。",
+      "shove": true
+    }
+  },
+  "starter_deck": ["spike", "salt", "keepsake", "shove", "spike", "salt", "keepsake", "shove"]
+}
+

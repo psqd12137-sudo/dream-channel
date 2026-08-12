@@ -1,0 +1,6 @@
+.godot/
+addons/godot_mcp/
+*.log
+.mcp.json
+artifacts/
+*.bak

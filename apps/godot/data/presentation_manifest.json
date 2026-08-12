@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "source": "CabinSlice_织梦频道.exe@EEC4C574CC22",
+  "actors": {
+    "player": {
+      "idle_frames": [
+        "res://assets/web_show/characters/lili/idle/frame_01.png",
+        "res://assets/web_show/characters/lili/idle/frame_02.png",
+        "res://assets/web_show/characters/lili/idle/frame_03.png",
+        "res://assets/web_show/characters/lili/idle/frame_04.png",
+        "res://assets/web_show/characters/lili/idle/frame_05.png",
+        "res://assets/web_show/characters/lili/idle/frame_06.png",
+        "res://assets/web_show/characters/lili/idle/frame_07.png",
+        "res://assets/web_show/characters/lili/idle/frame_08.png",
+        "res://assets/web_show/characters/lili/idle/frame_09.png",
+        "res://assets/web_show/characters/lili/idle/frame_10.png",
+        "res://assets/web_show/characters/lili/idle/frame_11.png",
+        "res://assets/web_show/characters/lili/idle/frame_12.png"
+      ],
+      "idle_fps": 8.0,
+      "animations": {
+        "idle": {
+          "frames": [
+            "res://assets/web_show/characters/lili/idle/frame_01.png",
+            "res://assets/web_show/characters/lili/idle/frame_02.png",
+            "res://assets/web_show/characters/lili/idle/frame_03.png",
+            "res://assets/web_show/characters/lili/idle/frame_04.png",
+            "res://assets/web_show/characters/lili/idle/frame_05.png",
+            "res://assets/web_show/characters/lili/idle/frame_06.png",
+            "res://assets/web_show/characters/lili/idle/frame_07.png",
+            "res://assets/web_show/characters/lili/idle/frame_08.png",
+            "res://assets/web_show/characters/lili/idle/frame_09.png",
+            "res://assets/web_show/characters/lili/idle/frame_10.png",
+            "res://assets/web_show/characters/lili/idle/frame_11.png",
+            "res://assets/web_show/characters/lili/idle/frame_12.png"
+          ],
+          "fps": 8.0,
+          "loop": true
+        }
+      },
+      "pixel_size": 0.00215,
+      "visual_y": 0.94
+    },
+    "enemy": {
+      "idle_frames": ["res://assets/web_show/characters/enemy/idle.png"],
+      "idle_fps": 1.0,
+      "animations": {
+        "idle": {
+          "frames": ["res://assets/web_show/characters/enemy/idle.png"],
+          "fps": 1.0,
+          "loop": true
+        }
+      },
+      "pixel_size": 0.00245,
+      "visual_y": 0.82
+    }
+  },
+  "items": {
+    "jab": "res://assets/web_show/items/AnimalTrap.png",
+    "snare": "res://assets/web_show/items/AnimalTrap.png",
+    "warp_trap": "res://assets/web_show/items/TeleportTrap.png",
+    "decoy": "res://assets/web_show/items/ToyBear.png",
+    "flare": "res://assets/web_show/items/SignalJammer.png",
+    "glare": "res://assets/web_show/items/SignalJammer.png",
+    "strobe": "res://assets/web_show/items/SignalJammer.png"
+  },
+  "decor": {
+    "door": "res://assets/web_show/decor/door.png",
+    "window": "res://assets/web_show/decor/window.png",
+    "pendant_lamp": "res://assets/web_show/decor/pendant_lamp.png",
+    "signal_anchor": "res://assets/web_show/decor/signal_anchor.png"
+  }
+}
