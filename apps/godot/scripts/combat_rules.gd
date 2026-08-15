@@ -19,9 +19,11 @@ var energy := 3
 var energy_roll := 1
 var energy_rolls: Array[int] = []
 var base_speed := 3
+var base_energy := 5
+var turn_energy_max := 5
 var hand_size := 4
 var move_cost := 1
-var dice_faces: Array = [0, 1, 2]
+var dice_faces: Array = []
 var energy_bonus := 0
 var placement_discount := 0
 var ready_effect: Dictionary = {}
@@ -94,15 +96,19 @@ func setup(arena: Dictionary, enemy: Dictionary, card_defs: Dictionary, starter:
 	player_hp = int(run_rules.get("player_hp", 6))
 	player_block = 0
 	base_speed = int(run_rules.get("base_speed", 3))
+	base_energy = maxi(1, int(run_rules.get("base_energy", base_speed + 2)))
 	hand_size = int(run_rules.get("hand_size", 4))
 	move_cost = int(run_rules.get("move_cost", 1))
-	dice_faces = run_rules.get("dice_faces", [0, 1, 2]).duplicate()
+	# Kept empty as a compatibility field for the archived 2D prototype. The
+	# production 3D rules use a fixed action-point budget and never roll speed dice.
+	dice_faces.clear()
 	energy_bonus = 1 if "omen_signal" in active_relics else 0
 	damage_bonus = 1 if "omen_salt" in active_relics else 0
 	free_draw_bonus = 1 if "omen_lens" in active_relics else 0
 	first_smash_bonus = 2 if "omen_flint" in active_relics else 0
-	energy = base_speed + energy_bonus
-	energy_roll = 1
+	energy = base_energy + energy_bonus
+	energy_roll = base_energy
+	turn_energy_max = energy
 	placement_discount = 0
 	ready_effect.clear()
 	retain_slots = 0
@@ -258,6 +264,7 @@ func play_card(hand_index: int, target: Vector2i) -> bool:
 		accepted = true
 	elif card_type == "medicine" or card.has("gainEnergy"):
 		energy += int(card.get("gainEnergy", 0))
+		turn_energy_max = maxi(turn_energy_max, energy)
 		player_hp -= int(card.get("selfDamage", 0))
 		accepted = true
 	elif card_type == "ready":
@@ -497,6 +504,9 @@ func _play_place(card: Dictionary, target: Vector2i) -> bool:
 	effect["card_id"] = str(card.get("id", "unknown"))
 	if smash:
 		var damage := int(effect.get("damage", 0))
+		var smash_roll: Dictionary = place_data.get("smashRoll", {})
+		if not smash_roll.is_empty():
+			damage = _roll_smash_damage(smash_roll, str(card.get("id", "?")))
 		if _tile_height(player_pos) > _tile_height(enemy_pos):
 			damage += int(place_data.get("heightSmashExtra", 1))
 		if enemy_broken:
@@ -510,6 +520,19 @@ func _play_place(card: Dictionary, target: Vector2i) -> bool:
 	else:
 		traps[target] = effect
 	return true
+
+
+func _roll_smash_damage(spec: Dictionary, card_id: String) -> int:
+	var dice := int(spec.get("dice", 1))
+	var faces: Array = spec.get("faces", [1, 2, 3])
+	var total := 0
+	var parts: Array[int] = []
+	for _i in range(dice):
+		var face := int(faces[rng.randi_range(0, faces.size() - 1)]) if not faces.is_empty() else 1
+		parts.append(face)
+		total += face
+	event_log.append("SmashRoll id=%s dice=%d result=%s total=%d" % [card_id, dice, str(parts), total])
+	return total
 
 
 func _play_shove(prefer_portal := false, draw_on_portal := 0) -> bool:
@@ -607,16 +630,13 @@ func _drain_toughness(amount: int, source: String) -> bool:
 
 func _start_player_turn() -> void:
 	energy_rolls.clear()
-	energy_roll = 0
-	for i in range(base_speed):
-		var roll := int(dice_faces[rng.randi_range(0, dice_faces.size() - 1)]) if not dice_faces.is_empty() else 1
-		energy_rolls.append(roll)
-		energy_roll += roll
+	energy_roll = base_energy
 	energy = energy_roll + energy_bonus
+	turn_energy_max = energy
 	player_block = 0
 	free_draw_used = false
 	_draw_to(hand_size)
-	event_log.append("PlayerTurn round=%d roll=%d energy=%d" % [round_number, energy_roll, energy])
+	event_log.append("PlayerTurn round=%d fixed_energy=%d bonus=%d energy=%d" % [round_number, base_energy, energy_bonus, energy])
 
 
 func _draw_to(target_count: int) -> void:

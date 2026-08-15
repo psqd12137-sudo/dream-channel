@@ -1,5 +1,7 @@
 # 表现资产包导入
 
+状态：Godot 技术接口。
+
 当前战斗角色不再绑定某一张贴图。`data/presentation_manifest.json` 是唯一的表现资产入口，战斗规则脚本只发出 `idle / move / ready / attack / hurt` 状态。
 
 ## 一键导入
@@ -54,3 +56,9 @@ my_pack/
 - 敌人巡视即使不在玩家视野内也会更新其状态；未被揭示时保持暗影显示，不泄露精确信息。
 
 装饰和道具也通过同一个 manifest 查找，后续可以在不改规则层的情况下替换为正式角色、场景微缩模型、特效和 UI 插图。
+
+## 3D 房间布景
+
+房间中的 3D 家具不走 2D 角色表现包，而由 `scripts/room_art_registry.gd` 单独配置。首轮资产位于 `assets/quaternius/ultimate_house_interior/`，来源和 CC0 许可见该目录的 `SOURCE.md` 与 `LICENSE.txt`。
+
+布景注册表只接受房间 ID、模型路径、局部位置、Y 轴旋转与统一缩放。它不会修改房间门向、格子坐标或战斗规则；未知房和缺少配置的房间继续显示原有纸盒白盒。

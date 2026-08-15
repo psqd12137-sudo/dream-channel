@@ -236,12 +236,12 @@ func _draw_chase() -> void:
 	draw_rect(Rect2(160, 130, 960, 540), PAPER, true)
 	draw_rect(Rect2(160, 130, 960, 540), INK, false, 3.0)
 	_label("警察抓小偷 · 打字追逐", Vector2(210, 185), 28, INK)
-	_label("输入完整英文句子逃向门口；打错不会清空进度。", Vector2(210, 220), 14, Color("665746"))
+	_label("你是小偷：打完整句往门口跑。警察匀速追；打错只闪一下、不清空进度。", Vector2(210, 220), 14, Color("665746"))
 	var track := Rect2(220, 285, 840, 64)
 	draw_rect(track, Color("d7c7a7"), true)
 	draw_rect(track, INK, false, 2.0)
-	var police_x := track.position.x + track.size.x * clampf(game.chase_police_progress / 14.0, 0.0, 1.0)
-	var player_x := track.position.x + track.size.x * clampf(game.chase_player_progress / 14.0, 0.0, 1.0)
+	var police_x := track.position.x + track.size.x * clampf(game.chase_police_progress / game.CHASE_TRACK_LENGTH, 0.0, 1.0)
+	var player_x := track.position.x + track.size.x * clampf(game.chase_player_progress / game.CHASE_TRACK_LENGTH, 0.0, 1.0)
 	draw_circle(Vector2(police_x, track.get_center().y), 19, RED)
 	draw_circle(Vector2(player_x, track.get_center().y), 19, TEAL)
 	_label("警", Vector2(police_x - 10, track.get_center().y + 7), 17, TEXT)
@@ -251,13 +251,20 @@ func _draw_chase() -> void:
 	var remaining: String = str(game.chase_sentence).substr(int(game.chase_typed))
 	_label(typed, Vector2(245, 430), 21, TEAL)
 	var typed_width := ThemeDB.fallback_font.get_string_size(typed, HORIZONTAL_ALIGNMENT_LEFT, -1, 21).x
-	_label(remaining, Vector2(245 + typed_width, 430), 21, INK)
-	_label("剩余 %d 字符" % (game.chase_sentence.length() - game.chase_typed), Vector2(245, 472), 13, Color("665746"))
-	if game.chase_countdown > 0.0:
-		_label("%.1f" % game.chase_countdown, Vector2(620, 535), 38, MAGENTA)
+	if not remaining.is_empty():
+		var next_character := remaining.left(1)
+		var next_color: Color = RED if game.chase_miss_flash_remaining > 0.0 else MAGENTA
+		_label(next_character, Vector2(245 + typed_width, 430), 21, next_color)
+		var next_width := ThemeDB.fallback_font.get_string_size(next_character, HORIZONTAL_ALIGNMENT_LEFT, -1, 21).x
+		_label(remaining.substr(1), Vector2(245 + typed_width + next_width, 430), 21, INK)
+	var gap: float = maxf(0.0, game.chase_player_progress - game.chase_police_progress)
+	_label("间距 %.1f · 终点 %d · 本句剩 %d 字" % [gap, int(game.CHASE_TRACK_LENGTH), max(0, game.chase_sentence.length() - game.chase_typed)], Vector2(245, 472), 13, Color("665746"))
+	if game.chase_phase == "countdown":
+		_label(game.chase_countdown_text, Vector2(610, 535), 38, MAGENTA)
 	elif not game.chase_result.is_empty():
 		_label("逃脱成功" if game.chase_result == "success" else "被追上了", Vector2(555, 535), 28, GREEN if game.chase_result == "success" else RED)
-	_draw_button(CHASE_START_RECT, "开始追逐", GOLD, INK)
+	if game.chase_phase == "ready":
+		_draw_button(CHASE_START_RECT, "开始追逐", GOLD, INK)
 	_draw_button(CHASE_FORFEIT_RECT, "举手投降", Color("4f5960"), TEXT)
 	_draw_coach(Rect2(160, 680, 960, 72), "追逐导播", game.status_message)
 
@@ -370,10 +377,9 @@ func _draw_omen_modal() -> void:
 func _draw_combat_hud() -> void:
 	var combat = game.combat
 	var intent: Dictionary = combat.preview_intent()
-	_draw_actor_strip(Rect2(20, 100, 278, 112), PLAYER_PROFILE, "小主角", GREEN, "HP %d/%d" % [combat.player_hp, game.player_max_hp], "盾 %d" % combat.player_block, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
+	_draw_actor_strip(Rect2(20, 100, 278, 112), PLAYER_PROFILE, "小主角", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_block, 4, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
 	_draw_intent_strip(Rect2(310, 100, 330, 112), intent)
-	var enemy_hp_text := "%d/%d" % [combat.enemy_hp, combat.enemy_max_hp] if combat.enemy_revealed else "??"
-	_draw_actor_strip(Rect2(652, 100, 320, 112), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, "HP %s" % enemy_hp_text, "韧 %d/%d" % [combat.enemy_toughness, combat.enemy_max_toughness], "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
+	_draw_actor_strip(Rect2(652, 100, 320, 112), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, combat.enemy_hp if combat.enemy_revealed else -1, combat.enemy_max_hp, "韧性", combat.enemy_toughness if combat.enemy_revealed else 0, combat.enemy_max_toughness, "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
 
 	draw_rect(Rect2(996, 96, 268, 672), Color("101820f4"), true)
 	draw_rect(Rect2(996, 96, 268, 672), GOLD, false, 3.0)
@@ -405,7 +411,7 @@ func _draw_combat_hud() -> void:
 	_draw_coach(Rect2(20, 690, 952, 68), "战斗导播", game.status_message)
 
 
-func _draw_actor_strip(rect: Rect2, portrait: Texture2D, title: String, accent: Color, line_a: String, line_b: String, line_c: String, action_state: String = "idle") -> void:
+func _draw_actor_strip(rect: Rect2, portrait: Texture2D, title: String, accent: Color, hp: int, max_hp: int, secondary_label: String, secondary_value: int, secondary_max: int, footer: String, action_state: String = "idle") -> void:
 	draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), Color("03070a"), true)
 	draw_rect(rect, Color("f6e7c4ee"), true)
 	if action_state != "idle":
@@ -414,12 +420,32 @@ func _draw_actor_strip(rect: Rect2, portrait: Texture2D, title: String, accent: 
 	draw_rect(Rect2(rect.position, Vector2(8, rect.size.y)), accent, true)
 	draw_rect(rect, accent, false, 2.0)
 	draw_texture_rect(portrait, Rect2(rect.position + Vector2(14, 12), Vector2(62, 88)), false)
-	_label(_shorten(title, 14), rect.position + Vector2(88, 29), 17, INK)
-	_label(line_a, rect.position + Vector2(88, 53), 13, Color("823b35"))
-	_label(line_b, rect.position + Vector2(88, 75), 12, Color("28687a"))
-	_label(_shorten(line_c, 24), rect.position + Vector2(88, 96), 11, Color("4a634a"))
+	_label(_shorten(title, 14), rect.position + Vector2(88, 25), 16, INK)
+	_draw_health_bar(Rect2(rect.position + Vector2(88, 34), Vector2(rect.size.x - 102, 20)), hp, max_hp)
+	_label(secondary_label, rect.position + Vector2(88, 72), 10, Color("43535b"))
+	_draw_stat_pips(Vector2(rect.position.x + 132, rect.position.y + 66), secondary_value, secondary_max, Color("3f91ad") if secondary_label == "护盾" else MAGENTA)
+	_label(_shorten(footer, 24), rect.position + Vector2(88, 96), 10, Color("4a634a"))
 	if action_state != "idle":
 		_draw_chip(Rect2(rect.end.x - 68, rect.position.y + 8, 58, 24), _presentation_state_label(action_state), _presentation_state_color(action_state), TEXT, 10)
+
+
+func _draw_health_bar(rect: Rect2, value: int, maximum: int) -> void:
+	draw_rect(rect, Color("352c2d"), true)
+	if value >= 0 and maximum > 0:
+		var ratio := clampf(float(value) / float(maximum), 0.0, 1.0)
+		draw_rect(Rect2(rect.position, Vector2(rect.size.x * ratio, rect.size.y)), Color("d9574f"), true)
+		_draw_centered("♥  %d / %d" % [value, maximum], rect, 11, TEXT)
+	else:
+		_draw_centered("♥  ? / ?", rect, 11, MUTED)
+	draw_rect(rect, Color("823b35"), false, 1.5)
+
+
+func _draw_stat_pips(origin: Vector2, value: int, maximum: int, color: Color) -> void:
+	var shown_max := clampi(maximum, 1, 8)
+	for index in range(shown_max):
+		var center := origin + Vector2(float(index) * 17.0, 0)
+		draw_circle(center, 5.5, color if index < value else Color("958c7c"))
+		draw_circle(center, 5.5, Color("27313a"), false, 1.0)
 
 
 func _actor_presentation_state(actor_name: String) -> String:
@@ -446,16 +472,50 @@ func _presentation_state_color(state: String) -> Color:
 
 
 func _draw_intent_strip(rect: Rect2, intent: Dictionary) -> void:
+	var intent_type := str(intent.get("type", "stall"))
+	var intent_color := _intent_color(intent_type)
 	draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), Color("03070a"), true)
 	draw_rect(rect, Color("222a35ef"), true)
-	draw_rect(Rect2(rect.position, Vector2(7, rect.size.y)), RED, true)
-	draw_circle(rect.position + Vector2(33, 34), 19, RED)
-	_draw_centered("!", Rect2(rect.position + Vector2(14, 15), Vector2(38, 38)), 20, TEXT)
-	_label("敌人意图", rect.position + Vector2(64, 24), 10, Color("e3a6a3"))
-	_label(_shorten(str(intent.get("label", "—")), 21), rect.position + Vector2(64, 49), 17, TEXT)
+	draw_rect(Rect2(rect.position, Vector2(7, rect.size.y)), intent_color, true)
+	draw_circle(rect.position + Vector2(44, 54), 31, Color(intent_color, 0.32))
+	draw_circle(rect.position + Vector2(44, 54), 31, intent_color, false, 3.0)
+	_draw_centered(_intent_glyph(intent_type), Rect2(rect.position + Vector2(14, 24), Vector2(60, 60)), 27, TEXT)
+	_draw_chip(Rect2(rect.position + Vector2(82, 12), Vector2(78, 22)), _intent_mode_label(intent_type), intent_color, TEXT, 9)
+	_label(_shorten(str(intent.get("label", "—")), 21), rect.position + Vector2(82, 57), 18, TEXT)
 	var hint := str(intent.get("detail", "蓝格=它走，红格=本回合必伤。"))
-	_label(_shorten(hint, 46), rect.position + Vector2(20, 79), 10, MUTED)
-	_label("怪行动力 %d · 追击/出手共用" % game.combat.enemy_action_points, rect.position + Vector2(20, 100), 11, GOLD)
+	_label(_shorten(hint, 38), rect.position + Vector2(82, 78), 9, MUTED)
+	_label("敌方 AP", rect.position + Vector2(82, 100), 9, GOLD)
+	_draw_stat_pips(rect.position + Vector2(138, 96), game.combat.enemy_action_points, 6, GOLD)
+
+
+func _intent_color(intent_type: String) -> Color:
+	match intent_type:
+		"attack": return RED
+		"chase": return Color("ff8c42")
+		"search": return BLUE
+		"patrol": return TEAL
+		"ambush": return MAGENTA
+	return Color("77838c")
+
+
+func _intent_glyph(intent_type: String) -> String:
+	match intent_type:
+		"attack": return "!"
+		"chase": return "»"
+		"search": return "?"
+		"patrol": return "↻"
+		"ambush": return "◉"
+	return "·"
+
+
+func _intent_mode_label(intent_type: String) -> String:
+	match intent_type:
+		"attack": return "攻击"
+		"chase": return "追击"
+		"search": return "搜索"
+		"patrol": return "巡逻"
+		"ambush": return "埋伏"
+	return "观望"
 
 
 func _draw_action_ticket(rect: Rect2) -> void:
@@ -467,12 +527,8 @@ func _draw_action_ticket(rect: Rect2) -> void:
 	_label("S%d" % game.combat.base_speed, rect.position + Vector2(15, 64), 26, INK)
 	_label("行动力", rect.position + Vector2(86, 28), 10, Color("7a6044"))
 	_label("%d AP" % game.combat.energy, rect.position + Vector2(84, 61), 24, INK)
-	var rolls: Array = game.combat.energy_rolls
-	for i in range(mini(4, rolls.size())):
-		var die := Rect2(rect.position + Vector2(86 + i * 32, 76), Vector2(26, 26))
-		draw_rect(die, Color("fffaf0"), true)
-		draw_rect(die, Color("9a7045"), false, 1.5)
-		_draw_centered(str(rolls[i]), die, 13, INK)
+	_draw_stat_pips(rect.position + Vector2(91, 91), game.combat.energy, game.combat.turn_energy_max, TEAL)
+	_label("固定预算", rect.position + Vector2(177, 96), 9, Color("7a6044"))
 
 
 func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int, selected: bool) -> void:
@@ -489,50 +545,55 @@ func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int
 		_label(_shorten(str(card.get("text", "")), 25), rect.position + Vector2(44, 61), 9, Color("64584e"))
 
 
-func _gui_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if game == null:
 		return
-	if event is InputEventKey:
-		var key_event: InputEventKey = event
-		if key_event.pressed and not key_event.echo and game.phase == "lab_chase" and key_event.unicode > 0:
-			game.chase_type_character(char(key_event.unicode))
-			accept_event()
+	if not (event is InputEventKey):
+		return
+	var key_event: InputEventKey = event
+	if key_event.pressed and not key_event.echo and game.phase == "lab_chase" and game.chase_phase == "race" and key_event.unicode > 0:
+		game.chase_type_character(char(key_event.unicode))
+		get_viewport().set_input_as_handled()
+		return
+	if key_event.pressed and not key_event.echo and game.phase.begins_with("lab_") and key_event.keycode == KEY_ESCAPE:
+		if not game.event_context.is_empty():
+			game.finish_event_trial(false)
+		else:
+			game.go_home()
+		get_viewport().set_input_as_handled()
+		return
+	if key_event.pressed and not key_event.echo and game.phase == "lab_puzzle":
+		var empty: int = game.puzzle_board.find(0)
+		var row: int = empty / 3
+		var col: int = empty % 3
+		if key_event.keycode in [KEY_A, KEY_LEFT] and col < 2:
+			game.puzzle_slide_from_offset(1)
+		elif key_event.keycode in [KEY_D, KEY_RIGHT] and col > 0:
+			game.puzzle_slide_from_offset(-1)
+		elif key_event.keycode in [KEY_W, KEY_UP] and row < 2:
+			game.puzzle_slide_from_offset(3)
+		elif key_event.keycode in [KEY_S, KEY_DOWN] and row > 0:
+			game.puzzle_slide_from_offset(-3)
+		else:
 			return
-		if key_event.pressed and not key_event.echo and game.phase.begins_with("lab_") and key_event.keycode == KEY_ESCAPE:
-			if not game.event_context.is_empty():
-				game.finish_event_trial(false)
-			else:
-				game.go_home()
-			accept_event()
-			return
-		if key_event.pressed and not key_event.echo and game.phase == "lab_puzzle":
-			var empty: int = game.puzzle_board.find(0)
-			var row: int = empty / 3
-			var col: int = empty % 3
-			if key_event.keycode in [KEY_A, KEY_LEFT] and col < 2:
-				game.puzzle_slide_from_offset(1)
-			elif key_event.keycode in [KEY_D, KEY_RIGHT] and col > 0:
-				game.puzzle_slide_from_offset(-1)
-			elif key_event.keycode in [KEY_W, KEY_UP] and row < 2:
-				game.puzzle_slide_from_offset(3)
-			elif key_event.keycode in [KEY_S, KEY_DOWN] and row > 0:
-				game.puzzle_slide_from_offset(-3)
-			else:
-				return
-			accept_event()
-			return
-		if game.phase == "lab_sideview":
-			if key_event.keycode in [KEY_A, KEY_LEFT]:
-				side_left = key_event.pressed
-			if key_event.keycode in [KEY_D, KEY_RIGHT]:
-				side_right = key_event.pressed
-			var jump := key_event.pressed and key_event.keycode in [KEY_W, KEY_UP, KEY_SPACE]
-			game.set_sideview_input(float(int(side_right) - int(side_left)), jump)
-			accept_event()
-			return
-		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE and game.phase == "combat" and game.selected_card >= 0:
-			game.cancel_selected_card()
-			accept_event()
+		get_viewport().set_input_as_handled()
+		return
+	if game.phase == "lab_sideview":
+		if key_event.keycode in [KEY_A, KEY_LEFT]:
+			side_left = key_event.pressed
+		if key_event.keycode in [KEY_D, KEY_RIGHT]:
+			side_right = key_event.pressed
+		var jump := key_event.pressed and key_event.keycode in [KEY_W, KEY_UP, KEY_SPACE]
+		game.set_sideview_input(float(int(side_right) - int(side_left)), jump)
+		get_viewport().set_input_as_handled()
+		return
+	if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE and game.phase == "combat" and game.selected_card >= 0:
+		game.cancel_selected_card()
+		get_viewport().set_input_as_handled()
+
+
+func _gui_input(event: InputEvent) -> void:
+	if game == null:
 		return
 	if event is InputEventMouseMotion:
 		if middle_dragging and game.phase == "combat":

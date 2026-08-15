@@ -4,6 +4,7 @@ const RoomRules = preload("res://scripts/room_rules.gd")
 const CombatRules = preload("res://scripts/combat_rules.gd")
 const WebContentAdapter = preload("res://scripts/web_content_adapter.gd")
 const CharacterPresenter = preload("res://scripts/character_presenter.gd")
+const RoomArtRegistry = preload("res://scripts/room_art_registry.gd")
 
 const EXE_SOURCE_ID := "CabinSlice_织梦频道.exe@EEC4C574CC22"
 const SNAPSHOT_ROOT := "res://data/exe_snapshot/"
@@ -42,6 +43,30 @@ const UNITY_ACTOR_SETTLE_DURATION := 0.12
 const UNITY_CARD_HALF_FLIP_DURATION := 0.10
 const ENEMY_STEP_DURATION := 0.18
 const ENEMY_ATTACK_DURATION := 0.22
+const BATTLE_STAGE_BUILD_DURATION := 0.34
+const BATTLE_ACTOR_ENTRY_DURATION := 0.30
+const CHASE_TRACK_LENGTH := 14.0
+const CHASE_PLAYER_START := 5.0
+const CHASE_POLICE_START := 0.0
+const CHASE_POLICE_SPEED := 0.12
+const CHASE_SENTENCE_STEP := 10.0
+const CHASE_COUNTDOWN_DURATION := 2.8
+const CHASE_CATCH_DISTANCE := 0.05
+const CHASE_MISS_FLASH_DURATION := 0.22
+const CHASE_FINISH_DELAY := 0.52
+const CHASE_SENTENCES := [
+	"run for the cabin door now",
+	"keep your boots quiet please",
+	"dash past the rusted gate",
+	"the hallway still bites hard",
+	"slip through the mud and go",
+	"climb the attic stair fast",
+	"hide behind the salt line",
+	"kick open the back door",
+]
+const CHASE_COUNTDOWN_LABELS := ["3", "2", "1", "跑！"]
+const CHASE_COUNTDOWN_STEP_DURATION := 0.75
+const CHASE_COUNTDOWN_RUN_DURATION := 0.55
 
 @onready var world_container: SubViewportContainer = $WorldLayer/WorldContainer
 @onready var world_viewport: SubViewport = $WorldLayer/WorldContainer/WorldViewport
@@ -108,12 +133,20 @@ var puzzle_refreshes_left := 3
 var puzzle_status := ""
 var search_targets: Array[Dictionary] = []
 var search_found := 0
-var chase_sentence := "the signal hides behind the painted door"
+var chase_sentence := ""
 var chase_typed := 0
-var chase_police_progress := 0.0
-var chase_player_progress := 5.0
+var chase_police_progress := CHASE_POLICE_START
+var chase_player_progress := CHASE_PLAYER_START
 var chase_started := false
+var chase_phase := "idle"
 var chase_countdown := 0.0
+var chase_countdown_index := 0
+var chase_countdown_step_remaining := 0.0
+var chase_countdown_text := ""
+var chase_miss_flash_remaining := 0.0
+var chase_used_sentences: Array[String] = []
+var chase_finish_delay_remaining := 0.0
+var chase_event_result_pending := false
 var chase_result := ""
 var lab_camera_target := Vector3.ZERO
 var lab_camera_yaw := 0.0
@@ -320,7 +353,6 @@ func start_combat_lab(room_id: String = "hall") -> void:
 		lab_root.visible = false
 	start_combat(room)
 	combat.hand.assign(["jab", "guard", "brace", "fling"])
-	combat.energy = 4
 	status_message = "意图实验：未揭示怪物最多埋伏一拍，随后会巡逻；蓝色编号显示逐步路径。"
 	build_battle_world()
 	_refresh_hud()
@@ -555,69 +587,146 @@ func start_chase_lab() -> void:
 	_prepare_lab("lab_chase")
 	event_context = ""
 	_reset_chase()
-	status_message = "点击开始追逐，倒计时结束后输入屏幕上的英文句子。"
+	status_message = "用鼠标点开始——倒计时后再碰键盘。"
 	_refresh_hud()
 
 
 func _reset_chase() -> void:
+	chase_sentence = ""
 	chase_typed = 0
-	chase_police_progress = 0.0
-	chase_player_progress = 5.0
+	chase_police_progress = CHASE_POLICE_START
+	chase_player_progress = CHASE_PLAYER_START
 	chase_started = false
+	chase_phase = "ready"
 	chase_countdown = 0.0
+	chase_countdown_index = 0
+	chase_countdown_step_remaining = 0.0
+	chase_countdown_text = ""
+	chase_miss_flash_remaining = 0.0
+	chase_used_sentences.clear()
+	chase_finish_delay_remaining = 0.0
+	chase_event_result_pending = false
 	chase_result = ""
 
 
 func begin_chase() -> void:
-	if phase != "lab_chase" or chase_started or not chase_result.is_empty():
+	if phase != "lab_chase" or chase_phase != "ready" or not chase_result.is_empty():
 		return
 	chase_started = true
-	chase_countdown = 2.5
-	status_message = "追逐即将开始……"
+	chase_phase = "countdown"
+	chase_countdown = CHASE_COUNTDOWN_DURATION
+	chase_countdown_index = 0
+	chase_countdown_step_remaining = CHASE_COUNTDOWN_STEP_DURATION
+	chase_countdown_text = str(CHASE_COUNTDOWN_LABELS[0])
+	status_message = "盯着倒计时，准备打一整句。"
 	_refresh_hud()
 
 
 func chase_type_character(character: String) -> void:
-	if phase != "lab_chase" or not chase_started or chase_countdown > 0.0 or not chase_result.is_empty() or character.is_empty():
+	if phase != "lab_chase" or chase_phase != "race" or not chase_started or not chase_result.is_empty() or character.length() != 1:
 		return
 	var expected := chase_sentence.substr(chase_typed, 1)
-	if character.to_lower() == expected.to_lower():
+	var matches := character == " " if expected == " " else character.to_lower() == expected.to_lower()
+	if matches:
 		chase_typed += 1
-		chase_player_progress += 9.0 / float(chase_sentence.length())
-		status_message = "输入正确：还剩 %d 个字符。" % (chase_sentence.length() - chase_typed)
+		chase_miss_flash_remaining = 0.0
 		if chase_typed >= chase_sentence.length():
-			_finish_chase(true)
+			chase_player_progress = minf(CHASE_TRACK_LENGTH, chase_player_progress + CHASE_SENTENCE_STEP)
+			if chase_player_progress >= CHASE_TRACK_LENGTH - 0.01:
+				_finish_chase(true)
+			else:
+				_next_chase_sentence()
+				status_message = "一句打完，继续下一句！"
 	else:
-		status_message = "打错了——进度保留，但警察还在靠近。"
+		chase_miss_flash_remaining = CHASE_MISS_FLASH_DURATION
+		status_message = "打错了——进度还在，再打这个字。"
 	_refresh_hud()
 
 
 func forfeit_chase() -> void:
-	if phase == "lab_chase" and chase_result.is_empty():
-		_finish_chase(false)
+	if phase == "lab_chase" and chase_phase != "done":
+		_finish_chase(false, "你举手投降——警察给节目组鞠躬。")
 
 
 func _update_chase(delta: float) -> void:
-	if not chase_started or not chase_result.is_empty():
+	if chase_phase == "done":
+		_update_chase_finish_delay(delta)
 		return
-	if chase_countdown > 0.0:
-		chase_countdown = maxf(0.0, chase_countdown - delta)
-		if chase_countdown <= 0.0:
-			status_message = "跑！输入完整句子，不要让警察追上。"
-			_refresh_hud()
+	if not chase_started:
 		return
-	chase_police_progress += delta * 1.05
-	if chase_police_progress + 0.7 >= chase_player_progress:
+	chase_miss_flash_remaining = maxf(0.0, chase_miss_flash_remaining - delta)
+	if chase_phase == "countdown":
+		_update_chase_countdown(delta)
+		if hud != null:
+			hud.queue_redraw()
+		return
+	if chase_phase != "race":
+		return
+	var race_delta := minf(0.05, delta)
+	chase_police_progress = minf(CHASE_TRACK_LENGTH, chase_police_progress + race_delta * CHASE_POLICE_SPEED)
+	if hud != null:
+		hud.queue_redraw()
+	if chase_police_progress >= chase_player_progress - CHASE_CATCH_DISTANCE:
 		_finish_chase(false)
 
 
-func _finish_chase(success: bool) -> void:
+func _update_chase_countdown(delta: float) -> void:
+	chase_countdown = maxf(0.0, chase_countdown - delta)
+	var remaining_delta := delta
+	while chase_phase == "countdown" and remaining_delta >= chase_countdown_step_remaining:
+		remaining_delta -= chase_countdown_step_remaining
+		chase_countdown_index += 1
+		if chase_countdown_index >= CHASE_COUNTDOWN_LABELS.size():
+			chase_phase = "race"
+			chase_countdown = 0.0
+			chase_countdown_step_remaining = 0.0
+			chase_countdown_text = ""
+			_next_chase_sentence()
+			status_message = "打完整句往前跑。打错只闪一下，进度不清空。"
+			return
+		chase_countdown_text = str(CHASE_COUNTDOWN_LABELS[chase_countdown_index])
+		chase_countdown_step_remaining = CHASE_COUNTDOWN_RUN_DURATION if chase_countdown_index == CHASE_COUNTDOWN_LABELS.size() - 1 else CHASE_COUNTDOWN_STEP_DURATION
+	if chase_phase == "countdown":
+		chase_countdown_step_remaining -= remaining_delta
+
+
+func _next_chase_sentence() -> void:
+	var pool: Array[String] = []
+	for candidate: String in CHASE_SENTENCES:
+		if candidate not in chase_used_sentences:
+			pool.append(candidate)
+	if pool.is_empty():
+		pool.assign(CHASE_SENTENCES)
+	var next_sentence: String = pool[rng.randi_range(0, pool.size() - 1)]
+	chase_used_sentences.append(next_sentence)
+	if chase_used_sentences.size() >= CHASE_SENTENCES.size():
+		chase_used_sentences.clear()
+	chase_sentence = next_sentence
+	chase_typed = 0
+	chase_miss_flash_remaining = 0.0
+
+
+func _finish_chase(success: bool, message: String = "") -> void:
+	if chase_phase == "done":
+		return
 	chase_result = "success" if success else "failure"
 	chase_started = false
-	status_message = "成功逃到门口！" if success else "警察追上来了。"
+	chase_phase = "done"
+	chase_countdown_text = ""
+	chase_miss_flash_remaining = 0.0
+	status_message = message if not message.is_empty() else ("你踹开门溜进雾里——速度涨了一截。" if success else "警察抓住了你——节目组大笑。")
+	chase_event_result_pending = event_context == "chase"
+	chase_finish_delay_remaining = CHASE_FINISH_DELAY if chase_event_result_pending else 0.0
 	_refresh_hud()
-	if event_context == "chase":
-		finish_event_trial(success)
+
+
+func _update_chase_finish_delay(delta: float) -> void:
+	if not chase_event_result_pending:
+		return
+	chase_finish_delay_remaining = maxf(0.0, chase_finish_delay_remaining - delta)
+	if chase_finish_delay_remaining <= 0.0:
+		chase_event_result_pending = false
+		finish_event_trial(chase_result == "success")
 
 
 func _prepare_lab(next_phase: String) -> void:
@@ -710,8 +819,6 @@ func select_offer(index: int) -> void:
 func rotate_offer() -> void:
 	if animation_busy or phase != "build":
 		return
-	if build_preview_tween != null and build_preview_tween.is_valid():
-		return
 	offer_rotation = (offer_rotation + 1) % 4
 	var preview := house_root.get_node_or_null("BuildPreview") as Node3D
 	if preview != null:
@@ -719,7 +826,7 @@ func rotate_offer() -> void:
 			build_preview_tween.kill()
 		build_preview_tween = create_tween()
 		build_preview_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		build_preview_tween.tween_property(preview, "rotation:y", preview.rotation.y - PI * 0.5, 0.18 * maxf(0.25, animation_duration_scale))
+		build_preview_tween.tween_property(preview, "rotation:y", -float(offer_rotation) * PI * 0.5, 0.18 * maxf(0.25, animation_duration_scale))
 		_update_build_preview_validity(preview)
 	status_message = "房间预览已旋转到 %d°；门位会在大地图中实时变化。" % (offer_rotation * 90)
 	_refresh_hud()
@@ -915,7 +1022,7 @@ func resolve_current_room() -> void:
 		return
 	var room: Dictionary = current_room()
 	if str(room.get("kind", "quiet")) == "combat":
-		start_combat(room)
+		start_combat(room, true)
 	elif str(room.get("kind", "quiet")) == "event":
 		start_event_trial(room)
 	else:
@@ -1070,7 +1177,7 @@ func finish_event_trial(success: bool) -> void:
 		_refresh_hud()
 
 
-func start_combat(room: Dictionary) -> void:
+func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	combat = CombatRules.new()
 	var enemy: Dictionary = room.get("enemy", {})
 	var run_rules: Dictionary = content.get("run_rules", {}).duplicate(true)
@@ -1082,9 +1189,85 @@ func start_combat(room: Dictionary) -> void:
 	phase = "combat"
 	house_root.visible = false
 	battle_root.visible = true
+	battle_root.position = Vector3.ZERO
+	battle_root.scale = Vector3.ONE
 	build_battle_world()
 	_set_battle_camera()
-	status_message = str(room.get("arena", {}).get("spawnNote", "房门在身后合上。"))
+	var entry_message := str(room.get("arena", {}).get("spawnNote", "房门在身后合上。"))
+	if animate_entry and animation_duration_scale > 0.0:
+		animation_busy = true
+		active_animation_kind = "combat_entry"
+		status_message = "房间正在展开战斗舞台……"
+		_prepare_combat_entry_pose()
+		_animate_combat_entry(entry_message)
+	else:
+		status_message = entry_message
+	_refresh_hud()
+
+
+func _prepare_combat_entry_pose() -> void:
+	battle_root.position = Vector3(0.0, 0.72, 0.0)
+	battle_root.scale = Vector3(0.92, 0.04, 0.92)
+	var player := battle_root.get_node_or_null("Player") as Node3D
+	var enemy := battle_root.get_node_or_null("Enemy") as Node3D
+	if player != null:
+		player.visible = false
+	if enemy != null:
+		enemy.visible = false
+
+
+func _animate_combat_entry(final_message: String) -> void:
+	var stage_duration := BATTLE_STAGE_BUILD_DURATION * animation_duration_scale
+	var stage_tween := create_tween()
+	active_motion_tween = stage_tween
+	stage_tween.set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	stage_tween.tween_property(battle_root, "position", Vector3.ZERO, stage_duration)
+	stage_tween.tween_property(battle_root, "scale", Vector3.ONE, stage_duration)
+	await stage_tween.finished
+	if active_motion_tween != stage_tween:
+		return
+	battle_root.position = Vector3.ZERO
+	battle_root.scale = Vector3.ONE
+	var player := battle_root.get_node_or_null("Player") as Node3D
+	var enemy := battle_root.get_node_or_null("Enemy") as Node3D
+	if player == null or enemy == null:
+		status_message = final_message
+		_complete_dynamic_effect()
+		_refresh_hud()
+		return
+	var player_target := player.position
+	var enemy_target := enemy.position
+	player.position = player_target + Vector3(-BATTLE_CELL * 0.70, 1.25, BATTLE_CELL * 0.55)
+	enemy.position = enemy_target + Vector3(BATTLE_CELL * 0.70, 1.25, -BATTLE_CELL * 0.55)
+	player.scale = Vector3.ONE * 0.68
+	enemy.scale = Vector3.ONE * 0.68
+	player.visible = true
+	enemy.visible = true
+	var actor_duration := BATTLE_ACTOR_ENTRY_DURATION * animation_duration_scale
+	var actor_tween := create_tween()
+	active_motion_tween = actor_tween
+	actor_tween.set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	actor_tween.tween_property(player, "position", player_target, actor_duration)
+	actor_tween.tween_property(player, "scale", Vector3.ONE, actor_duration)
+	actor_tween.tween_property(enemy, "position", enemy_target, actor_duration)
+	actor_tween.tween_property(enemy, "scale", Vector3.ONE, actor_duration)
+	await actor_tween.finished
+	if active_motion_tween != actor_tween:
+		return
+	if not is_instance_valid(player) or not is_instance_valid(enemy):
+		build_battle_world()
+		status_message = final_message
+		_complete_dynamic_effect()
+		_refresh_hud()
+		return
+	player.position = player_target
+	enemy.position = enemy_target
+	player.scale = Vector3.ONE
+	enemy.scale = Vector3.ONE
+	_play_actor_state("Player", "ready", "入场")
+	_play_actor_state("Enemy", "ready", "现身")
+	status_message = final_message
+	_complete_dynamic_effect()
 	_refresh_hud()
 
 
@@ -1265,7 +1448,7 @@ func battle_cell_from_viewport(view_pos: Vector2) -> Vector2i:
 
 
 func set_battle_hover(view_pos: Vector2) -> void:
-	if phase != "combat" or combat == null:
+	if animation_busy or phase != "combat" or combat == null:
 		return
 	var next_hover := battle_cell_from_viewport(view_pos)
 	if next_hover == hovered_battle_cell:
@@ -1275,6 +1458,8 @@ func set_battle_hover(view_pos: Vector2) -> void:
 
 
 func clear_battle_hover() -> void:
+	if animation_busy:
+		return
 	if hovered_battle_cell == INVALID_CELL:
 		return
 	hovered_battle_cell = INVALID_CELL
@@ -1509,8 +1694,10 @@ func _populate_room_visual(node: Node3D, pos: Vector2i, room: Dictionary) -> voi
 	var doors: Array = room.get("doors", [false, false, false, false])
 	for side in range(4):
 		_add_room_edge(node, side, bool(doors[side]), accent)
+	var decor_count := RoomArtRegistry.decorate(node, room, revealed)
 	var label_text := str(room.get("name", "房间")) if revealed else "?"
-	_add_label(node, "Label", label_text, Vector3(0, 1.18, 0), accent if revealed else COL_GOLD, 44)
+	var label_y := 2.10 if decor_count > 0 else 1.18
+	_add_label(node, "Label", label_text, Vector3(0, label_y, 0), accent if revealed else COL_GOLD, 44)
 
 
 func _add_room_edge(parent: Node3D, side: int, has_door: bool, color: Color) -> void:
@@ -1649,10 +1836,10 @@ func build_battle_world() -> void:
 				_add_label(cell_node, "Blocked", "×", Vector3(0, platform_height + 1.72, 0), Color("f0c9b4"), 42)
 			elif combat.traps.has(pos):
 				var trap: Dictionary = combat.traps[pos]
-				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.11, 0), 0.42, 0.18, _material(COL_GOLD, false, 0.05))
+				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
 				var card_id := str(trap.get("card_id", ""))
 				_add_trap_item_sprite(cell_node, card_id, top_y)
-				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.78, 0), COL_GOLD, 24)
+				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
 	_add_battle_pawn(combat.player_pos, true, true)
 	_add_battle_pawn(combat.enemy_pos, false, combat.enemy_revealed)
 	_add_battle_stage_decor()
@@ -1765,8 +1952,9 @@ func _add_trap_item_sprite(parent: Node3D, card_id: String, y: float) -> void:
 	var sprite := Sprite3D.new()
 	sprite.name = "ItemArt_%s" % card_id
 	sprite.texture = texture
-	sprite.position = Vector3(0, y + 0.42, 0)
-	sprite.pixel_size = 0.0024
+	sprite.position = Vector3(0, y + 0.31, 0)
+	var max_pixels := maxi(texture.get_width(), texture.get_height())
+	sprite.pixel_size = (BATTLE_CELL * 0.55) / float(maxi(1, max_pixels))
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false
 	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
@@ -1992,3 +2180,5 @@ func _refresh_hud() -> void:
 	if hud != null:
 		hud.sync_layout()
 		hud.queue_redraw()
+# Combat Lab intentionally keeps the same fixed action-point setup as real rooms;
+# this trailing note also guards SMB shares that do not truncate rewritten files.

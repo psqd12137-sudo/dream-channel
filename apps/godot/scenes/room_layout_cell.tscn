@@ -1,0 +1,61 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/room_layout_cell.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="Material_base"]
+albedo_color = Color(0.11, 0.15, 0.17, 1)
+roughness = 0.93
+
+[sub_resource type="StandardMaterial3D" id="Material_floor"]
+albedo_color = Color(0.94, 0.89, 0.72, 1)
+roughness = 0.88
+
+[sub_resource type="StandardMaterial3D" id="Material_wall"]
+albedo_color = Color(0.12, 0.62, 0.58, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Material_door"]
+albedo_color = Color(1, 0.67, 0.08, 1)
+roughness = 0.78
+emission_enabled = true
+emission = Color(0.72, 0.31, 0.02, 1)
+
+[node name="RoomCell" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Base" type="CSGBox3D" parent="."]
+position = Vector3(0, 0.14, 0)
+size = Vector3(3.05, 0.28, 3.05)
+material = SubResource("Material_base")
+
+[node name="Floor" type="CSGBox3D" parent="."]
+position = Vector3(0, 0.31, 0)
+size = Vector3(2.82, 0.12, 2.82)
+material = SubResource("Material_floor")
+
+[node name="NorthWall" type="CSGBox3D" parent="."]
+position = Vector3(0, 0.68, -1.42)
+size = Vector3(2.82, 0.55, 0.14)
+material = SubResource("Material_wall")
+
+[node name="EastWall" type="CSGBox3D" parent="."]
+position = Vector3(1.42, 0.68, 0)
+size = Vector3(0.14, 0.55, 2.82)
+material = SubResource("Material_wall")
+
+[node name="SouthDoorGuide" type="CSGBox3D" parent="." groups=["layout_guide"]]
+position = Vector3(0, 0.4, 1.42)
+size = Vector3(0.72, 0.07, 0.22)
+material = SubResource("Material_door")
+
+[node name="WestDoorGuide" type="CSGBox3D" parent="." groups=["layout_guide"]]
+position = Vector3(-1.42, 0.4, 0)
+size = Vector3(0.22, 0.07, 0.72)
+material = SubResource("Material_door")
+
+[node name="Name" type="Label3D" parent="." groups=["layout_guide"]]
+position = Vector3(0, 2.15, 0)
+modulate = Color(0.44, 0.86, 0.9, 1)
+text = "未命名\nroom"
+font_size = 64
+outline_size = 8

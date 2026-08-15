@@ -18,10 +18,11 @@ func _init() -> void:
 		"heights": {},
 		"portals": [],
 	}
-	var rules := {"player_hp": 6, "base_speed": 3, "hand_size": 4, "move_cost": 1, "dice_faces": [2]}
+	var rules := {"player_hp": 6, "base_speed": 3, "base_energy": 5, "hand_size": 4, "move_cost": 1}
 
 	var trap_combat = CombatRules.new()
 	trap_combat.setup(arena, _enemy(3), cards, ["jab", "guard", "focus", "tonic"], 1, rules, [])
+	_check(trap_combat.energy == 5 and trap_combat.energy_rolls.is_empty(), "player turns must use a fixed 5 AP budget without 0/1/2 dice")
 	var jab_index: int = trap_combat.hand.find("jab")
 	_check(jab_index >= 0 and trap_combat.play_card(jab_index, Vector2i(1, 0)), "jab should place on an adjacent cell")
 	trap_combat.enemy_turn()
@@ -44,7 +45,7 @@ func _init() -> void:
 	_check(decoy_combat.player_hp == 6, "decoy attack should not damage the player")
 
 	if failures.is_empty():
-		print("CHANNEL_COMBAT_MECHANICS_SMOKE: PASS trap ready decoy")
+		print("CHANNEL_COMBAT_MECHANICS_SMOKE: PASS fixed-ap trap ready decoy")
 		quit(0)
 	else:
 		for failure in failures:

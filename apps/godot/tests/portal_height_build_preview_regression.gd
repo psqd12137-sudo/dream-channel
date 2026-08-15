@@ -57,10 +57,16 @@ func _run() -> void:
 	var preview := game.house_root.get_node_or_null("BuildPreview") as Node3D
 	_check(preview != null, "build mode must show the selected room directly on the large map")
 	var before: float = preview.rotation.y if preview != null else 0.0
+	var rotation_before: int = game.offer_rotation
+	game.rotate_offer()
+	game.rotate_offer()
 	game.rotate_offer()
 	await create_timer(0.24).timeout
 	preview = game.house_root.get_node_or_null("BuildPreview") as Node3D
-	_check(preview != null and absf(preview.rotation.y - before) > 1.2, "pressing rotate must visibly turn the map preview by about 90 degrees")
+	var expected_rotation := (rotation_before + 3) % 4
+	var expected_angle := -float(expected_rotation) * PI * 0.5
+	_check(preview != null and absf(preview.rotation.y - before) > 1.2, "pressing rotate must visibly turn the map preview")
+	_check(game.offer_rotation == expected_rotation and preview != null and absf(angle_difference(preview.rotation.y, expected_angle)) < 0.12, "rapid rotate clicks must keep the large-map room synchronized with the selected direction")
 	_check(preview != null and preview.get_node_or_null("PreviewRotation") != null, "map preview must explain its current rotation and placement validity")
 
 	game.queue_free()

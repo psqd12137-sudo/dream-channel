@@ -100,8 +100,8 @@ func build_content(run_seed: int) -> Dictionary:
 		"run_rules": {
 			"player_hp": 6,
 			"base_speed": int(cards_json.get("baseSpeed", 3)),
+			"base_energy": int(cards_json.get("baseEnergy", int(cards_json.get("baseSpeed", 3)) + 2)),
 			"hand_size": int(cards_json.get("handSize", 4)),
-			"dice_faces": cards_json.get("diceFaces", [0, 1, 2]),
 			"move_cost": int(cards_json.get("moveCost", 1)),
 			"hostile_pass_cost": int(cards_json.get("hostilePassCost", 1)),
 		},
@@ -183,3 +183,5 @@ func _load_json(file_name: String) -> Dictionary:
 		push_error("Invalid Web snapshot JSON: %s" % path)
 		return {}
 	return parsed
+# The archived Web snapshot may still contain diceFaces, but production run
+# rules deliberately stop at base_energy and never expose those legacy faces.

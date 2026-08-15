@@ -50,6 +50,15 @@ func _run() -> void:
 	_check(_count_named_prefix(battle_root, "Height") > 0, "height cells must render H markers")
 	_check(_count_named_prefix(battle_root, "PortalLabel") == 2, "portal endpoints must render A/B markers")
 	_check(_count_named_prefix(battle_root, "Blocker") == 2, "hall walls must render blocker meshes")
+	var trap_cell := _first_empty_cell(game)
+	game.combat.traps[trap_cell] = {"card_id": "jab", "glyph": "刺", "damage": 2}
+	game.build_battle_world()
+	var trap_mesh := battle_root.get_node_or_null("Cell_%d_%d/Trap" % [trap_cell.x, trap_cell.y]) as MeshInstance3D
+	var trap_art := battle_root.get_node_or_null("Cell_%d_%d/ItemArt_jab" % [trap_cell.x, trap_cell.y]) as Sprite3D
+	var trap_radius := (trap_mesh.mesh as CylinderMesh).top_radius if trap_mesh != null else 99.0
+	var art_span := trap_art.pixel_size * float(maxi(trap_art.texture.get_width(), trap_art.texture.get_height())) if trap_art != null else 99.0
+	_check(trap_radius * 2.0 <= game.BATTLE_CELL * 0.30, "trap bases must stay comfortably inside a battle cell")
+	_check(art_span <= game.BATTLE_CELL * 0.56, "trap artwork must scale to at most about half a battle cell")
 
 	for y in range(game.combat.rows):
 		for x in range(game.combat.cols):
@@ -94,6 +103,15 @@ func _all_cells_have_layers(root_node: Node) -> bool:
 			if child.get_node_or_null("Frame") == null or child.get_node_or_null("Surface") == null:
 				return false
 	return true
+
+
+func _first_empty_cell(game: Node3D) -> Vector2i:
+	for y in range(game.combat.rows):
+		for x in range(game.combat.cols):
+			var cell := Vector2i(x, y)
+			if game.combat.is_walkable(cell) and cell != game.combat.player_pos and cell != game.combat.enemy_pos:
+				return cell
+	return Vector2i.ZERO
 
 
 func _count_named_prefix(node: Node, prefix: String) -> int:

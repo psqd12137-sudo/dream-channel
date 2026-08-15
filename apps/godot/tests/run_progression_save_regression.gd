@@ -50,11 +50,28 @@ func _run() -> void:
 	_check(game.player_speed == 5 and game.player_hp == 4, "continue must restore persistent player stats")
 
 	game.start_chase_lab()
+	_check(game.chase_phase == "ready" and game.chase_sentence.is_empty(), "Web chase must wait in ready before choosing a sentence")
 	game.begin_chase()
-	game.chase_countdown = 0.0
-	for character in game.chase_sentence:
-		game.chase_type_character(character)
+	_check(game.chase_phase == "countdown" and game.chase_countdown_text == "3", "Web chase countdown must begin at 3")
+	game._update_chase(0.75)
+	_check(game.chase_countdown_text == "2", "Web chase countdown must advance to 2 after 750 ms")
+	game._update_chase(0.75)
+	_check(game.chase_countdown_text == "1", "Web chase countdown must advance to 1 after 1500 ms")
+	game._update_chase(0.75)
+	_check(game.chase_countdown_text == "跑！", "Web chase countdown must show run before the race")
+	game._update_chase(0.55)
+	_check(game.chase_phase == "race" and game.chase_sentence in game.CHASE_SENTENCES, "Web chase must draw a sentence when the race starts")
+	var chase_start: float = game.chase_player_progress
+	game._update_chase(1.0)
+	_check(is_equal_approx(game.chase_police_progress, game.CHASE_POLICE_SPEED * 0.05), "Web chase race tick must clamp long frames to 50 ms")
+	for index in range(game.chase_sentence.length() - 1):
+		_send_chase_key(game, game.chase_sentence.substr(index, 1))
+	_check(is_equal_approx(game.chase_player_progress, chase_start), "typing chase must advance by completed sentence, not by character")
+	_send_chase_key(game, "x")
+	_check(game.chase_typed == game.chase_sentence.length() - 1 and game.chase_miss_flash_remaining > 0.0, "mistakes must preserve progress and trigger feedback")
+	_send_chase_key(game, game.chase_sentence.right(1))
 	_check(game.chase_result == "success", "typing the full sentence must finish the chase")
+	_check(is_equal_approx(game.chase_player_progress, game.CHASE_TRACK_LENGTH), "a completed sentence must carry the player to the exit")
 
 	game._clear_run_save()
 	game.queue_free()
@@ -71,3 +88,10 @@ func _run() -> void:
 func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
+
+
+func _send_chase_key(game: Node3D, character: String) -> void:
+	var event := InputEventKey.new()
+	event.pressed = true
+	event.unicode = character.unicode_at(0)
+	game.hud._input(event)

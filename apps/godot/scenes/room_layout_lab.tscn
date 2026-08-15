@@ -1,0 +1,351 @@
+[gd_scene format=3 uid="uid://rfje3pytkevb"]
+
+[ext_resource type="Script" uid="uid://bnofcxda0jlr6" path="res://scripts/room_layout_lab.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://elqikrll8ise" path="res://assets/quaternius/ultimate_house_interior/Bookshelf.fbx" id="2_bookshelf"]
+[ext_resource type="PackedScene" uid="uid://dbbuxhwsdxwm1" path="res://assets/quaternius/ultimate_house_interior/Chair_2.fbx" id="3_chair"]
+[ext_resource type="PackedScene" uid="uid://dwcqem5h6h4sr" path="res://assets/quaternius/ultimate_house_interior/Couch_Medium1.fbx" id="4_couch"]
+[ext_resource type="PackedScene" uid="uid://y5pmpdhkbj8x" path="res://assets/quaternius/ultimate_house_interior/Door_3.fbx" id="5_door"]
+[ext_resource type="PackedScene" uid="uid://ctkrw1bw4bq5w" path="res://assets/quaternius/ultimate_house_interior/Fireplace.fbx" id="6_fireplace"]
+[ext_resource type="PackedScene" uid="uid://cx8ptoqvsxjh7" path="res://assets/quaternius/ultimate_house_interior/Bed_Single.fbx" id="7_bed"]
+[ext_resource type="PackedScene" uid="uid://ks50cfef4nl6" path="res://assets/quaternius/ultimate_house_interior/Light_Chandelier.fbx" id="8_light"]
+[ext_resource type="PackedScene" uid="uid://ugawbuc73nmu" path="res://assets/quaternius/ultimate_house_interior/Table_RoundLarge.fbx" id="9_table"]
+[ext_resource type="PackedScene" uid="uid://rnb7jgfgcysr" path="res://assets/quaternius/ultimate_house_interior/Window_Round1.fbx" id="10_window"]
+[ext_resource type="PackedScene" path="res://scenes/room_layout_cell.tscn" id="11_cell"]
+
+[sub_resource type="Environment" id="Environment_lab"]
+background_mode = 1
+background_color = Color(0.047, 0.071, 0.09, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.34, 0.43, 0.47, 1)
+ambient_light_energy = 0.7
+tonemap_mode = 2
+glow_enabled = true
+glow_intensity = 0.45
+
+[sub_resource type="StandardMaterial3D" id="Material_base"]
+albedo_color = Color(0.11, 0.15, 0.17, 1)
+roughness = 0.93
+
+[sub_resource type="StandardMaterial3D" id="Material_floor"]
+albedo_color = Color(0.94, 0.89, 0.72, 1)
+roughness = 0.88
+
+[sub_resource type="StandardMaterial3D" id="Material_wall"]
+albedo_color = Color(0.12, 0.62, 0.58, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Material_door"]
+albedo_color = Color(1, 0.67, 0.08, 1)
+roughness = 0.78
+emission_enabled = true
+emission = Color(0.72, 0.31, 0.02, 1)
+
+[sub_resource type="StandardMaterial3D" id="Material_wall_magenta"]
+albedo_color = Color(0.84, 0.14, 0.43, 1)
+roughness = 0.9
+
+[node name="RoomLayoutLab" type="Node3D" unique_id=769782994]
+script = ExtResource("1_script")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=954020146]
+environment = SubResource("Environment_lab")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="." unique_id=1798178968]
+transform = Transform3D(0.8290376, 0.45239657, -0.32868537, 0, 0.5877853, 0.809017, 0.5591929, -0.6707055, 0.48729613, 0, 0, 0)
+light_color = Color(1, 0.82, 0.57, 1)
+light_energy = 1.55
+shadow_enabled = true
+
+[node name="FillLight" type="DirectionalLight3D" parent="." unique_id=547580042]
+transform = Transform3D(-0.7193397, -0.5162319, 0.4648172, 0, 0.66913056, 0.74314487, -0.69465846, 0.5345736, -0.4813322, 0, 0, 0)
+light_color = Color(0.31, 0.75, 0.83, 1)
+light_energy = 0.58
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=752802959]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 27, 24)
+projection = 1
+current = true
+size = 30.5
+
+[node name="LayoutGuide" type="CanvasLayer" parent="." unique_id=316336990 groups=["layout_guide"]]
+
+[node name="Title" type="Label" parent="LayoutGuide" unique_id=1525794084]
+offset_left = 24.0
+offset_top = 20.0
+offset_right = 700.0
+offset_bottom = 52.0
+theme_override_colors/font_color = Color(1, 0.92, 0.68, 1)
+theme_override_font_sizes/font_size = 24
+text = "ROOM LAYOUT LAB · 可直接调家具 Transform"
+
+[node name="Help" type="Label" parent="LayoutGuide" unique_id=1921963314]
+offset_left = 24.0
+offset_top = 54.0
+offset_right = 950.0
+offset_bottom = 110.0
+theme_override_colors/font_color = Color(0.7, 0.86, 0.86, 1)
+theme_override_font_sizes/font_size = 15
+text = "24 个房间都在这里 · 金色短条＝门洞禁区 · 家具保持在纸盒底盘内 · 选中家具后在 Inspector 改 Position / Rotation / Scale"
+
+[node name="Hall" type="Node3D" parent="." unique_id=1685894629]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.45, 0, -2.15)
+metadata/_room_id = "hall"
+
+[node name="Base" type="CSGBox3D" parent="Hall" unique_id=517047659]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+size = Vector3(3.05, 0.28, 3.05)
+material = SubResource("Material_base")
+
+[node name="Floor" type="CSGBox3D" parent="Hall" unique_id=91870646]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.31, 0)
+size = Vector3(2.82, 0.12, 2.82)
+material = SubResource("Material_floor")
+
+[node name="NorthWall" type="CSGBox3D" parent="Hall" unique_id=2081468818]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.68, -1.42)
+size = Vector3(2.82, 0.55, 0.14)
+material = SubResource("Material_wall")
+
+[node name="DoorGuide" type="CSGBox3D" parent="Hall" unique_id=1041559200 groups=["layout_guide"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 1.42)
+size = Vector3(0.72, 0.07, 0.22)
+material = SubResource("Material_door")
+
+[node name="Name" type="Label3D" parent="Hall" unique_id=376679816 groups=["layout_guide"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
+modulate = Color(1, 0.82, 0.22, 1)
+text = "长廊 hall"
+font_size = 64
+outline_size = 8
+
+[node name="Bookshelf" parent="Hall" unique_id=1850585882 groups=["room_prop"] instance=ExtResource("2_bookshelf")]
+transform = Transform3D(0.42, 0, -1.502037e-06, 0, 0.42, 0, 1.502037e-06, 0, 0.42, -0.59624124, 0.38, -1.1157382)
+
+[node name="Door" parent="Hall" unique_id=1770247824 groups=["room_prop"] instance=ExtResource("5_door")]
+transform = Transform3D(-0.38, 0, 9.633691e-07, 0, 0.38, 0, -9.633691e-07, 0, -0.38, -0.27713442, 0.38, 1.1952074)
+
+[node name="Chandelier" parent="Hall" unique_id=813983872 groups=["room_prop"] instance=ExtResource("8_light")]
+transform = Transform3D(0.25, 0, 0, 0, 0.25, 0, 0, 0, 0.25, 0, 1.65, 0)
+
+[node name="Parlor" type="Node3D" parent="." unique_id=964158904]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.75, 0, -2.15)
+metadata/_room_id = "parlor"
+
+[node name="Base" type="CSGBox3D" parent="Parlor" unique_id=155832481]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+size = Vector3(3.05, 0.28, 3.05)
+material = SubResource("Material_base")
+
+[node name="Floor" type="CSGBox3D" parent="Parlor" unique_id=2093693784]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.31, 0)
+size = Vector3(2.82, 0.12, 2.82)
+material = SubResource("Material_floor")
+
+[node name="NorthWall" type="CSGBox3D" parent="Parlor" unique_id=721375364]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.68, -1.42)
+size = Vector3(2.82, 0.55, 0.14)
+material = SubResource("Material_wall_magenta")
+
+[node name="DoorGuide" type="CSGBox3D" parent="Parlor" unique_id=1437323550 groups=["layout_guide"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.42, 0.4, 0)
+size = Vector3(0.22, 0.07, 0.72)
+material = SubResource("Material_door")
+
+[node name="Name" type="Label3D" parent="Parlor" unique_id=1403281343 groups=["layout_guide"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
+modulate = Color(1, 0.34, 0.7, 1)
+text = "会客室 parlor"
+font_size = 64
+outline_size = 8
+
+[node name="Couch" parent="Parlor" unique_id=1039742138 groups=["room_prop"] instance=ExtResource("4_couch")]
+transform = Transform3D(-0.2786611, 0, 1.0686422e-06, 0, 0.31078655, 0, -1.0209311e-06, 0, -0.29168376, 0.7709923, 0.3800001, 0.97381234)
+
+[node name="Table" parent="Parlor" unique_id=726157572 groups=["room_prop"] instance=ExtResource("9_table")]
+transform = Transform3D(0.4, 0, 0, 0, 0.4, 0, 0, 0, 0.4, 0.64349556, 0.38, 0.049999952)
+
+[node name="Chair" parent="Parlor" unique_id=1116332938 groups=["room_prop"] instance=ExtResource("3_chair")]
+transform = Transform3D(0.16904743, 0, 0.36252305, 0, 0.4, 0, -0.36252305, 0, 0.16904743, 0.8713279, 0.38, -0.98028183)
+
+[node name="Chandelier" parent="Parlor" unique_id=1647466122 groups=["room_prop"] instance=ExtResource("8_light")]
+transform = Transform3D(0.28, 0, 0, 0, 0.28, 0, 0, 0, 0.28, 0, 1.65, 0)
+
+[node name="WestWing" type="Node3D" parent="." unique_id=1487593812]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.75, 0, -6.45)
+metadata/_room_id = "west_wing"
+
+[node name="Base" type="CSGBox3D" parent="WestWing" unique_id=414545391]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+size = Vector3(3.05, 0.28, 3.05)
+material = SubResource("Material_base")
+
+[node name="Floor" type="CSGBox3D" parent="WestWing" unique_id=1720636105]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.31, 0)
+size = Vector3(2.82, 0.12, 2.82)
+material = SubResource("Material_floor")
+
+[node name="EastWall" type="CSGBox3D" parent="WestWing" unique_id=689044856]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.42, 0.68, 0)
+size = Vector3(0.14, 0.55, 2.82)
+material = SubResource("Material_wall")
+
+[node name="DoorGuide" type="CSGBox3D" parent="WestWing" unique_id=55561109 groups=["layout_guide"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, -1.42)
+size = Vector3(0.72, 0.07, 0.22)
+material = SubResource("Material_door")
+
+[node name="Name" type="Label3D" parent="WestWing" unique_id=1560039923 groups=["layout_guide"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
+modulate = Color(0.44, 0.86, 0.9, 1)
+text = "西厢 west_wing"
+font_size = 64
+outline_size = 8
+
+[node name="Bed" parent="WestWing" unique_id=1982900501 groups=["room_prop"] instance=ExtResource("7_bed")]
+transform = Transform3D(-0.42, 0, -1.5387546e-06, 0, 0.42, 0, 1.5387546e-06, 0, -0.42, -0.86588144, 0.38, 0.3777399)
+
+[node name="Window" parent="WestWing" unique_id=1412747741 groups=["room_prop"] instance=ExtResource("10_window")]
+transform = Transform3D(-0.42, 0, 1.0647763e-06, 0, 0.42, 0, -1.0647763e-06, 0, -0.42, 0.12, 0.6, 1.2)
+
+[node name="Chair" parent="WestWing" unique_id=1146755912 groups=["room_prop"] instance=ExtResource("3_chair")]
+transform = Transform3D(-0.31127834, 0, 0.21795823, 0, 0.38, 0, -0.21795823, 0, -0.31127834, 0.83, 0.38, -0.68)
+
+[node name="Cellar" type="Node3D" parent="." unique_id=2115886635]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 0, 6.45)
+metadata/_room_id = "cellar"
+
+[node name="Base" type="CSGBox3D" parent="Cellar" unique_id=1513743385]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+size = Vector3(3.05, 0.28, 3.05)
+material = SubResource("Material_base")
+
+[node name="Floor" type="CSGBox3D" parent="Cellar" unique_id=79949038]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.31, 0)
+size = Vector3(2.82, 0.12, 2.82)
+material = SubResource("Material_floor")
+
+[node name="SouthWall" type="CSGBox3D" parent="Cellar" unique_id=1179478020]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.68, 1.42)
+size = Vector3(2.82, 0.55, 0.14)
+material = SubResource("Material_wall_magenta")
+
+[node name="DoorGuide" type="CSGBox3D" parent="Cellar" unique_id=451706077 groups=["layout_guide"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.42, 0.4, 0)
+size = Vector3(0.22, 0.07, 0.72)
+material = SubResource("Material_door")
+
+[node name="Name" type="Label3D" parent="Cellar" unique_id=1354433101 groups=["layout_guide"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
+modulate = Color(1, 0.34, 0.7, 1)
+text = "地窖 cellar"
+font_size = 64
+outline_size = 8
+
+[node name="Fireplace" parent="Cellar" unique_id=2048805141 groups=["room_prop"] instance=ExtResource("6_fireplace")]
+transform = Transform3D(-0.43, 0, 1.0901282e-06, 0, 0.43, 0, -1.0901282e-06, 0, -0.43, 0.05, 0.38, 0.92)
+
+[node name="Bookshelf" parent="Cellar" unique_id=898872793 groups=["room_prop"] instance=ExtResource("2_bookshelf")]
+transform = Transform3D(-1.3755962e-06, 0, -0.38, 0, 0.38, 0, 0.38, 0, -1.3755962e-06, -1.079195, 0.37999976, -0.6776501)
+
+[node name="Chandelier" parent="Cellar" unique_id=41268324 groups=["room_prop"] instance=ExtResource("8_light")]
+transform = Transform3D(0.23, 0, 0, 0, 0.23, 0, 0, 0, 0.23, -0.45, 1.55, -0.35)
+
+[node name="Foyer" parent="." instance=ExtResource("11_cell")]
+position = Vector3(-10.75, 0, -6.45)
+display_name = "玄关\nfoyer"
+metadata/_room_id = "foyer"
+
+[node name="Porch" parent="." instance=ExtResource("11_cell")]
+position = Vector3(-6.45, 0, -6.45)
+display_name = "门廊\nporch"
+metadata/_room_id = "porch"
+
+[node name="Living" parent="." instance=ExtResource("11_cell")]
+position = Vector3(-2.15, 0, -6.45)
+display_name = "客厅\nliving"
+metadata/_room_id = "living"
+
+[node name="Kitchen" parent="." instance=ExtResource("11_cell")]
+position = Vector3(2.15, 0, -6.45)
+display_name = "厨房\nkitchen"
+metadata/_room_id = "kitchen"
+
+[node name="Mudroom" parent="." instance=ExtResource("11_cell")]
+position = Vector3(6.45, 0, -6.45)
+display_name = "泥靴间\nmudroom"
+metadata/_room_id = "mudroom"
+
+[node name="Pantry" parent="." instance=ExtResource("11_cell")]
+position = Vector3(-2.15, 0, -2.15)
+display_name = "储藏间\npantry"
+metadata/_room_id = "pantry"
+
+[node name="Yard" parent="." instance=ExtResource("11_cell")]
+position = Vector3(2.15, 0, -2.15)
+display_name = "后院\nyard"
+metadata/_room_id = "yard"
+
+[node name="Shed" parent="." instance=ExtResource("11_cell")]
+position = Vector3(6.45, 0, -2.15)
+display_name = "工具棚\nshed"
+metadata/_room_id = "shed"
+
+[node name="Guest" parent="." instance=ExtResource("11_cell")]
+position = Vector3(10.75, 0, -2.15)
+display_name = "客房\nguest"
+metadata/_room_id = "guest"
+
+[node name="Gallery" parent="." instance=ExtResource("11_cell")]
+position = Vector3(-10.75, 0, 2.15)
+display_name = "画廊\ngallery"
+metadata/_room_id = "gallery"
+
+[node name="Greenhouse" parent="." instance=ExtResource("11_cell")]
+position = Vector3(-6.45, 0, 2.15)
+display_name = "温室\ngreenhouse"
+metadata/_room_id = "greenhouse"
+
+[node name="Bedroom" parent="." instance=ExtResource("11_cell")]
+position = Vector3(-2.15, 0, 2.15)
+display_name = "主卧\nbedroom"
+metadata/_room_id = "bedroom"
+
+[node name="Study" parent="." instance=ExtResource("11_cell")]
+position = Vector3(2.15, 0, 2.15)
+display_name = "书房\nstudy"
+metadata/_room_id = "study"
+
+[node name="Nursery" parent="." instance=ExtResource("11_cell")]
+position = Vector3(6.45, 0, 2.15)
+display_name = "育儿室\nnursery"
+metadata/_room_id = "nursery"
+
+[node name="Darkroom" parent="." instance=ExtResource("11_cell")]
+position = Vector3(10.75, 0, 2.15)
+display_name = "暗房\ndarkroom"
+metadata/_room_id = "darkroom"
+
+[node name="Attic" parent="." instance=ExtResource("11_cell")]
+position = Vector3(-10.75, 0, 6.45)
+display_name = "阁楼\nattic"
+metadata/_room_id = "attic"
+
+[node name="Loft" parent="." instance=ExtResource("11_cell")]
+position = Vector3(-6.45, 0, 6.45)
+display_name = "阁楼栈桥\nloft"
+metadata/_room_id = "loft"
+
+[node name="Boiler" parent="." instance=ExtResource("11_cell")]
+position = Vector3(2.15, 0, 6.45)
+display_name = "锅炉房\nboiler"
+metadata/_room_id = "boiler"
+
+[node name="Ritual" parent="." instance=ExtResource("11_cell")]
+position = Vector3(6.45, 0, 6.45)
+display_name = "祭坛前厅\nritual"
+metadata/_room_id = "ritual"
+
+[node name="Altar" parent="." instance=ExtResource("11_cell")]
+position = Vector3(10.75, 0, 6.45)
+display_name = "祭坛房\naltar"
+metadata/_room_id = "altar"
