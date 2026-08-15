@@ -13,6 +13,22 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 	await process_frame
+	game.start_new_run(false)
+	game.choose_omen(0)
+	var house_center := Vector2(game.world_viewport.size) * 0.5
+	var house_fit: float = game.camera.size
+	for i in range(3):
+		game.hud._gui_input(_wheel_event(game.world_view_rect.position + house_center, MOUSE_BUTTON_WHEEL_UP))
+	_check(game.camera.size < house_fit, "house map wheel-up must zoom during exploration")
+	var house_zoomed: float = game.camera.size
+	var frontier: Vector2i = game.room_rules.frontiers()[0]
+	game.begin_build(frontier)
+	_check(is_equal_approx(game.camera.size, house_zoomed), "house zoom must survive rebuilding the placement preview")
+	var house_target_before: Vector3 = game.house_camera_target
+	game.pan_house_camera(Vector2(90, -45))
+	_check(game.house_camera_target != house_target_before, "house map middle-drag logic must pan during room placement")
+	game.reset_house_camera()
+	_check(is_equal_approx(game.camera.size, game.house_camera_fit_size), "house map reset must restore auto-fit")
 	game.start_combat_lab("hall")
 	var center := Vector2(game.world_viewport.size) * 0.5
 	var fit: float = game.camera.size

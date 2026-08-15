@@ -30,24 +30,28 @@ func _run() -> void:
 
 	var entrance: Vector2i = game.combat.portals.keys()[0]
 	var exit: Vector2i = game.combat.portals[entrance]
+	var portal_path: Array[Vector2i] = game.combat._find_path(entrance, exit)
+	_check(portal_path.size() == 2 and portal_path[1] == exit, "enemy pathfinding must expose the paired endpoint as a selectable portal edge")
 	var neighbor := _walkable_neighbor(game, entrance)
 	game.combat.player_pos = neighbor
 	game.combat.energy = 5
 	_check(game.combat.move_player(entrance), "player must be able to step onto a portal entrance")
 	_check(game.combat.player_pos == entrance, "stepping onto a portal must not teleport immediately")
-	_check(game.combat.pending_player_portal == exit, "portal entrance must publish the paired exit as a pending choice")
-	_check(not game.combat.can_move_player(neighbor), "movement must pause while the portal choice is unresolved")
-	_check(game.combat.resolve_player_portal(false) and game.combat.player_pos == entrance, "choosing stay must keep the player on the entrance cell")
+	_check(game.combat.can_move_player(neighbor), "standing on a portal must not block ordinary actions")
 	game.combat.player_pos = neighbor
 	game.combat.energy = 5
 	game.combat.move_player(entrance)
-	_check(game.combat.resolve_player_portal(true) and game.combat.player_pos == exit, "choosing use must move the player to the paired exit")
+	var before_portal_energy: int = game.combat.energy
+	_check(game.combat.use_player_portal() and game.combat.player_pos == exit, "active portal use must move the player to the paired exit")
+	_check(game.combat.energy == before_portal_energy - game.combat.move_cost, "active portal use must pay move cost separately")
 	game.combat.player_pos = neighbor
 	game.combat.enemy_pos = exit
 	game.combat.energy = 5
 	game.combat.move_player(entrance)
-	_check(not game.combat.resolve_player_portal(true) and game.combat.player_pos == entrance, "an occupied exit must block teleport instead of overlapping the enemy")
-	_check(game.combat.has_pending_player_portal(), "a blocked exit must keep the choice open so the player can choose stay")
+	_check(game.combat.use_player_portal() and game.combat.player_pos == exit, "an occupied exit must allow canonical portal stacking")
+	game.combat.player_pos = entrance
+	game.combat.energy = game.combat.move_cost - 1
+	_check(not game.combat.use_player_portal() and game.combat.player_pos == entrance, "insufficient AP must reject portal use without moving")
 
 	game.go_home()
 	game.start_new_run(false)
@@ -72,7 +76,7 @@ func _run() -> void:
 	game.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("CHANNEL_PORTAL_HEIGHT_BUILD: PASS grayscale wall portal-choice live-preview")
+		print("CHANNEL_PORTAL_HEIGHT_BUILD: PASS grayscale wall active-portal live-preview")
 		quit(0)
 	else:
 		for failure: String in failures:
@@ -116,3 +120,14 @@ func _count_named_prefix(node: Node, prefix: String) -> int:
 func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
+var _smb_tail_padding := """
+nt
+
+
+func _check(condition: bool, message: String) -> void:
+	if not condition:
+		failures.append(message)
+
+Oversized padding keeps an obsolete shared-volume tail inert after rewrites.
+"""
+# SMB_FINAL_PADDING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ

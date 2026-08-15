@@ -3,6 +3,12 @@ extends Control
 const PLAYER_PROFILE = preload("res://assets/web_show/characters/lili/bust.png")
 const ENEMY_PROFILE = preload("res://assets/web_show/characters/enemy/bust.png")
 const OMEN_ICON = preload("res://assets/latest_web/OmenIcon.png")
+const COMBAT_UI_LAYOUT = preload("res://scenes/combat_ui_layout.tscn")
+const CARD_BACK_BLUE = preload("res://assets/ui/channel_concept/card_blue.png")
+const CARD_BACK_RED = preload("res://assets/ui/channel_concept/card_red.png")
+const CARD_BACK_YELLOW = preload("res://assets/ui/channel_concept/card_yellow.png")
+const EVENT_PANEL_TEXTURE = preload("res://assets/ui/channel_concept/UI_HUD_Panel_EventProgram_Normal.png")
+const ACTION_PANEL_TEXTURE = preload("res://assets/ui/channel_concept/UI_HUD_Panel_ActionPanel_Normal.png")
 
 const INK := Color("171c25")
 const DARK := Color("101820")
@@ -21,7 +27,7 @@ const BLUE := Color("4c92bd")
 const DESIGN_SIZE := Vector2(1280, 800)
 const HOUSE_VIEW_RECT := Rect2(20, 96, 952, 578)
 const BUILD_VIEW_RECT := Rect2(20, 96, 952, 340)
-const COMBAT_VIEW_RECT := Rect2(20, 224, 952, 454)
+const COMBAT_VIEW_RECT := Rect2(20, 224, 1244, 544)
 
 const RESET_RECT := Rect2(1142, 24, 110, 38)
 const CAMERA_RESET_RECT := Rect2(1040, 22, 94, 34)
@@ -47,7 +53,11 @@ const HOME_TEST_SIDE_RECT := Rect2(800, 480, 205, 42)
 const HOME_TEST_PUZZLE_RECT := Rect2(585, 532, 205, 42)
 const HOME_TEST_SEARCH_RECT := Rect2(800, 532, 205, 42)
 const HOME_TEST_CHASE_RECT := Rect2(585, 584, 205, 42)
+const HOME_TEST_DIORAMA_RECT := Rect2(800, 584, 205, 42)
 const LAB_EXIT_RECT := Rect2(1100, 28, 150, 40)
+const LAB_REROLL_RECT := Rect2(520, 86, 180, 32)
+const LAB_HAND_RECT := Rect2(720, 86, 200, 32)
+const LAB_SWITCH_RECT := Rect2(940, 86, 220, 32)
 const PUZZLE_REFRESH_RECT := Rect2(850, 650, 190, 44)
 const CHASE_START_RECT := Rect2(480, 590, 190, 48)
 const CHASE_FORFEIT_RECT := Rect2(690, 590, 190, 48)
@@ -63,17 +73,43 @@ var middle_dragging := false
 var last_layout_size := Vector2.ZERO
 var side_left := false
 var side_right := false
+var combat_ui_layout: Control
+var hovered_combat_card := -1
+var combat_card_hover_amount := 0.0
+var dragged_combat_card := -1
+var dragged_card_position := Vector2.ZERO
+var board_left_pressed := false
+var board_left_dragged := false
+var board_left_distance := 0.0
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	combat_ui_layout = COMBAT_UI_LAYOUT.instantiate()
+	combat_ui_layout.visible = false
+	add_child(combat_ui_layout)
 	set_process_input(true)
 	sync_layout()
+
+
+func _combat_layout_rect(node_name: String, fallback: Rect2) -> Rect2:
+	if combat_ui_layout == null:
+		return fallback
+	var marker := combat_ui_layout.get_node_or_null(node_name) as Control
+	return Rect2(marker.position, marker.size) if marker != null else fallback
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		sync_layout()
+
+
+func _process(delta: float) -> void:
+	var target := 1.0 if hovered_combat_card >= 0 and dragged_combat_card < 0 else 0.0
+	var previous := combat_card_hover_amount
+	combat_card_hover_amount = move_toward(combat_card_hover_amount, target, delta * 8.5)
+	if not is_equal_approx(previous, combat_card_hover_amount):
+		queue_redraw()
 
 
 func sync_layout() -> void:
@@ -113,7 +149,7 @@ func get_world_view_rect() -> Rect2:
 func _design_world_rect(phase_name: String) -> Rect2:
 	if phase_name == "combat":
 		return COMBAT_VIEW_RECT
-	if phase_name in ["lab_sideview", "lab_search"]:
+	if phase_name in ["lab_sideview", "lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
 		return Rect2(60, 120, 1160, 520)
 	if phase_name == "lab_puzzle" or phase_name == "home":
 		return Rect2(0, 84, 1280, 716)
@@ -167,8 +203,8 @@ func _draw_top_bar() -> void:
 	_draw_chip(Rect2(680, 22, 112, 34), "生命 %d/%d" % [game.player_hp, game.player_max_hp], RED, TEXT, 12)
 	_draw_chip(Rect2(800, 22, 112, 34), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 12)
 	_draw_chip(Rect2(920, 22, 112, 34), "%s" % _phase_label(), MAGENTA if game.phase == "combat" else Color("344751"), TEXT, 11)
-	if game.phase == "combat":
-		_draw_button(CAMERA_RESET_RECT, "镜头复位", TEAL, TEXT)
+	if game.phase == "combat" or game.phase in ["explore", "build", "room_ready"]:
+		_draw_button(CAMERA_RESET_RECT, "镜头复位" if game.phase == "combat" else "地图复位", TEAL, TEXT)
 	if not game.phase.begins_with("lab_"):
 		_draw_button(RESET_RECT, "重开", Color("394852"), TEXT)
 
@@ -194,6 +230,7 @@ func _draw_home() -> void:
 		_draw_button(HOME_TEST_PUZZLE_RECT, "八数码拼图", GOLD, INK)
 		_draw_button(HOME_TEST_SEARCH_RECT, "3D 微缩搜物", Color("7863a5"), TEXT)
 		_draw_button(HOME_TEST_CHASE_RECT, "警察抓小偷", RED, TEXT)
+		_draw_button(HOME_TEST_DIORAMA_RECT, "桌模扩建 PCG", Color("5967a8"), TEXT)
 	_label("走位引怪踩机关 · 不同怪物破韧奖励不同 · 悬停卡牌听旁白", Vector2(576, 670), 12, Color("5d5043"))
 
 
@@ -207,6 +244,21 @@ func _draw_lab_hud() -> void:
 		_label("3D 微缩搜物 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
 		_draw_chip(Rect2(870, 82, 180, 32), "找到 %d/3" % game.search_found, GOLD, INK, 12)
 		_draw_coach(Rect2(60, 660, 1160, 96), "搜物实验", game.status_message)
+	elif game.phase == "lab_diorama":
+		_label("微缩箱庭美术对比 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
+		_draw_button(LAB_SWITCH_RECT, "查看 PCG 连片", Color("5967a8"), TEXT)
+		_draw_coach(Rect2(60, 660, 1160, 96), "对比重点", game.status_message)
+	elif game.phase == "lab_pcg_diorama":
+		_label("PCG 连片箱庭 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
+		_draw_button(LAB_REROLL_RECT, "换一个 Seed", GOLD, INK)
+		_draw_button(LAB_HAND_RECT, "查看手摆模拟", Color("3e8b78"), TEXT)
+		_draw_button(LAB_SWITCH_RECT, "查看 A/B/C 单格", Color("5967a8"), TEXT)
+		_draw_coach(Rect2(60, 660, 1160, 96), "拼接规则", game.status_message)
+	elif game.phase == "lab_hand_diorama":
+		_label("正式地图手摆模拟 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
+		_draw_button(LAB_REROLL_RECT, "返回 PCG", GOLD, INK)
+		_draw_button(LAB_SWITCH_RECT, "查看 A/B/C 单格", Color("5967a8"), TEXT)
+		_draw_coach(Rect2(60, 660, 1160, 96), "手摆工作流", game.status_message)
 	elif game.phase == "lab_puzzle":
 		_draw_puzzle()
 	elif game.phase == "lab_chase":
@@ -289,6 +341,8 @@ func _draw_reward_modal() -> void:
 func _draw_house_hud() -> void:
 	var room: Dictionary = game.current_room()
 	var revealed := bool(room.get("revealed", false)) or bool(room.get("completed", false))
+	if game.kenney_build_lab_mode:
+		_draw_chip(Rect2(32, 102, 245, 30), "KAYKIT 桌模 · 正式扩建链路", Color("3e8b78"), TEXT, 11)
 	var side := Rect2(996, 96, 268, 672)
 	draw_rect(side, Color("f8e9c7f5"), true)
 	draw_rect(side, INK, false, 3.0)
@@ -331,7 +385,7 @@ func _draw_build_dock() -> void:
 	draw_rect(Rect2(88, 448, 802, 292), Color("111b23ed"), true)
 	draw_rect(Rect2(88, 448, 802, 292), Color("6bbeb1"), false, 3.0)
 	_label("盖屋 · 扩建 %s" % game.selected_frontier, Vector2(112, 478), 16, TEXT)
-	_label("三张票根只显示房名和门型；走进去才知道是安静、事件还是惊吓。", Vector2(335, 478), 11, MUTED)
+	_label("本测试复用正式门位、旋转和摆放；不会覆盖存档。" if game.kenney_build_lab_mode else "三张票根只显示房名和门型；走进去才知道是安静、事件还是惊吓。", Vector2(335, 478), 11, MUTED)
 	for i in range(mini(3, game.build_offers.size())):
 		var room: Dictionary = game.build_offers[i]
 		var rect: Rect2 = BUILD_CARD_RECTS[i]
@@ -344,7 +398,7 @@ func _draw_build_dock() -> void:
 			_draw_chip(Rect2(rect.position + Vector2(50, 8), Vector2(96, 24)), "门已对上", GREEN, TEXT, 9)
 		_label("?", rect.position + Vector2(13, 69), 28, MAGENTA)
 		_label(_shorten(str(room.get("name", "房间")), 10), rect.position + Vector2(54, 72), 18, INK)
-		_label("未揭示 · %s" % _door_shape(room.get("doors", [])), rect.position + Vector2(54, 104), 11, Color("776553"))
+		_label("%d格 %s · %s" % [int(room.get("room_size", 1)), str(room.get("footprint_kind", "single")), _door_shape(room.get("doors", []))], rect.position + Vector2(54, 104), 11, Color("776553"))
 		if selected:
 			_label("ROT %d° · %s" % [game.offer_rotation * 90, _door_text(game.room_rules.rotated_doors(room.get("doors", []), game.offer_rotation))], rect.position + Vector2(54, 128), 10, Color("5e5146"))
 	_draw_button(BUILD_ROTATE_RECT, "↻ 旋转 90°", TEAL, TEXT)
@@ -377,38 +431,75 @@ func _draw_omen_modal() -> void:
 func _draw_combat_hud() -> void:
 	var combat = game.combat
 	var intent: Dictionary = combat.preview_intent()
+	var intent_rect := _combat_layout_rect("IntentArea", Rect2(310, 100, 330, 112))
+	var action_rect := _combat_layout_rect("ActionArea", Rect2(996, 96, 268, 116))
+	var hand_rect := _combat_layout_rect("HandArea", Rect2(250, 514, 580, 168))
+	var deck_rect := _combat_layout_rect("DeckArea", Rect2(42, 532, 104, 140))
+	var discard_rect := _combat_layout_rect("DiscardArea", Rect2(858, 532, 104, 140))
 	_draw_actor_strip(Rect2(20, 100, 278, 112), PLAYER_PROFILE, "小主角", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_block, 4, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
-	_draw_intent_strip(Rect2(310, 100, 330, 112), intent)
+	_draw_intent_strip(intent_rect, intent)
 	_draw_actor_strip(Rect2(652, 100, 320, 112), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, combat.enemy_hp if combat.enemy_revealed else -1, combat.enemy_max_hp, "韧性", combat.enemy_toughness if combat.enemy_revealed else 0, combat.enemy_max_toughness, "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
 
-	draw_rect(Rect2(996, 96, 268, 672), Color("101820f4"), true)
-	draw_rect(Rect2(996, 96, 268, 672), GOLD, false, 3.0)
-	_draw_action_ticket(Rect2(1010, 112, 240, 120))
-	_label("道具卡", Vector2(1014, 260), 16, TEXT)
-	_label(_shorten(combat.enemy_archetype_desc, 30), Vector2(1014, 280), 10, MUTED)
+	draw_rect(action_rect, Color("101820f4"), true)
+	draw_rect(action_rect, GOLD, false, 3.0)
+	_draw_action_ticket(Rect2(action_rect.position + Vector2(10, 8), Vector2(action_rect.size.x - 20, action_rect.size.y - 16)))
+	draw_texture_rect(CARD_BACK_BLUE, deck_rect, false, Color(1, 1, 1, 0.92))
+	draw_texture_rect(CARD_BACK_RED, discard_rect, false, Color(1, 1, 1, 0.92))
+	_draw_chip(Rect2(deck_rect.position + Vector2(5, deck_rect.size.y - 25), Vector2(deck_rect.size.x - 10, 22)), "抽牌 %d" % combat.deck.size(), TEAL, TEXT, 10)
+	_draw_chip(Rect2(discard_rect.position + Vector2(5, discard_rect.size.y - 25), Vector2(discard_rect.size.x - 10, 22)), "弃牌 %d" % combat.discard.size(), RED, TEXT, 10)
 	combat_card_rects.clear()
-	var gap := 8.0
-	var available := 290.0 if combat.has_pending_player_portal() else 370.0
-	var card_height := minf(82.0, (available - maxf(0.0, float(combat.hand.size() - 1)) * gap) / maxf(1.0, float(combat.hand.size())))
+	var card_width := minf(124.0, hand_rect.size.x / maxf(1.0, float(combat.hand.size())))
+	var card_height := minf(card_width * 154.0 / 124.0, hand_rect.size.y - 8.0)
+	var spacing := card_width
+	if combat.hand.size() > 1:
+		spacing = minf(card_width, (hand_rect.size.x - card_width) / float(combat.hand.size() - 1))
+	var total_width := card_width + spacing * maxf(0.0, float(combat.hand.size() - 1))
+	var start_x := hand_rect.position.x + (hand_rect.size.x - total_width) * 0.5
+	var middle := float(combat.hand.size() - 1) * 0.5
 	for i in range(combat.hand.size()):
-		var rect := Rect2(1012, 294 + i * (card_height + gap), 238, card_height)
+		var arc_drop := absf(float(i) - middle) * 5.0
+		var rect := Rect2(start_x + float(i) * spacing, hand_rect.position.y + arc_drop, card_width, card_height)
+		if i == hovered_combat_card and dragged_combat_card < 0:
+			var hover_scale := lerpf(1.0, 1.28, combat_card_hover_amount)
+			var hover_size := rect.size * hover_scale
+			var hover_y := lerpf(rect.position.y, hand_rect.position.y - 42.0, combat_card_hover_amount)
+			rect = Rect2(Vector2(rect.get_center().x - hover_size.x * 0.5, hover_y), hover_size)
 		combat_card_rects.append(rect)
 		var card: Dictionary = combat.cards.get(combat.hand[i], {})
 		_draw_combat_card(rect, str(combat.hand[i]), card, combat.card_cost(card), i == game.selected_card)
+	if dragged_combat_card >= 0 and dragged_combat_card < combat.hand.size():
+		_draw_card_target_arrow(combat_card_rects[dragged_combat_card].get_center(), dragged_card_position)
 	if combat.outcome == "":
-		if combat.has_pending_player_portal():
+		if combat.player_on_portal():
 			draw_rect(Rect2(1008, 596, 244, 102), Color("2c2441ee"), true)
 			draw_rect(Rect2(1008, 596, 244, 102), Color("9a70da"), false, 3.0)
-			_label("传送门等待选择", Vector2(1022, 624), 14, Color("e6d7ff"))
-			_draw_button(PORTAL_USE_RECT, "穿过", Color("7863a5") if combat.can_use_pending_player_portal() else Color("5b515f"), TEXT)
-			_draw_button(PORTAL_STAY_RECT, "留在这里", Color("394852"), TEXT)
+			_label("已站上传送门", Vector2(1022, 624), 14, Color("e6d7ff"))
+			_draw_button(PORTAL_USE_RECT, "穿门（%d）" % combat.move_cost, Color("7863a5") if combat.can_use_player_portal() else Color("5b515f"), TEXT)
 		elif game.selected_card >= 0:
 			_draw_button(CARD_CANCEL_RECT, "取消选牌", Color("4f5960"), TEXT)
-		if not combat.has_pending_player_portal():
-			_draw_button(END_TURN_RECT, "回合结束", GOLD, INK)
+		_draw_button(END_TURN_RECT, "回合结束", GOLD, INK)
 	else:
 		_draw_button(RETURN_RECT, "返回山屋" if combat.outcome == "victory" else "重开本集", GREEN if combat.outcome == "victory" else RED, TEXT)
-	_draw_coach(Rect2(20, 690, 952, 68), "战斗导播", game.status_message)
+
+
+func _draw_card_target_arrow(start: Vector2, target: Vector2) -> void:
+	var distance := start.distance_to(target)
+	if distance < 8.0:
+		return
+	var control := (start + target) * 0.5 + Vector2(0, -minf(92.0, distance * 0.24))
+	var points := PackedVector2Array()
+	for step in range(17):
+		var t := float(step) / 16.0
+		var inv := 1.0 - t
+		points.append(start * inv * inv + control * 2.0 * inv * t + target * t * t)
+	draw_polyline(points, Color("15191fbb"), 9.0, true)
+	draw_polyline(points, Color("f3a51f"), 4.0, true)
+	var direction := (points[-1] - points[-2]).normalized()
+	var side := Vector2(-direction.y, direction.x)
+	var arrow := PackedVector2Array([target, target - direction * 22.0 + side * 11.0, target - direction * 22.0 - side * 11.0])
+	draw_colored_polygon(arrow, Color("f3a51f"))
+	draw_circle(target, 12.0, Color("f3a51f44"))
+	draw_circle(target, 12.0, Color("fff0cf"), false, 2.0)
 
 
 func _draw_actor_strip(rect: Rect2, portrait: Texture2D, title: String, accent: Color, hp: int, max_hp: int, secondary_label: String, secondary_value: int, secondary_max: int, footer: String, action_state: String = "idle") -> void:
@@ -475,7 +566,8 @@ func _draw_intent_strip(rect: Rect2, intent: Dictionary) -> void:
 	var intent_type := str(intent.get("type", "stall"))
 	var intent_color := _intent_color(intent_type)
 	draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), Color("03070a"), true)
-	draw_rect(rect, Color("222a35ef"), true)
+	draw_texture_rect(EVENT_PANEL_TEXTURE, rect, false, Color(1, 1, 1, 0.66))
+	draw_rect(rect.grow(-6.0), Color("222a35c8"), true)
 	draw_rect(Rect2(rect.position, Vector2(7, rect.size.y)), intent_color, true)
 	draw_circle(rect.position + Vector2(44, 54), 31, Color(intent_color, 0.32))
 	draw_circle(rect.position + Vector2(44, 54), 31, intent_color, false, 3.0)
@@ -519,7 +611,8 @@ func _intent_mode_label(intent_type: String) -> String:
 
 
 func _draw_action_ticket(rect: Rect2) -> void:
-	draw_rect(rect, PAPER, true)
+	draw_texture_rect(ACTION_PANEL_TEXTURE, rect, false, Color(1, 1, 1, 0.78))
+	draw_rect(rect.grow(-6.0), Color("f8e9c7d8"), true)
 	draw_rect(rect, GOLD, false, 2.0)
 	draw_rect(Rect2(rect.position, Vector2(62, rect.size.y)), GOLD, true)
 	draw_dashed_line(rect.position + Vector2(70, 8), rect.position + Vector2(70, rect.size.y - 8), Color("9a7045"), 1.5, 6.0)
@@ -534,15 +627,32 @@ func _draw_action_ticket(rect: Rect2) -> void:
 func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int, selected: bool) -> void:
 	var kind := str(card.get("type", "skill"))
 	var accent := GOLD if kind == "place" else MAGENTA if kind == "ready" else RED if kind == "medicine" else TEAL
-	draw_rect(Rect2(rect.position + Vector2(0, 3), rect.size), Color("03070a"), true)
-	draw_rect(rect, PAPER, true)
-	draw_rect(Rect2(rect.position, Vector2(34, rect.size.y)), accent, true)
-	draw_rect(rect, GOLD if selected else Color("987452"), false, 4.0 if selected else 1.5)
-	_draw_centered(str(cost), Rect2(rect.position + Vector2(2, 4), Vector2(30, 30)), 15, INK if accent.get_luminance() > 0.55 else TEXT)
-	_label(_shorten(str(card.get("name", card_id)), 12), rect.position + Vector2(44, 26), 15, INK)
-	_label(_card_kind_label(kind), rect.position + Vector2(44, 43), 9, accent.darkened(0.25))
-	if rect.size.y >= 68:
-		_label(_shorten(str(card.get("text", "")), 25), rect.position + Vector2(44, 61), 9, Color("64584e"))
+	var card_texture: Texture2D = CARD_BACK_YELLOW if kind == "place" else CARD_BACK_RED if kind == "medicine" else CARD_BACK_BLUE
+	var card_scale := rect.size.x / 124.0
+	var scaled := func(value: float) -> float: return value * card_scale
+	draw_rect(Rect2(rect.position + Vector2(0, scaled.call(3.0)), rect.size), Color("03070a"), true)
+	draw_rect(rect, accent.darkened(0.32), true)
+	draw_rect(rect.grow(-scaled.call(7.0)), Color("f8e9c7f2"), true)
+	draw_rect(Rect2(rect.position + Vector2(scaled.call(7.0), scaled.call(7.0)), Vector2(scaled.call(30.0), rect.size.y - scaled.call(14.0))), Color(accent, 0.92), true)
+	draw_rect(rect, GOLD if selected else Color("987452"), false, scaled.call(4.0 if selected else 1.5))
+	_draw_centered(str(cost), Rect2(rect.position + Vector2(scaled.call(7.0), scaled.call(9.0)), Vector2(scaled.call(30.0), scaled.call(30.0))), maxi(9, roundi(scaled.call(15.0))), INK if accent.get_luminance() > 0.55 else TEXT)
+	_label(_shorten(str(card.get("name", card_id)), 8), rect.position + Vector2(scaled.call(43.0), scaled.call(29.0)), maxi(9, roundi(scaled.call(14.0))), INK)
+	_label(_card_kind_label(kind), rect.position + Vector2(scaled.call(43.0), scaled.call(48.0)), maxi(7, roundi(scaled.call(9.0))), accent.darkened(0.25))
+	if rect.size.y >= scaled.call(110.0):
+		var art_rect := Rect2(rect.position + Vector2(scaled.call(43.0), scaled.call(55.0)), Vector2(rect.size.x - scaled.call(51.0), scaled.call(58.0)))
+		_draw_texture_contained(card_texture, art_rect, Color(1, 1, 1, 0.96))
+		draw_rect(art_rect, accent.darkened(0.25), false, scaled.call(1.5))
+		_draw_wrapped(_shorten(str(card.get("text", "")), 42), Vector2(rect.position.x + scaled.call(43.0), art_rect.end.y + scaled.call(13.0)), rect.size.x - scaled.call(51.0), maxi(7, roundi(scaled.call(10.0))), Color("544a43"))
+
+
+func _draw_texture_contained(texture: Texture2D, rect: Rect2, modulate: Color = Color.WHITE) -> void:
+	if texture == null or rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return
+	var source_size := texture.get_size()
+	var fit_scale := minf(rect.size.x / source_size.x, rect.size.y / source_size.y)
+	var fitted_size := source_size * fit_scale
+	var fitted_rect := Rect2(rect.get_center() - fitted_size * 0.5, fitted_size)
+	draw_texture_rect(texture, fitted_rect, false, modulate)
 
 
 func _input(event: InputEvent) -> void:
@@ -592,31 +702,116 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+func _combat_overlay_has_point(point: Vector2) -> bool:
+	if game == null or game.phase != "combat" or game.combat == null:
+		return false
+	if game.combat.outcome != "":
+		return RETURN_RECT.has_point(point)
+	if END_TURN_RECT.has_point(point):
+		return true
+	if game.combat.player_on_portal() and PORTAL_USE_RECT.has_point(point):
+		return true
+	return game.selected_card >= 0 and CARD_CANCEL_RECT.has_point(point)
+
+
 func _gui_input(event: InputEvent) -> void:
 	if game == null:
 		return
 	if event is InputEventMouseMotion:
-		if middle_dragging and game.phase == "combat":
+		var design_point := _to_design(event.position)
+		if dragged_combat_card >= 0 and game.phase == "combat":
+			dragged_card_position = design_point
+			if world_view_rect_screen.has_point(event.position):
+				game.set_battle_hover(event.position - world_view_rect_screen.position)
+			else:
+				game.clear_battle_hover()
+			queue_redraw()
+			accept_event()
+		elif board_left_pressed and game.phase == "combat":
+			board_left_distance += event.relative.length()
+			if board_left_distance >= 5.0:
+				board_left_dragged = true
+				game.orbit_battle_camera(event.relative)
+				game.clear_battle_hover()
+			accept_event()
+		elif middle_dragging and game.phase == "combat":
 			game.pan_battle_camera(event.relative)
 			game.clear_battle_hover()
 			accept_event()
-		elif middle_dragging and game.phase == "lab_search":
+		elif middle_dragging and game.phase in ["explore", "build", "room_ready"]:
+			game.pan_house_camera(event.relative)
+			accept_event()
+		elif middle_dragging and game.phase in ["lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
 			game.orbit_search_camera(event.relative)
 			accept_event()
-		elif game.phase == "combat" and world_view_rect_screen.has_point(event.position):
-			game.set_battle_hover(event.position - world_view_rect_screen.position)
+		elif game.phase == "combat":
+			var previous_hover := hovered_combat_card
+			hovered_combat_card = -1
+			for i in range(combat_card_rects.size() - 1, -1, -1):
+				if combat_card_rects[i].has_point(design_point):
+					hovered_combat_card = i
+					break
+			if hovered_combat_card >= 0:
+				game.clear_battle_hover()
+			elif world_view_rect_screen.has_point(event.position):
+				game.set_battle_hover(event.position - world_view_rect_screen.position)
+			else:
+				game.clear_battle_hover()
+			if previous_hover != hovered_combat_card:
+				queue_redraw()
 		else:
 			game.clear_battle_hover()
 		return
 	if not (event is InputEventMouseButton):
 		return
 	var mouse_event: InputEventMouseButton = event
+	var point: Vector2 = _to_design(mouse_event.position)
 	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed and game.phase == "combat" and game.selected_card >= 0:
 		game.cancel_selected_card()
 		accept_event()
 		return
+	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase == "combat":
+		if not mouse_event.pressed and dragged_combat_card >= 0:
+			var dropped_on_board := world_view_rect_screen.has_point(mouse_event.position) and not _combat_overlay_has_point(point)
+			dragged_combat_card = -1
+			hovered_combat_card = -1
+			if dropped_on_board:
+				game.handle_screen_click(mouse_event.position - world_view_rect_screen.position)
+			elif game.selected_card >= 0:
+				game.cancel_selected_card("卡牌没有放到战场格，已返回手牌。")
+			game.clear_battle_hover()
+			queue_redraw()
+			accept_event()
+			return
+		if not mouse_event.pressed and board_left_pressed:
+			var should_click := not board_left_dragged and world_view_rect_screen.has_point(mouse_event.position)
+			board_left_pressed = false
+			board_left_dragged = false
+			board_left_distance = 0.0
+			if should_click:
+				game.handle_screen_click(mouse_event.position - world_view_rect_screen.position)
+			accept_event()
+			return
+		if mouse_event.pressed:
+			for i in range(combat_card_rects.size() - 1, -1, -1):
+				if not combat_card_rects[i].has_point(point):
+					continue
+				var card: Dictionary = game.combat.cards.get(game.combat.hand[i], {})
+				game.select_or_play_card(i)
+				if str(card.get("type", "")) == "place" and game.selected_card == i:
+					dragged_combat_card = i
+					dragged_card_position = point
+				queue_redraw()
+				accept_event()
+				return
+			if world_view_rect_screen.has_point(mouse_event.position) and not _combat_overlay_has_point(point):
+				board_left_pressed = true
+				board_left_dragged = false
+				board_left_distance = 0.0
+				accept_event()
+				return
 	if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
-		if mouse_event.pressed and game.phase in ["combat", "lab_search"] and world_view_rect_screen.has_point(mouse_event.position):
+		if mouse_event.pressed and game.phase in ["combat", "explore", "build", "room_ready", "lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"] and world_view_rect_screen.has_point(mouse_event.position):
 			middle_dragging = true
 			if game.phase == "combat":
 				game.clear_battle_hover()
@@ -634,7 +829,16 @@ func _gui_input(event: InputEvent) -> void:
 			game.zoom_battle_camera(mouse_event.position - world_view_rect_screen.position, 1.1)
 			accept_event()
 			return
-	if mouse_event.pressed and game.phase == "lab_search" and world_view_rect_screen.has_point(mouse_event.position):
+	if mouse_event.pressed and game.phase in ["explore", "build", "room_ready"] and world_view_rect_screen.has_point(mouse_event.position):
+		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			game.zoom_house_camera(mouse_event.position - world_view_rect_screen.position, 0.9)
+			accept_event()
+			return
+		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			game.zoom_house_camera(mouse_event.position - world_view_rect_screen.position, 1.1)
+			accept_event()
+			return
+	if mouse_event.pressed and game.phase in ["lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"] and world_view_rect_screen.has_point(mouse_event.position):
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			game.zoom_search_camera(0.9)
 			accept_event()
@@ -645,7 +849,6 @@ func _gui_input(event: InputEvent) -> void:
 			return
 	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
 		return
-	var point: Vector2 = _to_design(mouse_event.position)
 	if game.phase == "home":
 		if HOME_START_RECT.has_point(point):
 			game.start_new_run(false)
@@ -665,6 +868,8 @@ func _gui_input(event: InputEvent) -> void:
 			game.start_search_lab()
 		elif game.home_tests_open and HOME_TEST_CHASE_RECT.has_point(point):
 			game.start_chase_lab()
+		elif game.home_tests_open and HOME_TEST_DIORAMA_RECT.has_point(point):
+			game.start_kenney_build_lab()
 		return
 	if game.phase.begins_with("lab_"):
 		if LAB_EXIT_RECT.has_point(point):
@@ -672,6 +877,23 @@ func _gui_input(event: InputEvent) -> void:
 				game.finish_event_trial(false)
 			else:
 				game.go_home()
+			return
+		if game.phase == "lab_diorama" and LAB_SWITCH_RECT.has_point(point):
+			game.start_pcg_diorama_lab()
+			return
+		if game.phase == "lab_pcg_diorama":
+			if LAB_REROLL_RECT.has_point(point):
+				game.reroll_pcg_diorama()
+			elif LAB_HAND_RECT.has_point(point):
+				game.start_pcg_hand_layout_lab()
+			elif LAB_SWITCH_RECT.has_point(point):
+				game.start_diorama_art_lab()
+			return
+		if game.phase == "lab_hand_diorama":
+			if LAB_REROLL_RECT.has_point(point):
+				game.start_pcg_diorama_lab()
+			elif LAB_SWITCH_RECT.has_point(point):
+				game.start_diorama_art_lab()
 			return
 		if game.phase == "lab_puzzle":
 			var origin := Vector2(385, 245)
@@ -707,6 +929,9 @@ func _gui_input(event: InputEvent) -> void:
 	if game.phase == "combat" and CAMERA_RESET_RECT.has_point(point):
 		game.reset_battle_camera()
 		return
+	if game.phase in ["explore", "build", "room_ready"] and CAMERA_RESET_RECT.has_point(point):
+		game.reset_house_camera()
+		return
 	if game.phase == "omen":
 		if OMEN_A_RECT.has_point(point):
 			game.choose_omen(0)
@@ -732,11 +957,8 @@ func _gui_input(event: InputEvent) -> void:
 		game.enter_room(game.pending_room_pos)
 		return
 	if game.phase == "combat":
-		if game.combat.has_pending_player_portal():
-			if PORTAL_USE_RECT.has_point(point):
-				game.resolve_player_portal(true)
-			elif PORTAL_STAY_RECT.has_point(point):
-				game.resolve_player_portal(false)
+		if game.combat.player_on_portal() and PORTAL_USE_RECT.has_point(point):
+			game.use_player_portal()
 			return
 		if game.selected_card >= 0 and CARD_CANCEL_RECT.has_point(point):
 			game.cancel_selected_card()
@@ -866,3 +1088,23 @@ func _shorten(value: String, max_chars: int) -> String:
 	if max_chars <= 1 or value.length() <= max_chars:
 		return value
 	return value.left(max_chars - 1) + "…"
+var _smb_tail_padding := """
+ready" else "药物" if kind == "medicine" else "技巧"
+
+
+func _shorten(value: String, max_chars: int) -> String:
+	if max_chars <= 1 or value.length() <= max_chars:
+		return value
+	return value.left(max_chars - 1) + "…"
+
+This padding block intentionally stays longer than an obsolete SMB file tail.
+It prevents stale bytes on the shared volume from being parsed as GDScript.
+"""
+# SMB_SAFE_PADDING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz
+var _smb_tail_padding_2 := """
+ly stays longer than an obsolete SMB file tail.
+It prevents stale bytes on the shared volume from being parsed as GDScript.
+"""
+# SMB_SAFE_PADDING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz
+
+# SMB_FINAL_PADDING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz

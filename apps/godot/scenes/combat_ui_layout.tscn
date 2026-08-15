@@ -1,0 +1,69 @@
+[gd_scene format=3 uid="uid://b3ep55wrdohvf"]
+
+[ext_resource type="Script" uid="uid://dxrpgu6b3t0ax" path="res://scripts/combat_ui_layout_lab.gd" id="1_lab"]
+[ext_resource type="Texture2D" uid="uid://bv7cb6niao60h" path="res://assets/ui/channel_concept/card_blue.png" id="2_blue"]
+[ext_resource type="Texture2D" uid="uid://cy48yfrpnck2" path="res://assets/ui/channel_concept/card_red.png" id="3_red"]
+[ext_resource type="Texture2D" uid="uid://drmi3r3cv5cjh" path="res://assets/ui/channel_concept/UI_HUD_Panel_EventProgram_Normal.png" id="4_intent"]
+
+[node name="CombatUILayout" type="Control" unique_id=9631728]
+custom_minimum_size = Vector2(1280, 800)
+layout_mode = 3
+anchors_preset = 0
+offset_right = 1280.0
+offset_bottom = 800.0
+mouse_filter = 2
+script = ExtResource("1_lab")
+
+[node name="IntentArea" type="TextureRect" parent="." unique_id=1613671478]
+modulate = Color(1, 1, 1, 0.42)
+layout_mode = 0
+offset_left = 310.0
+offset_top = 100.0
+offset_right = 640.0
+offset_bottom = 212.0
+mouse_filter = 2
+texture = ExtResource("4_intent")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="ActionArea" type="ColorRect" parent="." unique_id=1285653696]
+layout_mode = 0
+offset_left = 996.0
+offset_top = 96.0
+offset_right = 1264.0
+offset_bottom = 212.0
+mouse_filter = 2
+color = Color(0.95, 0.61, 0.11, 0.28)
+
+[node name="HandArea" type="ColorRect" parent="." unique_id=243134601]
+layout_mode = 0
+offset_left = 207.0
+offset_top = 613.0
+offset_right = 787.0
+offset_bottom = 781.0
+mouse_filter = 2
+color = Color(0.08, 0.72, 0.64, 0.24)
+
+[node name="DeckArea" type="TextureRect" parent="." unique_id=2092191529]
+modulate = Color(1, 1, 1, 0.82)
+layout_mode = 0
+offset_left = 13.0
+offset_top = 627.0
+offset_right = 162.0
+offset_bottom = 767.0
+mouse_filter = 2
+texture = ExtResource("2_blue")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="DiscardArea" type="TextureRect" parent="." unique_id=1217096544]
+modulate = Color(1, 1, 1, 0.82)
+layout_mode = 0
+offset_left = 844.0
+offset_top = 626.0
+offset_right = 948.0
+offset_bottom = 766.0
+mouse_filter = 2
+texture = ExtResource("3_red")
+expand_mode = 1
+stretch_mode = 6

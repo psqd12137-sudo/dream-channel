@@ -14,6 +14,7 @@ func _run() -> void:
 		_finish()
 		return
 	var game: Node3D = packed.instantiate()
+	game.animation_duration_scale = 0.0
 	root.add_child(game)
 	await process_frame
 	await process_frame
@@ -23,6 +24,12 @@ func _run() -> void:
 	_check(game.phase == "combat", "a combat room must enter combat phase")
 	_check(game.combat.is_walkable(game.combat.player_pos), "player must spawn on the board")
 	_check(_inside(game.combat.enemy_pos, game.combat.cols, game.combat.rows), "enemy must spawn on the board")
+	var camera_yaw_before: float = game.battle_camera_yaw
+	var camera_pitch_before: float = game.battle_camera_pitch
+	game.orbit_battle_camera(Vector2(24, -8))
+	_check(not is_equal_approx(game.battle_camera_yaw, camera_yaw_before), "battle camera must rotate when the empty board drag gesture supplies motion")
+	_check(is_equal_approx(game.battle_camera_pitch, camera_pitch_before), "battle orbit must ignore vertical drag and keep a fixed pitch")
+	_check(is_equal_approx(game.battle_camera_target.x, 0.0) and is_equal_approx(game.battle_camera_target.z, 0.0), "battle orbit must use the board center instead of the player")
 
 	game.combat.hand.assign(["jab", "guard"])
 	game.combat.energy = 4
@@ -55,6 +62,17 @@ func _run() -> void:
 	_check(game.combat.can_target_place_card(0, game.combat.enemy_pos), "enemy cell must only be marked when a direct smash is valid")
 	game.handle_battle_cell(game.combat.enemy_pos)
 	_check(game.combat.enemy_hp < hp_before, "clicking a valid enemy target must deal combat damage")
+	_check(game.battle_root.get_node_or_null("Enemy/DamageFeedback") is Label3D, "enemy HP loss must create a model-scale-independent damage popup")
+
+	if game.combat.outcome == "":
+		var hud: Control = game.get_node("HUD/HUDRoot")
+		var round_before: int = game.combat.round_number
+		var end_turn_click := InputEventMouseButton.new()
+		end_turn_click.button_index = MOUSE_BUTTON_LEFT
+		end_turn_click.pressed = true
+		end_turn_click.position = hud.ui_offset + hud.END_TURN_RECT.get_center() * hud.ui_scale
+		hud._gui_input(end_turn_click)
+		_check(game.combat.round_number > round_before or game.combat.outcome != "", "end-turn button must win input priority over the expanded battle viewport")
 
 	game.queue_free()
 	await process_frame

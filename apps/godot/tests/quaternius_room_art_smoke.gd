@@ -2,6 +2,7 @@ extends SceneTree
 
 const RoomArtRegistry = preload("res://scripts/room_art_registry.gd")
 const RoomLayoutLab = preload("res://scenes/room_layout_lab.tscn")
+const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
 
 var failures: Array[String] = []
 
@@ -14,6 +15,8 @@ func _run() -> void:
 	for path: String in RoomArtRegistry.asset_paths():
 		_check(ResourceLoader.exists(path), "selected Quaternius asset must import: %s" % path)
 	var layout: Node3D = RoomLayoutLab.instantiate()
+	root.add_child(layout)
+	await process_frame
 	var expected_layout_rooms: Array[String] = []
 	for room_id: String in RoomArtRegistry.LAYOUT_ROOM_NODES:
 		expected_layout_rooms.append(str(RoomArtRegistry.LAYOUT_ROOM_NODES[room_id]))
@@ -22,8 +25,17 @@ func _run() -> void:
 		_check(room_node != null, "layout lab must expose editable room root: %s" % layout_room)
 		if room_node != null and layout_room in ["Hall", "Parlor", "WestWing", "Cellar"]:
 			_check(_count_grouped_children(room_node, &"room_prop") >= 3, "%s must keep at least three direct editable furniture instances" % layout_room)
+		if room_node != null:
+			var room_id := str(room_node.get_meta("_room_id", ""))
+			var config: Dictionary = RoomFootprintCatalog.ROOM_CONFIG.get(room_id, {})
+			var expected_shape: Array = RoomFootprintCatalog.SHAPES.get(str(config.get("shape", "single")), [[0, 0]])
+			var authored_cells: Array = room_node.get("layout_cells")
+			_check(authored_cells.size() == expected_shape.size(), "%s editor footprint must match its runtime 1/3/5 shape" % layout_room)
+			var generated := room_node.get_node_or_null("GeneratedFootprint")
+			_check(generated != null and generated.get_child_count() == maxi(0, authored_cells.size() - 1) * 2, "%s must render every extra footprint cell in the editor lab" % layout_room)
 	_check(expected_layout_rooms.size() == 24, "layout lab must include all 24 catalog rooms")
-	layout.free()
+	layout.queue_free()
+	await process_frame
 
 	var game: Node3D = load("res://channel_3d.tscn").instantiate()
 	game.animation_duration_scale = 0.0
@@ -63,10 +75,9 @@ func _run() -> void:
 
 
 func _count_named_prefix(node: Node, prefix: String) -> int:
-	var count := 0
+	var count := 1 if str(node.name).begins_with(prefix) else 0
 	for child: Node in node.get_children():
-		if child.name.begins_with(prefix):
-			count += 1
+		count += _count_named_prefix(child, prefix)
 	return count
 
 

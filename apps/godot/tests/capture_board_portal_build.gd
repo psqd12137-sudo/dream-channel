@@ -14,8 +14,7 @@ func _run() -> void:
 	game.start_combat_lab("hall")
 	var entrance: Vector2i = game.combat.portals.keys()[0]
 	game.combat.player_pos = entrance
-	game.combat.pending_player_portal = game.combat.portals[entrance]
-	game.status_message = "已踩上传送门入口；必须主动选择穿过或留在这里。"
+	game.status_message = "已站上传送门；可花 1 行动力穿门，也可继续移动、出牌或结束回合。"
 	game.build_battle_world()
 	game._refresh_hud()
 	await _capture("res://artifacts/combat_height_portal_choice.png")
@@ -36,3 +35,8 @@ func _capture(path: String) -> void:
 	var error := root.get_texture().get_image().save_png(path)
 	if error != OK:
 		push_error("CAPTURE_BOARD_PORTAL_BUILD: %s" % error_string(error))
+var _smb_tail_padding := """
+ILD: %s" % error_string(error))
+Shared-volume padding keeps an obsolete truncated tail inert.
+"""
+# SMB_SAFE_PADDING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz

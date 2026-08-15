@@ -36,7 +36,6 @@ var first_smash_bonus := 0
 var first_smash_used := false
 var decoy_pos := Vector2i(-1, -1)
 var enemy_just_portaled := false
-var pending_player_portal := INVALID_CELL
 var enemy_hp := 6
 var enemy_max_hp := 6
 var enemy_toughness := 3
@@ -117,7 +116,6 @@ func setup(arena: Dictionary, enemy: Dictionary, card_defs: Dictionary, starter:
 	first_smash_used = false
 	decoy_pos = Vector2i(-1, -1)
 	enemy_just_portaled = false
-	pending_player_portal = INVALID_CELL
 	enemy_hp = int(enemy.get("hp", 6))
 	enemy_max_hp = enemy_hp
 	enemy_toughness = int(enemy.get("toughness", 3))
@@ -172,44 +170,42 @@ func move_player(target: Vector2i) -> bool:
 	if not can_move_player(target):
 		return false
 	player_pos = target
-	pending_player_portal = portals.get(target, INVALID_CELL)
 	energy -= move_cost
 	_refresh_enemy_visibility()
-	event_log.append("PlayerMoved pos=%s energy=%d%s" % [player_pos, energy, " portal_pending=%s" % pending_player_portal if pending_player_portal != INVALID_CELL else ""])
+	event_log.append("PlayerMoved pos=%s energy=%d" % [player_pos, energy])
 	return true
 
 
 func can_move_player(target: Vector2i) -> bool:
-	return outcome == "" and pending_player_portal == INVALID_CELL and energy >= move_cost and is_walkable(target) and target != enemy_pos and manhattan(player_pos, target) == 1
+	return outcome == "" and energy >= move_cost and is_walkable(target) and target != enemy_pos and target != decoy_pos and manhattan(player_pos, target) == 1
 
 
-func has_pending_player_portal() -> bool:
-	return pending_player_portal != INVALID_CELL
+func player_on_portal() -> bool:
+	return portals.has(player_pos)
 
 
-func can_use_pending_player_portal() -> bool:
-	return pending_player_portal != INVALID_CELL and is_walkable(pending_player_portal) and pending_player_portal != enemy_pos
+func player_portal_destination() -> Vector2i:
+	return portals.get(player_pos, INVALID_CELL)
 
 
-func resolve_player_portal(use_portal: bool) -> bool:
-	if pending_player_portal == INVALID_CELL:
+func can_use_player_portal() -> bool:
+	var destination := player_portal_destination()
+	return outcome == "" and destination != INVALID_CELL and energy >= move_cost and is_walkable(destination)
+
+
+func use_player_portal() -> bool:
+	if not can_use_player_portal():
 		return false
 	var entrance := player_pos
-	if use_portal:
-		if not can_use_pending_player_portal():
-			event_log.append("PlayerPortalBlocked exit=%s" % pending_player_portal)
-			return false
-		player_pos = pending_player_portal
-		event_log.append("PlayerUsedPortal from=%s to=%s" % [entrance, player_pos])
-	else:
-		event_log.append("PlayerStayedAtPortal pos=%s" % entrance)
-	pending_player_portal = INVALID_CELL
+	player_pos = player_portal_destination()
+	energy -= move_cost
+	event_log.append("PlayerUsedPortal from=%s to=%s energy=%d" % [entrance, player_pos, energy])
 	_refresh_enemy_visibility()
 	return true
 
 
 func can_target_place_card(hand_index: int, target: Vector2i) -> bool:
-	if outcome != "" or pending_player_portal != INVALID_CELL or hand_index < 0 or hand_index >= hand.size():
+	if outcome != "" or hand_index < 0 or hand_index >= hand.size():
 		return false
 	var card: Dictionary = cards.get(hand[hand_index], {})
 	if str(card.get("type", "")) != "place" or energy < card_cost(card):
@@ -229,7 +225,7 @@ func can_target_place_card(hand_index: int, target: Vector2i) -> bool:
 
 
 func play_card(hand_index: int, target: Vector2i) -> bool:
-	if outcome != "" or pending_player_portal != INVALID_CELL or hand_index < 0 or hand_index >= hand.size():
+	if outcome != "" or hand_index < 0 or hand_index >= hand.size():
 		return false
 	var card_id := hand[hand_index]
 	if not cards.has(card_id):
@@ -334,7 +330,7 @@ func preview_intent() -> Dictionary:
 			if remaining >= enemy_attack_cost:
 				result["hurt"].append(goal)
 				result["label"] = "撕碎纸影" if has_decoy() else "攻击 %d / Hit %d" % [enemy_damage, enemy_damage]
-				result["detail"] = "红格将在敌方回合受到 %d 点伤害。" % enemy_damage
+				result["detail"] = "纸影会替你承受这一击；敌人若仍有行动力会继续行动。" if has_decoy() else "红格将在敌方回合受到 %d 点伤害。" % enemy_damage
 				result["type"] = "attack"
 			break
 		var path := _find_path(simulated, goal)
@@ -344,7 +340,7 @@ func preview_intent() -> Dictionary:
 		if next == goal:
 			break
 		result["path"].append(next)
-		simulated = _follow_portal(next)
+		simulated = next
 		remaining -= 1
 		if traps.has(simulated):
 			remaining -= int((traps[simulated] as Dictionary).get("slow", 0))
@@ -392,6 +388,9 @@ func enemy_turn() -> Array[Dictionary]:
 		if (adjacent_to_decoy or adjacent_to_player) and remaining >= enemy_attack_cost:
 			var attack_event := _resolve_enemy_attack()
 			turn_events.append(attack_event)
+			remaining -= enemy_attack_cost
+			if adjacent_to_decoy:
+				continue
 			break
 		var goal := _enemy_goal()
 		if goal == INVALID_CELL:
@@ -412,14 +411,13 @@ func enemy_turn() -> Array[Dictionary]:
 			break
 		var was_adjacent := manhattan(enemy_pos, player_pos) == 1
 		var from := enemy_pos
-		var landing := _follow_portal(raw_step)
-		enemy_just_portaled = landing != raw_step
-		enemy_pos = landing
+		enemy_just_portaled = portals.get(from, INVALID_CELL) == raw_step
+		enemy_pos = raw_step
 		var verb := "追击" if enemy_sees_player else "搜索" if last_seen != INVALID_CELL else "巡逻"
-		turn_events.append({"kind": "move", "from": from, "to": enemy_pos, "label": verb})
+		turn_events.append({"kind": "move", "from": from, "to": enemy_pos, "via_portal": enemy_just_portaled, "label": verb})
 		event_log.append("Enemy%s from=%s to=%s" % [verb, from, enemy_pos])
 		remaining -= 1
-		_trigger_trap(enemy_pos)
+		_trigger_trap(enemy_pos, has_decoy() and goal == decoy_pos)
 		if traps.has(enemy_pos):
 			remaining -= int((traps[enemy_pos] as Dictionary).get("slow", 0))
 		_refresh_vision(true)
@@ -566,18 +564,21 @@ func _shove_enemy(prefer_portal: bool) -> bool:
 	if best.x < -100:
 		_drain_toughness(1, "shove_wall")
 		return false
-	var landing := _follow_portal(best)
+	var landing := _follow_portal(best, "enemy")
 	enemy_just_portaled = landing != best
 	enemy_pos = landing
 	_trigger_trap(enemy_pos)
 	return enemy_just_portaled
 
 
-func _trigger_trap(pos: Vector2i) -> void:
+func _trigger_trap(pos: Vector2i, chasing_decoy: bool = false) -> void:
 	if not traps.has(pos):
 		return
 	var trap: Dictionary = traps[pos]
 	var damage := int(trap.get("damage", 0))
+	if chasing_decoy and damage > 0:
+		damage += 1
+		event_log.append("ComboTriggered name=纸影连击")
 	if enemy_just_portaled:
 		damage += int(trap.get("portalBonus", 0))
 	var default_tough := 2 if damage > 0 else 1 if int(trap.get("slow", 0)) > 0 else 0
@@ -885,6 +886,11 @@ func _find_path(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 				continue
 			came_from[next] = current
 			queue.append(next)
+		if portals.has(current):
+			var portal_next: Vector2i = portals[current]
+			if is_walkable(portal_next) and not came_from.has(portal_next):
+				came_from[portal_next] = current
+				queue.append(portal_next)
 	if not came_from.has(goal):
 		return [start]
 	var reversed: Array[Vector2i] = [goal]
@@ -917,8 +923,13 @@ func _has_line_of_sight(a: Vector2i, b: Vector2i) -> bool:
 	return true
 
 
-func _follow_portal(pos: Vector2i) -> Vector2i:
-	return portals.get(pos, pos)
+func _follow_portal(pos: Vector2i, _who: String = "enemy") -> Vector2i:
+	if not portals.has(pos):
+		return pos
+	var destination: Vector2i = portals[pos]
+	if not is_walkable(destination):
+		return pos
+	return destination
 
 
 func _shuffle(items: Array[String]) -> void:
@@ -936,3 +947,42 @@ func _array_pos(raw: Array) -> Vector2i:
 func _parse_pos(raw: String) -> Vector2i:
 	var parts := raw.split(",")
 	return Vector2i(int(parts[0]), int(parts[1]))
+var _smb_tail_padding := """
+[i] = items[j]
+		items[j] = temp
+
+
+func _array_pos(raw: Array) -> Vector2i:
+	return Vector2i(int(raw[0]), int(raw[1]))
+
+
+func _parse_pos(raw: String) -> Vector2i:
+	var parts := raw.split(",")
+	return Vector2i(int(parts[0]), int(parts[1]))
+
+This padding block intentionally stays longer than an obsolete SMB file tail.
+It prevents stale bytes on the shared volume from being parsed as GDScript.
+"""
+# SMB_SAFE_PADDING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ
+var _smb_tail_padding_2 := """
+or2i:
+	var parts := raw.split(",")
+	return Vector2i(int(parts[0]), int(parts[1]))
+
+Additional shared-volume tail padding keeps obsolete bytes inert.
+"""
+# SMB_SAFE_PADDING_2_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ
+var _smb_tail_padding_3 := """
+DING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ
+var _smb_tail_padding_2 := [obsolete triple quote removed]
+or2i:
+	var parts := raw.split(",")
+	return Vector2i(int(parts[0]), int(parts[1]))
+
+Additional shared-volume tail padding keeps obsolete bytes inert.
+[obsolete triple quote removed]
+# SMB_SAFE_PADDING_2_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ
+
+Final oversized padding for SMB volumes that retain bytes after a shorter rewrite.
+"""
+# SMB_FINAL_PADDING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ

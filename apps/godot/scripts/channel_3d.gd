@@ -5,11 +5,21 @@ const CombatRules = preload("res://scripts/combat_rules.gd")
 const WebContentAdapter = preload("res://scripts/web_content_adapter.gd")
 const CharacterPresenter = preload("res://scripts/character_presenter.gd")
 const RoomArtRegistry = preload("res://scripts/room_art_registry.gd")
+const DIORAMA_ART_LAB = preload("res://scenes/diorama_art_lab.tscn")
+const PCG_DIORAMA_STITCH_LAB = preload("res://scenes/pcg_diorama_stitch_lab.tscn")
+const PCG_HAND_LAYOUT_LAB = preload("res://scenes/pcg_hand_layout_lab.tscn")
+const PCG_HAND_ROOM_SCRIPT = preload("res://scripts/pcg_hand_room.gd")
+const KAYKIT_DUNGEON_ROOT := "res://assets/third_party/kaykit_dungeon/models/"
 
 const EXE_SOURCE_ID := "CabinSlice_织梦频道.exe@EEC4C574CC22"
 const SNAPSHOT_ROOT := "res://data/exe_snapshot/"
 const PRESENTATION_MANIFEST := "res://data/presentation_manifest.json"
 const RUN_SAVE_PATH := "user://channel_run_v1.json"
+const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interior/"
+const BATTLE_HEIGHT_ASSETS := {
+	1: ["Table_RoundLarge.fbx", "Couch_Medium1.fbx", "Kitchen_Oven.fbx"],
+	2: ["Bookshelf.fbx", "Kitchen_Fridge.fbx", "Fireplace.fbx"],
+}
 const HOUSE_CELL := 3.4
 const BATTLE_CELL := 2.35
 
@@ -109,9 +119,18 @@ var player_speed := 3
 var status_message := "频道正在预热。"
 var event_log: Array[String] = []
 var world_view_rect := Rect2(20, 96, 952, 578)
+var house_camera_target := Vector3.ZERO
+var house_camera_fit_size := 12.0
+var house_camera_zoom_ratio := 1.0
+var house_camera_user_adjusted := false
+var house_player_facing_yaw := 0.0
 var battle_camera_target := Vector3.ZERO
 var battle_camera_fit_size := 12.0
 var battle_camera_distance := 20.0
+var battle_camera_yaw := atan2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z)
+var battle_camera_pitch := atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
+var battle_player_facing_yaw := 0.0
+var battle_enemy_facing_yaw := PI
 var hovered_battle_cell := INVALID_CELL
 var animation_busy := false
 var active_animation_kind := ""
@@ -119,6 +138,7 @@ var active_motion_tween: Tween = null
 var build_preview_tween: Tween = null
 var lab_root: Node3D = null
 var home_tests_open := false
+var kenney_build_lab_mode := false
 var lab_move_axis := 0.0
 var lab_jump_held := false
 var lab_jump_was_down := false
@@ -152,6 +172,7 @@ var lab_camera_target := Vector3.ZERO
 var lab_camera_yaw := 0.0
 var lab_camera_pitch := 0.24
 var lab_camera_distance := 14.0
+var pcg_diorama_seed := 20260816
 
 
 func _ready() -> void:
@@ -206,6 +227,8 @@ func set_world_view_rect(rect: Rect2) -> void:
 		return
 	if phase == "combat" and combat != null:
 		reset_battle_camera()
+	elif phase in ["lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
+		_apply_search_camera()
 	else:
 		_set_house_camera()
 
@@ -256,6 +279,13 @@ func reset_run(seed_value: int = 0) -> void:
 	offer_rotation = 0
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
+	house_camera_target = Vector3.ZERO
+	house_camera_fit_size = 12.0
+	house_camera_zoom_ratio = 1.0
+	house_camera_user_adjusted = false
+	house_player_facing_yaw = 0.0
+	battle_player_facing_yaw = 0.0
+	battle_enemy_facing_yaw = PI
 	run_progress = 1
 	player_hp = 6
 	player_max_hp = 6
@@ -270,6 +300,7 @@ func reset_run(seed_value: int = 0) -> void:
 
 
 func start_new_run(tutorial_mode: bool = false) -> void:
+	kenney_build_lab_mode = false
 	reset_run(run_seed + 1 if phase != "home" else run_seed)
 	status_message = "教学提示：先选预兆，再点黄色扩建格；战斗中绿色=移动、金色=放置。" if tutorial_mode else "先从两枚行前预兆中选一枚，节目就会正式开播。"
 	_refresh_hud()
@@ -278,6 +309,7 @@ func start_new_run(tutorial_mode: bool = false) -> void:
 
 func go_home() -> void:
 	_cancel_dynamic_effect()
+	kenney_build_lab_mode = false
 	phase = "home"
 	home_tests_open = false
 	house_root.visible = false
@@ -294,6 +326,7 @@ func has_saved_run() -> bool:
 
 
 func continue_saved_run() -> bool:
+	kenney_build_lab_mode = false
 	if not has_saved_run():
 		return false
 	var parsed = JSON.parse_string(FileAccess.get_file_as_string(RUN_SAVE_PATH))
@@ -323,6 +356,7 @@ func continue_saved_run() -> bool:
 			remaining_rooms.append(room.duplicate(true))
 	current_room_pos = _array_to_pos(save.get("current_room", [0, 0]))
 	pending_room_pos = _array_to_pos(save.get("pending_room", [0, 0]))
+	house_player_facing_yaw = float(save.get("house_player_facing_yaw", 0.0))
 	phase = str(save.get("phase", "explore"))
 	if phase not in ["omen", "explore", "room_ready", "reward"]:
 		phase = "room_ready" if not bool(current_room().get("completed", false)) else "explore"
@@ -356,6 +390,69 @@ func start_combat_lab(room_id: String = "hall") -> void:
 	status_message = "意图实验：未揭示怪物最多埋伏一拍，随后会巡逻；蓝色编号显示逐步路径。"
 	build_battle_world()
 	_refresh_hud()
+
+
+func start_kenney_build_lab() -> void:
+	kenney_build_lab_mode = true
+	reset_run(run_seed + 101)
+	phase = "explore"
+	omen_options.clear()
+	status_message = "Kenney 桌模扩建实验：直接点击黄色扩建格，选择 1/3/5 格票根，旋转并摆下；每次确认后按正式 room_rules 重算整栋墙、门和房间边界。本模式不会覆盖存档。"
+	build_house_world()
+	_set_house_camera()
+	_refresh_hud()
+
+
+func start_diorama_art_lab() -> void:
+	_prepare_lab("lab_diorama")
+	var comparison := DIORAMA_ART_LAB.instantiate() as Node3D
+	comparison.name = "DioramaArtComparison"
+	lab_root.add_child(comparison)
+	status_message = "A 是现有软装与几何墙体；B 是 Mini Dungeon；C 是 Modular Ruins，并用楼梯与资产地面验证高低差。"
+	_set_diorama_camera_defaults()
+	_refresh_hud()
+
+
+func start_pcg_diorama_lab() -> void:
+	_prepare_lab("lab_pcg_diorama")
+	var generator := PCG_DIORAMA_STITCH_LAB.instantiate() as Node3D
+	generator.name = "PcgDioramaStitch"
+	generator.generation_seed = pcg_diorama_seed
+	lab_root.add_child(generator)
+	_set_pcg_diorama_camera(generator)
+	status_message = "先看 R00·1格 整块接入 R01·5格，再继续拼 3/1/5 格；编号保留房间归属，门洞标记跨房连接，整房依次落位。"
+	_refresh_hud()
+
+
+func reroll_pcg_diorama() -> void:
+	if phase != "lab_pcg_diorama":
+		return
+	var generator := lab_root.get_node_or_null("PcgDioramaStitch")
+	if generator == null:
+		return
+	pcg_diorama_seed += 1
+	generator.regenerate(pcg_diorama_seed)
+	_set_pcg_diorama_camera(generator)
+	status_message = "已换 Seed %d 并重播建造：%d 房 / %d 格 / %d 门洞 / %d 外墙 / %d 楼梯。" % [pcg_diorama_seed, generator.rooms.size(), generator.occupancy.size(), generator.doorway_count, generator.external_wall_count, generator.stair_count]
+	_refresh_hud()
+
+
+func start_pcg_hand_layout_lab() -> void:
+	_prepare_lab("lab_hand_diorama")
+	var composer := PCG_HAND_LAYOUT_LAB.instantiate() as Node3D
+	composer.name = "PcgHandLayout"
+	lab_root.add_child(composer)
+	_set_pcg_diorama_camera(composer)
+	status_message = "这是正式地图手摆模拟：在 Godot 编辑器打开 pcg_hand_layout_lab.tscn，移动 Layout 下的房间根节点；运行这里检查镜头、拼接和整房落位动画。当前 %s。" % composer.authored_summary()
+	_refresh_hud()
+
+
+func _set_pcg_diorama_camera(generator: Node3D) -> void:
+	lab_camera_target = generator.camera_target()
+	lab_camera_yaw = -0.62
+	lab_camera_pitch = 0.40
+	lab_camera_distance = generator.suggested_camera_distance()
+	_apply_search_camera()
 
 
 func _find_catalog_room(room_id: String) -> Dictionary:
@@ -731,6 +828,7 @@ func _update_chase_finish_delay(delta: float) -> void:
 
 func _prepare_lab(next_phase: String) -> void:
 	_cancel_dynamic_effect()
+	kenney_build_lab_mode = false
 	phase = next_phase
 	world_container.visible = true
 	house_root.visible = false
@@ -754,8 +852,16 @@ func _set_search_camera_defaults() -> void:
 	_apply_search_camera()
 
 
+func _set_diorama_camera_defaults() -> void:
+	lab_camera_target = Vector3(0.0, 0.85, 0.15)
+	lab_camera_yaw = 0.0
+	lab_camera_pitch = 0.34
+	lab_camera_distance = 16.0
+	_apply_search_camera()
+
+
 func orbit_search_camera(relative: Vector2) -> void:
-	if phase != "lab_search":
+	if phase not in ["lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
 		return
 	lab_camera_yaw -= relative.x * 0.008
 	lab_camera_pitch = clampf(lab_camera_pitch - relative.y * 0.006, 0.10, 0.72)
@@ -763,9 +869,9 @@ func orbit_search_camera(relative: Vector2) -> void:
 
 
 func zoom_search_camera(factor: float) -> void:
-	if phase != "lab_search":
+	if phase not in ["lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
 		return
-	lab_camera_distance = clampf(lab_camera_distance * factor, 8.0, 20.0)
+	lab_camera_distance = clampf(lab_camera_distance * factor, 8.0, 28.0)
 	_apply_search_camera()
 
 
@@ -825,8 +931,11 @@ func rotate_offer() -> void:
 		if build_preview_tween != null and build_preview_tween.is_valid():
 			build_preview_tween.kill()
 		build_preview_tween = create_tween()
-		build_preview_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		build_preview_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_parallel(true)
 		build_preview_tween.tween_property(preview, "rotation:y", -float(offer_rotation) * PI * 0.5, 0.18 * maxf(0.25, animation_duration_scale))
+		var room: Dictionary = build_offers[selected_offer]
+		var preview_origin := room_rules.placement_origin(selected_frontier, room, offer_rotation)
+		build_preview_tween.tween_property(preview, "position", _house_world(preview_origin) + Vector3(0, 0.20, 0), 0.18 * maxf(0.25, animation_duration_scale))
 		_update_build_preview_validity(preview)
 	status_message = "房间预览已旋转到 %d°；门位会在大地图中实时变化。" % (offer_rotation * 90)
 	_refresh_hud()
@@ -859,9 +968,8 @@ func place_selected_offer() -> void:
 	if not room_rules.place(selected_frontier, room, offer_rotation):
 		return
 	var instance: Dictionary = room_rules.placed[selected_frontier]
-	instance["revealed"] = false
-	instance["visited"] = false
-	room_rules.placed[selected_frontier] = instance
+	room_rules.set_instance_flag(selected_frontier, "revealed", false)
+	room_rules.set_instance_flag(selected_frontier, "visited", false)
 	pending_room_pos = selected_frontier
 	_remove_remaining_room(str(room.get("id", "")))
 	phase = "explore"
@@ -878,21 +986,25 @@ func place_selected_offer() -> void:
 
 
 func _animate_room_placement(target: Vector2i, final_message: String) -> void:
-	var room_node := _find_room_node(target)
-	if room_node == null:
+	var room_nodes := _find_room_instance_nodes(target)
+	if room_nodes.is_empty():
 		status_message = final_message
 		_complete_dynamic_effect()
 		_refresh_hud()
 		return
-	var final_position := _house_world(target)
-	room_node.position = final_position + Vector3.UP * HOUSE_CELL * UNITY_ROOM_DROP_HEIGHT_CELLS
-	room_node.rotation = Vector3(deg_to_rad(-82.0), 0.0, 0.0)
-	room_node.scale = Vector3.ONE * UNITY_ROOM_START_SCALE
+	var final_positions: Dictionary = {}
+	var drop_height := (1.55 if kenney_build_lab_mode else HOUSE_CELL) * UNITY_ROOM_DROP_HEIGHT_CELLS
+	for room_node: Node3D in room_nodes:
+		final_positions[room_node] = room_node.position
+		room_node.position += Vector3.UP * drop_height
+		room_node.rotation = Vector3(deg_to_rad(-82.0), 0.0, 0.0)
+		room_node.scale = Vector3.ONE * UNITY_ROOM_START_SCALE
 	var drop_duration := UNITY_ROOM_DROP_DURATION * animation_duration_scale
 	if drop_duration <= 0.0:
-		room_node.position = final_position
-		room_node.rotation = Vector3.ZERO
-		room_node.scale = Vector3.ONE
+		for room_node: Node3D in room_nodes:
+			room_node.position = final_positions[room_node]
+			room_node.rotation = Vector3.ZERO
+			room_node.scale = Vector3.ONE
 		status_message = final_message
 		_complete_dynamic_effect()
 		_refresh_hud()
@@ -900,21 +1012,51 @@ func _animate_room_placement(target: Vector2i, final_message: String) -> void:
 	var tween := create_tween()
 	active_motion_tween = tween
 	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT).set_parallel(true)
-	tween.tween_property(room_node, "position", final_position, drop_duration)
-	tween.tween_property(room_node, "rotation", Vector3.ZERO, drop_duration)
-	tween.tween_property(room_node, "scale", Vector3.ONE * 1.035, drop_duration)
+	for room_node: Node3D in room_nodes:
+		tween.tween_property(room_node, "position", final_positions[room_node], drop_duration)
+		tween.tween_property(room_node, "rotation", Vector3.ZERO, drop_duration)
+		tween.tween_property(room_node, "scale", Vector3.ONE * 1.035, drop_duration)
 	tween.set_parallel(false)
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tween.tween_property(room_node, "scale", Vector3.ONE, UNITY_ACTOR_SETTLE_DURATION * animation_duration_scale)
+	var settle_duration := UNITY_ACTOR_SETTLE_DURATION * animation_duration_scale
+	for room_index in range(room_nodes.size()):
+		var room_node: Node3D = room_nodes[room_index]
+		if room_index == 0:
+			tween.tween_property(room_node, "scale", Vector3.ONE, settle_duration)
+		else:
+			tween.parallel().tween_property(room_node, "scale", Vector3.ONE, settle_duration)
 	await tween.finished
 	if active_motion_tween != tween:
 		return
-	room_node.position = final_position
-	room_node.rotation = Vector3.ZERO
-	room_node.scale = Vector3.ONE
+	for room_node: Node3D in room_nodes:
+		room_node.position = final_positions[room_node]
+		room_node.rotation = Vector3.ZERO
+		room_node.scale = Vector3.ONE
 	status_message = final_message
 	_complete_dynamic_effect()
 	_refresh_hud()
+
+
+func _find_room_instance_nodes(target: Vector2i) -> Array[Node3D]:
+	var result: Array[Node3D] = []
+	if not room_rules.placed.has(target):
+		return result
+	var instance_id := str(room_rules.placed[target].get("instance_id", ""))
+	if kenney_build_lab_mode:
+		var generated := house_root.get_node_or_null("KenneyFormalComposer/GeneratedMap")
+		if generated != null:
+			for child: Node in generated.get_children():
+				if child is Node3D and str(child.get_meta("room_id", "")) == instance_id:
+					result.append(child as Node3D)
+					return result
+	for raw_cell: Variant in room_rules.placed.keys():
+		var cell: Vector2i = raw_cell
+		if str(room_rules.placed[cell].get("instance_id", "")) != instance_id:
+			continue
+		var room_node := _find_room_node(cell)
+		if room_node != null:
+			result.append(room_node)
+	return result
 
 
 func handle_screen_click(screen_pos: Vector2) -> void:
@@ -954,6 +1096,9 @@ func _animate_enter_room(target: Vector2i) -> void:
 	var target_position := _house_world(target)
 	var move_duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
 	if token != null and move_duration > 0.0:
+		var presenter := token.get_node_or_null("Presenter")
+		if presenter != null and presenter.has_method("play_state"):
+			presenter.play_state("move")
 		var move_tween := create_tween()
 		active_motion_tween = move_tween
 		move_tween.set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN_OUT)
@@ -977,8 +1122,8 @@ func _animate_enter_room(target: Vector2i) -> void:
 		await close_tween.finished
 		if active_motion_tween != close_tween:
 			return
-		room["revealed"] = true
-		room_rules.placed[target] = room
+		room_rules.set_instance_flag(target, "revealed", true)
+		room = room_rules.placed[target]
 		_populate_room_visual(room_node, target, room)
 		var open_tween := create_tween()
 		active_motion_tween = open_tween
@@ -996,14 +1141,18 @@ func _set_house_token_motion(weight: float, token: Node3D, start_position: Vecto
 	var smooth_weight := weight * weight * (3.0 - 2.0 * weight)
 	var hop := sin(smooth_weight * PI) * 0.34
 	token.position = start_position.lerp(target_position, smooth_weight) + Vector3.UP * hop
+	var direction := target_position - start_position
+	direction.y = 0.0
+	if direction.length_squared() > 0.001:
+		house_player_facing_yaw = atan2(direction.x, direction.z)
+		token.rotation.y = house_player_facing_yaw
 
 
 func _finish_enter_room(target: Vector2i) -> void:
 	current_room_pos = target
 	var room: Dictionary = room_rules.placed[target]
 	var first_visit := not bool(room.get("visited", false))
-	room["revealed"] = true
-	room_rules.placed[target] = room
+	room_rules.set_instance_flag(target, "revealed", true)
 	if first_visit and not bool(room.get("completed", false)):
 		phase = "room_ready"
 		status_message = str(room.get("description", "你推开了房门。"))
@@ -1034,9 +1183,8 @@ func _complete_current_room() -> void:
 	var room: Dictionary = current_room()
 	if not bool(room.get("completed", false)):
 		run_progress += 1
-	room["completed"] = true
-	room["visited"] = true
-	room_rules.placed[current_room_pos] = room
+	room_rules.set_instance_flag(current_room_pos, "completed", true)
+	room_rules.set_instance_flag(current_room_pos, "visited", true)
 
 
 func _collect_combat_deck() -> void:
@@ -1179,11 +1327,13 @@ func finish_event_trial(success: bool) -> void:
 
 func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	combat = CombatRules.new()
+	battle_player_facing_yaw = house_player_facing_yaw
+	battle_enemy_facing_yaw = PI
 	var enemy: Dictionary = room.get("enemy", {})
 	var run_rules: Dictionary = content.get("run_rules", {}).duplicate(true)
 	run_rules["player_hp"] = player_hp
 	run_rules["base_speed"] = player_speed
-	combat.setup(room.get("arena", {}), enemy, content.get("cards", {}), run_deck, run_seed + room_rules.placed.size() * 17, run_rules, active_relics)
+	combat.setup(room.get("arena", {}), enemy, content.get("cards", {}), run_deck, run_seed + room_rules.instance_count() * 17, run_rules, active_relics)
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
 	phase = "combat"
@@ -1272,7 +1422,7 @@ func _animate_combat_entry(final_message: String) -> void:
 
 
 func select_or_play_card(index: int) -> void:
-	if animation_busy or phase != "combat" or combat == null or combat.has_pending_player_portal() or index < 0 or index >= combat.hand.size():
+	if animation_busy or phase != "combat" or combat == null or index < 0 or index >= combat.hand.size():
 		return
 	var card: Dictionary = combat.cards.get(combat.hand[index], {})
 	if str(card.get("type", "")) == "place":
@@ -1292,7 +1442,9 @@ func select_or_play_card(index: int) -> void:
 			_after_combat_action()
 			_play_actor_state("Player", "ready" if str(card.get("type", "")) == "ready" else "attack", str(card.get("name", "出手")))
 			if combat.enemy_hp < enemy_hp_before:
-				_play_actor_state("Enemy", "hurt", "-%d" % (enemy_hp_before - combat.enemy_hp))
+				var damage_dealt: int = enemy_hp_before - combat.enemy_hp
+				_play_actor_state("Enemy", "hurt", "-%d" % damage_dealt)
+				_show_actor_damage_feedback("Enemy", damage_dealt)
 		else:
 			status_message = "%s当前条件不满足，卡牌没有消耗。" % str(card.get("name", "这张牌"))
 	_refresh_hud()
@@ -1308,7 +1460,7 @@ func cancel_selected_card(message: String = "已取消选牌；绿色角标表�
 
 
 func end_combat_turn() -> void:
-	if animation_busy or phase != "combat" or combat == null or combat.outcome != "" or combat.has_pending_player_portal():
+	if animation_busy or phase != "combat" or combat == null or combat.outcome != "":
 		return
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
@@ -1343,13 +1495,6 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			break
 	if not first_move.is_empty():
 		enemy_node.position = _battle_world(first_move.get("from", combat.enemy_pos))
-	var player_hit := turn_events.any(func(event: Dictionary) -> bool:
-		return str(event.get("kind", "")) == "attack" and event.get("target", INVALID_CELL) == combat.player_pos
-	)
-	if turn_events.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack"):
-		_play_actor_state("Enemy", "attack", "袭击!")
-	if player_hit:
-		_play_actor_state("Player", "hurt", "受击!")
 	var tween := create_tween()
 	active_motion_tween = tween
 	for event: Dictionary in turn_events:
@@ -1357,10 +1502,19 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 		if kind == "move":
 			var source: Vector2i = event.get("from", combat.enemy_pos)
 			var target: Vector2i = event.get("to", combat.enemy_pos)
-			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-			tween.tween_method(_set_enemy_step_motion.bind(enemy_node, _battle_world(source), _battle_world(target)), 0.0, 1.0, ENEMY_STEP_DURATION * animation_duration_scale)
+			tween.tween_callback(_play_actor_state.bind("Enemy", "move", "穿门" if bool(event.get("via_portal", false)) else ""))
+			if bool(event.get("via_portal", false)):
+				tween.tween_property(enemy_node, "scale", Vector3(0.08, 1.35, 0.08), ENEMY_STEP_DURATION * 0.42 * animation_duration_scale)
+				tween.tween_callback(func() -> void: enemy_node.position = _battle_world(target))
+				tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_STEP_DURATION * 0.58 * animation_duration_scale)
+			else:
+				tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+				tween.tween_method(_set_enemy_step_motion.bind(enemy_node, _battle_world(source), _battle_world(target)), 0.0, 1.0, ENEMY_STEP_DURATION * animation_duration_scale)
 			tween.tween_interval(0.035 * animation_duration_scale)
 		elif kind == "attack":
+			tween.tween_callback(_play_actor_state.bind("Enemy", "attack", "袭击!"))
+			if event.get("target", INVALID_CELL) == combat.player_pos:
+				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "受击!"))
 			tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			tween.tween_property(enemy_node, "scale", Vector3(1.22, 0.82, 1.22), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -1375,10 +1529,23 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 
 
 func _set_enemy_step_motion(weight: float, enemy_node: Node3D, start_position: Vector3, target_position: Vector3) -> void:
-	if not is_instance_valid(enemy_node):
+	_set_battle_actor_step_motion(weight, enemy_node, start_position, target_position)
+
+
+func _set_battle_actor_step_motion(weight: float, actor_node: Node3D, start_position: Vector3, target_position: Vector3) -> void:
+	if not is_instance_valid(actor_node):
 		return
 	var smooth_weight := weight * weight * (3.0 - 2.0 * weight)
-	enemy_node.position = start_position.lerp(target_position, smooth_weight) + Vector3.UP * sin(smooth_weight * PI) * 0.28
+	actor_node.position = start_position.lerp(target_position, smooth_weight) + Vector3.UP * sin(smooth_weight * PI) * 0.16
+	var direction := target_position - start_position
+	direction.y = 0.0
+	if direction.length_squared() > 0.001:
+		var facing_yaw := atan2(direction.x, direction.z)
+		actor_node.rotation.y = facing_yaw
+		if actor_node.name == &"Player":
+			battle_player_facing_yaw = facing_yaw
+		elif actor_node.name == &"Enemy":
+			battle_enemy_facing_yaw = facing_yaw
 
 
 func _handle_battle_world_click(screen_pos: Vector2) -> void:
@@ -1391,7 +1558,10 @@ func _handle_battle_world_click(screen_pos: Vector2) -> void:
 
 
 func handle_battle_cell(target: Vector2i) -> void:
-	if combat == null or combat.outcome != "" or combat.has_pending_player_portal() or target == INVALID_CELL:
+	if animation_busy or combat == null or combat.outcome != "" or target == INVALID_CELL:
+		return
+	if selected_card < 0 and combat.player_on_portal() and target == combat.player_portal_destination():
+		use_player_portal()
 		return
 	if selected_card >= 0:
 		var card_name := "所选卡牌"
@@ -1404,33 +1574,87 @@ func handle_battle_cell(target: Vector2i) -> void:
 			_after_combat_action()
 			_play_actor_state("Player", "attack", card_name)
 			if combat.enemy_hp < enemy_hp_before:
-				_play_actor_state("Enemy", "hurt", "-%d" % (enemy_hp_before - combat.enemy_hp))
+				var damage_dealt: int = enemy_hp_before - combat.enemy_hp
+				_play_actor_state("Enemy", "hurt", "-%d" % damage_dealt)
+				_show_actor_damage_feedback("Enemy", damage_dealt)
 			return
 		else:
 			selected_card = -1
 			status_message = "%s不能放在这里，已自动取消选牌；现在可点击绿色格移动。" % card_name
 	else:
+		var source: Vector2i = combat.player_pos
 		if combat.move_player(target):
-			status_message = "你站在传送门入口：选择穿过或留在这里。" if combat.has_pending_player_portal() else "移动完成。选择手牌布置陷阱，或直接砸向有视野的敌人格。"
+			status_message = "你站在传送门上：可花 %d 行动力穿门，也可继续行动。" % combat.move_cost if combat.player_on_portal() else "移动完成。选择手牌布置陷阱，或直接砸向有视野的敌人格。"
 			_after_combat_action()
-			_play_actor_state("Player", "move")
+			_animate_player_battle_step(source, target)
 			return
 		else:
 			status_message = "不能移动到该格：只能走相邻绿色格，且需要足够行动力。"
 	_after_combat_action()
 
 
-func resolve_player_portal(use_portal: bool) -> void:
+func _animate_player_battle_step(source: Vector2i, target: Vector2i) -> void:
+	_play_actor_state("Player", "move")
+	var player_node := battle_root.get_node_or_null("Player") as Node3D
+	var duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
+	if player_node == null or duration <= 0.0:
+		return
+	animation_busy = true
+	active_animation_kind = "player_step"
+	var source_height := float(combat.heights.get(source, 0)) * 0.64
+	var target_height := float(combat.heights.get(target, 0)) * 0.64
+	var start_position := _battle_world(source) + Vector3.UP * (source_height - target_height)
+	var target_position := _battle_world(target)
+	player_node.position = start_position
+	var tween := create_tween()
+	active_motion_tween = tween
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_method(_set_battle_actor_step_motion.bind(player_node, start_position, target_position), 0.0, 1.0, duration)
+	tween.finished.connect(func() -> void:
+		if active_motion_tween != tween:
+			return
+		if is_instance_valid(player_node):
+			player_node.position = target_position
+		_complete_dynamic_effect()
+		_refresh_hud()
+	)
+
+
+func use_player_portal() -> void:
 	if animation_busy or phase != "combat" or combat == null:
 		return
-	if use_portal and not combat.can_use_pending_player_portal():
-		status_message = "传送门出口被怪物占住了；你只能先留在入口。"
+	if not combat.can_use_player_portal():
+		status_message = "行动力不足，或传送门出口地形不可用。"
 		_refresh_hud()
 		return
-	if not combat.resolve_player_portal(use_portal):
+	var source: Vector2i = combat.player_pos
+	var target: Vector2i = combat.player_portal_destination()
+	if not combat.use_player_portal():
 		return
-	status_message = "你主动穿过传送门，到达成对出口。" if use_portal else "你决定留在入口格，传送门没有强制发动。"
+	status_message = "你花费 %d 行动力穿过传送门。" % combat.move_cost
 	_after_combat_action()
+	_animate_player_portal(source, target)
+
+
+func _animate_player_portal(source: Vector2i, target: Vector2i) -> void:
+	var player_node := battle_root.get_node_or_null("Player") as Node3D
+	var duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
+	if player_node == null or duration <= 0.0:
+		return
+	animation_busy = true
+	active_animation_kind = "player_portal"
+	player_node.position = _battle_world(source)
+	_play_actor_state("Player", "move", "穿门")
+	var tween := create_tween()
+	active_motion_tween = tween
+	tween.tween_property(player_node, "scale", Vector3(0.08, 1.35, 0.08), duration * 0.42)
+	tween.tween_callback(func() -> void: player_node.position = _battle_world(target))
+	tween.tween_property(player_node, "scale", Vector3.ONE, duration * 0.58)
+	tween.finished.connect(func() -> void:
+		if active_motion_tween == tween:
+			_complete_dynamic_effect()
+			_refresh_hud()
+	)
 
 
 func battle_cell_from_viewport(view_pos: Vector2) -> Vector2i:
@@ -1474,6 +1698,8 @@ func reset_battle_camera() -> void:
 	for raw_height in combat.heights.values():
 		max_height = maxf(max_height, float(raw_height))
 	battle_camera_target = Vector3(0.0, max_height * 0.18, 0.0)
+	battle_camera_yaw = atan2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z)
+	battle_camera_pitch = atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
 	_apply_battle_camera()
 	var half_x := (float(combat.cols - 1) * 0.5 + 0.65) * BATTLE_CELL
 	var half_z := (float(combat.rows - 1) * 0.5 + 0.65) * BATTLE_CELL
@@ -1514,6 +1740,18 @@ func pan_battle_camera(pixel_delta: Vector2) -> void:
 	_apply_battle_camera()
 
 
+func orbit_battle_camera(pixel_delta: Vector2) -> void:
+	if phase != "combat" or combat == null:
+		return
+	battle_camera_yaw -= pixel_delta.x * 0.008
+	battle_camera_pitch = atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
+	var max_height := 0.0
+	for raw_height in combat.heights.values():
+		max_height = maxf(max_height, float(raw_height))
+	battle_camera_target = Vector3(0.0, max_height * 0.18, 0.0)
+	_apply_battle_camera()
+
+
 func zoom_battle_camera(view_pos: Vector2, zoom_factor: float) -> void:
 	if phase != "combat" or combat == null:
 		return
@@ -1539,7 +1777,9 @@ func _clamp_battle_camera_target() -> void:
 
 func _apply_battle_camera() -> void:
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.position = battle_camera_target + CAMERA_DIRECTION
+	var horizontal := cos(battle_camera_pitch) * battle_camera_distance
+	var direction := Vector3(sin(battle_camera_yaw) * horizontal, sin(battle_camera_pitch) * battle_camera_distance, cos(battle_camera_yaw) * horizontal)
+	camera.position = battle_camera_target + direction
 	camera.look_at(battle_camera_target + Vector3(0, 0.2, 0), Vector3.UP)
 
 
@@ -1601,7 +1841,7 @@ func reward_description(reward: Dictionary) -> String:
 
 
 func _save_run() -> void:
-	if phase == "home" or phase.begins_with("lab_") and event_context.is_empty():
+	if kenney_build_lab_mode or phase == "home" or phase.begins_with("lab_") and event_context.is_empty():
 		return
 	var placed_entries: Array[Dictionary] = []
 	for raw_pos in room_rules.placed.keys():
@@ -1627,6 +1867,7 @@ func _save_run() -> void:
 		"reward_origin": reward_origin,
 		"current_room": [current_room_pos.x, current_room_pos.y],
 		"pending_room": [pending_room_pos.x, pending_room_pos.y],
+		"house_player_facing_yaw": house_player_facing_yaw,
 		"placed": placed_entries,
 		"remaining_ids": remaining_ids,
 	}
@@ -1658,7 +1899,10 @@ func build_house_world() -> void:
 	for raw_pos in room_rules.placed.keys():
 		var pos: Vector2i = raw_pos
 		_add_room_mesh(pos, room_rules.placed[pos])
-	_add_room_bridges()
+	if kenney_build_lab_mode:
+		_add_kenney_formal_composer()
+	else:
+		_add_room_bridges()
 	for frontier in room_rules.frontiers():
 		_add_frontier_mesh(frontier, phase == "build" and frontier == selected_frontier)
 	if phase == "build" and not build_offers.is_empty():
@@ -1666,6 +1910,96 @@ func build_house_world() -> void:
 	_add_house_player()
 	if phase != "combat":
 		_set_house_camera()
+
+
+func _add_kenney_formal_composer() -> void:
+	var composer := PCG_HAND_LAYOUT_LAB.instantiate() as Node3D
+	composer.name = "KenneyFormalComposer"
+	composer.generation_seed = run_seed
+	composer.animate_room_build = false
+	composer.show_room_ids = true
+	composer.kenney_only = true
+	composer.use_kaykit_room_shell = true
+	composer.show_summary_title = false
+	composer.explicit_connection_edges = _formal_connection_edge_keys()
+	composer.scale = Vector3.ONE * (HOUSE_CELL / 1.55)
+	var layout := composer.get_node("Layout") as Node3D
+	for existing: Node in layout.get_children():
+		layout.remove_child(existing)
+		existing.free()
+	for record: Dictionary in _formal_instance_records_in_connection_order():
+		var room: Dictionary = record["room"]
+		var origin_raw: Array = room.get("origin", [0, 0])
+		var origin := Vector2i(int(origin_raw[0]), int(origin_raw[1]))
+		var piece := Node3D.new()
+		piece.name = "Placed_%s" % str(record["id"]).replace("@", "_").replace(",", "_")
+		piece.set_script(PCG_HAND_ROOM_SCRIPT)
+		piece.set("room_id", str(record["id"]))
+		piece.set("shape_id", str(room.get("footprint_kind", "single")))
+		piece.set("elevated", bool(room.get("elevated", false)))
+		piece.position = Vector3(float(origin.x) * 1.55, 0.0, float(origin.y) * 1.55)
+		piece.rotation.y = float(int(room.get("rotation", 0))) * PI * 0.5
+		layout.add_child(piece)
+	house_root.add_child(composer)
+
+
+func _formal_instance_records_in_connection_order() -> Array[Dictionary]:
+	var by_id: Dictionary = {}
+	for raw_pos: Variant in room_rules.placed.keys():
+		var pos: Vector2i = raw_pos
+		var room: Dictionary = room_rules.placed[pos]
+		var instance_id := str(room.get("instance_id", "room@%d,%d" % [pos.x, pos.y]))
+		if not by_id.has(instance_id):
+			by_id[instance_id] = {"id": instance_id, "room": room, "cells": []}
+		(by_id[instance_id]["cells"] as Array).append(pos)
+	var result: Array[Dictionary] = []
+	if by_id.is_empty():
+		return result
+	var start_id := str(room_rules.placed.get(Vector2i.ZERO, {}).get("instance_id", by_id.keys()[0]))
+	var queued: Dictionary = {start_id: true}
+	var queue: Array[String] = [start_id]
+	while not queue.is_empty():
+		var instance_id: String = queue.pop_front()
+		if not by_id.has(instance_id):
+			continue
+		var record: Dictionary = by_id[instance_id]
+		result.append(record)
+		for cell: Vector2i in record["cells"]:
+			for side in range(4):
+				var neighbor: Vector2i = cell + RoomRules.DIRS[side]
+				if not room_rules.placed.has(neighbor) or not room_rules.cell_has_door(cell, side) or not room_rules.cell_has_door(neighbor, (side + 2) % 4):
+					continue
+				var neighbor_id := str(room_rules.placed[neighbor].get("instance_id", ""))
+				if neighbor_id == instance_id or queued.has(neighbor_id):
+					continue
+				queued[neighbor_id] = true
+				queue.append(neighbor_id)
+	var remaining_ids: Array = by_id.keys()
+	remaining_ids.sort()
+	for raw_id: Variant in remaining_ids:
+		var instance_id := str(raw_id)
+		if not queued.has(instance_id):
+			result.append(by_id[instance_id])
+	return result
+
+
+func _formal_connection_edge_keys() -> Dictionary:
+	var result: Dictionary = {}
+	for raw_pos: Variant in room_rules.placed.keys():
+		var pos: Vector2i = raw_pos
+		for side in [1, 2]:
+			var neighbor: Vector2i = pos + RoomRules.DIRS[side]
+			if not room_rules.placed.has(neighbor) or room_rules.same_instance(pos, neighbor):
+				continue
+			if room_rules.cell_has_door(pos, side) and room_rules.cell_has_door(neighbor, (side + 2) % 4):
+				result[_grid_edge_key(pos, neighbor)] = true
+	return result
+
+
+func _grid_edge_key(a: Vector2i, b: Vector2i) -> String:
+	var first := a if a.y < b.y or (a.y == b.y and a.x < b.x) else b
+	var second := b if first == a else a
+	return "%d,%d|%d,%d" % [first.x, first.y, second.x, second.y]
 
 
 func _add_room_mesh(pos: Vector2i, room: Dictionary) -> void:
@@ -1678,6 +2012,8 @@ func _add_room_mesh(pos: Vector2i, room: Dictionary) -> void:
 
 func _populate_room_visual(node: Node3D, pos: Vector2i, room: Dictionary) -> void:
 	_clear_children(node)
+	if kenney_build_lab_mode:
+		return
 	var revealed := bool(room.get("revealed", false)) or bool(room.get("completed", false))
 	var kind := str(room.get("kind", "quiet"))
 	var accent := COL_TEAL
@@ -1687,17 +2023,26 @@ func _populate_room_visual(node: Node3D, pos: Vector2i, room: Dictionary) -> voi
 		accent = COL_MAGENTA
 	elif kind == "event":
 		accent = Color("7964a5")
-	if pos == current_room_pos:
+	if room_rules.same_instance(pos, current_room_pos):
 		accent = COL_GOLD
 	_add_box(node, "Base", Vector3.ZERO + Vector3(0, 0.14, 0), Vector3(3.05, 0.28, 3.05), _material(accent.darkened(0.35)))
 	_add_box(node, "Floor", Vector3(0, 0.31, 0), Vector3(2.82, 0.12, 2.82), _material(COL_PAPER if revealed else Color("26363d")))
 	var doors: Array = room.get("doors", [false, false, false, false])
 	for side in range(4):
+		if room_rules.same_instance(pos, pos + RoomRules.DIRS[side]):
+			continue
 		_add_room_edge(node, side, bool(doors[side]), accent)
-	var decor_count := RoomArtRegistry.decorate(node, room, revealed)
+	var decor_count := 0
+	if room_rules.is_instance_anchor(pos):
+		var decor_root := Node3D.new()
+		decor_root.name = "RoomDecor"
+		decor_root.rotation.y = -float(int(room.get("rotation", 0))) * PI * 0.5
+		node.add_child(decor_root)
+		decor_count = RoomArtRegistry.decorate(decor_root, room, revealed)
 	var label_text := str(room.get("name", "房间")) if revealed else "?"
 	var label_y := 2.10 if decor_count > 0 else 1.18
-	_add_label(node, "Label", label_text, Vector3(0, label_y, 0), accent if revealed else COL_GOLD, 44)
+	if room_rules.is_instance_anchor(pos):
+		_add_label(node, "Label", "%s · %d格" % [label_text, int(room.get("room_size", 1))], Vector3(0, label_y, 0), accent if revealed else COL_GOLD, 44)
 
 
 func _add_room_edge(parent: Node3D, side: int, has_door: bool, color: Color) -> void:
@@ -1722,12 +2067,12 @@ func _add_room_edge(parent: Node3D, side: int, has_door: bool, color: Color) -> 
 func _add_room_bridges() -> void:
 	for raw_pos in room_rules.placed.keys():
 		var pos: Vector2i = raw_pos
-		var room: Dictionary = room_rules.placed[pos]
-		var doors: Array = room.get("doors", [])
-		if doors.size() >= 4 and bool(doors[1]) and room_rules.placed.has(pos + Vector2i.RIGHT):
-			_add_box(house_root, "Bridge", (_house_world(pos) + _house_world(pos + Vector2i.RIGHT)) * 0.5 + Vector3(0, 0.24, 0), Vector3(0.55, 0.12, 1.05), _material(COL_PAPER))
-		if doors.size() >= 4 and bool(doors[2]) and room_rules.placed.has(pos + Vector2i.DOWN):
-			_add_box(house_root, "Bridge", (_house_world(pos) + _house_world(pos + Vector2i.DOWN)) * 0.5 + Vector3(0, 0.24, 0), Vector3(1.05, 0.12, 0.55), _material(COL_PAPER))
+		for side in [1, 2]:
+			var neighbor: Vector2i = pos + RoomRules.DIRS[side]
+			if not room_rules.placed.has(neighbor) or not room_rules.cell_has_door(pos, side):
+				continue
+			var bridge_size := Vector3(0.55, 0.12, 2.82) if side == 1 else Vector3(2.82, 0.12, 0.55)
+			_add_box(house_root, "RoomJoin" if room_rules.same_instance(pos, neighbor) else "Bridge", (_house_world(pos) + _house_world(neighbor)) * 0.5 + Vector3(0, 0.24, 0), bridge_size, _material(COL_PAPER))
 
 
 func _add_frontier_mesh(pos: Vector2i, selected: bool) -> void:
@@ -1745,18 +2090,53 @@ func _add_build_preview() -> void:
 	var room: Dictionary = build_offers[selected_offer]
 	var node := Node3D.new()
 	node.name = "BuildPreview"
-	node.position = _house_world(selected_frontier) + Vector3(0, 0.20, 0)
+	var preview_origin := room_rules.placement_origin(selected_frontier, room, offer_rotation)
+	node.position = _house_world(preview_origin) + Vector3(0, 0.20, 0)
 	node.rotation.y = -float(offer_rotation) * PI * 0.5
 	house_root.add_child(node)
 	var preview_room := room.duplicate(true)
 	preview_room["revealed"] = false
 	preview_room["completed"] = false
 	preview_room["doors"] = room_rules.normalize_doors(room.get("doors", []))
-	_populate_room_visual(node, selected_frontier, preview_room)
+	if kenney_build_lab_mode:
+		for offset: Vector2i in room_rules.footprint_cells(room):
+			_add_kenney_preview_cell(node, offset)
+	else:
+		_populate_room_visual(node, selected_frontier, preview_room)
+		for offset: Vector2i in room_rules.footprint_cells(room):
+			if offset == Vector2i.ZERO:
+				continue
+			var footprint_cell := Node3D.new()
+			footprint_cell.name = "Footprint_%d_%d" % [offset.x, offset.y]
+			footprint_cell.position = Vector3(float(offset.x) * HOUSE_CELL, 0.0, float(offset.y) * HOUSE_CELL)
+			node.add_child(footprint_cell)
+			_add_box(footprint_cell, "Base", Vector3(0, 0.14, 0), Vector3(3.05, 0.28, 3.05), _material(Color("27343a")))
+			_add_box(footprint_cell, "Floor", Vector3(0, 0.31, 0), Vector3(2.82, 0.12, 2.82), _material(Color("26363d")))
 	var validity := _add_cylinder(node, "PreviewValidity", Vector3(0, 0.14, 0), 1.58, 0.08, _material(Color(COL_GREEN if can_place_selected_offer() else COL_RED, 0.72), true, 0.08))
 	validity.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_add_label(node, "PreviewRotation", "%d°" % (offer_rotation * 90), Vector3(0, 1.68, 0), Color.WHITE, 30)
 	_update_build_preview_validity(node)
+
+
+func _add_kenney_preview_cell(parent: Node3D, offset: Vector2i) -> void:
+	var cell_root := Node3D.new()
+	cell_root.name = "KenneyPreview_%d_%d" % [offset.x, offset.y]
+	cell_root.position = Vector3(float(offset.x) * HOUSE_CELL, 0.0, float(offset.y) * HOUSE_CELL)
+	parent.add_child(cell_root)
+	_add_box(cell_root, "GhostBase", Vector3(0, 0.10, 0), Vector3(HOUSE_CELL * 0.94, 0.16, HOUSE_CELL * 0.94), _material(Color(COL_GREEN if can_place_selected_offer() else COL_RED, 0.30), true))
+	var packed := load(KAYKIT_DUNGEON_ROOT + "floor_wood_large.gltf.glb") as PackedScene
+	if packed == null:
+		return
+	var floor_model := packed.instantiate() as Node3D
+	if floor_model == null:
+		return
+	floor_model.name = "FloorModel"
+	floor_model.position.y = 0.20
+	floor_model.scale = Vector3.ONE * (HOUSE_CELL / 4.0)
+	cell_root.add_child(floor_model)
+	var ghost_material := _material(Color(COL_GREEN if can_place_selected_offer() else COL_RED, 0.34), true, 0.05)
+	for raw_mesh: Node in floor_model.find_children("*", "MeshInstance3D", true, false):
+		(raw_mesh as MeshInstance3D).material_override = ghost_material
 
 
 func _update_build_preview_validity(preview: Node3D) -> void:
@@ -1764,6 +2144,13 @@ func _update_build_preview_validity(preview: Node3D) -> void:
 	var validity := preview.get_node_or_null("PreviewValidity") as MeshInstance3D
 	if validity != null:
 		validity.material_override = _material(Color(COL_GREEN if valid else COL_RED, 0.72), true, 0.08)
+	for raw_ghost: Node in preview.find_children("GhostBase", "MeshInstance3D", true, false):
+		(raw_ghost as MeshInstance3D).material_override = _material(Color(COL_GREEN if valid else COL_RED, 0.30), true)
+	for preview_cell: Node in preview.find_children("KenneyPreview_*", "Node3D", true, false):
+		var model := preview_cell.get_node_or_null("FloorModel")
+		if model != null:
+			for raw_mesh: Node in model.find_children("*", "MeshInstance3D", true, false):
+				(raw_mesh as MeshInstance3D).material_override = _material(Color(COL_GREEN if valid else COL_RED, 0.34), true, 0.05)
 	var label := preview.get_node_or_null("PreviewRotation") as Label3D
 	if label != null:
 		label.text = "%d° · %s" % [offer_rotation * 90, "可摆" if valid else "门不合"]
@@ -1774,10 +2161,15 @@ func _add_house_player() -> void:
 	var node := Node3D.new()
 	node.name = "LiliToken"
 	node.position = _house_world(current_room_pos)
+	node.rotation.y = house_player_facing_yaw
 	house_root.add_child(node)
-	_add_cylinder(node, "Body", Vector3(0, 0.9, 0), 0.34, 1.15, _material(COL_TEAL))
-	_add_cylinder(node, "Hat", Vector3(0, 1.58, 0), 0.46, 0.18, _material(COL_RED))
-	_add_label(node, "Name", "LILI", Vector3(0, 2.0, 0), Color.WHITE, 34)
+	_add_cylinder(node, "TokenBase", Vector3(0, 0.09, 0), 0.48, 0.12, _material(COL_TEAL, false, 0.05))
+	var presenter := CharacterPresenter.new()
+	presenter.name = "Presenter"
+	presenter.position = Vector3(0.0, 0.14, 0.0)
+	node.add_child(presenter)
+	presenter.configure("player", (presentation.get("actors", {}).get("player", {}) as Dictionary))
+	_add_label(node, "Name", "LILI", Vector3(0, 2.48, 0), Color.WHITE, 34)
 
 
 func build_battle_world() -> void:
@@ -1812,7 +2204,11 @@ func build_battle_world() -> void:
 				surface_color = surface_color.darkened(0.035)
 			if combat.walls.has(pos):
 				surface_color = COL_WALL_GREEN.darkened(0.12)
-			_add_box(cell_node, "Frame", Vector3(0, platform_height * 0.5, 0), Vector3(BATTLE_CELL - 0.08, platform_height, BATTLE_CELL - 0.08), _material(rim_color, false, 0.04 if rim_color != COL_GRID_DARK else 0.0))
+			if height == 0:
+				_add_box(cell_node, "Frame", Vector3(0, platform_height * 0.5, 0), Vector3(BATTLE_CELL - 0.08, platform_height, BATTLE_CELL - 0.08), _material(rim_color, false, 0.04 if rim_color != COL_GRID_DARK else 0.0))
+			else:
+				_add_box(cell_node, "TerrainFoot", Vector3(0, 0.14, 0), Vector3(BATTLE_CELL - 0.08, 0.28, BATTLE_CELL - 0.08), _material(rim_color))
+				_add_battle_height_asset(cell_node, pos, height, platform_height + 0.13)
 			_add_box(cell_node, "Surface", Vector3(0, platform_height + 0.055, 0), Vector3(BATTLE_CELL - 0.34, 0.11, BATTLE_CELL - 0.34), _material(surface_color))
 			var top_y := platform_height + 0.13
 			var is_hurt_cell: bool = pos in (intent.get("hurt", []) as Array)
@@ -1842,6 +2238,8 @@ func build_battle_world() -> void:
 				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
 	_add_battle_pawn(combat.player_pos, true, true)
 	_add_battle_pawn(combat.enemy_pos, false, combat.enemy_revealed)
+	if combat.has_decoy():
+		_add_decoy_pawn(combat.decoy_pos)
 	_add_battle_stage_decor()
 
 
@@ -1861,6 +2259,30 @@ func _add_corner_marks(parent: Node3D, prefix: String, color: Color, y: float) -
 		var sx := -1.0 if index % 2 == 0 else 1.0
 		var sz := -1.0 if index < 2 else 1.0
 		_add_box(parent, "%s_%d" % [prefix, index], Vector3(sx * edge, y, sz * edge), Vector3(0.28, 0.055, 0.28), _material(color, false, 0.08))
+
+
+func _add_battle_height_asset(parent: Node3D, pos: Vector2i, height: int, logical_top_y: float) -> void:
+	var options: Array = BATTLE_HEIGHT_ASSETS.get(height, [])
+	if options.is_empty():
+		return
+	var asset_name := str(options[posmod(pos.x * 17 + pos.y * 31, options.size())])
+	var packed := load(BATTLE_HEIGHT_ASSET_ROOT + asset_name) as PackedScene
+	if packed == null:
+		return
+	var prop := packed.instantiate() as Node3D
+	if prop == null:
+		return
+	prop.name = "TerrainAsset_H%d_%s" % [height, asset_name.get_basename()]
+	prop.position = Vector3(0, 0.31, 0)
+	prop.rotation.y = float(posmod(pos.x + pos.y, 4)) * PI * 0.5
+	prop.scale = Vector3.ONE * (0.43 if height == 1 else 0.46)
+	parent.add_child(prop)
+	for child: Node in prop.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := child as MeshInstance3D
+		if mesh_instance != null:
+			mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	var top_marker := _add_box(parent, "WalkableAssetTop", Vector3(0, logical_top_y - 0.075, 0), Vector3(BATTLE_CELL - 0.46, 0.055, BATTLE_CELL - 0.46), _material(Color(COL_PAPER, 0.46), true, 0.03))
+	top_marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 func _add_portal_marker(parent: Node3D, pos: Vector2i, y: float) -> void:
@@ -1887,6 +2309,7 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
 	var node := Node3D.new()
 	node.name = "Player" if is_player else "Enemy"
 	node.position = _battle_world(pos)
+	node.rotation.y = battle_player_facing_yaw if is_player else battle_enemy_facing_yaw
 	battle_root.add_child(node)
 	var floor_y := 0.39 + float(combat.heights.get(pos, 0)) * 0.64
 	_add_cylinder(node, "PawnBase", Vector3(0, floor_y + 0.08, 0), 0.52, 0.16, _material(COL_TEAL if is_player else COL_RED if revealed else Color("1f2930"), false, 0.04))
@@ -1897,15 +2320,61 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
 	var actor_key := "player" if is_player else "enemy"
 	presenter.configure(actor_key, (presentation.get("actors", {}).get(actor_key, {}) as Dictionary))
 	presenter.state_changed.connect(_on_presenter_state_changed)
-	if not revealed and not is_player and presenter.sprite != null:
-		presenter.sprite.modulate = Color("30383d")
+	if not is_player:
+		presenter.set_obscured(not revealed)
 	_add_label(node, "PawnLabel", "你" if is_player else ("怪" if revealed else "?"), Vector3(0, floor_y + 2.05, 0), Color.WHITE if revealed or is_player else COL_GOLD, 31)
+
+
+func _add_decoy_pawn(pos: Vector2i) -> void:
+	var node := Node3D.new()
+	node.name = "PaperDecoy"
+	node.position = _battle_world(pos)
+	battle_root.add_child(node)
+	var floor_y := 0.39 + float(combat.heights.get(pos, 0)) * 0.64
+	_add_cylinder(node, "PaperBase", Vector3(0, floor_y + 0.06, 0), 0.42, 0.10, _material(Color("d5b97a")))
+	_add_box(node, "PaperBody", Vector3(0, floor_y + 0.72, 0), Vector3(0.72, 1.22, 0.10), _material(Color("efe0b9")))
+	var cross := _add_box(node, "PaperCross", Vector3(0, floor_y + 0.77, 0), Vector3(0.10, 1.05, 0.68), _material(Color("efe0b9")))
+	cross.rotation.y = PI * 0.5
+	_add_label(node, "PaperGlyph", "影", Vector3(0, floor_y + 1.48, 0), COL_MAGENTA, 34)
 
 
 func _play_actor_state(actor_node_name: String, state: String, callout: String = "") -> void:
 	var presenter := battle_root.get_node_or_null("%s/Presenter" % actor_node_name)
 	if presenter != null and presenter.has_method("play_state"):
 		presenter.play_state(state, callout)
+
+
+func _show_actor_damage_feedback(actor_node_name: String, damage: int) -> void:
+	var actor := battle_root.get_node_or_null(actor_node_name) as Node3D
+	if actor == null or damage <= 0:
+		return
+	var popup := Label3D.new()
+	popup.name = "DamageFeedback"
+	popup.text = "✦  -%d  ✦" % damage
+	popup.position = Vector3(0, 1.28, 0.12)
+	popup.font_size = 58
+	popup.pixel_size = 0.014
+	popup.modulate = Color("ff4e61")
+	popup.outline_modulate = Color("fff2d2")
+	popup.outline_size = 12
+	popup.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	popup.no_depth_test = true
+	popup.scale = Vector3(0.35, 0.35, 0.35)
+	actor.add_child(popup)
+	var base_actor_position := actor.position
+	var feedback := actor.create_tween()
+	feedback.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	feedback.tween_property(actor, "position", base_actor_position + Vector3(-0.18, 0.05, 0), 0.055)
+	feedback.tween_property(actor, "position", base_actor_position + Vector3(0.16, 0.0, 0), 0.055)
+	feedback.tween_property(actor, "position", base_actor_position, 0.09)
+	feedback.parallel().tween_property(actor, "scale", Vector3(1.16, 0.86, 1.16), 0.10)
+	feedback.tween_property(actor, "scale", Vector3.ONE, 0.13)
+	var popup_tween := popup.create_tween()
+	popup_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	popup_tween.tween_property(popup, "scale", Vector3.ONE, 0.11)
+	popup_tween.parallel().tween_property(popup, "position:y", 1.72, 0.34)
+	popup_tween.tween_property(popup, "modulate:a", 0.0, 0.20)
+	popup_tween.tween_callback(popup.queue_free)
 
 
 func _on_presenter_state_changed(_state: String) -> void:
@@ -1978,10 +2447,58 @@ func _set_house_camera() -> void:
 	var span := 12.0
 	for point in points:
 		span = maxf(span, maxf(absf(point.x - center.x) * 2.2 + 5.0, absf(point.z - center.z) * 2.2 + 5.0))
+	house_camera_fit_size = minf(28.0, span)
+	if not house_camera_user_adjusted:
+		house_camera_target = center
+	camera.size = clampf(house_camera_fit_size * house_camera_zoom_ratio, house_camera_fit_size * CAMERA_ZOOM_MIN, house_camera_fit_size * CAMERA_ZOOM_MAX)
+	_apply_house_camera()
+
+
+func pan_house_camera(pixel_delta: Vector2) -> void:
+	if phase not in ["explore", "build", "room_ready"]:
+		return
+	var units_per_pixel := camera.size / maxf(1.0, world_view_rect.size.y)
+	var right := Vector3(camera.global_transform.basis.x.x, 0.0, camera.global_transform.basis.x.z).normalized()
+	var screen_up := Vector3(camera.global_transform.basis.y.x, 0.0, camera.global_transform.basis.y.z).normalized()
+	house_camera_target += (-right * pixel_delta.x + screen_up * pixel_delta.y) * units_per_pixel
+	house_camera_user_adjusted = true
+	_clamp_house_camera_target()
+	_apply_house_camera()
+
+
+func zoom_house_camera(view_pos: Vector2, zoom_factor: float) -> void:
+	if phase not in ["explore", "build", "room_ready"]:
+		return
+	var before: Variant = _screen_to_plane(view_pos, 0.0)
+	var next_size := clampf(camera.size * zoom_factor, house_camera_fit_size * CAMERA_ZOOM_MIN, house_camera_fit_size * CAMERA_ZOOM_MAX)
+	camera.size = next_size
+	house_camera_zoom_ratio = next_size / maxf(0.001, house_camera_fit_size)
+	house_camera_user_adjusted = true
+	_apply_house_camera()
+	var after: Variant = _screen_to_plane(view_pos, 0.0)
+	if before is Vector3 and after is Vector3:
+		var anchor_shift: Vector3 = before - after
+		house_camera_target += Vector3(anchor_shift.x, 0.0, anchor_shift.z)
+		_clamp_house_camera_target()
+		_apply_house_camera()
+
+
+func reset_house_camera() -> void:
+	house_camera_zoom_ratio = 1.0
+	house_camera_user_adjusted = false
+	_set_house_camera()
+
+
+func _clamp_house_camera_target() -> void:
+	var limit := maxf(HOUSE_CELL * 2.0, house_camera_fit_size * 0.85)
+	house_camera_target.x = clampf(house_camera_target.x, -limit, limit)
+	house_camera_target.z = clampf(house_camera_target.z, -limit, limit)
+
+
+func _apply_house_camera() -> void:
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = minf(28.0, span)
-	camera.position = center + Vector3(10.5, 13.5, 11.5)
-	camera.look_at(center + Vector3(0, 0.2, 0), Vector3.UP)
+	camera.position = house_camera_target + Vector3(10.5, 13.5, 11.5)
+	camera.look_at(house_camera_target + Vector3(0, 0.2, 0), Vector3.UP)
 
 
 func _set_battle_camera() -> void:
@@ -2034,7 +2551,7 @@ func _make_build_offers(target: Vector2i) -> Array[Dictionary]:
 	for room in candidates:
 		if result.size() >= 3:
 			break
-		if not _contains_room(result, str(room.get("id", ""))):
+		if not _contains_room(result, str(room.get("id", ""))) and not room_rules.valid_rotations(target, room).is_empty():
 			result.append(room)
 	return result
 
@@ -2063,9 +2580,9 @@ func _rooms_connected(a: Vector2i, b: Vector2i) -> bool:
 		side = 3
 	if side < 0:
 		return false
-	var doors: Array = room_rules.placed[a].get("doors", [])
-	var other: Array = room_rules.placed[b].get("doors", [])
-	return doors.size() >= 4 and other.size() >= 4 and bool(doors[side]) and bool(other[(side + 2) % 4])
+	if room_rules.same_instance(a, b):
+		return true
+	return room_rules.cell_has_door(a, side) and room_rules.cell_has_door(b, (side + 2) % 4)
 
 
 func _contains_room(rooms: Array[Dictionary], room_id: String) -> bool:
@@ -2180,5 +2697,15 @@ func _refresh_hud() -> void:
 	if hud != null:
 		hud.sync_layout()
 		hud.queue_redraw()
-# Combat Lab intentionally keeps the same fixed action-point setup as real rooms;
-# this trailing note also guards SMB shares that do not truncate rewritten files.
+var _smb_tail_padding := """
+Combat Lab intentionally keeps the same fixed action-point setup as real rooms.
+This trailing padding also guards SMB shares that do not truncate rewritten files.
+padding padding padding padding padding padding padding padding padding padding
+padding padding padding padding padding padding padding padding padding padding
+padding padding padding padding padding padding padding padding padding padding
+padding padding padding padding padding padding padding padding padding padding
+padding padding padding padding padding padding padding padding padding padding
+padding padding padding padding padding padding padding padding padding padding
+padding padding padding padding padding padding padding padding padding padding
+padding padding padding padding padding padding padding padding padding padding
+"""

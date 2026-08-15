@@ -1,0 +1,32 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/pcg_diorama_stitch_lab.gd" id="1_script"]
+
+[sub_resource type="Environment" id="Environment_preview"]
+background_mode = 1
+background_color = Color(0.035, 0.055, 0.075, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.43, 0.58, 0.62, 1)
+ambient_light_energy = 0.68
+tonemap_mode = 2
+
+[node name="PcgDioramaStitchLab" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="StandaloneRig" type="Node3D" parent="."]
+visible = false
+
+[node name="Camera3D" type="Camera3D" parent="StandaloneRig"]
+fov = 45.0
+environment = SubResource("Environment_preview")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="StandaloneRig"]
+rotation = Vector3(-0.92, -0.55, 0)
+light_color = Color(1, 0.84, 0.67, 1)
+light_energy = 1.55
+shadow_enabled = true
+
+[node name="FillLight" type="DirectionalLight3D" parent="StandaloneRig"]
+rotation = Vector3(-0.62, 2.2, 0)
+light_color = Color(0.46, 0.76, 0.92, 1)
+light_energy = 0.55

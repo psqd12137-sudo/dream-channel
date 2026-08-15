@@ -128,7 +128,7 @@ func _draw_header() -> void:
 
 
 func _draw_house() -> void:
-	var explored := maxi(0, room_rules.placed.size() - 1)
+	var explored := maxi(0, room_rules.instance_count() - 1)
 	var run_length := int(content.get("run_length", 12))
 	_draw_stage_panel(Rect2(24, 102, 860, 650))
 	_label("山屋频道 · 探索中", Vector2(46, 137), 22, TEXT)
@@ -359,7 +359,7 @@ func _start_combat(room: Dictionary) -> void:
 	current_combat_room = room.duplicate(true)
 	combat = CombatRules.new()
 	var enemy: Dictionary = room.get("enemy", content.get("enemy", {}))
-	combat.setup(room["arena"], enemy, content["cards"], content["starter_deck"], run_seed + room_rules.placed.size(), content.get("run_rules", {}), active_relics)
+	combat.setup(room["arena"], enemy, content["cards"], content["starter_deck"], run_seed + room_rules.instance_count(), content.get("run_rules", {}), active_relics)
 	selected_card = -1
 	mode = "combat"
 	queue_redraw()

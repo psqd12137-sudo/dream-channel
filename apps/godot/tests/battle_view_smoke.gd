@@ -26,9 +26,9 @@ func _run() -> void:
 		var layout: Dictionary = hud.calculate_layout(viewport_size, "combat")
 		var board: Rect2 = layout["board_rect"]
 		_check(not board.intersects(layout["top_rect"]), "board must not overlap top HUD at %s" % viewport_size)
-		_check(not board.intersects(layout["side_rect"]), "board must not overlap card sidebar at %s" % viewport_size)
-		_check(not board.intersects(layout["coach_rect"]), "board must not overlap coach bar at %s" % viewport_size)
-		_check(board.size.x >= 760.0 or viewport_size.x < 1280.0, "desktop board should retain useful width")
+		var layout_scale: float = layout["scale"]
+		_check(board.size.x >= 1240.0 * layout_scale, "combat board should reclaim the removed sidebar width at %s" % viewport_size)
+		_check(board.size.y >= 540.0 * layout_scale, "combat board should reclaim the removed coach-bar height at %s" % viewport_size)
 
 	game.choose_omen(0)
 	var hall: Dictionary = _find_room(game.room_catalog, "hall")
@@ -46,8 +46,11 @@ func _run() -> void:
 	var camera: Camera3D = game.get_node(WORLD_ROOT + "/CameraRig/Camera3D")
 	var world_viewport: SubViewport = game.get_node("WorldLayer/WorldContainer/WorldViewport")
 	_check(_count_named_prefix(battle_root, "Cell_") == 36, "hall must render all 36 cells")
-	_check(_all_cells_have_layers(battle_root), "each cell must have a frame and surface")
+	_check(_all_cells_have_layers(battle_root), "each cell must have a base layer and logical walkable surface")
 	_check(_count_named_prefix(battle_root, "Height") > 0, "height cells must render H markers")
+	_check(_count_named_prefix(battle_root, "TerrainAsset_H1_") > 0, "H1 cells must use current furniture assets instead of tall cubes")
+	_check(_count_named_prefix(battle_root, "TerrainAsset_H2_") > 0, "H2 cells must use current furniture assets instead of tall cubes")
+	_check(_count_named_prefix(battle_root, "WalkableAssetTop") > 0, "height assets must expose a visible logical standing surface")
 	_check(_count_named_prefix(battle_root, "PortalLabel") == 2, "portal endpoints must render A/B markers")
 	_check(_count_named_prefix(battle_root, "Blocker") == 2, "hall walls must render blocker meshes")
 	var trap_cell := _first_empty_cell(game)
@@ -100,7 +103,8 @@ func _find_room(rooms: Array[Dictionary], id: String) -> Dictionary:
 func _all_cells_have_layers(root_node: Node) -> bool:
 	for child: Node in root_node.get_children():
 		if child.name.begins_with("Cell_"):
-			if child.get_node_or_null("Frame") == null or child.get_node_or_null("Surface") == null:
+			var has_base := child.get_node_or_null("Frame") != null or child.get_node_or_null("TerrainFoot") != null
+			if not has_base or child.get_node_or_null("Surface") == null:
 				return false
 	return true
 
@@ -134,3 +138,11 @@ func _finish() -> void:
 		for failure: String in failures:
 			push_error("CHANNEL_BATTLE_VIEW_SMOKE: %s" % failure)
 		quit(1)
+var _smb_tail_padding := """
+:
+			push_error("CHANNEL_BATTLE_VIEW_SMOKE: %s" % failure)
+		quit(1)
+
+Shared-volume padding keeps obsolete tail bytes inert after layout-test rewrites.
+"""
+# SMB_FINAL_PADDING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ

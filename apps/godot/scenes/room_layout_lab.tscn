@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://rfje3pytkevb"]
 
-[ext_resource type="Script" uid="uid://bnofcxda0jlr6" path="res://scripts/room_layout_lab.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/room_layout_lab.gd" id="1_script"]
 [ext_resource type="PackedScene" uid="uid://elqikrll8ise" path="res://assets/quaternius/ultimate_house_interior/Bookshelf.fbx" id="2_bookshelf"]
 [ext_resource type="PackedScene" uid="uid://dbbuxhwsdxwm1" path="res://assets/quaternius/ultimate_house_interior/Chair_2.fbx" id="3_chair"]
 [ext_resource type="PackedScene" uid="uid://dwcqem5h6h4sr" path="res://assets/quaternius/ultimate_house_interior/Couch_Medium1.fbx" id="4_couch"]
@@ -11,6 +11,7 @@
 [ext_resource type="PackedScene" uid="uid://ugawbuc73nmu" path="res://assets/quaternius/ultimate_house_interior/Table_RoundLarge.fbx" id="9_table"]
 [ext_resource type="PackedScene" uid="uid://rnb7jgfgcysr" path="res://assets/quaternius/ultimate_house_interior/Window_Round1.fbx" id="10_window"]
 [ext_resource type="PackedScene" path="res://scenes/room_layout_cell.tscn" id="11_cell"]
+[ext_resource type="Script" path="res://scripts/room_layout_cell.gd" id="12_cell_script"]
 
 [sub_resource type="Environment" id="Environment_lab"]
 background_mode = 1
@@ -62,10 +63,10 @@ light_color = Color(0.31, 0.75, 0.83, 1)
 light_energy = 0.58
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=752802959]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 27, 24)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 62, 72, 62)
 projection = 1
 current = true
-size = 30.5
+size = 82.0
 
 [node name="LayoutGuide" type="CanvasLayer" parent="." unique_id=316336990 groups=["layout_guide"]]
 
@@ -88,7 +89,10 @@ theme_override_font_sizes/font_size = 15
 text = "24 个房间都在这里 · 金色短条＝门洞禁区 · 家具保持在纸盒底盘内 · 选中家具后在 Inspector 改 Position / Rotation / Scale"
 
 [node name="Hall" type="Node3D" parent="." unique_id=1685894629]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.45, 0, -2.15)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18.75, 0, -6.25)
+script = ExtResource("12_cell_script")
+display_name = "长廊\nhall · 5格精英"
+layout_cells = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)])
 metadata/_room_id = "hall"
 
 [node name="Base" type="CSGBox3D" parent="Hall" unique_id=517047659]
@@ -128,7 +132,10 @@ transform = Transform3D(-0.38, 0, 9.633691e-07, 0, 0.38, 0, -9.633691e-07, 0, -0
 transform = Transform3D(0.25, 0, 0, 0, 0.25, 0, 0, 0, 0.25, 0, 1.65, 0)
 
 [node name="Parlor" type="Node3D" parent="." unique_id=964158904]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.75, 0, -2.15)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -31.25, 0, -6.25)
+script = ExtResource("12_cell_script")
+display_name = "会客室\nparlor · 3格玩法"
+layout_cells = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1)])
 metadata/_room_id = "parlor"
 
 [node name="Base" type="CSGBox3D" parent="Parlor" unique_id=155832481]
@@ -171,7 +178,10 @@ transform = Transform3D(0.16904743, 0, 0.36252305, 0, 0.4, 0, -0.36252305, 0, 0.
 transform = Transform3D(0.28, 0, 0, 0, 0.28, 0, 0, 0, 0.28, 0, 1.65, 0)
 
 [node name="WestWing" type="Node3D" parent="." unique_id=1487593812]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.75, 0, -6.45)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 31.25, 0, -18.75)
+script = ExtResource("12_cell_script")
+display_name = "西厢\nwest_wing · 3格玩法"
+layout_cells = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)])
 metadata/_room_id = "west_wing"
 
 [node name="Base" type="CSGBox3D" parent="WestWing" unique_id=414545391]
@@ -211,7 +221,10 @@ transform = Transform3D(-0.42, 0, 1.0647763e-06, 0, 0.42, 0, -1.0647763e-06, 0, 
 transform = Transform3D(-0.31127834, 0, 0.21795823, 0, 0.38, 0, -0.21795823, 0, -0.31127834, 0.83, 0.38, -0.68)
 
 [node name="Cellar" type="Node3D" parent="." unique_id=2115886635]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 0, 6.45)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.25, 0, 18.75)
+script = ExtResource("12_cell_script")
+display_name = "地窖\ncellar · 5格精英"
+layout_cells = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(0, 2)])
 metadata/_room_id = "cellar"
 
 [node name="Base" type="CSGBox3D" parent="Cellar" unique_id=1513743385]
@@ -251,101 +264,108 @@ transform = Transform3D(-1.3755962e-06, 0, -0.38, 0, 0.38, 0, 0.38, 0, -1.375596
 transform = Transform3D(0.23, 0, 0, 0, 0.23, 0, 0, 0, 0.23, -0.45, 1.55, -0.35)
 
 [node name="Foyer" parent="." instance=ExtResource("11_cell")]
-position = Vector3(-10.75, 0, -6.45)
-display_name = "玄关\nfoyer"
+position = Vector3(-31.25, 0, -18.75)
+display_name = "玄关\nfoyer · 1格节奏"
 metadata/_room_id = "foyer"
 
 [node name="Porch" parent="." instance=ExtResource("11_cell")]
-position = Vector3(-6.45, 0, -6.45)
-display_name = "门廊\nporch"
+position = Vector3(-18.75, 0, -18.75)
+display_name = "门廊\nporch · 1格节奏"
 metadata/_room_id = "porch"
 
 [node name="Living" parent="." instance=ExtResource("11_cell")]
-position = Vector3(-2.15, 0, -6.45)
-display_name = "客厅\nliving"
+position = Vector3(-6.25, 0, -18.75)
+display_name = "客厅\nliving · 1格节奏"
 metadata/_room_id = "living"
 
 [node name="Kitchen" parent="." instance=ExtResource("11_cell")]
-position = Vector3(2.15, 0, -6.45)
-display_name = "厨房\nkitchen"
+position = Vector3(6.25, 0, -18.75)
+display_name = "厨房\nkitchen · 1格节奏"
 metadata/_room_id = "kitchen"
 
 [node name="Mudroom" parent="." instance=ExtResource("11_cell")]
-position = Vector3(6.45, 0, -6.45)
-display_name = "泥靴间\nmudroom"
+position = Vector3(18.75, 0, -18.75)
+display_name = "泥靴间\nmudroom · 3格玩法"
+layout_cells = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)])
 metadata/_room_id = "mudroom"
 
 [node name="Pantry" parent="." instance=ExtResource("11_cell")]
-position = Vector3(-2.15, 0, -2.15)
-display_name = "储藏间\npantry"
+position = Vector3(-6.25, 0, -6.25)
+display_name = "储藏间\npantry · 1格节奏"
 metadata/_room_id = "pantry"
 
 [node name="Yard" parent="." instance=ExtResource("11_cell")]
-position = Vector3(2.15, 0, -2.15)
-display_name = "后院\nyard"
+position = Vector3(6.25, 0, -6.25)
+display_name = "后院\nyard · 1格节奏"
 metadata/_room_id = "yard"
 
 [node name="Shed" parent="." instance=ExtResource("11_cell")]
-position = Vector3(6.45, 0, -2.15)
-display_name = "工具棚\nshed"
+position = Vector3(18.75, 0, -6.25)
+display_name = "工具棚\nshed · 1格节奏"
 metadata/_room_id = "shed"
 
 [node name="Guest" parent="." instance=ExtResource("11_cell")]
-position = Vector3(10.75, 0, -2.15)
-display_name = "客房\nguest"
+position = Vector3(31.25, 0, -6.25)
+display_name = "客房\nguest · 1格节奏"
 metadata/_room_id = "guest"
 
 [node name="Gallery" parent="." instance=ExtResource("11_cell")]
-position = Vector3(-10.75, 0, 2.15)
-display_name = "画廊\ngallery"
+position = Vector3(-31.25, 0, 6.25)
+display_name = "画廊\ngallery · 3格玩法"
+layout_cells = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1)])
 metadata/_room_id = "gallery"
 
 [node name="Greenhouse" parent="." instance=ExtResource("11_cell")]
-position = Vector3(-6.45, 0, 2.15)
-display_name = "温室\ngreenhouse"
+position = Vector3(-18.75, 0, 6.25)
+display_name = "温室\ngreenhouse · 1格节奏"
 metadata/_room_id = "greenhouse"
 
 [node name="Bedroom" parent="." instance=ExtResource("11_cell")]
-position = Vector3(-2.15, 0, 2.15)
-display_name = "主卧\nbedroom"
+position = Vector3(-6.25, 0, 6.25)
+display_name = "主卧\nbedroom · 1格节奏"
 metadata/_room_id = "bedroom"
 
 [node name="Study" parent="." instance=ExtResource("11_cell")]
-position = Vector3(2.15, 0, 2.15)
-display_name = "书房\nstudy"
+position = Vector3(6.25, 0, 6.25)
+display_name = "书房\nstudy · 5格精英"
+layout_cells = Array[Vector2i]([Vector2i(0, 0), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(0, 2)])
 metadata/_room_id = "study"
 
 [node name="Nursery" parent="." instance=ExtResource("11_cell")]
-position = Vector3(6.45, 0, 2.15)
-display_name = "育儿室\nnursery"
+position = Vector3(18.75, 0, 6.25)
+display_name = "育儿室\nnursery · 1格节奏"
 metadata/_room_id = "nursery"
 
 [node name="Darkroom" parent="." instance=ExtResource("11_cell")]
-position = Vector3(10.75, 0, 2.15)
-display_name = "暗房\ndarkroom"
+position = Vector3(31.25, 0, 6.25)
+display_name = "暗房\ndarkroom · 1格节奏"
 metadata/_room_id = "darkroom"
 
 [node name="Attic" parent="." instance=ExtResource("11_cell")]
-position = Vector3(-10.75, 0, 6.45)
-display_name = "阁楼\nattic"
+position = Vector3(-31.25, 0, 18.75)
+display_name = "阁楼\nattic · 1格节奏"
 metadata/_room_id = "attic"
 
 [node name="Loft" parent="." instance=ExtResource("11_cell")]
-position = Vector3(-6.45, 0, 6.45)
-display_name = "阁楼栈桥\nloft"
+position = Vector3(-18.75, 0, 18.75)
+display_name = "阁楼栈桥\nloft · 3格玩法"
+layout_cells = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)])
 metadata/_room_id = "loft"
 
 [node name="Boiler" parent="." instance=ExtResource("11_cell")]
-position = Vector3(2.15, 0, 6.45)
-display_name = "锅炉房\nboiler"
+position = Vector3(6.25, 0, 18.75)
+display_name = "锅炉房\nboiler · 5格精英"
+layout_cells = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1), Vector2i(2, 2)])
 metadata/_room_id = "boiler"
 
 [node name="Ritual" parent="." instance=ExtResource("11_cell")]
-position = Vector3(6.45, 0, 6.45)
-display_name = "祭坛前厅\nritual"
+position = Vector3(18.75, 0, 18.75)
+display_name = "祭坛前厅\nritual · 1格节奏"
 metadata/_room_id = "ritual"
 
 [node name="Altar" parent="." instance=ExtResource("11_cell")]
-position = Vector3(10.75, 0, 6.45)
-display_name = "祭坛房\naltar"
+position = Vector3(31.25, 0, 18.75)
+display_name = "祭坛房\naltar · 5格精英"
+layout_cells = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(0, 1), Vector2i(2, 1)])
 metadata/_room_id = "altar"
+; End of the complete 24-room layout authoring map; keep this footer for SMB-safe edits.

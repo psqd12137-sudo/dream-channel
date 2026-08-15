@@ -29,13 +29,19 @@ func _run() -> void:
 	var enemy_node := game.battle_root.get_node_or_null("Enemy") as Node3D
 	_check(enemy_node != null, "enemy pawn must remain available for patrol animation")
 	var visibly_departed := false
+	var saw_walk_animation := false
 	if enemy_node != null:
 		var source_world: Vector3 = game._battle_world(start)
 		while game.animation_busy:
 			await process_frame
 			if is_instance_valid(enemy_node) and enemy_node.position.distance_to(source_world) > 0.01:
 				visibly_departed = true
+			if is_instance_valid(enemy_node):
+				var presenter = enemy_node.get_node_or_null("Presenter")
+				if presenter != null and presenter.current_model_animation().to_lower().contains("walk"):
+					saw_walk_animation = true
 	_check(visibly_departed, "enemy pawn must visibly leave its source cell during patrol tween")
+	_check(saw_walk_animation, "enemy patrol tween must drive the temporary 3D model Walk loop")
 	while game.animation_busy:
 		await process_frame
 	_check(game.combat.enemy_pos != start, "enemy rules position must finish on a different patrol cell")

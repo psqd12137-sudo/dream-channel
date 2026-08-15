@@ -64,6 +64,9 @@ func _run() -> void:
 	_check(bool(revealed_room.get("revealed", false)), "the unknown room must flip to its revealed face")
 	_check(game.phase == "room_ready", "first entry must still preserve room resolution rules")
 	_check(not game.animation_busy, "room reveal must release interaction")
+	var expected_house_yaw := atan2(float(target.x), float(target.y))
+	var arrived_token := game.house_root.get_node_or_null("LiliToken") as Node3D
+	_check(arrived_token != null and is_equal_approx(arrived_token.rotation.y, expected_house_yaw), "house-map Lili must keep facing the room she just entered after the map rebuild")
 
 	var combat_room: Dictionary = _find_room(game.room_catalog, "hall")
 	_check(not combat_room.is_empty(), "combat entry animation test requires the hall")

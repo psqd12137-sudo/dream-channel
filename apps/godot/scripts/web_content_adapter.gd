@@ -1,5 +1,7 @@
 extends RefCounted
 
+const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
+
 const SNAPSHOT_ROOT := "res://data/exe_snapshot/"
 const SOURCE_ID := "CabinSlice_织梦频道.exe@EEC4C574CC22"
 
@@ -54,7 +56,7 @@ func build_content(run_seed: int) -> Dictionary:
 			enemy["toughness"] = int(enemy.get("toughness", 3))
 			enemy["action_points"] = int(enemy.get("action_points", 3))
 			enemy["attack_cost"] = int(enemy.get("attack_cost", 2))
-		room_catalog.append({
+		var room := {
 			"id": id,
 			"name": str(source.get("name", id)),
 			"description": str(source.get("desc", "")),
@@ -64,7 +66,9 @@ func build_content(run_seed: int) -> Dictionary:
 			"door_pattern": str(pattern.get("id", "?")),
 			"arena": arena,
 			"enemy": enemy,
-		})
+		}
+		RoomFootprintCatalog.apply_to_room(room, id)
+		room_catalog.append(room)
 		index += 1
 
 	var start_source: Dictionary = room_records.get(start_id, {})
@@ -75,6 +79,7 @@ func build_content(run_seed: int) -> Dictionary:
 		"kind": "quiet",
 		"doors": [true, true, true, true],
 	}
+	RoomFootprintCatalog.apply_to_room(start_room, start_id)
 
 	var relic_pool: Array = relics_json.get("pool", [])
 	var active_relics: Array = []

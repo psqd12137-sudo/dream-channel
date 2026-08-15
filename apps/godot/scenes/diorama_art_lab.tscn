@@ -1,0 +1,334 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/diorama_art_lab.gd" id="0_script"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/ultimate_house_interior/Bookshelf.fbx" id="1_current_bookshelf"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/ultimate_house_interior/Couch_Medium1.fbx" id="2_current_couch"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/ultimate_house_interior/Table_RoundLarge.fbx" id="3_current_table"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/ultimate_house_interior/Door_3.fbx" id="4_current_door"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/floor.fbx" id="5_kenney_floor"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/floor-detail.fbx" id="6_kenney_floor_detail"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/wall.fbx" id="7_kenney_wall"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/wall-half.fbx" id="8_kenney_wall_half"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/wall-opening.fbx" id="9_kenney_opening"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/gate.fbx" id="10_kenney_gate"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/stairs.fbx" id="11_kenney_stairs"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/column.fbx" id="12_kenney_column"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/table.fbx" id="13_kenney_table"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/chair.fbx" id="14_kenney_chair"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/chest.fbx" id="15_kenney_chest"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/barrel.fbx" id="16_kenney_barrel"]
+[ext_resource type="PackedScene" path="res://assets/third_party/kenney_mini_dungeon/models/trap.fbx" id="17_kenney_trap"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Floor_Standard.fbx" id="18_ruins_floor"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Floor_Squares.fbx" id="19_ruins_floor_detail"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Wall.fbx" id="20_ruins_wall"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Wall_Broken.fbx" id="21_ruins_wall_broken"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Arch_Round.fbx" id="22_ruins_arch"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Doors_RoundArch.fbx" id="23_ruins_door"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Column_Round.fbx" id="24_ruins_column"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Stairs.fbx" id="25_ruins_stairs"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Bookcase_Full.fbx" id="26_ruins_bookcase"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Chest.fbx" id="27_ruins_chest"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Crate.fbx" id="28_ruins_crate"]
+[ext_resource type="PackedScene" path="res://assets/third_party/quaternius_ultimate_modular_ruins/models/Barrel.fbx" id="29_ruins_barrel"]
+
+[sub_resource type="StandardMaterial3D" id="Material_base_current"]
+albedo_color = Color(0.08, 0.13, 0.16, 1)
+roughness = 0.92
+
+[sub_resource type="StandardMaterial3D" id="Material_base_kenney"]
+albedo_color = Color(0.16, 0.18, 0.28, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Material_base_ruins"]
+albedo_color = Color(0.24, 0.19, 0.17, 1)
+roughness = 0.96
+
+[sub_resource type="StandardMaterial3D" id="Material_current_floor"]
+albedo_color = Color(0.9, 0.87, 0.75, 1)
+roughness = 0.85
+
+[sub_resource type="StandardMaterial3D" id="Material_current_wall"]
+albedo_color = Color(0.15, 0.54, 0.51, 1)
+roughness = 0.88
+
+[sub_resource type="StandardMaterial3D" id="Material_raised"]
+albedo_color = Color(0.29, 0.24, 0.22, 1)
+roughness = 0.94
+
+[sub_resource type="StandardMaterial3D" id="Material_divider"]
+albedo_color = Color(0.95, 0.61, 0.12, 1)
+emission_enabled = true
+emission = Color(0.35, 0.13, 0.01, 1)
+roughness = 0.75
+
+[sub_resource type="Environment" id="Environment_standalone"]
+background_mode = 1
+background_color = Color(0.035, 0.055, 0.075, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.42, 0.58, 0.62, 1)
+ambient_light_energy = 0.65
+tonemap_mode = 2
+
+[node name="DioramaArtLab" type="Node3D"]
+script = ExtResource("0_script")
+
+[node name="StandaloneRig" type="Node3D" parent="."]
+visible = false
+
+[node name="Camera3D" type="Camera3D" parent="StandaloneRig"]
+position = Vector3(0, 8.4, 20)
+fov = 45.0
+environment = SubResource("Environment_standalone")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="StandaloneRig"]
+rotation = Vector3(-0.92, -0.55, 0)
+light_color = Color(1, 0.84, 0.67, 1)
+light_energy = 1.55
+shadow_enabled = true
+
+[node name="FillLight" type="DirectionalLight3D" parent="StandaloneRig"]
+rotation = Vector3(-0.62, 2.2, 0)
+light_color = Color(0.46, 0.76, 0.92, 1)
+light_energy = 0.55
+
+[node name="CurrentBaseline" type="Node3D" parent="." groups=["diorama_option"]]
+position = Vector3(-6, 0, 0)
+metadata/option_id = "current"
+
+[node name="Base" type="CSGBox3D" parent="CurrentBaseline"]
+position = Vector3(0, -0.36, 0)
+size = Vector3(5, 0.72, 5)
+material = SubResource("Material_base_current")
+
+[node name="Floor" type="CSGBox3D" parent="CurrentBaseline"]
+position = Vector3(0, 0.04, 0)
+size = Vector3(4.65, 0.16, 4.65)
+material = SubResource("Material_current_floor")
+
+[node name="BackWall" type="CSGBox3D" parent="CurrentBaseline"]
+position = Vector3(0, 0.82, -2.18)
+size = Vector3(4.65, 1.55, 0.18)
+material = SubResource("Material_current_wall")
+
+[node name="LeftWall" type="CSGBox3D" parent="CurrentBaseline"]
+position = Vector3(-2.18, 0.82, 0)
+size = Vector3(0.18, 1.55, 4.65)
+material = SubResource("Material_current_wall")
+
+[node name="GridX" type="CSGBox3D" parent="CurrentBaseline"]
+position = Vector3(0, 0.14, 0)
+size = Vector3(0.045, 0.03, 4.4)
+material = SubResource("Material_base_current")
+
+[node name="GridZ" type="CSGBox3D" parent="CurrentBaseline"]
+position = Vector3(0, 0.14, 0)
+size = Vector3(4.4, 0.03, 0.045)
+material = SubResource("Material_base_current")
+
+[node name="Bookshelf" parent="CurrentBaseline" instance=ExtResource("1_current_bookshelf")]
+position = Vector3(1.7, 0.14, -1.75)
+rotation = Vector3(0, -1.5708, 0)
+scale = Vector3(0.48, 0.48, 0.48)
+
+[node name="Couch" parent="CurrentBaseline" instance=ExtResource("2_current_couch")]
+position = Vector3(-1.05, 0.14, -1.2)
+rotation = Vector3(0, -1.5708, 0)
+scale = Vector3(0.46, 0.46, 0.46)
+
+[node name="Table" parent="CurrentBaseline" instance=ExtResource("3_current_table")]
+position = Vector3(0.35, 0.14, 0.2)
+scale = Vector3(0.44, 0.44, 0.44)
+
+[node name="Door" parent="CurrentBaseline" instance=ExtResource("4_current_door")]
+position = Vector3(1.05, 0.14, -2.04)
+scale = Vector3(0.42, 0.42, 0.42)
+
+[node name="Title" type="Label3D" parent="CurrentBaseline"]
+position = Vector3(0, 3.25, -1.8)
+billboard = 1
+no_depth_test = true
+modulate = Color(0.7, 0.92, 0.9, 1)
+text = "A 现有房间\n软装 + 几何墙体"
+font_size = 54
+outline_size = 12
+pixel_size = 0.008
+
+[node name="KenneyMiniDungeon" type="Node3D" parent="." groups=["diorama_option"]]
+metadata/option_id = "kenney_mini_dungeon"
+
+[node name="Base" type="CSGBox3D" parent="KenneyMiniDungeon"]
+position = Vector3(0, -0.36, 0)
+size = Vector3(5, 0.72, 5)
+material = SubResource("Material_base_kenney")
+
+[node name="Floor00" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(-1.5, 0.12, -1.5)
+[node name="Floor10" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(-0.5, 0.12, -1.5)
+[node name="Floor20" parent="KenneyMiniDungeon" instance=ExtResource("6_kenney_floor_detail")]
+position = Vector3(0.5, 0.12, -1.5)
+[node name="Floor30" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(1.5, 0.12, -1.5)
+[node name="Floor01" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(-1.5, 0.12, -0.5)
+[node name="Floor11" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(-0.5, 0.12, -0.5)
+[node name="Floor21" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(0.5, 0.12, -0.5)
+[node name="Floor31" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(1.5, 0.12, -0.5)
+[node name="Floor02" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(-1.5, 0.12, 0.5)
+[node name="Floor12" parent="KenneyMiniDungeon" instance=ExtResource("6_kenney_floor_detail")]
+position = Vector3(-0.5, 0.12, 0.5)
+[node name="Floor22" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(0.5, 0.12, 0.5)
+[node name="Floor32" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(1.5, 0.12, 0.5)
+[node name="Floor03" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(-1.5, 0.12, 1.5)
+[node name="Floor13" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(-0.5, 0.12, 1.5)
+[node name="Floor23" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(0.5, 0.12, 1.5)
+[node name="Floor33" parent="KenneyMiniDungeon" instance=ExtResource("5_kenney_floor")]
+position = Vector3(1.5, 0.12, 1.5)
+
+[node name="WallLeft" parent="KenneyMiniDungeon" instance=ExtResource("7_kenney_wall")]
+position = Vector3(-1.5, 0.13, -1.5)
+[node name="WallMiddle" parent="KenneyMiniDungeon" instance=ExtResource("9_kenney_opening")]
+position = Vector3(-0.5, 0.13, -1.5)
+[node name="WallRight" parent="KenneyMiniDungeon" instance=ExtResource("7_kenney_wall")]
+position = Vector3(0.5, 0.13, -1.5)
+[node name="WallCorner" parent="KenneyMiniDungeon" instance=ExtResource("7_kenney_wall")]
+position = Vector3(1.5, 0.13, -1.5)
+[node name="SideWall" parent="KenneyMiniDungeon" instance=ExtResource("8_kenney_wall_half")]
+position = Vector3(-1.5, 0.13, -0.5)
+[node name="Gate" parent="KenneyMiniDungeon" instance=ExtResource("10_kenney_gate")]
+position = Vector3(-0.5, 0.13, -1.0)
+[node name="Stairs" parent="KenneyMiniDungeon" instance=ExtResource("11_kenney_stairs")]
+position = Vector3(1.5, 0.13, -0.5)
+[node name="Column" parent="KenneyMiniDungeon" instance=ExtResource("12_kenney_column")]
+position = Vector3(-1.55, 0.13, 1.55)
+[node name="Table" parent="KenneyMiniDungeon" instance=ExtResource("13_kenney_table")]
+position = Vector3(0.2, 0.13, 0.35)
+[node name="Chair" parent="KenneyMiniDungeon" instance=ExtResource("14_kenney_chair")]
+position = Vector3(-0.65, 0.13, 0.45)
+rotation = Vector3(0, 1.15, 0)
+[node name="Chest" parent="KenneyMiniDungeon" instance=ExtResource("15_kenney_chest")]
+position = Vector3(1.35, 0.13, 1.45)
+rotation = Vector3(0, -0.45, 0)
+[node name="Barrel" parent="KenneyMiniDungeon" instance=ExtResource("16_kenney_barrel")]
+position = Vector3(1.78, 0.13, 1.3)
+[node name="Trap" parent="KenneyMiniDungeon" instance=ExtResource("17_kenney_trap")]
+position = Vector3(-0.75, 0.13, 1.4)
+
+[node name="Title" type="Label3D" parent="KenneyMiniDungeon"]
+position = Vector3(0, 3.25, -1.8)
+billboard = 1
+no_depth_test = true
+modulate = Color(0.78, 0.81, 1, 1)
+text = "B Mini Dungeon\n桌面模型候选"
+font_size = 54
+outline_size = 12
+pixel_size = 0.008
+
+[node name="QuaterniusRuins" type="Node3D" parent="." groups=["diorama_option"]]
+position = Vector3(6, 0, 0)
+metadata/option_id = "quaternius_ruins"
+
+[node name="Base" type="CSGBox3D" parent="QuaterniusRuins"]
+position = Vector3(0, -0.36, 0)
+size = Vector3(5, 0.72, 5)
+material = SubResource("Material_base_ruins")
+
+[node name="RaisedCorner" type="CSGBox3D" parent="QuaterniusRuins"]
+position = Vector3(1.3, 0.28, 1.3)
+size = Vector3(2.05, 0.56, 2.05)
+material = SubResource("Material_raised")
+
+[node name="Assets" type="Node3D" parent="QuaterniusRuins"]
+position = Vector3(0, 0.15, 0)
+scale = Vector3(0.5, 0.5, 0.5)
+
+[node name="Floor00" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(-3, 0, -3)
+[node name="Floor10" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(-1, 0, -3)
+[node name="Floor20" parent="QuaterniusRuins/Assets" instance=ExtResource("19_ruins_floor_detail")]
+position = Vector3(1, 0, -3)
+[node name="Floor30" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(3, 0, -3)
+[node name="Floor01" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(-3, 0, -1)
+[node name="Floor11" parent="QuaterniusRuins/Assets" instance=ExtResource("19_ruins_floor_detail")]
+position = Vector3(-1, 0, -1)
+[node name="Floor21" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(1, 0, -1)
+[node name="Floor31" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(3, 0, -1)
+[node name="Floor02" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(-3, 0, 1)
+[node name="Floor12" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(-1, 0, 1)
+[node name="Floor22" parent="QuaterniusRuins/Assets" instance=ExtResource("19_ruins_floor_detail")]
+position = Vector3(1, 1.12, 1)
+[node name="Floor32" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(3, 1.12, 1)
+[node name="Floor03" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(-3, 0, 3)
+[node name="Floor13" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(-1, 0, 3)
+[node name="Floor23" parent="QuaterniusRuins/Assets" instance=ExtResource("18_ruins_floor")]
+position = Vector3(1, 1.12, 3)
+[node name="Floor33" parent="QuaterniusRuins/Assets" instance=ExtResource("19_ruins_floor_detail")]
+position = Vector3(3, 1.12, 3)
+
+[node name="Arch" parent="QuaterniusRuins/Assets" instance=ExtResource("22_ruins_arch")]
+position = Vector3(0, 0, -3.78)
+[node name="Door" parent="QuaterniusRuins/Assets" instance=ExtResource("23_ruins_door")]
+position = Vector3(0, 0, -3.72)
+[node name="BackBroken" parent="QuaterniusRuins/Assets" instance=ExtResource("21_ruins_wall_broken")]
+position = Vector3(-2.55, 0, -3.78)
+[node name="BackWall" parent="QuaterniusRuins/Assets" instance=ExtResource("20_ruins_wall")]
+position = Vector3(2.55, 0, -3.78)
+[node name="SideWall" parent="QuaterniusRuins/Assets" instance=ExtResource("21_ruins_wall_broken")]
+position = Vector3(-3.78, 0, 0)
+rotation = Vector3(0, 1.5708, 0)
+[node name="ColumnLeft" parent="QuaterniusRuins/Assets" instance=ExtResource("24_ruins_column")]
+position = Vector3(-3.45, 0, -3.15)
+[node name="ColumnRight" parent="QuaterniusRuins/Assets" instance=ExtResource("24_ruins_column")]
+position = Vector3(3.45, 0, -3.15)
+[node name="Stairs" parent="QuaterniusRuins/Assets" instance=ExtResource("25_ruins_stairs")]
+position = Vector3(1.25, 0, 0.15)
+rotation = Vector3(0, 3.14159, 0)
+[node name="Bookcase" parent="QuaterniusRuins/Assets" instance=ExtResource("26_ruins_bookcase")]
+position = Vector3(-2.5, 0, -2.75)
+rotation = Vector3(0, 1.5708, 0)
+[node name="Chest" parent="QuaterniusRuins/Assets" instance=ExtResource("27_ruins_chest")]
+position = Vector3(2.6, 1.12, 2.6)
+rotation = Vector3(0, -0.6, 0)
+[node name="Crate" parent="QuaterniusRuins/Assets" instance=ExtResource("28_ruins_crate")]
+position = Vector3(-2.2, 0, 2.4)
+[node name="Barrel" parent="QuaterniusRuins/Assets" instance=ExtResource("29_ruins_barrel")]
+position = Vector3(-2.9, 0, 2.6)
+
+[node name="Title" type="Label3D" parent="QuaterniusRuins"]
+position = Vector3(0, 3.25, -1.8)
+billboard = 1
+no_depth_test = true
+modulate = Color(1, 0.78, 0.57, 1)
+text = "C Modular Ruins\n废墟 + 资产高差"
+font_size = 54
+outline_size = 12
+pixel_size = 0.008
+
+[node name="DividerLeft" type="CSGBox3D" parent="."]
+position = Vector3(-3, 0.06, 0)
+size = Vector3(0.06, 0.08, 5.3)
+material = SubResource("Material_divider")
+
+[node name="DividerRight" type="CSGBox3D" parent="."]
+position = Vector3(3, 0.06, 0)
+size = Vector3(0.06, 0.08, 5.3)
+material = SubResource("Material_divider")
