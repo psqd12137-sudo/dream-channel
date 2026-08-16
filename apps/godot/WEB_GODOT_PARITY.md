@@ -1,6 +1,6 @@
 # Godot 完成度与 Web 历史参考
 
-状态：Godot 主线完成度记录。核对日期：2026-08-15。
+状态：Godot 主线完成度记录。核对日期：2026-08-16。
 
 Godot 是正式客户端，Web 只用于玩法验证。本表保留 Web 历史参考，目的是识别尚未迁入 Godot 的候选想法，而不是要求两端逐项对齐。规则冲突以现行策划和 Godot 回归测试为准；仍未拍板的问题进入 [未决设计](../../docs/open-questions.md)。历史参考可执行文件为 `cabin-slice/CabinSlice_织梦频道.exe`，SHA-256 `EEC4C574CC227FB966D39265A31E25F4D6875557C6BB09BB771E6760CC11DC03`。
 
@@ -22,6 +22,10 @@ Godot 是正式客户端，Web 只用于玩法验证。本表保留 Web 历史�
 | 横版手感 | 原型可玩 | WASD/方向键移动与跳跃；仅为测试台实验，不代表主流程视角。 |
 | 3D 微缩搜物 | 原型可玩 | 测试台可完成物品点击；尚未接入正式事件房。 |
 | 房间微缩布景 | 首轮可用 | Quaternius CC0 精选家具已覆盖长廊、西厢、地窖、会客室及常用生活房；未知房保持隐藏并保留白盒回退。 |
+| 房间编辑工作流 | 已回归 | `room_layout_lab.tscn` 以 6 × 4 放置全部 24 房间，家具入 `room_prop` 组即被主游戏按房间 ID 读取；`quaternius_room_art_smoke.gd` 校验 24 房均存在。 |
+| 多格房间 footprint | 已回归 | 1 / 3 / 5 格房间已接入；`room_rules.gd` 序列化 origin / world_cells / open_edges / instance_id，`room_footprint_regression.gd` 与 `multi_room_build_regression.gd` 覆盖。 |
+| 大地图桌模壳体 | 已回归 | 正式大地图使用 KayKit Dungeon 桌模房间外壳，`kenney_formal_build_flow_regression.gd` 验证形式化构建与旋转预览；PCG 连片箱庭见 `pcg_diorama_stitch_lab.tscn`。 |
+| 表现资产扩展 | 已接入 | 临时 3D 角色（`Casual_Female` / `Demon`）与 UI 图集已接入；`combat_ui_layout.tscn` 手调战斗 HUD 五区域。 |
 
 ## Godot 尚未完成
 
@@ -33,7 +37,7 @@ Godot 是正式客户端，Web 只用于玩法验证。本表保留 Web 历史�
 | P1 | 完整教学与菜单状态 | Web 的完整教学状态机、音乐状态、暂停和片尾仍未迁移。 |
 | P1 | 实验与调试数据 | Web 的实验记录、JSON 导出和部分测试沙盒仍缺。 |
 | P1 | 搜物主流程 | 3D 搜物需要事件房入口、成功/失败后果和奖励接口。 |
-| P1 | 固定房间模型 | 首轮通用布景注册表已接入；仍需为其余房间制作独立构图、专属道具和纸纤维/黏土材质精修。 |
+| P1 | 固定房间模型 | 首轮通用布景与编辑工作流已接入；仍需为其余房间制作独立叙事构图、专属道具和纸纤维/黏土材质精修。 |
 | P2 | 视图与内容扩展 | 计划/等距视图切换、商店、货币、回火、牌升级、单向门和杂影双敌属于后续候选（已从 Web 路线图撤下，统一在此维护）。 |
 
 ## 验证依据

@@ -8,8 +8,9 @@
 
 - 探索、摆房、揭示、战斗、奖励、静室、事件和存档已经形成可继续扩展的单局骨架。
 - 自由相机、高度灰度、传送选择、连续点击同步的房间旋转预览、固定 5 点行动力、图形化战斗状态、战斗入场、敌人巡视和地图意图已有回归测试。
-- 角色表现由 `data/presentation_manifest.json` 驱动，可用 Web 2D 帧白盒，也可通过资产包替换。
-- 18 个非截图回归测试在共享 UNC 路径通过。
+- 角色表现由 `data/presentation_manifest.json` 驱动，可用 Web 2D 帧白盒，也可通过资产包替换；临时 3D 角色模型（玩家 `Casual_Female`、怪物 `Demon`）已接入待机/移动/攻击动画。
+- 大地图房间壳体已切换为 KayKit Dungeon 桌模；Kenney Mini Dungeon 与 Quaternius Modular Ruins 保留为战斗地形与题材候选。
+- 22 个非截图回归测试在共享 UNC 路径通过（`tests/` 下非 `capture_` 脚本）。
 
 ## P0：完成一局的结局
 
@@ -38,7 +39,9 @@
 
 为房间数据增加稳定的表现标识，例如 `presentation_id`。运行时通过注册表或 manifest 查找模型；缺失时自动回退到现有程序白盒。
 
-首轮已用 Quaternius Ultimate House Interior Pack 的 CC0 精选子集建立 `room_art_registry.gd`：长廊、西厢、地窖、会客室已有多道具构图，客厅、厨房、书房、卧室和温室也有可用布景。下一轮重点从“有家具”推进到每张房独有的叙事构图与项目自有材质。
+布景工作流已经固定：`scenes/room_layout_lab.tscn` 以 6 × 4 编辑地图放置全部 24 个房间，家具作为房间根节点直接子节点放入 `room_prop` 组即被主游戏按房间 ID 读取，无需再改硬编码坐标。大地图房间壳体已切换为 KayKit Dungeon 桌模并接入正式 `explore/build` 摆房路径（标题页“节目测试台 → 桌模扩建 PCG”）。
+
+下一轮重点从“有家具”推进到每张房独有的叙事构图与项目自有材质。
 
 首批覆盖四类示范房：
 

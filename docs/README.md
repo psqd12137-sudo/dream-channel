@@ -46,6 +46,7 @@
 | [Godot 完成度与 Web 历史参考](../apps/godot/WEB_GODOT_PARITY.md) | Godot 正式完成度及 Web 候选想法 | 客户端事实 |
 | [下一阶段计划](../apps/godot/NEXT_PHASE_PLAN.md) | Godot 实施顺序 | 计划，不代表完成 |
 | [表现资产包](../apps/godot/PRESENTATION_PACK.md) | 角色、动画、道具和装饰导入契约 | 技术接口 |
+| [房间占格与节奏分层](../apps/godot/ROOM_FOOTPRINT_DESIGN.md) | 1/3/5 格房间规模、当前分配与编辑规则 | 客户端事实 |
 
 ### 协作与环境
 

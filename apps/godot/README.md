@@ -1,5 +1,5 @@
 # Channel Godot 4 Client
-状态：正式客户端事实（核对日期：2026-08-15）。
+状态：正式客户端事实（核对日期：2026-08-16）。
 
 这是《织梦频道》当前唯一正式开发主线。玩法规则、运行数据、交互、3D 表现和发布质量都在本目录落地并由 Godot 回归测试约束。`cabin-slice/` 只保留为低成本玩法实验场；其中的行为不会自动成为正式规则，也不要求与 Godot UI 保持一致。
 
@@ -181,9 +181,16 @@ D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject -
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/completion_labs_smoke.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/diorama_art_lab_smoke.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/pcg_diorama_stitch_smoke.gd
+D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/pcg_hand_layout_lab_smoke.gd
+D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/combat_input_regression.gd
+D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/input_intent_regression.gd
+D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/portal_height_build_preview_regression.gd
+D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/presentation_animation_regression.gd
+D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/run_progression_save_regression.gd
+D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/kenney_formal_build_flow_regression.gd
+D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/kaykit_asset_bounds_probe.gd
 ```
 
 `latest_3d_smoke.gd` 覆盖二选一预兆、三张票根、摆下后隐藏、进入后揭示、3D 房屋网格与 3D 战斗网格；`dynamic_effects_smoke.gd` 额外覆盖房间翻转悬落、角色移动、未知揭示与输入锁。
 
 截图脚本会把视觉校验图写入本机 `artifacts/`；该目录与 `.godot/` 一样属于可再生成产物，不提交到仓库。
-��到仓库。
