@@ -1,0 +1,62 @@
+{
+  "relics": {
+    "omen_signal": {
+      "id": "omen_signal",
+      "name": "预兆·串台",
+      "desc": "战斗开始时行动力骰结果 +1（总池）。不可被偷。",
+      "effect": { "energyBonus": 1 }
+    },
+    "omen_salt": {
+      "id": "omen_salt",
+      "name": "预兆·盐环",
+      "desc": "你造成的伤害 +1。不可被偷。",
+      "effect": { "damageBonus": 1 }
+    },
+    "omen_lens": {
+      "id": "omen_lens",
+      "name": "预兆·镜头",
+      "desc": "每场战斗首次费用 0 的牌额外抽 1。不可被偷。",
+      "effect": { "freeDraw": 1 }
+    },
+    "omen_echo": {
+      "id": "omen_echo",
+      "name": "预兆·回声",
+      "desc": "生命上限 +1 并回满差额。不可被偷。",
+      "effect": { "maxHp": 1 }
+    },
+    "omen_decoy": {
+      "id": "omen_decoy",
+      "name": "预兆·纸影",
+      "desc": "每场战斗开始时，手牌加入 1 张消耗型「纸影傀儡」（占开局手牌位，不额外多抽）。不可被偷。",
+      "effect": { "combatDecoy": 1 }
+    },
+    "omen_flint": {
+      "id": "omen_flint",
+      "name": "预兆·火漆",
+      "desc": "每场战斗首次砸击伤害 +2。不可被偷。",
+      "effect": { "firstSmashBonus": 2 }
+    },
+    "omen_boots": {
+      "id": "omen_boots",
+      "name": "预兆·胶靴",
+      "desc": "攀爬不额外耗行动力。不可被偷。",
+      "effect": { "ignoreClimb": true }
+    },
+    "omen_bell": {
+      "id": "omen_bell",
+      "name": "预兆·铃铛",
+      "desc": "埋伏房开场立刻揭开埋伏（怪不会弹簧扑出）。不可被偷。",
+      "effect": { "revealAmbush": true }
+    }
+  },
+  "pool": [
+    "omen_signal",
+    "omen_salt",
+    "omen_lens",
+    "omen_echo",
+    "omen_decoy",
+    "omen_flint",
+    "omen_boots",
+    "omen_bell"
+  ]
+}

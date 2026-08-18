@@ -9,16 +9,16 @@
 | 产品定位与已拍板设计 | [现行主策划](./docs/design/织梦频道_channel_dream_策划案与招标书.md) |
 | 尚未拍板的问题 | [未决设计](./docs/open-questions.md) |
 | 全部正式文档及冲突处理 | [文档地图](./docs/README.md) |
-| 运行 Web 版 | [Web README](./cabin-slice/README.md) |
-| 打开 Godot 版 | [Godot README](./apps/godot/README.md) |
+| 运行 Web 版 | [Web README](./web/README.md) |
+| 打开 Godot 版 | [Godot README](./godot/README.md) |
 | 修改和提交代码 | [协作指南](./CONTRIBUTING.md) |
 
 ## 开发主线与验证原型
 
 | 路径 | 定位 | 冲突时如何处理 |
 | --- | --- | --- |
-| `apps/godot/` | 正式 Godot 4 客户端 | 玩法、数据、交互、表现和回归测试均以这里的实现为准 |
-| `cabin-slice/` | Web 玩法验证原型及旧桌面封装 | 只验证尚未拍板的玩法，不承担正式 UI、内容同步或发布质量 |
+| `godot/` | 正式 Godot 4 客户端 | 玩法、数据、交互、表现和回归测试均以这里的实现为准 |
+| `web/` | Web 玩法验证原型及旧桌面封装 | 只验证尚未拍板的玩法，不承担正式 UI、内容同步或发布质量 |
 
 若策划已经拍板，以现行主策划为准；若策划未写清，以 Godot 中有测试覆盖的行为作为当前客户端事实。Web 的实验结果只有在明确采纳并迁入 Godot 后才成为正式实现，不再要求两端 UI 或代码逐项同步。
 
@@ -30,8 +30,8 @@
 \\192.168.1.2\SharedFolder\new channel
 ```
 
-- Web 修改在 `cabin-slice/` 进行。
-- Godot 修改在 `apps/godot/` 进行。
+- Web 修改在 `web/` 进行。
+- Godot 修改在 `godot/` 进行。
 - 策划与跨客户端文档在 `docs/` 进行。
 - `.godot/`、日志、截图、下载和本机 MCP 配置不提交。
 
@@ -42,18 +42,18 @@
 ### Web
 
 ```powershell
-Set-Location "\\192.168.1.2\SharedFolder\new channel\cabin-slice"
+Set-Location "\\192.168.1.2\SharedFolder\new channel\web"
 python -m http.server 8787
 ```
 
-浏览器打开 `http://127.0.0.1:8787/`。桌面包与完整操作见 [Web README](./cabin-slice/README.md)。
+浏览器打开 `http://127.0.0.1:8787/`。桌面包与完整操作见 [Web README](./web/README.md)。
 
 ### Godot
 
-打开 [apps/godot/project.godot](./apps/godot/project.godot)，或运行：
+打开 [godot/project.godot](./godot/project.godot)，或运行：
 
 ```powershell
-D:\godot\Godot_v4.7.1-stable_win64.exe --path "\\192.168.1.2\SharedFolder\new channel\apps\godot" --editor
+D:\godot\Godot_v4.7.1-stable_win64.exe --path "\\192.168.1.2\SharedFolder\new channel\godot" --editor
 ```
 
 Godot 支持 UNC 路径；网络共享上的首次资源导入通常比本地磁盘慢。
@@ -69,7 +69,7 @@ new channel/
 │   ├── design/                # 现行设计、设计分析与历史归档
 │   ├── tech/                  # 跨项目或客户端技术说明
 │   └── setup/                 # 环境接入说明
-├── cabin-slice/               # Web 规则原型与桌面封装
+├── web/               # Web 规则原型与桌面封装
 └── apps/
     └── godot/                 # Godot 3D 客户端
 ```
