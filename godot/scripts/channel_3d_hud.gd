@@ -9,6 +9,9 @@ const CARD_BACK_RED = preload("res://assets/ui/channel_concept/card_red.png")
 const CARD_BACK_YELLOW = preload("res://assets/ui/channel_concept/card_yellow.png")
 const EVENT_PANEL_TEXTURE = preload("res://assets/ui/channel_concept/UI_HUD_Panel_EventProgram_Normal.png")
 const ACTION_PANEL_TEXTURE = preload("res://assets/ui/channel_concept/UI_HUD_Panel_ActionPanel_Normal.png")
+const BTN_START_TEXTURE = preload("res://assets/ui/unity_buttons/SP_StartGame.png")
+const BTN_END_TEXTURE = preload("res://assets/ui/unity_buttons/SP_EndGame.png")
+const BTN_MENU_TEXTURE = preload("res://assets/ui/unity_buttons/SP_Menu.png")
 
 const INK := Color("171c25")
 const DARK := Color("101820")
@@ -206,24 +209,28 @@ func _draw_top_bar() -> void:
 	if game.phase == "combat" or game.phase in ["explore", "build", "room_ready"]:
 		_draw_button(CAMERA_RESET_RECT, "镜头复位" if game.phase == "combat" else "地图复位", TEAL, TEXT)
 	if not game.phase.begins_with("lab_"):
-		if game.kenney_build_lab_mode:
-			_draw_button(RESET_RECT, "回到标题", Color("394852"), TEXT)
-		else:
-			_draw_button(RESET_RECT, "重开", Color("394852"), TEXT)
+		_draw_button(RESET_RECT, "回到标题", Color("394852"), TEXT)
 
 
 func _draw_home() -> void:
-	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, DESIGN_SIZE.y), Color("315d5c"), true)
-	draw_rect(Rect2(26, 28, 1228, 654), Color("fff3d8"), true)
-	draw_rect(Rect2(26, 28, 1228, 654), Color("244745"), false, 3.0)
-	draw_texture_rect(PLAYER_PROFILE, Rect2(190, 210, 300, 300), false)
-	_label("信号锁定 · CH-198X · channel", Vector2(576, 198), 13, Color("5e503e"))
-	_label("山屋奇妙夜", Vector2(576, 272), 42, Color("18534f"))
-	_draw_wrapped("拧开织梦频道的旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪把行动力花在追你身上。", Vector2(576, 316), 520, 15, Color("5d5043"))
-	_draw_button(HOME_START_RECT, "打开电视机", Color("f28d1b"), INK)
-	_draw_button(HOME_TUTORIAL_RECT, "新手教学", PAPER, INK)
+	# 视频循环动画已在背后播放；这里只铺一层半透明暗色让文字可读。
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, DESIGN_SIZE.y), Color(0.05, 0.02, 0.07, 0.55), true)
+	# 顶部品牌条
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 74), Color("0d0512d9"), true)
+	draw_rect(Rect2(0, 72, DESIGN_SIZE.x, 3), Color("452655"), true)
+	_label("channel dream", Vector2(34, 34), 13, Color("8e699e"))
+	_label("织梦频道", Vector2(34, 58), 20, Color("f7e8ff"))
+	# 主标题区
+	_label("信号锁定 · CH-198X", Vector2(84, 150), 13, Color("a98cc0"))
+	_label("山屋奇妙夜", Vector2(80, 196), 56, Color("f4ecff"))
+	_draw_wrapped("拧开织梦频道的旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪把行动力花在追你身上。", Vector2(84, 252), 620, 15, Color("d6c6e6"))
+	# 主按钮：打开电视机（洋红贴图）
+	_draw_texture_button(HOME_START_RECT, "打开电视机", BTN_START_TEXTURE, Color.WHITE, 15)
+	# 次按钮：新手教学 / 接着看上集（青贴图）
+	_draw_texture_button(HOME_TUTORIAL_RECT, "新手教学", BTN_END_TEXTURE, Color.WHITE, 14)
 	if game.has_saved_run():
-		_draw_button(HOME_CONTINUE_RECT, "接着看上集", TEAL, TEXT)
+		_draw_texture_button(HOME_CONTINUE_RECT, "接着看上集", BTN_END_TEXTURE, Color.WHITE, 13)
+	# 节目测试台（米白面板，保留原功能）
 	_draw_button(HOME_TESTS_RECT, "▼ 节目测试台" if game.home_tests_open else "▶ 节目测试台", Color("f7e8c5"), INK)
 	if game.home_tests_open:
 		draw_rect(Rect2(565, 470, 460, 172), Color("fff8e8"), true)
@@ -234,7 +241,7 @@ func _draw_home() -> void:
 		_draw_button(HOME_TEST_SEARCH_RECT, "3D 微缩搜物", Color("7863a5"), TEXT)
 		_draw_button(HOME_TEST_CHASE_RECT, "警察抓小偷", RED, TEXT)
 		_draw_button(HOME_TEST_DIORAMA_RECT, "桌模扩建 PCG", Color("5967a8"), TEXT)
-	_label("走位引怪踩机关 · 不同怪物破韧奖励不同 · 悬停卡牌听旁白", Vector2(576, 670), 12, Color("5d5043"))
+	_label("走位引怪踩机关 · 不同怪物破韧奖励不同 · 悬停卡牌听旁白", Vector2(84, 720), 13, Color("b49fd0"))
 
 
 func _draw_lab_hud() -> void:
@@ -345,7 +352,7 @@ func _draw_house_hud() -> void:
 	var room: Dictionary = game.current_room()
 	var revealed := bool(room.get("revealed", false)) or bool(room.get("completed", false))
 	if game.kenney_build_lab_mode:
-		_draw_chip(Rect2(32, 102, 245, 30), "KAYKIT 桌模 · 正式扩建链路", Color("3e8b78"), TEXT, 11)
+		_draw_chip(Rect2(32, 102, 245, 30), "KAYKIT 桌模 · 山屋扩建", Color("3e8b78"), TEXT, 11)
 	var side := Rect2(996, 96, 268, 672)
 	draw_rect(side, Color("f8e9c7f5"), true)
 	draw_rect(side, INK, false, 3.0)
@@ -388,7 +395,7 @@ func _draw_build_dock() -> void:
 	draw_rect(Rect2(88, 448, 802, 292), Color("111b23ed"), true)
 	draw_rect(Rect2(88, 448, 802, 292), Color("6bbeb1"), false, 3.0)
 	_label("盖屋 · 扩建 %s" % game.selected_frontier, Vector2(112, 478), 16, TEXT)
-	_label("本测试复用正式门位、旋转和摆放；不会覆盖存档。" if game.kenney_build_lab_mode else "三张票根只显示房名和门型；走进去才知道是安静、事件还是惊吓。", Vector2(335, 478), 11, MUTED)
+	_label("三张票根只显示房名和门型；走进去才知道是安静、事件还是惊吓。", Vector2(335, 478), 11, MUTED)
 	for i in range(mini(3, game.build_offers.size())):
 		var room: Dictionary = game.build_offers[i]
 		var rect: Rect2 = BUILD_CARD_RECTS[i]
@@ -931,10 +938,7 @@ func _gui_input(event: InputEvent) -> void:
 			game.skip_reward()
 		return
 	if RESET_RECT.has_point(point):
-		if game.kenney_build_lab_mode:
-			game.go_home()
-		else:
-			game.start_new_run(false)
+		game.go_home()
 		return
 	if game.phase == "combat" and CAMERA_RESET_RECT.has_point(point):
 		game.reset_battle_camera()
@@ -1006,6 +1010,12 @@ func _draw_button(rect: Rect2, caption: String, fill: Color, text_color: Color) 
 	draw_rect(rect, fill, true)
 	draw_rect(rect, INK, false, 2.0)
 	_draw_centered(caption, rect, 14, text_color)
+
+
+func _draw_texture_button(rect: Rect2, caption: String, texture: Texture2D, text_color: Color, font_size: int = 14, modulate: Color = Color.WHITE) -> void:
+	if texture != null:
+		draw_texture_rect(texture, rect, false, modulate)
+	_draw_centered(caption, rect, font_size, text_color)
 
 
 func _draw_chip(rect: Rect2, caption: String, fill: Color, text_color: Color, font_size: int) -> void:

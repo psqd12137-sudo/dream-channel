@@ -9,6 +9,15 @@ script = ExtResource("1_l8mse")
 [node name="WorldLayer" type="CanvasLayer" parent="."]
 layer = -1
 
+[node name="HomeVideo" type="VideoStreamPlayer" parent="WorldLayer" unique_id=2026081901]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+expand = true
+volume_db = -80.0
+
 [node name="WorldContainer" type="SubViewportContainer" parent="WorldLayer"]
 offset_left = 20.0
 offset_top = 96.0

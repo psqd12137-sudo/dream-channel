@@ -85,6 +85,7 @@ const CHASE_COUNTDOWN_RUN_DURATION := 0.55
 @onready var house_root: Node3D = $WorldLayer/WorldContainer/WorldViewport/WorldRoot/HouseRoot
 @onready var battle_root: Node3D = $WorldLayer/WorldContainer/WorldViewport/WorldRoot/BattleRoot
 @onready var hud: Control = $HUD/HUDRoot
+@onready var home_video: VideoStreamPlayer = $WorldLayer/HomeVideo
 
 @export_range(0.0, 4.0, 0.05) var animation_duration_scale := 1.0
 
@@ -139,7 +140,7 @@ var active_motion_tween: Tween = null
 var build_preview_tween: Tween = null
 var lab_root: Node3D = null
 var home_tests_open := false
-var kenney_build_lab_mode := false
+var kenney_build_lab_mode := true  # 桌模建造已转正：主游玩默认用 Kaykit/Kenney 桌模渲染房间
 var lab_move_axis := 0.0
 var lab_jump_held := false
 var lab_jump_was_down := false
@@ -178,6 +179,7 @@ var pcg_diorama_seed := 20260816
 
 func _ready() -> void:
 	_configure_environment()
+	_configure_home_video()
 	presentation = _load_json_dictionary(PRESENTATION_MANIFEST)
 	lab_root = Node3D.new()
 	lab_root.name = "LabRoot"
@@ -186,6 +188,27 @@ func _ready() -> void:
 	hud.sync_layout()
 	reset_run(run_seed)
 	go_home()
+
+
+func _configure_home_video() -> void:
+	if home_video == null:
+		return
+	var stream := VideoStreamTheora.new()
+	stream.file = "res://assets/ui/menu_video.ogv"
+	home_video.stream = stream
+	home_video.loop = true
+
+
+func _set_home_video(active: bool) -> void:
+	if home_video == null:
+		return
+	home_video.visible = active
+	if active:
+		home_video.paused = false
+		home_video.play()
+	else:
+		home_video.paused = true
+		home_video.stop()
 
 
 func _process(delta: float) -> void:
@@ -302,7 +325,7 @@ func reset_run(seed_value: int = 0) -> void:
 
 
 func start_new_run(tutorial_mode: bool = false) -> void:
-	kenney_build_lab_mode = false
+	_set_home_video(false)
 	reset_run(run_seed + 1 if phase != "home" else run_seed)
 	status_message = "教学提示：先选预兆，再点黄色扩建格；战斗中绿色=移动、金色=放置。" if tutorial_mode else "先从两枚行前预兆中选一枚，节目就会正式开播。"
 	_refresh_hud()
@@ -311,7 +334,6 @@ func start_new_run(tutorial_mode: bool = false) -> void:
 
 func go_home() -> void:
 	_cancel_dynamic_effect()
-	kenney_build_lab_mode = false
 	phase = "home"
 	home_tests_open = false
 	house_root.visible = false
@@ -319,6 +341,7 @@ func go_home() -> void:
 	if lab_root != null:
 		lab_root.visible = false
 	world_container.visible = false
+	_set_home_video(true)
 	status_message = "电视机预热完毕。"
 	_refresh_hud()
 
@@ -328,7 +351,7 @@ func has_saved_run() -> bool:
 
 
 func continue_saved_run() -> bool:
-	kenney_build_lab_mode = false
+	_set_home_video(false)
 	if not has_saved_run():
 		return false
 	var parsed = JSON.parse_string(FileAccess.get_file_as_string(RUN_SAVE_PATH))
@@ -383,6 +406,7 @@ func start_combat_lab(room_id: String = "hall") -> void:
 	var room := _find_catalog_room(room_id)
 	if room.is_empty():
 		return
+	_set_home_video(false)
 	world_container.visible = true
 	house_root.visible = false
 	if lab_root != null:
@@ -395,11 +419,12 @@ func start_combat_lab(room_id: String = "hall") -> void:
 
 
 func start_kenney_build_lab() -> void:
+	_set_home_video(false)
 	kenney_build_lab_mode = true
 	reset_run(run_seed + 101)
 	phase = "explore"
 	omen_options.clear()
-	status_message = "Kenney 桌模扩建实验：直接点击黄色扩建格，选择 1/3/5 格票根，旋转并摆下；每次确认后按正式 room_rules 重算整栋墙、门和房间边界。本模式不会覆盖存档。"
+	status_message = "山屋扩建已转正：点击黄色扩建格，选择 1/3/5 格票根，旋转并摆下；每次确认后按正式 room_rules 重算整栋墙、门和房间边界。"
 	build_house_world()
 	_set_house_camera()
 	_refresh_hud()
@@ -830,7 +855,7 @@ func _update_chase_finish_delay(delta: float) -> void:
 
 func _prepare_lab(next_phase: String) -> void:
 	_cancel_dynamic_effect()
-	kenney_build_lab_mode = false
+	_set_home_video(false)
 	phase = next_phase
 	world_container.visible = true
 	house_root.visible = false
@@ -1868,7 +1893,7 @@ func reward_description(reward: Dictionary) -> String:
 
 
 func _save_run() -> void:
-	if kenney_build_lab_mode or phase == "home" or phase.begins_with("lab_") and event_context.is_empty():
+	if phase == "home" or phase.begins_with("lab_") and event_context.is_empty():
 		return
 	var placed_entries: Array[Dictionary] = []
 	for raw_pos in room_rules.placed.keys():
