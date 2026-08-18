@@ -12,10 +12,10 @@
 `application/run/main_scene` 已通过 Godot MCP 设置为 `res://channel_3d.tscn`。在编辑器里按 F6 可运行当前场景，按 F5 可运行项目主场景。
 
 ```powershell
-D:\godot\Godot_v4.7.1-stable_win64.exe --path "\\192.168.1.2\SharedFolder\new channel\godot" --editor
+D:\godot\Godot_v4.7.1-stable_win64.exe --path "G:\dream-channel\godot" --editor
 ```
 
-Godot 4 可以直接读取 Windows UNC 网络路径。若编辑器导入或文件监听在网络盘上变慢，可将共享目录映射成盘符，或在本地 clone 后打开；项目内资源统一使用 `res://`，因此无需修改场景和脚本。
+Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再依赖网络共享；项目内资源统一使用 `res://`，移动目录不影响内部引用。
 
 ## 历史 Web 参考快照
 
@@ -165,7 +165,7 @@ Godot 4 可以直接读取 Windows UNC 网络路径。若编辑器导入或文�
 ## 自检
 
 ```powershell
-$godotProject = "\\192.168.1.2\SharedFolder\new channel\godot"
+$godotProject = "G:\dream-channel\godot"
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/smoke_test.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/web_snapshot_smoke.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/combat_mechanics_smoke.gd
@@ -194,3 +194,26 @@ D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject -
 `latest_3d_smoke.gd` 覆盖二选一预兆、三张票根、摆下后隐藏、进入后揭示、3D 房屋网格与 3D 战斗网格；`dynamic_effects_smoke.gd` 额外覆盖房间翻转悬落、角色移动、未知揭示与输入锁。
 
 截图脚本会把视觉校验图写入本机 `artifacts/`；该目录与 `.godot/` 一样属于可再生成产物，不提交到仓库。
+
+## 近期改动（2026-08-19）
+
+### 主页 UI 复刻（Unity 版美术）
+
+- 主页改为深紫电视节目风：循环播放主角形象的 **AI 播片动画**（源文件 `web/ai_media/menu_video.mp4`，转码副本 `assets/ui/menu_video.ogv`），由 `channel_3d.tscn` 的 `VideoStreamPlayer` + `channel_3d.gd::_configure_home_video()` / `_set_home_video()` 控制（进主页播放、进游戏停止、回主页恢复）。
+- 主/次按钮使用 Unity 版胶囊按钮贴图（洋红「打开电视机」、青「新手教学/接着看上集」），来源 `assets/ui/unity_buttons/`。
+- 保留「回到标题」与「节目测试台」功能。
+
+### PCG 建造转正
+
+- `kenney_build_lab_mode` 由实验开关（默认关闭）转为 **默认开启**：正式主游玩（开局/读档）全程使用 Kaykit/Kenney 桌模渲染房间（门洞、墙、地板、透视、移动悬浮），不再走旧几何桥路线。
+- `_save_run()` 的「实验模式不存档」短路已移除，正式游玩正常存档/读档。
+- 新增回归测试 `tests/formal_build_promoted_regression.gd`（开局→预兆→探索→扩建→存档→读档全程 Kenney composer）与 `tests/home_video_regression.gd`（主页视频显隐/循环）。
+
+### 渲染器修复（编辑器崩溃）
+
+- 项目渲染器从 `gl_compatibility`（OpenGL 3.3，与 NVIDIA 610.47 驱动冲突导致编辑器启动即崩溃 `0xc0000005`）改为默认 `forward_plus`（Vulkan）。`project.godot` 中不再强制 OpenGL。
+
+### 标准约定
+
+- **Web 是规则基准，Godot 是 3D 表现分支**：玩法核对以共享盘 `\\192.168.1.21\bytedance\Shared\new channel\web\releases\CabinSlice_织梦频道.exe` 的实际行为为准。
+- **Godot 是本机权威开发主线**：所有 Godot 开发在本地 `G:\dream-channel\godot` 进行，不依赖网络共享。

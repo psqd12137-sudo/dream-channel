@@ -166,3 +166,35 @@ cd cabin-slice && ./desktop/build.sh
 5. **第 5 轮**：商店与货币（Godot 版）
 
 大方向以 `docs/open-questions.md` 为准；能力值若拍板，第 3 轮起改成长轴。
+
+## 目录结构（2026-08 整理）
+
+Web 目录已按「活跃源码 / 发布产物 / AI 动画资产」分区，避免把 exe、实验日志、动画堆在顶层：
+
+```text
+web/
+├── index.html            # 网页版入口（活跃源码）
+├── css/ js/ data/ assets/ scripts/   # 网页版源码
+├── desktop/              # 桌面启动器源码（Go，重新打包见 desktop/build.sh）
+├── ai_media/             # ★ AI 播片动画资产库（源 MP4 + 预览页 + 规范）
+├── releases/             # ★ 发布版归档（桌面 exe + lab 自测日志）
+├── README.md             # 本说明
+├── 一键启动.bat / 一键启动.command   # 一键启动网页服务
+```
+
+## AI 播片动画资产（ai_media/）
+
+`ai_media/` 是 **AI 生成播片动画**的归档目录——当前成员是主页循环背景动画（用主角形象生成的 AI 动画，本项目最有价值的资产之一），未来会持续加入更多 AI 播片。资产规范、转码 Godot OGV 的方法与资产清单见 [ai_media/README.md](./ai_media/README.md)。
+
+- Godot 侧转码副本：`../godot/assets/ui/menu_video.ogv`（主页 `VideoStreamPlayer` 循环播放，由 `channel_3d.gd::_configure_home_video()` 加载）。
+- 浏览器预览：本地起服务后打开 `http://127.0.0.1:8787/ai_media/menu_video_preview.html`。
+
+## 发布版归档（releases/）
+
+`releases/` 存放桌面发布版与自测日志，与活跃源码分开：
+
+- `CabinSlice_织梦频道.exe`：当前 **Web/桌面规则基准**（2026-08-12，SHA-256 `EEC4C574CC227FB966D39265A31E25F4D6875557C6BB09BB771E6760CC11DC03`）。玩法核对必须以它的实际行为为准。
+- `CabinSlice_山屋惊魂.exe`：早期实验桌面包（2026-08-02）。
+- `lab_logs/`：Playwright 自测产物（`lab-*.json` / `lab-*.log`）。
+
+exe 与 lab 日志均被 `.gitignore` 忽略，不进入 git 仓库，仅作本地发布物。
