@@ -34,7 +34,6 @@ func _run() -> void:
 	_check(missing_icons.is_empty(), "all card icons must load (missing: %s)" % ", ".join(missing_icons))
 
 	# 2. 触发战斗并验证手牌弧形布局 + 发牌动效
-	var hall_room: Dictionary = game._find_catalog_room("hall")
 	game.start_combat_lab("hall")
 	await process_frame
 	await process_frame
@@ -42,7 +41,7 @@ func _run() -> void:
 	if game.combat != null and not game.combat.hand.is_empty():
 		var hud: Control = game.hud
 		await process_frame
-		# 手牌布局：弧形（中间卡 y 低于两端卡）
+		# 手牌布局：弧形（中间卡高于两端卡）
 		var rects: Array = hud.combat_card_rects
 		_check(rects.size() == game.combat.hand.size(), "combat card rects must match hand size")
 		if rects.size() >= 3:
@@ -50,10 +49,37 @@ func _run() -> void:
 			var mid_y: float = (rects[mid_idx] as Rect2).position.y
 			var edge_y: float = (rects[0] as Rect2).position.y
 			_check(mid_y < edge_y, "arc layout: middle card should sit higher than edge cards (mid=%.1f edge=%.1f)" % [mid_y, edge_y])
-		# 发牌动效：hand_key 变化应触发 flight offsets
+		# 发牌动效：逐张飞行（stagger 延迟应使不同卡同时处于不同进度）
 		hud._update_card_flights("", ",".join(game.combat.hand))
-		await create_timer(0.1).timeout
-		_check(not hud.card_flight_offsets.is_empty(), "dealing a new hand must create flight offsets")
+		await create_timer(0.06).timeout
+		var offsets_after: Dictionary = hud.card_flight_offsets
+		_check(not offsets_after.is_empty(), "dealing a new hand must create flight offsets")
+		# 逐张验证：第一张卡已飞行一段，最后一张还在初始位置附近
+		var ids: Array = []
+		for raw_id: Variant in offsets_after.keys():
+			ids.append(str(raw_id))
+		if ids.size() >= 2:
+			var first_offset: Vector2 = offsets_after[ids[0]]
+			var last_offset: Vector2 = offsets_after[ids[ids.size() - 1]]
+			_check(first_offset.length_squared() < last_offset.length_squared() or not is_equal_approx(first_offset.length(), last_offset.length()), "staggered deal: cards should fly one by one (first=%.0f last=%.0f)" % [first_offset.length(), last_offset.length()])
+		# 收牌动效：打出一张卡后应进入离场列表并飞向弃牌堆
+		if game.combat.hand.size() > 0:
+			var played_id := str(game.combat.hand[0])
+			hud._update_card_flights(",".join(game.combat.hand), ",".join(game.combat.hand.slice(1)))
+			await process_frame
+			var found_exit := false
+			for entry: Dictionary in hud.exiting_cards:
+				if str(entry.get("id", "")) == played_id:
+					found_exit = true
+					break
+			_check(found_exit, "discarded card must enter exiting_cards for flight to discard pile")
+			await create_timer(0.30).timeout
+			var still_exit := false
+			for entry: Dictionary in hud.exiting_cards:
+				if str(entry.get("id", "")) == played_id:
+					still_exit = true
+					break
+			_check(not still_exit, "exiting card must be removed after flight completes")
 
 	game.queue_free()
 	await process_frame

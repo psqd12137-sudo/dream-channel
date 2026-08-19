@@ -91,6 +91,8 @@ var dragged_card_position := Vector2.ZERO
 var card_flight_offsets: Dictionary = {}
 var card_flight_tweens: Dictionary = {}
 var card_exit_alphas: Dictionary = {}
+var card_icon_cache: Dictionary = {}
+var exiting_cards: Array[Dictionary] = []
 var last_hand_key := ""
 var deck_flight_origin := Vector2(94, 600)
 var discard_flight_origin := Vector2(910, 600)
@@ -130,13 +132,25 @@ func _notification(what: int) -> void:
 func _process(delta: float) -> void:
 	if seed_input != null:
 		seed_input.visible = game != null and game.phase == "home"
+	# 离开战斗时清理残留的飞行动画状态
+	if game != null and game.phase != "combat" and (not card_flight_offsets.is_empty() or not exiting_cards.is_empty() or not card_flight_tweens.is_empty()):
+		for raw_tween: Variant in card_flight_tweens.values():
+			var tween: Tween = raw_tween
+			if tween != null and tween.is_valid():
+				tween.kill()
+		card_flight_offsets.clear()
+		card_flight_tweens.clear()
+		card_exit_alphas.clear()
+		exiting_cards.clear()
+		last_hand_key = ""
+		queue_redraw()
 	var target := 1.0 if hovered_combat_card >= 0 and dragged_combat_card < 0 else 0.0
 	var previous := combat_card_hover_amount
 	combat_card_hover_amount = move_toward(combat_card_hover_amount, target, delta * 8.5)
 	if not is_equal_approx(previous, combat_card_hover_amount):
 		queue_redraw()
 	# 发牌/收牌动效推进（flight offsets 归零后自动清除）
-	if not card_flight_offsets.is_empty():
+	if not card_flight_offsets.is_empty() or not exiting_cards.is_empty():
 		queue_redraw()
 
 
@@ -158,7 +172,8 @@ func _update_card_flights(old_key: String, new_key: String) -> void:
 	for id: String in old_ids:
 		if not id.is_empty():
 			old_set[id] = true
-	# 新卡：从牌堆位置飞入（首次进入战斗也触发）
+	# 新卡：从牌堆位置逐张飞入（stagger 0.09s）
+	var deal_index := 0
 	for id: String in new_ids:
 		if id.is_empty() or old_set.has(id):
 			continue
@@ -166,14 +181,18 @@ func _update_card_flights(old_key: String, new_key: String) -> void:
 			card_flight_offsets.erase(id)
 		var start_offset := deck_flight_origin - _hand_card_anchor_position(id, new_ids)
 		card_flight_offsets[id] = start_offset
-		_tween_card_flight(id, Vector2.ZERO)
-	# 消失的卡：飞向弃牌堆（收牌动效）
+		_tween_card_flight(id, Vector2.ZERO, 0.26, 0.09 * float(deal_index))
+		deal_index += 1
+	# 消失的卡：进入离场列表，逐张飞向弃牌堆并淡出
+	var discard_index := 0
 	for id: String in old_ids:
 		if id.is_empty() or new_set.has(id):
 			continue
-		var discard_offset := discard_flight_origin - _hand_card_anchor_position(id, old_ids)
-		card_flight_offsets[id] = discard_offset
-		_fade_card_flight_out(id)
+		var card_data: Dictionary = combat_cards().get(id, {})
+		var anchor := _hand_card_anchor_position(id, old_ids)
+		exiting_cards.append({"id": id, "from": anchor, "position": anchor, "alpha": 1.0, "kind": str(card_data.get("type", "skill"))})
+		_tween_exit_flight(id, 0.09 * float(discard_index))
+		discard_index += 1
 
 
 func _hand_card_anchor_position(card_id: String, hand_ids: Array) -> Vector2:
@@ -196,7 +215,7 @@ func _hand_card_anchor_position(card_id: String, hand_ids: Array) -> Vector2:
 	return Vector2(x + card_width * 0.5, arc_y + card_height * 0.5)
 
 
-func _tween_card_flight(card_id: String, target_offset: Vector2) -> void:
+func _tween_card_flight(card_id: String, target_offset: Vector2, duration: float = 0.26, delay: float = 0.0) -> void:
 	if card_flight_tweens.has(card_id):
 		var existing: Tween = card_flight_tweens[card_id]
 		if existing != null and existing.is_valid():
@@ -204,33 +223,43 @@ func _tween_card_flight(card_id: String, target_offset: Vector2) -> void:
 	var start_offset: Vector2 = card_flight_offsets.get(card_id, target_offset)
 	var flight := create_tween()
 	card_flight_tweens[card_id] = flight
+	if delay > 0.0:
+		flight.tween_interval(delay)
 	flight.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	flight.tween_method(_apply_card_flight.bind(card_id), start_offset, target_offset, 0.28)
+	flight.tween_method(_apply_card_flight.bind(card_id), start_offset, target_offset, duration)
 	flight.tween_callback(_finish_card_flight.bind(card_id))
 
 
-func _fade_card_flight_out(card_id: String) -> void:
-	# 收牌：从手牌位飞向弃牌堆并淡出，结束后移除
-	if card_flight_tweens.has(card_id):
-		var existing: Tween = card_flight_tweens[card_id]
-		if existing != null and existing.is_valid():
-			existing.kill()
-	card_flight_tweens.erase(card_id)
-	card_exit_alphas[card_id] = 1.0
+func _tween_exit_flight(card_id: String, delay: float = 0.0) -> void:
+	# 离场卡：从手牌位置飞向弃牌堆，同时淡出；逐张 stagger
 	var exit_tween := create_tween()
-	card_flight_tweens[card_id] = exit_tween
+	if delay > 0.0:
+		exit_tween.tween_interval(delay)
 	exit_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	exit_tween.tween_method(_apply_card_exit_alpha.bind(card_id), 1.0, 0.0, 0.24)
-	exit_tween.tween_callback(_finish_card_flight.bind(card_id))
-
-
-func _apply_card_exit_alpha(alpha: float, card_id: String) -> void:
-	card_exit_alphas[card_id] = alpha
-	queue_redraw()
+	exit_tween.tween_method(_apply_exit_card_flight.bind(card_id), 0.0, 1.0, 0.22)
+	exit_tween.tween_callback(_finish_exit_card.bind(card_id))
 
 
 func _apply_card_flight(offset: Vector2, card_id: String) -> void:
 	card_flight_offsets[card_id] = offset
+	queue_redraw()
+
+
+func _apply_exit_card_flight(weight: float, card_id: String) -> void:
+	for entry: Dictionary in exiting_cards:
+		if str(entry.get("id", "")) == card_id:
+			var start: Vector2 = entry.get("from", Vector2.ZERO)
+			entry["position"] = start.lerp(discard_flight_origin, weight)
+			entry["alpha"] = 1.0 - weight
+			queue_redraw()
+			return
+
+
+func _finish_exit_card(card_id: String) -> void:
+	for i in range(exiting_cards.size() - 1, -1, -1):
+		if str((exiting_cards[i] as Dictionary).get("id", "")) == card_id:
+			exiting_cards.remove_at(i)
+			break
 	queue_redraw()
 
 
@@ -239,6 +268,12 @@ func _finish_card_flight(card_id: String) -> void:
 	card_flight_tweens.erase(card_id)
 	card_exit_alphas.erase(card_id)
 	queue_redraw()
+
+
+func combat_cards() -> Dictionary:
+	if game != null and game.combat != null:
+		return game.combat.cards
+	return {}
 
 
 func sync_layout() -> void:
@@ -648,6 +683,16 @@ func _draw_combat_hud() -> void:
 		combat_card_rects.append(rect)
 		var card: Dictionary = combat.cards.get(combat.hand[i], {})
 		_draw_combat_card(rect, str(combat.hand[i]), card, combat.card_cost(card), i == game.selected_card, tilt_deg)
+	# 离场卡（正在飞向弃牌堆）绘制在手牌之上
+	for entry: Dictionary in exiting_cards:
+		var exit_id := str(entry.get("id", ""))
+		var exit_pos: Vector2 = entry.get("position", discard_flight_origin)
+		var exit_alpha := float(entry.get("alpha", 0.0))
+		if exit_alpha <= 0.01:
+			continue
+		var exit_card: Dictionary = combat.cards.get(exit_id, {})
+		var exit_rect := Rect2(exit_pos - Vector2(card_width, card_height) * 0.5, Vector2(card_width, card_height))
+		_draw_combat_card(exit_rect, exit_id, exit_card, combat.card_cost(exit_card), false, 0.0, exit_alpha)
 	if dragged_combat_card >= 0 and dragged_combat_card < combat.hand.size():
 		_draw_card_target_arrow(combat_card_rects[dragged_combat_card].get_center(), dragged_card_position)
 	if combat.outcome == "":
@@ -805,13 +850,13 @@ func _draw_action_ticket(rect: Rect2) -> void:
 	_label("固定预算", rect.position + Vector2(177, 96), 9, Color("7a6044"))
 
 
-func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int, selected: bool, tilt_deg: float = 0.0) -> void:
+func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int, selected: bool, tilt_deg: float = 0.0, alpha_override: float = -1.0) -> void:
 	var kind := str(card.get("type", "skill"))
 	var accent := GOLD if kind == "place" else MAGENTA if kind == "ready" else RED if kind == "medicine" else TEAL
 	var frame: Texture2D = CARD_FRAME_YELLOW if kind == "place" else CARD_FRAME_RED if kind == "medicine" else CARD_FRAME_BLUE
 	var card_scale := rect.size.x / 124.0
 	var scaled := func(value: float) -> float: return value * card_scale
-	var fade := Color(1, 1, 1, float(card_exit_alphas.get(card_id, 1.0)))
+	var fade := Color(1, 1, 1, alpha_override if alpha_override >= 0.0 else float(card_exit_alphas.get(card_id, 1.0)))
 	if not is_zero_approx(tilt_deg):
 		var pivot := rect.get_center()
 		draw_set_transform(pivot, deg_to_rad(tilt_deg), Vector2.ONE)
@@ -834,13 +879,11 @@ func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int
 	# 类型标签
 	_label(_card_kind_label(kind), rect.position + Vector2(scaled.call(43.0), scaled.call(48.0)), maxi(7, roundi(scaled.call(9.0))), Color(accent.darkened(0.25), fade.a))
 	if rect.size.y >= scaled.call(110.0):
-		# 中央道具图标（Unity 原图，取自 presentation.items[card_id]）
+		# 中央道具图标（Unity 原图，取自 presentation.items[card_id]，缓存避免每帧 load）
 		var art_rect := Rect2(rect.position + Vector2(scaled.call(43.0), scaled.call(55.0)), Vector2(rect.size.x - scaled.call(51.0), scaled.call(58.0)))
-		var item_path := str((game.presentation.get("items", {}) as Dictionary).get(card_id, ""))
-		if not item_path.is_empty():
-			var icon := load(item_path) as Texture2D
-			if icon != null:
-				_draw_texture_contained(icon, art_rect, Color(1, 1, 1, 0.98) * fade)
+		var icon := _card_icon(card_id)
+		if icon != null:
+			_draw_texture_contained(icon, art_rect, Color(1, 1, 1, 0.98) * fade)
 		else:
 			draw_texture_rect(frame, art_rect, false, Color(1, 1, 1, 0.96) * fade)
 		draw_rect(art_rect, Color(accent.darkened(0.25), fade.a), false, scaled.call(1.5))
@@ -848,6 +891,19 @@ func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int
 		_draw_wrapped(_shorten(str(card.get("text", "")), 42), Vector2(rect.position.x + scaled.call(43.0), art_rect.end.y + scaled.call(13.0)), rect.size.x - scaled.call(51.0), maxi(7, roundi(scaled.call(10.0))), Color("544a43", fade.a))
 	if not is_zero_approx(tilt_deg):
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func _card_icon(card_id: String) -> Texture2D:
+	# 图标纹理缓存：避免动画期间每帧 load()（卡顿主因）
+	if card_icon_cache.has(card_id):
+		return card_icon_cache[card_id] as Texture2D
+	var icon: Texture2D = null
+	if game != null:
+		var item_path := str((game.presentation.get("items", {}) as Dictionary).get(card_id, ""))
+		if not item_path.is_empty():
+			icon = load(item_path) as Texture2D
+	card_icon_cache[card_id] = icon
+	return icon
 
 
 func _draw_texture_contained(texture: Texture2D, rect: Rect2, modulate: Color = Color.WHITE) -> void:
