@@ -49,7 +49,7 @@ func _run() -> void:
 			var mid_idx := int(float(rects.size() - 1) * 0.5)
 			var mid_y: float = (rects[mid_idx] as Rect2).position.y
 			var edge_y: float = (rects[0] as Rect2).position.y
-			_check(mid_y > edge_y - 1.0, "arc layout: middle card should sit lower than edge cards (mid=%.1f edge=%.1f)" % [mid_y, edge_y])
+			_check(mid_y < edge_y, "arc layout: middle card should sit higher than edge cards (mid=%.1f edge=%.1f)" % [mid_y, edge_y])
 		# 发牌动效：hand_key 变化应触发 flight offsets
 		hud._update_card_flights("", ",".join(game.combat.hand))
 		await create_timer(0.1).timeout

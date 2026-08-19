@@ -1938,6 +1938,9 @@ func _apply_battle_camera() -> void:
 
 func _after_combat_action() -> void:
 	player_hp = combat.player_hp
+	# 杀戮尖塔式回合：敌方动画播完后才给玩家发新牌
+	if combat != null and combat.pending_player_turn and combat.outcome == "":
+		combat.start_player_turn()
 	build_battle_world()
 	if combat.outcome != "":
 		status_message = "战斗胜利。" if combat.outcome == "victory" else "本集信号中断。"

@@ -32,6 +32,7 @@ var retain_this_turn := 0
 var damage_bonus := 0
 var free_draw_bonus := 0
 var free_draw_used := false
+var pending_player_turn := false
 var first_smash_bonus := 0
 var first_smash_used := false
 var decoy_pos := Vector2i(-1, -1)
@@ -462,7 +463,14 @@ func _finish_enemy_turn() -> void:
 		if enemy_blind_turns > 0:
 			enemy_blind_turns -= 1
 		round_number += 1
-		_start_player_turn()
+		# 杀戮尖塔式回合：怪物回合结束后不立即抽牌；
+		# 由 channel_3d 在敌方动画播完后调用 start_player_turn() 才发新牌。
+		pending_player_turn = true
+
+
+func start_player_turn() -> void:
+	pending_player_turn = false
+	_start_player_turn()
 
 
 func is_walkable(pos: Vector2i) -> bool:
