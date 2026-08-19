@@ -22,6 +22,8 @@ const BATTLE_HEIGHT_ASSETS := {
 }
 const HOUSE_CELL := 3.4
 const BATTLE_CELL := 2.35
+const BATTLE_SHELL_WALL_HEIGHT := 1.65
+const BATTLE_SHELL_JUNCTION_WIDTH := 0.22
 
 const COL_INK := Color("161b24")
 const COL_PAPER := Color("f7e8c5")
@@ -132,6 +134,10 @@ var battle_camera_yaw := atan2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z)
 var battle_camera_pitch := atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
 var battle_player_facing_yaw := 0.0
 var battle_enemy_facing_yaw := PI
+var battle_room_title := "房间"
+var battle_shell_edge_records: Dictionary = {}
+var battle_shell_culled_count := 0
+var battle_shell_visible_count := 0
 var hovered_battle_cell := INVALID_CELL
 var hovered_house_cell := INVALID_CELL
 var animation_busy := false
@@ -267,6 +273,7 @@ func is_world_view_point(screen_pos: Vector2) -> bool:
 
 func reset_run(seed_value: int = 0) -> void:
 	_cancel_dynamic_effect()
+	camera.environment = null
 	world_container.visible = true
 	house_root.visible = true
 	battle_root.visible = false
@@ -334,6 +341,7 @@ func start_new_run(tutorial_mode: bool = false) -> void:
 
 func go_home() -> void:
 	_cancel_dynamic_effect()
+	camera.environment = null
 	phase = "home"
 	home_tests_open = false
 	house_root.visible = false
@@ -422,9 +430,10 @@ func start_kenney_build_lab() -> void:
 	_set_home_video(false)
 	kenney_build_lab_mode = true
 	reset_run(run_seed + 101)
+	camera.environment = _make_visual_polish_environment()
 	phase = "explore"
 	omen_options.clear()
-	status_message = "山屋扩建已转正：点击黄色扩建格，选择 1/3/5 格票根，旋转并摆下；每次确认后按正式 room_rules 重算整栋墙、门和房间边界。"
+	status_message = "正式 PCG 验证：1/3/5 格票根仍由 room_rules 摆放；朝镜头外墙与当前房间近侧隔墙会实体剖切，门洞和边账本保持不变。"
 	build_house_world()
 	_set_house_camera()
 	_refresh_hud()
@@ -435,7 +444,8 @@ func start_diorama_art_lab() -> void:
 	var comparison := DIORAMA_ART_LAB.instantiate() as Node3D
 	comparison.name = "DioramaArtComparison"
 	lab_root.add_child(comparison)
-	status_message = "A 是现有软装与几何墙体；B 是 Mini Dungeon；C 是 Modular Ruins，并用楼梯与资产地面验证高低差。"
+	camera.environment = _make_visual_polish_environment()
+	status_message = "A 验证暖色焦点、接触阴影、实体剖切墙与信号发光；B/C 保留资产基线，便于直接判断增强是否真的改善层次。"
 	_set_diorama_camera_defaults()
 	_refresh_hud()
 
@@ -856,6 +866,7 @@ func _update_chase_finish_delay(delta: float) -> void:
 func _prepare_lab(next_phase: String) -> void:
 	_cancel_dynamic_effect()
 	_set_home_video(false)
+	camera.environment = null
 	phase = next_phase
 	world_container.visible = true
 	house_root.visible = false
@@ -885,6 +896,26 @@ func _set_diorama_camera_defaults() -> void:
 	lab_camera_pitch = 0.34
 	lab_camera_distance = 16.0
 	_apply_search_camera()
+
+
+func _make_visual_polish_environment() -> Environment:
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color("071116")
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color("58717a")
+	environment.ambient_light_energy = 0.24
+	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.ssao_enabled = true
+	environment.ssao_radius = 2.2
+	environment.ssao_intensity = 2.0
+	environment.ssao_power = 1.4
+	environment.ssil_enabled = true
+	environment.ssil_radius = 3.0
+	environment.ssil_intensity = 0.8
+	environment.glow_enabled = true
+	environment.glow_intensity = 0.35
+	return environment
 
 
 func orbit_search_camera(relative: Vector2) -> void:
@@ -1180,6 +1211,7 @@ func _finish_enter_room(target: Vector2i) -> void:
 	var room: Dictionary = room_rules.placed[target]
 	var first_visit := not bool(room.get("visited", false))
 	room_rules.set_instance_flag(target, "revealed", true)
+	room_rules.set_instance_flag(target, "visited", true)
 	if first_visit and not bool(room.get("completed", false)):
 		phase = "room_ready"
 		status_message = str(room.get("description", "你推开了房门。"))
@@ -1354,6 +1386,7 @@ func finish_event_trial(success: bool) -> void:
 
 func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	combat = CombatRules.new()
+	battle_room_title = str(room.get("name", "房间"))
 	battle_player_facing_yaw = house_player_facing_yaw
 	battle_enemy_facing_yaw = PI
 	var enemy: Dictionary = room.get("enemy", {})
@@ -1753,9 +1786,17 @@ func reset_battle_camera() -> void:
 	battle_camera_yaw = atan2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z)
 	battle_camera_pitch = atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
 	_apply_battle_camera()
+	_refit_battle_camera(false)
+
+
+func _refit_battle_camera(preserve_zoom: bool) -> void:
+	var zoom_ratio := camera.size / maxf(0.001, battle_camera_fit_size) if preserve_zoom else 1.0
+	var max_height := 0.0
+	for raw_height in combat.heights.values():
+		max_height = maxf(max_height, float(raw_height))
 	var half_x := (float(combat.cols - 1) * 0.5 + 0.65) * BATTLE_CELL
 	var half_z := (float(combat.rows - 1) * 0.5 + 0.65) * BATTLE_CELL
-	var max_y := max_height * 0.64 + 2.25
+	var max_y := maxf(max_height * 0.64 + 2.25, BATTLE_SHELL_WALL_HEIGHT + 1.0)
 	var min_x := INF
 	var max_x := -INF
 	var min_y := INF
@@ -1777,7 +1818,7 @@ func reset_battle_camera() -> void:
 	var projected_width := max_x - min_x + 0.8
 	var projected_height := max_y_projected - min_y + 0.8
 	battle_camera_fit_size = maxf(6.0, maxf(projected_height, projected_width / maxf(0.5, aspect)) * 1.08)
-	camera.size = battle_camera_fit_size
+	camera.size = battle_camera_fit_size * clampf(zoom_ratio, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX)
 	_apply_battle_camera()
 
 
@@ -1802,6 +1843,7 @@ func orbit_battle_camera(pixel_delta: Vector2) -> void:
 		max_height = maxf(max_height, float(raw_height))
 	battle_camera_target = Vector3(0.0, max_height * 0.18, 0.0)
 	_apply_battle_camera()
+	_refit_battle_camera(true)
 
 
 func zoom_battle_camera(view_pos: Vector2, zoom_factor: float) -> void:
@@ -1833,6 +1875,7 @@ func _apply_battle_camera() -> void:
 	var direction := Vector3(sin(battle_camera_yaw) * horizontal, sin(battle_camera_pitch) * battle_camera_distance, cos(battle_camera_yaw) * horizontal)
 	camera.position = battle_camera_target + direction
 	camera.look_at(battle_camera_target + Vector3(0, 0.2, 0), Vector3.UP)
+	_apply_battle_room_cutaway()
 
 
 func _after_combat_action() -> void:
@@ -1960,8 +2003,6 @@ func build_house_world() -> void:
 	if phase == "build" and not build_offers.is_empty():
 		_add_build_preview()
 	_add_house_player()
-	if kenney_build_lab_mode:
-		_apply_current_room_xray()
 	if hovered_house_cell != INVALID_CELL and room_rules.placed.has(hovered_house_cell):
 		_add_move_hover_mesh(hovered_house_cell)
 	if phase != "combat":
@@ -1994,6 +2035,11 @@ func _add_kenney_formal_composer() -> void:
 		piece.set("room_id", str(record["id"]))
 		piece.set("shape_id", str(room.get("footprint_kind", "single")))
 		piece.set("elevated", bool(room.get("elevated", false)))
+		piece.set_meta("room_name", str(room.get("name", "房间")))
+		piece.set_meta("revealed", bool(room.get("revealed", false)))
+		piece.set_meta("visited", bool(room.get("visited", false)))
+		piece.set_meta("completed", bool(room.get("completed", false)))
+		piece.set_meta("is_current", str(record["id"]) == str(room_rules.placed[current_room_pos].get("instance_id", "")))
 		piece.position = Vector3(float(origin.x) * 1.55, 0.0, float(origin.y) * 1.55)
 		piece.rotation.y = float(int(room.get("rotation", 0))) * PI * 0.5
 		layout.add_child(piece)
@@ -2150,9 +2196,13 @@ func _add_frontier_mesh(pos: Vector2i, selected: bool) -> void:
 	node.position = _house_world(pos)
 	house_root.add_child(node)
 	var color := COL_GOLD if selected else Color("c88b2f")
-	var transparent := Color(color, 0.54 if selected else 0.28)
-	_add_box(node, "BuildPad", Vector3(0, 0.11, 0), Vector3(2.75, 0.18, 2.75), _material(transparent, true))
-	_add_label(node, "Plus", "+", Vector3(0, 0.72, 0), color, 70)
+	var transparent := Color(color, 0.72 if selected else 0.48)
+	var socket_size := 0.88 if selected else 0.64
+	node.rotation.y = PI * 0.25
+	_add_box(node, "BuildSocket", Vector3(0, 0.18, 0), Vector3(socket_size, 0.22, socket_size), _material(transparent, true))
+	_add_box(node, "SocketCore", Vector3(0, 0.30, 0), Vector3(socket_size * 0.48, 0.06, socket_size * 0.48), _material(color))
+	var label := _add_label(node, "Plus", "+", Vector3(0, 0.88, 0), color, 44)
+	label.rotation.y = -PI * 0.25
 
 
 func _add_build_preview() -> void:
@@ -2250,38 +2300,42 @@ func _add_move_hover_mesh(pos: Vector2i) -> void:
 	_add_label(node, "MoveHint", "移动", Vector3(0, 1.08, 0), Color("bde8ff"), 30)
 
 
-func _apply_current_room_xray() -> void:
+func _apply_current_room_cutaway() -> void:
 	if not room_rules.placed.has(current_room_pos):
 		return
 	var composer := house_root.get_node_or_null("KenneyFormalComposer")
-	if composer == null or camera == null:
+	if composer == null or camera == null or not composer.has_method("apply_camera_cutaway"):
 		return
-	var generated := composer.get_node_or_null("GeneratedMap")
-	if generated == null:
-		return
-	var current_id := str(room_rules.placed[current_room_pos].get("instance_id", ""))
-	var camera_pos := camera.global_position
-	var player_pos := _house_world(current_room_pos)
-	var player_dist := camera_pos.distance_to(player_pos)
-	for child: Node in generated.get_children():
-		if not (child is Node3D) or str(child.get_meta("room_id", "")) != current_id:
-			continue
-		for mesh: Node in child.find_children("*", "MeshInstance3D", true, false):
-			var lower := str(mesh.name).to_lower()
-			if not (lower.contains("wall") or lower.contains("pillar")):
-				continue
-			if camera_pos.distance_to((mesh as Node3D).global_position) < player_dist:
-				_fade_mesh_instance(mesh as MeshInstance3D, 0.45)
-		return
+	var viewer_axis := camera.global_transform.basis.z
+	var local_viewer_axis: Vector3 = composer.global_transform.basis.inverse() * viewer_axis
+	composer.apply_camera_cutaway(current_room_pos, Vector2(local_viewer_axis.x, local_viewer_axis.z))
 
-func _fade_mesh_instance(mesh: MeshInstance3D, alpha: float) -> void:
-	var source := mesh.get_active_material(0) as BaseMaterial3D
-	if source == null:
-		return
-	var faded := source.duplicate() as BaseMaterial3D
-	faded.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	faded.albedo_color = Color(faded.albedo_color, alpha)
-	mesh.material_override = faded
+
+func pcg_cutaway_debug_text() -> String:
+	var composer := house_root.get_node_or_null("KenneyFormalComposer")
+	if composer == null or not composer.has_method("cutaway_debug_summary"):
+		return "PCG 诊断等待生成"
+	return str(composer.cutaway_debug_summary())
+
+
+func pcg_room_state_debug_text() -> String:
+	var composer := house_root.get_node_or_null("KenneyFormalComposer")
+	if composer == null or not composer.has_method("room_state_debug_summary"):
+		return "房态等待生成"
+	return "%s · 扩建插槽%d" % [str(composer.room_state_debug_summary()), room_rules.frontiers().size()]
+
+
+func frontier_markers_are_compact() -> bool:
+	var marker_count := 0
+	for raw_marker: Node in house_root.find_children("Frontier_*", "Node3D", false, false):
+		var marker := raw_marker as Node3D
+		var socket := marker.get_node_or_null("BuildSocket") as MeshInstance3D
+		if socket == null or not (socket.mesh is BoxMesh):
+			return false
+		if (socket.mesh as BoxMesh).size.x > HOUSE_CELL * 0.35:
+			return false
+		marker_count += 1
+	return marker_count == room_rules.frontiers().size()
 
 func build_battle_world() -> void:
 	_clear_children(battle_root)
@@ -2351,6 +2405,7 @@ func build_battle_world() -> void:
 	_add_battle_pawn(combat.enemy_pos, false, combat.enemy_revealed)
 	if combat.has_decoy():
 		_add_decoy_pawn(combat.decoy_pos)
+	_add_battle_room_shell()
 	_add_battle_stage_decor()
 
 
@@ -2505,6 +2560,161 @@ func _add_battle_stage_decor() -> void:
 	_add_decor_sprite("StageAnchor", str(decor.get("signal_anchor", "")), Vector3(half_x + 0.65, 0.65, half_z - 0.6), 0.0050)
 
 
+func _add_battle_room_shell() -> void:
+	battle_shell_edge_records.clear()
+	battle_shell_culled_count = 0
+	battle_shell_visible_count = 0
+	var shell := Node3D.new()
+	shell.name = "BattleRoomShell"
+	battle_root.add_child(shell)
+	var half_x := float(combat.cols) * BATTLE_CELL * 0.5
+	var half_z := float(combat.rows) * BATTLE_CELL * 0.5
+	var entrance: Dictionary = _battle_room_entrance_edge()
+	for side in range(4):
+		var segment_count: int = int(combat.cols) if side in [0, 2] else int(combat.rows)
+		for index in range(segment_count):
+			var is_entrance := side == int(entrance["side"]) and index == int(entrance["index"])
+			_add_battle_shell_edge(shell, side, index, half_x, half_z, is_entrance)
+	_add_battle_boundary_outline(shell, half_x, half_z)
+	var label := Label3D.new()
+	label.name = "BattleRoomStateLabel"
+	label.text = "%s · 当前房间" % battle_room_title
+	label.position = Vector3(0, BATTLE_SHELL_WALL_HEIGHT + 0.75, -half_z - 0.10)
+	label.modulate = COL_GOLD
+	label.font_size = 44
+	label.outline_size = 10
+	label.pixel_size = 0.009
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	shell.add_child(label)
+	_apply_battle_room_cutaway()
+
+
+func _battle_room_entrance_edge() -> Dictionary:
+	var player: Vector2i = combat.player_pos
+	var distances := [player.y, combat.cols - 1 - player.x, combat.rows - 1 - player.y, player.x]
+	var side := 0
+	for candidate in range(1, 4):
+		if int(distances[candidate]) < int(distances[side]):
+			side = candidate
+	var index := player.x if side in [0, 2] else player.y
+	return {"side": side, "index": index}
+
+
+func _add_battle_shell_edge(shell: Node3D, side: int, index: int, half_x: float, half_z: float, is_entrance: bool) -> void:
+	var segment := Node3D.new()
+	segment.name = "ShellEdge_%d_%d" % [side, index]
+	segment.set_meta("side", side)
+	segment.set_meta("is_entrance", is_entrance)
+	var direction: Vector2i = RoomRules.DIRS[side]
+	if side in [0, 2]:
+		segment.position = Vector3((float(index) - float(combat.cols - 1) * 0.5) * BATTLE_CELL, 0.34, -half_z if side == 0 else half_z)
+	else:
+		segment.position = Vector3(half_x if side == 1 else -half_x, 0.34, (float(index) - float(combat.rows - 1) * 0.5) * BATTLE_CELL)
+	segment.rotation.y = _battle_shell_direction_yaw(direction)
+	shell.add_child(segment)
+	var full_root := Node3D.new()
+	full_root.name = "FullDoorway" if is_entrance else "FullWall"
+	segment.add_child(full_root)
+	var asset_path := KAYKIT_DUNGEON_ROOT + ("wall_doorway.glb" if is_entrance else "wall.gltf.glb")
+	var packed := load(asset_path) as PackedScene
+	if packed != null:
+		var model := packed.instantiate() as Node3D
+		if model != null:
+			model.name = "ShellAsset"
+			model.scale = Vector3((BATTLE_CELL - BATTLE_SHELL_JUNCTION_WIDTH) / 4.0, BATTLE_SHELL_WALL_HEIGHT / 4.0, BATTLE_SHELL_JUNCTION_WIDTH)
+			full_root.add_child(model)
+			for child: Node in model.find_children("*", "MeshInstance3D", true, false):
+				(child as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	var cutaway_root := Node3D.new()
+	cutaway_root.name = "DoorThreshold" if is_entrance else "WallSill"
+	cutaway_root.visible = false
+	segment.add_child(cutaway_root)
+	_add_battle_shell_sill(cutaway_root, is_entrance)
+	var key := "%d:%d" % [side, index]
+	battle_shell_edge_records[key] = {"side": side, "full": full_root, "cutaway": cutaway_root, "entrance": is_entrance}
+
+
+func _add_battle_shell_sill(parent: Node3D, is_entrance: bool) -> void:
+	var span := BATTLE_CELL - BATTLE_SHELL_JUNCTION_WIDTH
+	if not is_entrance:
+		_add_box(parent, "CutawayWallBase", Vector3(0, 0.07, 0), Vector3(span, 0.14, 0.16), _material(Color("54757a")))
+		return
+	var opening := minf(0.88, span * 0.46)
+	var side_span := (span - opening) * 0.5
+	var offset := opening * 0.5 + side_span * 0.5
+	_add_box(parent, "DoorBaseLeft", Vector3(-offset, 0.07, 0), Vector3(side_span, 0.14, 0.16), _material(Color("54757a")))
+	_add_box(parent, "DoorBaseRight", Vector3(offset, 0.07, 0), Vector3(side_span, 0.14, 0.16), _material(Color("54757a")))
+	_add_box(parent, "EntranceThreshold", Vector3(0, 0.025, 0), Vector3(opening, 0.04, 0.24), _material(COL_GOLD, false, 0.05))
+
+
+func _battle_shell_direction_yaw(direction: Vector2i) -> float:
+	if direction == Vector2i.RIGHT:
+		return -PI * 0.5
+	if direction == Vector2i.LEFT:
+		return PI * 0.5
+	if direction == Vector2i.DOWN:
+		return PI
+	return 0.0
+
+
+func _add_battle_boundary_outline(shell: Node3D, half_x: float, half_z: float) -> void:
+	var y := 0.39
+	_add_box(shell, "BattleBoundaryTop", Vector3(0, y, -half_z + 0.08), Vector3(half_x * 2.0 - 0.16, 0.045, 0.08), _material(COL_GOLD, false, 0.04))
+	_add_box(shell, "BattleBoundaryBottom", Vector3(0, y, half_z - 0.08), Vector3(half_x * 2.0 - 0.16, 0.045, 0.08), _material(COL_GOLD, false, 0.04))
+	_add_box(shell, "BattleBoundaryRight", Vector3(half_x - 0.08, y, 0), Vector3(0.08, 0.045, half_z * 2.0 - 0.16), _material(COL_GOLD, false, 0.04))
+	_add_box(shell, "BattleBoundaryLeft", Vector3(-half_x + 0.08, y, 0), Vector3(0.08, 0.045, half_z * 2.0 - 0.16), _material(COL_GOLD, false, 0.04))
+
+
+func _apply_battle_room_cutaway() -> void:
+	if combat == null or battle_shell_edge_records.is_empty():
+		return
+	battle_shell_culled_count = 0
+	battle_shell_visible_count = 0
+	var viewer_direction := Vector2(sin(battle_camera_yaw), cos(battle_camera_yaw)).normalized()
+	for raw_record: Variant in battle_shell_edge_records.values():
+		var record: Dictionary = raw_record
+		var side := int(record["side"])
+		var direction: Vector2i = RoomRules.DIRS[side]
+		var outward := Vector2(float(direction.x), float(direction.y))
+		var culled := outward.dot(viewer_direction) > 0.35
+		(record["full"] as Node3D).visible = not culled
+		(record["cutaway"] as Node3D).visible = culled
+		if culled:
+			battle_shell_culled_count += 1
+		else:
+			battle_shell_visible_count += 1
+
+
+func battle_room_shell_debug_state() -> Dictionary:
+	var entrance_count := 0
+	for raw_record: Variant in battle_shell_edge_records.values():
+		if bool((raw_record as Dictionary).get("entrance", false)):
+			entrance_count += 1
+	return {
+		"edges": battle_shell_edge_records.size(),
+		"culled": battle_shell_culled_count,
+		"visible": battle_shell_visible_count,
+		"entrances": entrance_count,
+		"logical_walls": combat.walls.size() if combat != null else 0,
+	}
+
+
+func battle_room_shell_is_consistent() -> bool:
+	if combat == null or battle_shell_edge_records.size() != (combat.cols + combat.rows) * 2:
+		return false
+	var entrance_count := 0
+	for raw_record: Variant in battle_shell_edge_records.values():
+		var record: Dictionary = raw_record
+		var full := record.get("full") as Node3D
+		var cutaway := record.get("cutaway") as Node3D
+		if full == null or cutaway == null or full.visible == cutaway.visible:
+			return false
+		if bool(record.get("entrance", false)):
+			entrance_count += 1
+	return entrance_count == 1 and battle_shell_culled_count > 0 and battle_shell_visible_count > 0
+
+
 func _add_decor_sprite(node_name: String, texture_path: String, local_position: Vector3, pixel_size: float) -> void:
 	if texture_path.is_empty():
 		return
@@ -2610,6 +2820,8 @@ func _apply_house_camera() -> void:
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.position = house_camera_target + Vector3(10.5, 13.5, 11.5)
 	camera.look_at(house_camera_target + Vector3(0, 0.2, 0), Vector3.UP)
+	if kenney_build_lab_mode:
+		_apply_current_room_cutaway()
 
 
 func _set_battle_camera() -> void:

@@ -48,6 +48,15 @@ var prop_count := 0
 var junction_count := 0
 var visual_edge_records: Dictionary = {}
 var visual_geometry_issues: Array[String] = []
+var structural_edge_nodes: Dictionary = {}
+var structural_junction_nodes: Array[Node3D] = []
+var cutaway_marker_nodes: Dictionary = {}
+var cutaway_culled_edge_keys: Array[String] = []
+var cutaway_culled_wall_count := 0
+var cutaway_culled_doorway_count := 0
+var cutaway_visible_wall_count := 0
+var cutaway_visible_doorway_count := 0
+var cutaway_focus_room_index := -1
 var layout_extent := 8.0
 
 @onready var standalone_rig: Node3D = $StandaloneRig
@@ -81,6 +90,15 @@ func regenerate(seed_value: int) -> void:
 	junction_count = 0
 	visual_edge_records.clear()
 	visual_geometry_issues.clear()
+	structural_edge_nodes.clear()
+	structural_junction_nodes.clear()
+	cutaway_marker_nodes.clear()
+	cutaway_culled_edge_keys.clear()
+	cutaway_culled_wall_count = 0
+	cutaway_culled_doorway_count = 0
+	cutaway_visible_wall_count = 0
+	cutaway_visible_doorway_count = 0
+	cutaway_focus_room_index = -1
 	_generate_room_layout()
 	_build_joined_diorama()
 	if animate_room_build and not Engine.is_editor_hint():
@@ -195,10 +213,15 @@ func _add_room(shape_id: String, cells: Array[Vector2i], elevation: float, room_
 	var room_index := rooms.size()
 	var room := {
 		"id": room_id,
+		"name": room_id,
 		"shape": shape_id,
 		"size": cells.size(),
 		"cells": cells.duplicate(),
 		"elevation": elevation,
+		"revealed": true,
+		"visited": true,
+		"completed": false,
+		"is_current": false,
 	}
 	rooms.append(room)
 	for cell: Vector2i in cells:
@@ -256,6 +279,7 @@ func _build_joined_diorama() -> void:
 		_build_cell(cell, center)
 	_build_edges(center)
 	_build_room_props(center)
+	_build_room_state_overlays(center)
 	_build_title(size)
 
 
@@ -273,6 +297,10 @@ func _prepare_room_visual_roots(center: Vector2) -> void:
 		room_root.set_meta("room_index", room_index)
 		room_root.set_meta("room_size", int(room.get("size", 1)))
 		room_root.set_meta("room_id", str(room.get("id", "R%02d" % room_index)))
+		room_root.set_meta("revealed", bool(room.get("revealed", true)))
+		room_root.set_meta("visited", bool(room.get("visited", true)))
+		room_root.set_meta("completed", bool(room.get("completed", false)))
+		room_root.set_meta("is_current", bool(room.get("is_current", false)))
 		generated_root.add_child(room_root)
 		room_visual_roots.append(room_root)
 
@@ -337,19 +365,25 @@ func _build_edges(center: Vector2) -> void:
 
 func _spawn_wall(cell: Vector2i, side: int, center: Vector2, elevation: float, divider: bool) -> void:
 	var direction: Vector2i = DIRS[side]
+	var neighbor := cell + direction
+	var edge_key := _edge_key(cell, neighbor)
+	var edge_kind := "divider" if divider else "outer"
 	var base := _cell_world(cell, center)
 	if use_kaykit_room_shell:
 		var wall_position := base + Vector3(float(direction.x) * CELL * 0.5, elevation + 0.025, float(direction.y) * CELL * 0.5)
-		_add_model("%sWall_%d_%d_%d" % ["Divider" if divider else "Outer", cell.x, cell.y, side], KAYKIT_ROOT + "wall.gltf.glb", wall_position, KAYKIT_WALL_SCALE, _direction_yaw(direction), int(occupancy[cell]))
+		var kaykit_wall := _add_model("%sWall_%d_%d_%d" % ["Divider" if divider else "Outer", cell.x, cell.y, side], KAYKIT_ROOT + "wall.gltf.glb", wall_position, KAYKIT_WALL_SCALE, _direction_yaw(direction), int(occupancy[cell]))
+		_tag_structural_edge(kaykit_wall, edge_key, edge_kind, cell, neighbor, direction)
 		return
 	if kenney_only:
 		var kenney_asset := KENNEY_ROOT + ("wall-half.fbx" if not divider and posmod(cell.x * 11 + cell.y * 23 + side + generation_seed, 5) == 0 else "wall.fbx")
-		_add_model("%sWall_%d_%d_%d" % ["Divider" if divider else "Outer", cell.x, cell.y, side], kenney_asset, base + Vector3(0, elevation + 0.025, 0), Vector3.ONE * CELL, _direction_yaw(direction), int(occupancy[cell]))
+		var kenney_wall := _add_model("%sWall_%d_%d_%d" % ["Divider" if divider else "Outer", cell.x, cell.y, side], kenney_asset, base + Vector3(0, elevation + 0.025, 0), Vector3.ONE * CELL, _direction_yaw(direction), int(occupancy[cell]))
+		_tag_structural_edge(kenney_wall, edge_key, edge_kind, cell, neighbor, direction)
 		return
 	var position := base + Vector3(float(direction.x) * CELL * 0.5, elevation + 0.02, float(direction.y) * CELL * 0.5)
 	var asset := RUINS_ROOT + ("Wall_Broken.fbx" if not divider and posmod(cell.x * 11 + cell.y * 23 + side + generation_seed, 5) == 0 else "Wall.fbx")
 	var scale_value := Vector3(CELL * 0.5, 0.55 if not divider else 0.47, 0.72)
-	_add_model("%sWall_%d_%d_%d" % ["Divider" if divider else "Outer", cell.x, cell.y, side], asset, position, scale_value, PI * 0.5 if side in [1, 3] else 0.0, int(occupancy[cell]))
+	var ruins_wall := _add_model("%sWall_%d_%d_%d" % ["Divider" if divider else "Outer", cell.x, cell.y, side], asset, position, scale_value, PI * 0.5 if side in [1, 3] else 0.0, int(occupancy[cell]))
+	_tag_structural_edge(ruins_wall, edge_key, edge_kind, cell, neighbor, direction)
 
 
 func _spawn_connection(cell: Vector2i, neighbor: Vector2i, side: int, center: Vector2) -> void:
@@ -360,14 +394,16 @@ func _spawn_connection(cell: Vector2i, neighbor: Vector2i, side: int, center: Ve
 	var position := _cell_world(cell, center) + Vector3(float(direction.x) * CELL * 0.5, low_elevation + 0.02, float(direction.y) * CELL * 0.5)
 	var yaw := PI * 0.5 if side in [1, 3] else 0.0
 	var connection_room_index := maxi(int(occupancy[cell]), int(occupancy[neighbor]))
+	var doorway_model: Node3D = null
 	if use_kaykit_room_shell:
-		_add_model("Doorway_%d" % doorway_count, KAYKIT_ROOT + "wall_doorway.glb", position, KAYKIT_DOOR_SCALE, _direction_yaw(direction), connection_room_index)
+		doorway_model = _add_model("Doorway_%d" % doorway_count, KAYKIT_ROOT + "wall_doorway.glb", position, KAYKIT_DOOR_SCALE, _direction_yaw(direction), connection_room_index)
 	elif kenney_only:
-		_add_model("Doorway_%d" % doorway_count, KENNEY_ROOT + "wall-opening.fbx", _cell_world(cell, center) + Vector3(0, elevation_a + 0.025, 0), Vector3.ONE * CELL, _direction_yaw(direction), connection_room_index)
+		doorway_model = _add_model("Doorway_%d" % doorway_count, KENNEY_ROOT + "wall-opening.fbx", _cell_world(cell, center) + Vector3(0, elevation_a + 0.025, 0), Vector3.ONE * CELL, _direction_yaw(direction), connection_room_index)
 		_add_model("Gate_%d" % doorway_count, KENNEY_ROOT + "gate.fbx", position + Vector3(0, 0.02, 0), Vector3.ONE * CELL, _direction_yaw(direction), connection_room_index)
 	else:
-		_add_model("Doorway_%d" % doorway_count, RUINS_ROOT + "Arch_Round.fbx", position, Vector3(CELL / 3.1, 0.38, 0.55), yaw, connection_room_index)
+		doorway_model = _add_model("Doorway_%d" % doorway_count, RUINS_ROOT + "Arch_Round.fbx", position, Vector3(CELL / 3.1, 0.38, 0.55), yaw, connection_room_index)
 		_add_model("Gate_%d" % doorway_count, KENNEY_ROOT + "gate.fbx", position + Vector3(0, 0.02, 0), Vector3.ONE * 1.12, yaw, connection_room_index)
+	_tag_structural_edge(doorway_model, _edge_key(cell, neighbor), "door", cell, neighbor, direction)
 	doorway_count += 1
 	if not is_equal_approx(elevation_a, elevation_b):
 		var lower_cell := cell if elevation_a < elevation_b else neighbor
@@ -387,17 +423,20 @@ func _spawn_connection(cell: Vector2i, neighbor: Vector2i, side: int, center: Ve
 
 func _spawn_outer_doorway(cell: Vector2i, side: int, center: Vector2, elevation: float) -> void:
 	var direction: Vector2i = DIRS[side]
+	var neighbor := cell + direction
 	var room_index := int(occupancy[cell])
 	var position := _cell_world(cell, center) + Vector3(float(direction.x) * CELL * 0.5, elevation + 0.02, float(direction.y) * CELL * 0.5)
 	var yaw := PI * 0.5 if side in [1, 3] else 0.0
+	var doorway_model: Node3D = null
 	if use_kaykit_room_shell:
-		_add_model("Doorway_%d" % doorway_count, KAYKIT_ROOT + "wall_doorway.glb", position, KAYKIT_DOOR_SCALE, _direction_yaw(direction), room_index)
+		doorway_model = _add_model("Doorway_%d" % doorway_count, KAYKIT_ROOT + "wall_doorway.glb", position, KAYKIT_DOOR_SCALE, _direction_yaw(direction), room_index)
 	elif kenney_only:
-		_add_model("Doorway_%d" % doorway_count, KENNEY_ROOT + "wall-opening.fbx", _cell_world(cell, center) + Vector3(0, elevation + 0.025, 0), Vector3.ONE * CELL, _direction_yaw(direction), room_index)
+		doorway_model = _add_model("Doorway_%d" % doorway_count, KENNEY_ROOT + "wall-opening.fbx", _cell_world(cell, center) + Vector3(0, elevation + 0.025, 0), Vector3.ONE * CELL, _direction_yaw(direction), room_index)
 		_add_model("Gate_%d" % doorway_count, KENNEY_ROOT + "gate.fbx", position + Vector3(0, 0.02, 0), Vector3.ONE * CELL, _direction_yaw(direction), room_index)
 	else:
-		_add_model("Doorway_%d" % doorway_count, RUINS_ROOT + "Arch_Round.fbx", position, Vector3(CELL / 3.1, 0.38, 0.55), yaw, room_index)
+		doorway_model = _add_model("Doorway_%d" % doorway_count, RUINS_ROOT + "Arch_Round.fbx", position, Vector3(CELL / 3.1, 0.38, 0.55), yaw, room_index)
 		_add_model("Gate_%d" % doorway_count, KENNEY_ROOT + "gate.fbx", position + Vector3(0, 0.02, 0), Vector3.ONE * 1.12, yaw, room_index)
+	_tag_structural_edge(doorway_model, _edge_key(cell, neighbor), "door", cell, neighbor, direction)
 	doorway_count += 1
 
 func _record_visual_edge(key: String, kind: String, cell: Vector2i, neighbor: Vector2i) -> void:
@@ -407,10 +446,197 @@ func _record_visual_edge(key: String, kind: String, cell: Vector2i, neighbor: Ve
 	visual_edge_records[key] = {"kind": kind, "cell": cell, "neighbor": neighbor}
 
 
+func _tag_structural_edge(node: Node3D, edge_key: String, kind: String, cell: Vector2i, neighbor: Vector2i, direction: Vector2i) -> void:
+	if node == null:
+		return
+	node.set_meta("structure_kind", kind)
+	node.set_meta("edge_key", edge_key)
+	node.set_meta("edge_cell", cell)
+	node.set_meta("edge_neighbor", neighbor)
+	node.set_meta("edge_direction", direction)
+	structural_edge_nodes[edge_key] = node
+	_create_cutaway_marker(node, edge_key, kind)
+
+
+func _create_cutaway_marker(structure: Node3D, edge_key: String, kind: String) -> void:
+	var marker := Node3D.new()
+	marker.name = "CutawayMarker_%s" % edge_key.replace("-", "m").replace(",", "_").replace("|", "__")
+	marker.position = structure.position
+	marker.rotation.y = structure.rotation.y
+	marker.visible = false
+	marker.set_meta("edge_key", edge_key)
+	marker.set_meta("structure_kind", kind)
+	structure.get_parent().add_child(marker)
+	var span := CELL - KAYKIT_JUNCTION_WIDTH
+	if kind == "door":
+		var opening := 0.66
+		var end_span := (span - opening) * 0.5
+		var offset := opening * 0.5 + end_span * 0.5
+		_add_cutaway_box(marker, "DoorSillLeft", Vector3(-offset, 0.07, 0), Vector3(end_span, 0.12, 0.13), Color("54757a"))
+		_add_cutaway_box(marker, "DoorSillRight", Vector3(offset, 0.07, 0), Vector3(end_span, 0.12, 0.13), Color("54757a"))
+		_add_cutaway_box(marker, "DoorThreshold", Vector3(0, 0.025, 0), Vector3(opening, 0.035, 0.18), Color("c88b2f"))
+	else:
+		_add_cutaway_box(marker, "WallSill", Vector3(0, 0.07, 0), Vector3(span, 0.12, 0.13), Color("54757a"))
+	cutaway_marker_nodes[edge_key] = marker
+
+
+func _add_cutaway_box(parent: Node3D, node_name: String, position: Vector3, size: Vector3, color: Color) -> void:
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = node_name
+	mesh_instance.position = position
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mesh_instance.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.88
+	mesh_instance.material_override = material
+	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mesh_instance)
+
+
+func apply_camera_cutaway(focus_cell: Vector2i, camera_direction: Vector2) -> Dictionary:
+	cutaway_culled_edge_keys.clear()
+	cutaway_culled_wall_count = 0
+	cutaway_culled_doorway_count = 0
+	cutaway_visible_wall_count = 0
+	cutaway_visible_doorway_count = 0
+	cutaway_focus_room_index = int(occupancy.get(focus_cell, -1))
+	for raw_node: Variant in structural_edge_nodes.values():
+		var edge_node := raw_node as Node3D
+		if edge_node != null:
+			edge_node.visible = true
+	for raw_marker: Variant in cutaway_marker_nodes.values():
+		var marker := raw_marker as Node3D
+		if marker != null:
+			marker.visible = false
+	for junction: Node3D in structural_junction_nodes:
+		if is_instance_valid(junction):
+			junction.visible = true
+	if cutaway_focus_room_index < 0:
+		return cutaway_debug_state()
+	var viewer_direction := camera_direction.normalized()
+	if viewer_direction.length_squared() < 0.01:
+		viewer_direction = Vector2.ONE.normalized()
+	var edge_keys: Array = visual_edge_records.keys()
+	edge_keys.sort()
+	for raw_key: Variant in edge_keys:
+		var edge_key := str(raw_key)
+		var record: Dictionary = visual_edge_records[edge_key]
+		var kind := str(record.get("kind", ""))
+		var cell: Vector2i = record.get("cell", Vector2i.ZERO)
+		var neighbor: Vector2i = record.get("neighbor", Vector2i.ZERO)
+		var should_cull := false
+		if kind == "outer":
+			should_cull = _edge_faces_camera(neighbor - cell, viewer_direction)
+		elif kind == "door" and not occupancy.has(neighbor):
+			should_cull = _edge_faces_camera(neighbor - cell, viewer_direction)
+		elif kind in ["divider", "door"]:
+			var outward := Vector2i.ZERO
+			if int(occupancy.get(cell, -1)) == cutaway_focus_room_index:
+				outward = neighbor - cell
+			elif int(occupancy.get(neighbor, -1)) == cutaway_focus_room_index:
+				outward = cell - neighbor
+			if outward != Vector2i.ZERO:
+				should_cull = _edge_faces_camera(outward, viewer_direction)
+		var edge_node := structural_edge_nodes.get(edge_key) as Node3D
+		if edge_node != null:
+			edge_node.visible = not should_cull
+		var cutaway_marker := cutaway_marker_nodes.get(edge_key) as Node3D
+		if cutaway_marker != null:
+			cutaway_marker.visible = should_cull
+		if kind == "door":
+			if should_cull:
+				cutaway_culled_edge_keys.append(edge_key)
+				cutaway_culled_doorway_count += 1
+			else:
+				cutaway_visible_doorway_count += 1
+		elif kind in ["outer", "divider"]:
+			if should_cull:
+				cutaway_culled_edge_keys.append(edge_key)
+				cutaway_culled_wall_count += 1
+			else:
+				cutaway_visible_wall_count += 1
+	_update_cutaway_junction_visibility()
+	return cutaway_debug_state()
+
+
+func _edge_faces_camera(outward: Vector2i, viewer_direction: Vector2) -> bool:
+	var normal := Vector2(float(outward.x), float(outward.y)).normalized()
+	return normal.dot(viewer_direction) > 0.35
+
+
+func _update_cutaway_junction_visibility() -> void:
+	for junction: Node3D in structural_junction_nodes:
+		if not is_instance_valid(junction):
+			continue
+		var incident_edges: Array = junction.get_meta("junction_edge_keys", [])
+		var has_visible_edge := incident_edges.is_empty()
+		for raw_key: Variant in incident_edges:
+			if not cutaway_culled_edge_keys.has(str(raw_key)):
+				has_visible_edge = true
+				break
+		junction.visible = has_visible_edge
+
+
+func cutaway_debug_state() -> Dictionary:
+	var focus_size := 0
+	if cutaway_focus_room_index >= 0 and cutaway_focus_room_index < rooms.size():
+		focus_size = int(rooms[cutaway_focus_room_index].get("size", 0))
+	return {
+		"focus_room_index": cutaway_focus_room_index,
+		"focus_room_size": focus_size,
+		"culled_walls": cutaway_culled_wall_count,
+		"culled_doors": cutaway_culled_doorway_count,
+		"visible_walls": cutaway_visible_wall_count,
+		"visible_doors": cutaway_visible_doorway_count,
+		"edge_total": visual_edge_records.size(),
+		"external_walls": external_wall_count,
+		"divider_walls": divider_wall_count,
+		"doorways": doorway_count,
+	}
+
+
+func cutaway_debug_summary() -> String:
+	var state := cutaway_debug_state()
+	return "PCG %d格房 · 剔除%d墙/%d门 · 可见%d墙/%d门 · 边%d=%d外+%d隔+%d门" % [
+		int(state["focus_room_size"]),
+		int(state["culled_walls"]),
+		int(state["culled_doors"]),
+		int(state["visible_walls"]),
+		int(state["visible_doors"]),
+		int(state["edge_total"]),
+		int(state["external_walls"]),
+		int(state["divider_walls"]),
+		int(state["doorways"]),
+	]
+
+
+func structural_edge_metadata_is_complete() -> bool:
+	if structural_edge_nodes.size() != visual_edge_records.size() or cutaway_marker_nodes.size() != visual_edge_records.size():
+		return false
+	for raw_key: Variant in visual_edge_records.keys():
+		var edge_key := str(raw_key)
+		var node := structural_edge_nodes.get(edge_key) as Node3D
+		if node == null or str(node.get_meta("edge_key", "")) != edge_key:
+			return false
+	return true
+
+
+func cutaway_markers_match_culled_edges() -> bool:
+	for raw_key: Variant in visual_edge_records.keys():
+		var edge_key := str(raw_key)
+		var marker := cutaway_marker_nodes.get(edge_key) as Node3D
+		if marker == null or marker.visible != cutaway_culled_edge_keys.has(edge_key):
+			return false
+	return true
+
+
 func _register_edge_junctions(cell: Vector2i, side: int, center: Vector2, elevation: float, room_index: int, junctions: Dictionary) -> void:
 	if not use_kaykit_room_shell:
 		return
 	var direction: Vector2i = DIRS[side]
+	var edge_key := _edge_key(cell, cell + direction)
 	var edge_center := _cell_world(cell, center) + Vector3(float(direction.x) * CELL * 0.5, elevation + 0.025, float(direction.y) * CELL * 0.5)
 	var tangent: Vector3 = Vector3.RIGHT if side in [0, 2] else Vector3.BACK
 	for raw_sign: Variant in [-1.0, 1.0]:
@@ -418,11 +644,14 @@ func _register_edge_junctions(cell: Vector2i, side: int, center: Vector2, elevat
 		var position: Vector3 = edge_center + tangent * CELL * 0.5 * sign_value
 		var key := "%0.3f,%0.3f" % [position.x, position.z]
 		if not junctions.has(key):
-			junctions[key] = {"position": Vector3(position.x, elevation + 0.025, position.z), "min_elevation": elevation, "max_elevation": elevation, "room_index": room_index}
+			junctions[key] = {"position": Vector3(position.x, elevation + 0.025, position.z), "min_elevation": elevation, "max_elevation": elevation, "room_index": room_index, "edge_keys": {edge_key: true}}
 			continue
 		var record: Dictionary = junctions[key]
 		record["min_elevation"] = minf(float(record["min_elevation"]), elevation)
 		record["max_elevation"] = maxf(float(record["max_elevation"]), elevation)
+		var record_edge_keys: Dictionary = record.get("edge_keys", {})
+		record_edge_keys[edge_key] = true
+		record["edge_keys"] = record_edge_keys
 		junctions[key] = record
 
 
@@ -440,7 +669,11 @@ func _spawn_edge_junctions(junctions: Dictionary) -> void:
 		var position: Vector3 = record["position"]
 		position.y = min_elevation + 0.025
 		var scale_value := Vector3(KAYKIT_JUNCTION_WIDTH / 1.5, height / 4.0, KAYKIT_JUNCTION_WIDTH / 1.5)
-		_add_model("Junction_%s" % key, KAYKIT_ROOT + "pillar.gltf.glb", position, scale_value, 0.0, int(record["room_index"]))
+		var junction := _add_model("Junction_%s" % key, KAYKIT_ROOT + "pillar.gltf.glb", position, scale_value, 0.0, int(record["room_index"]))
+		if junction != null:
+			junction.set_meta("structure_kind", "junction")
+			junction.set_meta("junction_edge_keys", (record.get("edge_keys", {}) as Dictionary).keys())
+			structural_junction_nodes.append(junction)
 		junction_count += 1
 
 
@@ -449,6 +682,10 @@ func _build_room_props(center: Vector2) -> void:
 		var room: Dictionary = rooms[room_index]
 		var cells: Array[Vector2i] = room["cells"]
 		if cells.is_empty():
+			continue
+		if not bool(room.get("visited", true)):
+			if show_room_ids:
+				_add_room_label(room, room_index, center)
 			continue
 		var cell: Vector2i = cells[posmod(room_index * 3 + generation_seed, cells.size())]
 		var elevation := float(room.get("elevation", 0.0))
@@ -461,6 +698,43 @@ func _build_room_props(center: Vector2) -> void:
 			_add_room_label(room, room_index, center)
 
 
+func _build_room_state_overlays(center: Vector2) -> void:
+	for room_index in range(rooms.size()):
+		var room: Dictionary = rooms[room_index]
+		var cells: Array[Vector2i] = room["cells"]
+		var visited := bool(room.get("visited", true))
+		var completed := bool(room.get("completed", false))
+		var is_current := bool(room.get("is_current", false))
+		if not visited:
+			for cell: Vector2i in cells:
+				var elevation := float(room.get("elevation", 0.0))
+				_add_box("UnvisitedCover_%d_%d" % [cell.x, cell.y], _cell_world(cell, center) + Vector3(0, elevation + 0.14, 0), Vector3(CELL * 0.88, 0.08, CELL * 0.88), Color("17242a"), room_index)
+		var outline_color := Color.TRANSPARENT
+		if is_current:
+			outline_color = Color("f3b52b")
+		elif not visited:
+			outline_color = Color("6b7d84")
+		elif completed:
+			outline_color = Color("55aa91")
+		if outline_color.a > 0.0:
+			_add_room_state_outline(room, room_index, center, outline_color)
+
+
+func _add_room_state_outline(room: Dictionary, room_index: int, center: Vector2, color: Color) -> void:
+	var cells: Array[Vector2i] = room["cells"]
+	var cell_set: Dictionary = {}
+	for cell: Vector2i in cells:
+		cell_set[cell] = true
+	for cell: Vector2i in cells:
+		var elevation := float(room.get("elevation", 0.0))
+		for direction: Vector2i in DIRS:
+			if cell_set.has(cell + direction):
+				continue
+			var position := _cell_world(cell, center) + Vector3(float(direction.x) * CELL * 0.47, elevation + 0.20, float(direction.y) * CELL * 0.47)
+			var size := Vector3(0.065, 0.045, CELL * 0.84) if direction.x != 0 else Vector3(CELL * 0.84, 0.045, 0.065)
+			_add_box("RoomStateEdge_%d_%d_%d_%d" % [room_index, cell.x, cell.y, DIRS.find(direction)], position, size, color, room_index)
+
+
 func _add_room_label(room: Dictionary, room_index: int, center: Vector2) -> void:
 	var cells: Array[Vector2i] = room["cells"]
 	var average := Vector3.ZERO
@@ -470,13 +744,63 @@ func _add_room_label(room: Dictionary, room_index: int, center: Vector2) -> void
 	average.y = float(room.get("elevation", 0.0)) + 1.25
 	var label := Label3D.new()
 	label.name = "RoomLabel_%s" % str(room.get("id", "room"))
-	label.text = "%s · %d格" % [str(room.get("id", "room")), int(room.get("size", 1))]
+	var visited := bool(room.get("visited", true))
+	var completed := bool(room.get("completed", false))
+	var is_current := bool(room.get("is_current", false))
+	var room_name := str(room.get("name", room.get("id", "房间")))
+	if not visited:
+		label.text = "? 未到访 · %d格" % int(room.get("size", 1))
+		label.modulate = Color("a9bac0")
+	elif is_current:
+		label.text = "%s · 当前" % room_name
+		label.modulate = Color("f3b52b")
+	elif completed:
+		label.text = "%s · 已完成" % room_name
+		label.modulate = Color("78c9ad")
+	else:
+		label.text = "%s · 已到访" % room_name
+		label.modulate = Color("d5ddd8")
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.font_size = 44
 	label.outline_size = 10
 	label.pixel_size = 0.007
 	_add_to_visual_root(label, room_index, average)
+
+
+func room_state_counts() -> Dictionary:
+	var result := {"unvisited": 0, "visited": 0, "completed": 0, "current": 0}
+	for room: Dictionary in rooms:
+		if bool(room.get("is_current", false)):
+			result["current"] = int(result["current"]) + 1
+		if bool(room.get("completed", false)):
+			result["completed"] = int(result["completed"]) + 1
+		elif bool(room.get("visited", true)):
+			result["visited"] = int(result["visited"]) + 1
+		else:
+			result["unvisited"] = int(result["unvisited"]) + 1
+	return result
+
+
+func room_state_debug_summary() -> String:
+	var counts := room_state_counts()
+	return "房态 未到%d · 已到%d · 完成%d · 当前%d" % [int(counts["unvisited"]), int(counts["visited"]), int(counts["completed"]), int(counts["current"])]
+
+
+func room_state_visual_is_consistent() -> bool:
+	if room_visual_roots.size() != rooms.size():
+		return false
+	for room_index in range(rooms.size()):
+		var room: Dictionary = rooms[room_index]
+		var root: Node3D = room_visual_roots[room_index]
+		var cover_count := root.find_children("UnvisitedCover_*", "MeshInstance3D", true, false).size()
+		var expected_cover_count := 0 if bool(room.get("visited", true)) else int(room.get("size", 0))
+		if cover_count != expected_cover_count:
+			return false
+		var prop := root.find_child("RoomProp_%02d" % room_index, true, false)
+		if bool(room.get("visited", true)) != (prop != null):
+			return false
+	return true
 
 
 func _build_title(size: Vector2i) -> void:
@@ -507,20 +831,21 @@ func _add_box(node_name: String, position: Vector3, size: Vector3, color: Color,
 	_add_to_visual_root(mesh_instance, room_index, position)
 
 
-func _add_model(node_name: String, path: String, position: Vector3, scale_value: Vector3, yaw: float, room_index: int = -1) -> void:
+func _add_model(node_name: String, path: String, position: Vector3, scale_value: Vector3, yaw: float, room_index: int = -1) -> Node3D:
 	var packed := load(path) as PackedScene
 	if packed == null:
 		push_warning("PCG diorama asset missing: %s" % path)
-		return
+		return null
 	var model := packed.instantiate() as Node3D
 	if model == null:
-		return
+		return null
 	model.name = node_name
 	model.scale = scale_value
 	model.rotation.y = yaw
 	_add_to_visual_root(model, room_index, position)
 	for child: Node in model.find_children("*", "MeshInstance3D", true, false):
 		(child as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	return model
 
 
 func _add_to_visual_root(node: Node3D, room_index: int, world_position: Vector3) -> void:

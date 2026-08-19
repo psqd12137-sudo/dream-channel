@@ -53,6 +53,12 @@ func _run() -> void:
 	_check(_count_named_prefix(battle_root, "WalkableAssetTop") > 0, "height assets must expose a visible logical standing surface")
 	_check(_count_named_prefix(battle_root, "PortalLabel") == 2, "portal endpoints must render A/B markers")
 	_check(_count_named_prefix(battle_root, "Blocker") == 2, "hall walls must render blocker meshes")
+	var shell_state: Dictionary = game.battle_room_shell_debug_state()
+	_check(game.battle_room_shell_is_consistent(), "the combat room shell must pair each full wall with one camera-facing cutaway sill")
+	_check(int(shell_state["edges"]) == (game.combat.cols + game.combat.rows) * 2, "the combat shell must cover every canonical arena boundary segment")
+	_check(int(shell_state["entrances"]) == 1, "the player spawn side must expose one explicit room entrance threshold")
+	_check(int(shell_state["logical_walls"]) == game.combat.walls.size(), "presentation shell edges must stay separate from logical combat blockers")
+	_check(battle_root.get_node_or_null("BattleRoomShell/BattleRoomStateLabel") is Label3D, "the interior must identify the active room as the current room")
 	var trap_cell := _first_empty_cell(game)
 	game.combat.traps[trap_cell] = {"card_id": "jab", "glyph": "刺", "damage": 2}
 	game.build_battle_world()
@@ -67,6 +73,15 @@ func _run() -> void:
 		for x in range(game.combat.cols):
 			var screen_pos: Vector2 = camera.unproject_position(game._battle_world(Vector2i(x, y)))
 			_check(screen_pos.x >= 0.0 and screen_pos.y >= 0.0 and screen_pos.x <= world_viewport.size.x and screen_pos.y <= world_viewport.size.y, "auto-fit must keep cell %s visible" % Vector2i(x, y))
+	var logical_wall_count: int = game.combat.walls.size()
+	game.orbit_battle_camera(Vector2(196, 0))
+	_check(game.battle_room_shell_is_consistent(), "rotating the camera must swap near walls for sills without losing shell edges")
+	_check(game.combat.walls.size() == logical_wall_count, "camera-facing shell cutaway must not mutate combat wall logic")
+	for y in range(game.combat.rows):
+		for x in range(game.combat.cols):
+			var rotated_screen_pos: Vector2 = camera.unproject_position(game._battle_world(Vector2i(x, y)))
+			_check(rotated_screen_pos.x >= 0.0 and rotated_screen_pos.y >= 0.0 and rotated_screen_pos.x <= world_viewport.size.x and rotated_screen_pos.y <= world_viewport.size.y, "angle-aware fit must keep rotated cell %s visible" % Vector2i(x, y))
+	game.reset_battle_camera()
 
 	var initial_size: float = camera.size
 	game.pan_battle_camera(Vector2(120, -60))

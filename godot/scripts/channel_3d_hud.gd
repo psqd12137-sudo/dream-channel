@@ -255,9 +255,9 @@ func _draw_lab_hud() -> void:
 		_draw_chip(Rect2(870, 82, 180, 32), "找到 %d/3" % game.search_found, GOLD, INK, 12)
 		_draw_coach(Rect2(60, 660, 1160, 96), "搜物实验", game.status_message)
 	elif game.phase == "lab_diorama":
-		_label("微缩箱庭美术对比 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
+		_label("美术增强对比 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
 		_draw_button(LAB_SWITCH_RECT, "查看 PCG 连片", Color("5967a8"), TEXT)
-		_draw_coach(Rect2(60, 660, 1160, 96), "对比重点", game.status_message)
+		_draw_coach(Rect2(60, 660, 1160, 96), "灯光与空间层次", game.status_message)
 	elif game.phase == "lab_pcg_diorama":
 		_label("PCG 连片箱庭 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
 		_draw_button(LAB_REROLL_RECT, "换一个 Seed", GOLD, INK)
@@ -353,6 +353,9 @@ func _draw_house_hud() -> void:
 	var revealed := bool(room.get("revealed", false)) or bool(room.get("completed", false))
 	if game.kenney_build_lab_mode:
 		_draw_chip(Rect2(32, 102, 245, 30), "KAYKIT 桌模 · 山屋扩建", Color("3e8b78"), TEXT, 11)
+		_draw_chip(Rect2(290, 102, 680, 30), game.pcg_cutaway_debug_text(), Color("394852"), TEXT, 10)
+		_draw_chip(Rect2(290, 138, 500, 28), game.pcg_room_state_debug_text(), Color("46545b"), TEXT, 10)
+		_draw_chip(Rect2(802, 138, 168, 28), "小型 + = 扩建口", Color("c88b2f"), INK, 10)
 	var side := Rect2(996, 96, 268, 672)
 	draw_rect(side, Color("f8e9c7f5"), true)
 	draw_rect(side, INK, false, 3.0)
