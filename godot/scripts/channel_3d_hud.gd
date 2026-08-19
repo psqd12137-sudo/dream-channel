@@ -50,13 +50,16 @@ const PORTAL_STAY_RECT := Rect2(1135, 646, 110, 44)
 const HOME_START_RECT := Rect2(576, 350, 255, 48)
 const HOME_TUTORIAL_RECT := Rect2(842, 350, 200, 48)
 const HOME_CONTINUE_RECT := Rect2(1052, 350, 180, 48)
-const HOME_TESTS_RECT := Rect2(576, 430, 230, 38)
-const HOME_TEST_COMBAT_RECT := Rect2(585, 480, 205, 42)
-const HOME_TEST_SIDE_RECT := Rect2(800, 480, 205, 42)
-const HOME_TEST_PUZZLE_RECT := Rect2(585, 532, 205, 42)
-const HOME_TEST_SEARCH_RECT := Rect2(800, 532, 205, 42)
-const HOME_TEST_CHASE_RECT := Rect2(585, 584, 205, 42)
-const HOME_TEST_DIORAMA_RECT := Rect2(800, 584, 205, 42)
+const HOME_SEED_INPUT_RECT := Rect2(576, 410, 255, 40)
+const HOME_SEED_START_RECT := Rect2(842, 410, 200, 40)
+const HOME_SEED_COPY_RECT := Rect2(1052, 410, 180, 40)
+const HOME_TESTS_RECT := Rect2(576, 464, 230, 38)
+const HOME_TEST_COMBAT_RECT := Rect2(585, 514, 205, 42)
+const HOME_TEST_SIDE_RECT := Rect2(800, 514, 205, 42)
+const HOME_TEST_PUZZLE_RECT := Rect2(585, 566, 205, 42)
+const HOME_TEST_SEARCH_RECT := Rect2(800, 566, 205, 42)
+const HOME_TEST_CHASE_RECT := Rect2(585, 618, 205, 42)
+const HOME_TEST_DIORAMA_RECT := Rect2(800, 618, 205, 42)
 const LAB_EXIT_RECT := Rect2(1100, 28, 150, 40)
 const LAB_REROLL_RECT := Rect2(520, 86, 180, 32)
 const LAB_HAND_RECT := Rect2(720, 86, 200, 32)
@@ -77,6 +80,7 @@ var last_layout_size := Vector2.ZERO
 var side_left := false
 var side_right := false
 var combat_ui_layout: Control
+var seed_input: LineEdit
 var hovered_combat_card := -1
 var combat_card_hover_amount := 0.0
 var dragged_combat_card := -1
@@ -91,6 +95,13 @@ func _ready() -> void:
 	combat_ui_layout = COMBAT_UI_LAYOUT.instantiate()
 	combat_ui_layout.visible = false
 	add_child(combat_ui_layout)
+	seed_input = LineEdit.new()
+	seed_input.name = "SeedInput"
+	seed_input.placeholder_text = "输入种子码"
+	seed_input.max_length = 10
+	seed_input.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	seed_input.text_submitted.connect(_submit_seed_input)
+	add_child(seed_input)
 	set_process_input(true)
 	sync_layout()
 
@@ -108,6 +119,8 @@ func _notification(what: int) -> void:
 
 
 func _process(delta: float) -> void:
+	if seed_input != null:
+		seed_input.visible = game != null and game.phase == "home"
 	var target := 1.0 if hovered_combat_card >= 0 and dragged_combat_card < 0 else 0.0
 	var previous := combat_card_hover_amount
 	combat_card_hover_amount = move_toward(combat_card_hover_amount, target, delta * 8.5)
@@ -126,7 +139,28 @@ func sync_layout() -> void:
 	last_layout_size = viewport_size
 	if game != null:
 		game.set_world_view_rect(world_view_rect_screen)
+	_sync_seed_input_layout()
 	queue_redraw()
+
+
+func _sync_seed_input_layout() -> void:
+	if seed_input == null:
+		return
+	var rect := _scale_rect(HOME_SEED_INPUT_RECT, ui_scale, ui_offset)
+	seed_input.position = rect.position
+	seed_input.size = rect.size
+	seed_input.add_theme_font_size_override("font_size", maxi(11, roundi(14.0 * ui_scale)))
+	seed_input.visible = game != null and game.phase == "home"
+
+
+func _submit_seed_input(_submitted_text: String = "") -> void:
+	if game == null or not game.start_run_from_seed_text(seed_input.text):
+		seed_input.text = ""
+		seed_input.placeholder_text = "请输入 1-9999999999"
+		return
+	seed_input.text = ""
+	seed_input.release_focus()
+	_sync_seed_input_layout()
 
 
 func calculate_layout(viewport_size: Vector2, phase_name: String) -> Dictionary:
@@ -201,7 +235,7 @@ func _draw_top_bar() -> void:
 	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 84), Color("101820ee"), true)
 	draw_rect(Rect2(0, 80, DESIGN_SIZE.x, 4), TEAL, true)
 	_label("织梦频道 · 3D BRIDGE", Vector2(24, 34), 23, TEXT)
-	_label(game.latest_source_label(), Vector2(24, 60), 12, Color("70cdbf"))
+	_label("%s · SEED %d" % [game.latest_source_label(), game.run_seed], Vector2(24, 60), 12, Color("70cdbf"))
 	_draw_chip(Rect2(560, 22, 112, 34), "速度 %d" % int(game.player_speed), TEAL, TEXT, 12)
 	_draw_chip(Rect2(680, 22, 112, 34), "生命 %d/%d" % [game.player_hp, game.player_max_hp], RED, TEXT, 12)
 	_draw_chip(Rect2(800, 22, 112, 34), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 12)
@@ -230,11 +264,13 @@ func _draw_home() -> void:
 	_draw_texture_button(HOME_TUTORIAL_RECT, "新手教学", BTN_END_TEXTURE, Color.WHITE, 14)
 	if game.has_saved_run():
 		_draw_texture_button(HOME_CONTINUE_RECT, "接着看上集", BTN_END_TEXTURE, Color.WHITE, 13)
+	_draw_button(HOME_SEED_START_RECT, "按种子开局", Color("355e5d"), TEXT)
+	_draw_button(HOME_SEED_COPY_RECT, "复制当前种子", Color("394852"), TEXT)
 	# 节目测试台（米白面板，保留原功能）
 	_draw_button(HOME_TESTS_RECT, "▼ 节目测试台" if game.home_tests_open else "▶ 节目测试台", Color("f7e8c5"), INK)
 	if game.home_tests_open:
-		draw_rect(Rect2(565, 470, 460, 172), Color("fff8e8"), true)
-		draw_rect(Rect2(565, 470, 460, 172), INK, false, 2.0)
+		draw_rect(Rect2(565, 504, 460, 166), Color("fff8e8"), true)
+		draw_rect(Rect2(565, 504, 460, 166), INK, false, 2.0)
 		_draw_button(HOME_TEST_COMBAT_RECT, "战斗意图实验", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_SIDE_RECT, "WASD 横版手感", TEAL, TEXT)
 		_draw_button(HOME_TEST_PUZZLE_RECT, "八数码拼图", GOLD, INK)
@@ -873,6 +909,10 @@ func _gui_input(event: InputEvent) -> void:
 			game.start_new_run(true)
 		elif game.has_saved_run() and HOME_CONTINUE_RECT.has_point(point):
 			game.continue_saved_run()
+		elif HOME_SEED_START_RECT.has_point(point):
+			_submit_seed_input()
+		elif HOME_SEED_COPY_RECT.has_point(point):
+			game.copy_current_seed()
 		elif HOME_TESTS_RECT.has_point(point):
 			game.toggle_home_tests()
 		elif game.home_tests_open and HOME_TEST_COMBAT_RECT.has_point(point):

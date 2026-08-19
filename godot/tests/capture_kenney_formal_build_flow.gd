@@ -38,6 +38,10 @@ func _run() -> void:
 		await process_frame
 	await create_timer(0.25).timeout
 	await _capture("res://artifacts/kenney_formal_build_placed.png")
+	game._finish_enter_room(game.pending_room_pos)
+	await process_frame
+	await create_timer(0.25).timeout
+	await _capture("res://artifacts/kenney_formal_room_occupied.png")
 	print("CAPTURE_KENNEY_FORMAL_BUILD: PASS")
 	quit(0)
 

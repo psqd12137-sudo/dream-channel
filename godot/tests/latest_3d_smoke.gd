@@ -20,7 +20,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	_check(game.phase == "home", "the project must open on the Web-style home screen")
-	game.start_new_run(false)
+	game.start_new_run(false, 2026081901)
 
 	_check(game is Node3D, "main scene root must be Node3D")
 	_check(game.get_node_or_null("WorldLayer/WorldContainer/WorldViewport/WorldRoot/CameraRig/Camera3D") is Camera3D, "scene must contain Camera3D")

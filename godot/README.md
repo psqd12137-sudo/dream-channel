@@ -79,9 +79,11 @@ Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再�
 
 ## CC0 房间微缩布景
 
-首轮房间布景使用 Quaternius 的 [Ultimate House Interior Pack](https://quaternius.com/packs/ultimatehomeinterior.html) 精选子集，许可证为 CC0 1.0。仓库只保留 Demo 实际使用的 12 个 FBX 和原始许可文本，来源清单见 `assets/quaternius/ultimate_house_interior/SOURCE.md`。
+本节列出的第三方包是当前 PCG、门墙剔除、占位密度和交互槽位的结构验证资产，不是《织梦频道》的最终主题。正式美术目标是“荒诞儿童玩具秀的实体微缩布景”：生活家具负责宜居和角色互动，纸板/黏土/毛毡材质与摄影棚装置负责节目身份，事件状态负责暴露失控内核。不得因资源包名称或默认贴图把项目收敛成传统地牢、写实豪宅或纯温馨小屋。
 
-大地图房间壳体使用 [KayKit Dungeon Pack](https://kaylousberg.itch.io/kaykit-dungeon-pack) 的 CC0 精选 GLB：低矮木地板、薄墙、门洞、转角和楼梯。它被 `scenes/pcg_hand_layout_lab.tscn` 与正式摆房测试入口共用，来源、精选范围和原始许可见 `assets/third_party/kaykit_dungeon/SOURCE.md`。
+首轮家具形体以 [KayKit Furniture Bits](https://godotengine.org/asset-library/asset/2125) 为基础，固定上游提交 `96d5930`，保留 53 个运行时 GLTF、共享色板、许可证与来源说明；它提供一致的低模家具比例，但不是项目最终视觉身份。Quaternius 的 [Ultimate House Interior Pack](https://quaternius.com/packs/ultimatehomeinterior.html) 精选子集用于补充床、厨房电器、壁炉等类别，许可证同为 CC0 1.0。来源分别见 `assets/third_party/kaykit_furniture_bits/SOURCE.md` 与 `assets/quaternius/ultimate_house_interior/SOURCE.md`。
+
+大地图房间壳体暂用 [KayKit Dungeon Pack](https://kaylousberg.itch.io/kaykit-dungeon-pack) 的 CC0 精选 GLB 验证低矮地板、薄墙、门洞、转角和楼梯。它被 `scenes/pcg_hand_layout_lab.tscn` 与正式摆房测试入口共用，来源、精选范围和原始许可见 `assets/third_party/kaykit_dungeon/SOURCE.md`；其中木石默认材质属于占位表现，不能作为最终美术锁。
 
 [Kenney Mini Dungeon](https://kenney.nl/assets/mini-dungeon) 仍保留为战斗地图的柱子、可站立地形块与掩体候选；[Quaternius Ultimate Modular Ruins](https://quaternius.com/packs/ultimatemodularruins.html) 保留为废墟题材候选。二者不会再作为当前大地图房间壳体。
 
@@ -89,6 +91,15 @@ Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再�
 - 客厅、厨房、书房、卧室与温室复用同一套可配置布景；未知房不会实例化家具，避免提前泄露内容。
 - `scripts/room_art_registry.gd` 只决定模型、位置、旋转与微缩比例；门向、战斗格、房间规则和 Lili 身份资产保持独立。
 - 模型丢失或未导入时会发出警告并保留原有程序白盒，不阻塞玩法。
+
+### 房间表现验收
+
+- 每房先用主家具建立可辨认的生活功能，再放小型点缀；不按格子均匀撒道具。
+- 每房至少保留一处节目摄影棚证据，例如场记板、走位胶带、摄影灯、提词卡、假窗、布景支架或可见机关。
+- 一个逻辑格允许多个“演员走位点”。家具的坐、靠、翻找、表演和躲藏槽位彼此独立，为后续多人占位保留稳定 ID。
+- 角色进入房间只选择空闲交互槽，不允许通过实时避让推动家具或重新生成整房摆放。
+- 家具和节目装置不加入连接账本，不封堵门洞、楼梯、开放通道、玩家出生点和建造接口。
+- 正常播出与节目失控复用同一套房间拓扑；异常主要通过灯光、音频、字幕、动画与少量道具状态切换表现。
 
 ## CC0 临时角色模型
 
@@ -125,14 +136,17 @@ Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再�
 
 `scenes/pcg_diorama_stitch_lab.tscn` 保留为自动 Seed 整体构图测试；玩家实际评审入口改为标题页“节目测试台 → 桌模扩建 PCG”。该入口直接进入正式 `explore/build` 阶段：点击黄色扩建格、选择票根、按“旋转 90°”查看完整 1/3/5 格 Kenney 预览，确认“摆下”后再从真实 `room_rules.placed` 重算整栋外观，而且不会写入本局存档。
 
-当前 PCG 绘制统一使用 Kenney Mini Dungeon 的 `floor / wall / wall-half / wall-opening / gate / stairs / column` 与桌椅箱桶道具；Modular Ruins 的石拱、破墙和圆柱已经从这条测试链路移除。
+当前 PCG 壳体分为四层：KayKit Dungeon 只保留木地板与高差楼梯；墙、纸盒门扇和转角柱改为程序化涂漆纸板；KayKit Furniture Bits 与 Quaternius 提供生活家具；每个已揭示房间额外生成演员走位胶带，以及场记板、假窗或播出灯牌之一。Modular Ruins 与 Mini Dungeon 石墙不再进入正式大地图链路。
 
 - 固定用 `R00 · 1格 → R01 · 5格` 开场，直接证明先放一格房、再接五格房的组合；后续继续混合 3 格和其他 1/5 格形状。
 - 同一房间的相邻单元删除内墙，地板连续铺设。
 - 房间生成时使用的连接边变成 Kenney `wall-opening` 与 `gate`；后来偶然贴合但不连通的跨房边保留完整墙。
-- 占用并集的外边界生成连续 `wall / wall-half` 轮廓和凸角 `column`；朝镜头一侧保留剖视开口。
+- 占用并集的外边界生成连续平整纸盒墙板、折边、接缝胶带、外侧支撑脚和纸盒转角柱；朝镜头一侧保留剖视开口。
+- 关闭连接显示有门扇的纸盒门框；两侧房间均已访问后整件门组件消失，只保留不参与碰撞的低门槛提示。
 - 第一个五格房作为整体抬高，而不是随机抬高单格；连接高低区时自动补楼梯。
-- 装饰按房间而非按单格投放，每房只选一个焦点道具，避免 PCG 把资产均匀撒满棋盘。
+- 家具按房型组合和 2–8 件预算确定性摆放；每个逻辑格提供四个稳定演员槽位，角色占位不会推动或重排家具。
+- 每个已揭示房间确定性绑定一个地面走位标记和一个墙面节目装置；墙面装置随规范墙边剔除，不加入连接、寻路或战斗账本。
+- `set_room_broadcast_glitch(room_index, active)` 可让同一房间在“正常播出 / 节目失控”间切换：仅改变走位标记和节目装置的倾斜、缩放与发光，不重建家具、不换房间拓扑。
 - 每个房间拥有独立视觉根节点和编号；重建时按房间顺序整块落位，因此五格房会作为一个建筑整体出现，不会逐格散落。
 
 实验室支持“换一个 Seed”整栋重建并重播逐房落位动画，也可切回 A/B/C 单格样板。它验证的是网格版“建筑化学”：拓扑拼接、连续轮廓、门洞、高差和装饰密度；并不等同于 Tiny Glade 的无网格程序化网格、曲墙、屋顶变形与材质融合。正式数据中的 `room_rules.placed` 已用独立 `instance_id` 区分每间房，并要求跨房接触面门对门；当前正式摆放动画也会同步落下一个多格房的全部格子。把实验室资产拼接器接到这份数据、补齐最终转角/屋顶/门窗变体后，才能替换正式大地图的占位美术。

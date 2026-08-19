@@ -54,7 +54,7 @@ func _run() -> void:
 	_check(not game.combat.use_player_portal() and game.combat.player_pos == entrance, "insufficient AP must reject portal use without moving")
 
 	game.go_home()
-	game.start_new_run(false)
+	game.start_new_run(false, 2026081901)
 	game.choose_omen(0)
 	var frontier: Vector2i = game.room_rules.frontiers()[0]
 	game.begin_build(frontier)

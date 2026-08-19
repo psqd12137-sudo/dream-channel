@@ -44,12 +44,31 @@ albedo_color = Color(0.24, 0.19, 0.17, 1)
 roughness = 0.96
 
 [sub_resource type="StandardMaterial3D" id="Material_current_floor"]
-albedo_color = Color(0.9, 0.87, 0.75, 1)
-roughness = 0.85
+albedo_color = Color(0.48, 0.34, 0.23, 1)
+roughness = 0.78
 
 [sub_resource type="StandardMaterial3D" id="Material_current_wall"]
-albedo_color = Color(0.15, 0.54, 0.51, 1)
-roughness = 0.88
+albedo_color = Color(0.075, 0.25, 0.26, 1)
+roughness = 0.91
+
+[sub_resource type="StandardMaterial3D" id="Material_signal_screen"]
+albedo_color = Color(0.035, 0.12, 0.14, 1)
+emission_enabled = true
+emission = Color(0.05, 0.82, 0.76, 1)
+emission_energy_multiplier = 2.4
+roughness = 0.35
+
+[sub_resource type="StandardMaterial3D" id="Material_signal_frame"]
+albedo_color = Color(0.035, 0.045, 0.055, 1)
+metallic = 0.35
+roughness = 0.52
+
+[sub_resource type="StandardMaterial3D" id="Material_focus_ring"]
+albedo_color = Color(0.78, 0.08, 0.38, 1)
+emission_enabled = true
+emission = Color(0.85, 0.03, 0.34, 1)
+emission_energy_multiplier = 1.8
+roughness = 0.46
 
 [sub_resource type="StandardMaterial3D" id="Material_raised"]
 albedo_color = Color(0.29, 0.24, 0.22, 1)
@@ -143,12 +162,44 @@ scale = Vector3(0.44, 0.44, 0.44)
 position = Vector3(1.05, 0.14, -2.04)
 scale = Vector3(0.42, 0.42, 0.42)
 
+[node name="SignalFrame" type="CSGBox3D" parent="CurrentBaseline"]
+position = Vector3(-0.72, 1.18, -2.03)
+size = Vector3(1.2, 0.78, 0.12)
+material = SubResource("Material_signal_frame")
+
+[node name="SignalScreen" type="CSGBox3D" parent="CurrentBaseline"]
+position = Vector3(-0.72, 1.18, -1.955)
+size = Vector3(0.96, 0.56, 0.035)
+material = SubResource("Material_signal_screen")
+
+[node name="FocusRing" type="CSGTorus3D" parent="CurrentBaseline"]
+position = Vector3(0.35, 0.15, 0.2)
+inner_radius = 0.48
+outer_radius = 0.58
+material = SubResource("Material_focus_ring")
+
+[node name="PracticalWarmLight" type="OmniLight3D" parent="CurrentBaseline"]
+position = Vector3(0.35, 2.15, 0.15)
+light_color = Color(1, 0.56, 0.28, 1)
+light_energy = 5.2
+omni_range = 5.2
+omni_attenuation = 1.55
+shadow_enabled = true
+
+[node name="SignalFillLight" type="OmniLight3D" parent="CurrentBaseline"]
+position = Vector3(-0.72, 1.25, -1.55)
+light_color = Color(0.08, 0.88, 0.78, 1)
+light_energy = 2.0
+omni_range = 3.1
+omni_attenuation = 1.8
+shadow_enabled = true
+
 [node name="Title" type="Label3D" parent="CurrentBaseline"]
 position = Vector3(0, 3.25, -1.8)
 billboard = 1
 no_depth_test = true
 modulate = Color(0.7, 0.92, 0.9, 1)
-text = "A 现有房间\n软装 + 几何墙体"
+text = "A 美术增强\n暖光 + 接触阴影"
 font_size = 54
 outline_size = 12
 pixel_size = 0.008

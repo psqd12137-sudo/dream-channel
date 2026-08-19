@@ -16,6 +16,8 @@ func _run() -> void:
 		await process_frame
 		_check(lab.get_tree().get_nodes_in_group("diorama_option").size() == 3, "the scene must expose current, Kenney and Ruins comparison options")
 		_check(lab.get_node_or_null("CurrentBaseline") != null, "comparison A must preserve the current room look")
+		_check(lab.get_node_or_null("CurrentBaseline/PracticalWarmLight") != null, "comparison A must include a warm focal light")
+		_check(lab.get_node_or_null("CurrentBaseline/SignalScreen") != null, "comparison A must include an emissive signal focal point")
 		_check(lab.get_node_or_null("KenneyMiniDungeon/Gate") != null, "comparison B must use a real Mini Dungeon gate")
 		_check(lab.get_node_or_null("QuaterniusRuins/Assets/Arch") != null, "comparison C must use a real Modular Ruins arch")
 		_check(lab.get_node_or_null("QuaterniusRuins/RaisedCorner") != null, "the Ruins option must demonstrate asset-backed elevation")

@@ -79,6 +79,14 @@ const CHASE_SENTENCES := [
 const CHASE_COUNTDOWN_LABELS := ["3", "2", "1", "跑！"]
 const CHASE_COUNTDOWN_STEP_DURATION := 0.75
 const CHASE_COUNTDOWN_RUN_DURATION := 0.55
+const MAX_RANDOM_RUN_SEED := 2_147_483_646
+const MAX_RUN_SEED_CODE := 9_999_999_999
+const RUN_LAYOUT_PROFILES := [
+	{"id": "compact", "label": "紧凑街屋", "weights": {"single": 6, "line3": 3, "l3": 3, "large": 1}},
+	{"id": "branching", "label": "分枝旅馆", "weights": {"single": 2, "line3": 4, "l3": 6, "large": 3}},
+	{"id": "courtyard", "label": "庭院大宅", "weights": {"single": 1, "line3": 3, "l3": 3, "large": 7}},
+	{"id": "mixed", "label": "错层公寓", "weights": {"single": 3, "line3": 5, "l3": 4, "large": 5}},
+]
 
 @onready var world_container: SubViewportContainer = $WorldLayer/WorldContainer
 @onready var world_viewport: SubViewport = $WorldLayer/WorldContainer/WorldViewport
@@ -98,6 +106,7 @@ var combat = null
 var rng := RandomNumberGenerator.new()
 
 var run_seed := 2522061406
+var run_layout_profile: Dictionary = {}
 var phase := "omen"
 var room_catalog: Array[Dictionary] = []
 var remaining_rooms: Array[Dictionary] = []
@@ -127,6 +136,7 @@ var house_camera_fit_size := 12.0
 var house_camera_zoom_ratio := 1.0
 var house_camera_user_adjusted := false
 var house_player_facing_yaw := 0.0
+var house_actor_slot_assignments: Dictionary = {}
 var battle_camera_target := Vector3.ZERO
 var battle_camera_fit_size := 12.0
 var battle_camera_distance := 20.0
@@ -282,6 +292,7 @@ func reset_run(seed_value: int = 0) -> void:
 	if seed_value != 0:
 		run_seed = seed_value
 	rng.seed = run_seed
+	run_layout_profile = (RUN_LAYOUT_PROFILES[posmod(run_seed, RUN_LAYOUT_PROFILES.size())] as Dictionary).duplicate(true)
 	content = WebContentAdapter.new(SNAPSHOT_ROOT, EXE_SOURCE_ID).build_content(run_seed)
 	room_catalog.clear()
 	for raw_room in content.get("rooms", []):
@@ -316,6 +327,7 @@ func reset_run(seed_value: int = 0) -> void:
 	house_camera_zoom_ratio = 1.0
 	house_camera_user_adjusted = false
 	house_player_facing_yaw = 0.0
+	house_actor_slot_assignments.clear()
 	battle_player_facing_yaw = 0.0
 	battle_enemy_facing_yaw = PI
 	run_progress = 1
@@ -331,12 +343,41 @@ func reset_run(seed_value: int = 0) -> void:
 	_refresh_hud()
 
 
-func start_new_run(tutorial_mode: bool = false) -> void:
+func start_new_run(tutorial_mode: bool = false, seed_override: int = 0) -> void:
 	_set_home_video(false)
-	reset_run(run_seed + 1 if phase != "home" else run_seed)
-	status_message = "教学提示：先选预兆，再点黄色扩建格；战斗中绿色=移动、金色=放置。" if tutorial_mode else "先从两枚行前预兆中选一枚，节目就会正式开播。"
+	var next_seed := seed_override if seed_override != 0 else _random_run_seed()
+	reset_run(next_seed)
+	status_message = "教学提示：先选预兆，再点黄色扩建格；战斗中绿色=移动、金色=放置。" if tutorial_mode else "本集格局：%s。先从两枚行前预兆中选一枚。" % current_layout_profile_label()
 	_refresh_hud()
 	_save_run()
+
+
+func _random_run_seed() -> int:
+	var entropy_rng := RandomNumberGenerator.new()
+	entropy_rng.randomize()
+	var candidate := entropy_rng.randi_range(1, MAX_RANDOM_RUN_SEED)
+	if candidate == run_seed:
+		candidate = 1 if candidate == MAX_RANDOM_RUN_SEED else candidate + 1
+	return candidate
+
+
+func current_layout_profile_label() -> String:
+	return str(run_layout_profile.get("label", "随机山屋"))
+
+
+func start_run_from_seed_text(seed_text: String, tutorial_mode: bool = false) -> bool:
+	var normalized := seed_text.strip_edges()
+	if not normalized.is_valid_int():
+		return false
+	var requested_seed := int(normalized)
+	if requested_seed <= 0 or requested_seed > MAX_RUN_SEED_CODE:
+		return false
+	start_new_run(tutorial_mode, requested_seed)
+	return true
+
+
+func copy_current_seed() -> void:
+	DisplayServer.clipboard_set(str(run_seed))
 
 
 func go_home() -> void:
@@ -1150,8 +1191,10 @@ func enter_room(target: Vector2i) -> void:
 
 func _animate_enter_room(target: Vector2i) -> void:
 	var token := house_root.get_node_or_null("LiliToken") as Node3D
-	var start_position := _house_world(current_room_pos)
-	var target_position := _house_world(target)
+	var start_position := token.position if token != null else _house_world(current_room_pos)
+	var target_position := _house_interaction_target_position("player:lili", target)
+	var doorway_position := (_house_world(current_room_pos) + _house_world(target)) * 0.5
+	doorway_position.y = lerpf(start_position.y, target_position.y, 0.5)
 	var move_duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
 	if token != null and move_duration > 0.0:
 		var presenter := token.get_node_or_null("Presenter")
@@ -1160,7 +1203,7 @@ func _animate_enter_room(target: Vector2i) -> void:
 		var move_tween := create_tween()
 		active_motion_tween = move_tween
 		move_tween.set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN_OUT)
-		move_tween.tween_method(_set_house_token_motion.bind(token, start_position, target_position), 0.0, 1.0, move_duration)
+		move_tween.tween_method(_set_house_token_path_motion.bind(token, start_position, doorway_position, target_position), 0.0, 1.0, move_duration)
 		move_tween.tween_property(token, "scale", Vector3(1.06, 0.90, 1.06), UNITY_ACTOR_SETTLE_DURATION * 0.5 * animation_duration_scale)
 		move_tween.tween_property(token, "scale", Vector3.ONE, UNITY_ACTOR_SETTLE_DURATION * 0.5 * animation_duration_scale)
 		await move_tween.finished
@@ -1203,6 +1246,21 @@ func _set_house_token_motion(weight: float, token: Node3D, start_position: Vecto
 	direction.y = 0.0
 	if direction.length_squared() > 0.001:
 		house_player_facing_yaw = atan2(direction.x, direction.z)
+		token.rotation.y = house_player_facing_yaw
+
+
+func _set_house_token_path_motion(weight: float, token: Node3D, start_position: Vector3, doorway_position: Vector3, target_position: Vector3) -> void:
+	if not is_instance_valid(token):
+		return
+	var smooth_weight := weight * weight * (3.0 - 2.0 * weight)
+	var inverse := 1.0 - smooth_weight
+	var path_position := start_position * inverse * inverse + doorway_position * 2.0 * inverse * smooth_weight + target_position * smooth_weight * smooth_weight
+	path_position.y += sin(smooth_weight * PI) * 0.18
+	token.position = path_position
+	var tangent := (doorway_position - start_position) * (2.0 * inverse) + (target_position - doorway_position) * (2.0 * smooth_weight)
+	tangent.y = 0.0
+	if tangent.length_squared() > 0.001:
+		house_player_facing_yaw = atan2(tangent.x, tangent.z)
 		token.rotation.y = house_player_facing_yaw
 
 
@@ -1951,6 +2009,7 @@ func _save_run() -> void:
 		"version": 1,
 		"source": EXE_SOURCE_ID,
 		"seed": run_seed,
+		"layout_profile": str(run_layout_profile.get("id", "")),
 		"phase": phase,
 		"player_hp": player_hp,
 		"player_max_hp": player_max_hp,
@@ -2017,6 +2076,7 @@ func _add_kenney_formal_composer() -> void:
 	composer.show_room_ids = true
 	composer.kenney_only = true
 	composer.use_kaykit_room_shell = true
+	composer.open_visited_connections = true
 	composer.show_summary_title = false
 	composer.explicit_connection_edges = _formal_connection_edge_keys()
 	composer.explicit_open_edges = _formal_outer_open_edge_keys()
@@ -2036,6 +2096,7 @@ func _add_kenney_formal_composer() -> void:
 		piece.set("shape_id", str(room.get("footprint_kind", "single")))
 		piece.set("elevated", bool(room.get("elevated", false)))
 		piece.set_meta("room_name", str(room.get("name", "房间")))
+		piece.set_meta("room_type", str(room.get("id", "")))
 		piece.set_meta("revealed", bool(room.get("revealed", false)))
 		piece.set_meta("visited", bool(room.get("visited", false)))
 		piece.set_meta("completed", bool(room.get("completed", false)))
@@ -2279,8 +2340,21 @@ func _update_build_preview_validity(preview: Node3D) -> void:
 func _add_house_player() -> void:
 	var node := Node3D.new()
 	node.name = "LiliToken"
-	node.position = _house_world(current_room_pos)
-	node.rotation.y = house_player_facing_yaw
+	var interaction_slot := claim_room_interaction_slot("player:lili", current_room_pos)
+	if interaction_slot.is_empty():
+		node.position = _house_world(current_room_pos)
+		node.rotation.y = house_player_facing_yaw
+	else:
+		node.position = _interaction_slot_house_position(interaction_slot, "position")
+		node.rotation.y = float(interaction_slot.get("facing_yaw", house_player_facing_yaw))
+		house_player_facing_yaw = node.rotation.y
+		node.set_meta("interaction_room_id", str(interaction_slot.get("room_id", "")))
+		node.set_meta("interaction_cell", interaction_slot.get("cell", current_room_pos))
+		node.set_meta("interaction_slot_index", int(interaction_slot.get("slot_index", -1)))
+		node.set_meta("interaction_kind", str(interaction_slot.get("kind", "stand")))
+		node.set_meta("interaction_pose", str(interaction_slot.get("pose", "stand")))
+		node.set_meta("interaction_asset_id", str(interaction_slot.get("asset_id", "")))
+		node.set_meta("interaction_anchor", _interaction_slot_house_position(interaction_slot, "anchor_position"))
 	house_root.add_child(node)
 	_add_cylinder(node, "TokenBase", Vector3(0, 0.09, 0), 0.48, 0.12, _material(COL_TEAL, false, 0.05))
 	var presenter := CharacterPresenter.new()
@@ -2288,7 +2362,83 @@ func _add_house_player() -> void:
 	presenter.position = Vector3(0.0, 0.14, 0.0)
 	node.add_child(presenter)
 	presenter.configure("player", (presentation.get("actors", {}).get("player", {}) as Dictionary))
+	if not interaction_slot.is_empty() and presenter.has_method("set_interaction_pose"):
+		presenter.set_interaction_pose(str(interaction_slot.get("pose", "stand")), str(interaction_slot.get("kind", "stand")))
 	_add_label(node, "Name", "LILI", Vector3(0, 2.48, 0), Color.WHITE, 34)
+
+
+func room_interaction_slots(target: Vector2i) -> Array[Dictionary]:
+	var composer := house_root.get_node_or_null("KenneyFormalComposer")
+	if composer == null or not composer.has_method("interaction_slots_for_cell"):
+		return []
+	return composer.interaction_slots_for_cell(target)
+
+
+func claim_room_interaction_slot(actor_id: String, target: Vector2i, preferred_kind: String = "") -> Dictionary:
+	if not room_rules.placed.has(target):
+		return {}
+	var slots := room_interaction_slots(target)
+	if slots.is_empty():
+		return {}
+	var room_id := str(room_rules.placed[target].get("instance_id", ""))
+	var existing: Dictionary = house_actor_slot_assignments.get(actor_id, {})
+	if str(existing.get("room_id", "")) == room_id and existing.has("cell") and existing["cell"] == target:
+		var existing_index := int(existing.get("slot_index", -1))
+		if existing_index >= 0 and existing_index < slots.size():
+			return slots[existing_index].duplicate(true)
+	var occupied: Dictionary = {}
+	for raw_actor_id: Variant in house_actor_slot_assignments.keys():
+		if str(raw_actor_id) == actor_id:
+			continue
+		var assignment: Dictionary = house_actor_slot_assignments[raw_actor_id]
+		if str(assignment.get("room_id", "")) == room_id and assignment.has("cell") and assignment["cell"] == target:
+			occupied[int(assignment.get("slot_index", -1))] = true
+	var chosen_index := -1
+	if not preferred_kind.is_empty():
+		for slot_index in range(slots.size()):
+			if not occupied.has(slot_index) and str(slots[slot_index].get("kind", "")) == preferred_kind:
+				chosen_index = slot_index
+				break
+	if chosen_index < 0:
+		for slot_index in range(slots.size()):
+			if not occupied.has(slot_index):
+				chosen_index = slot_index
+				break
+	if chosen_index < 0:
+		return {}
+	var chosen_slot: Dictionary = slots[chosen_index]
+	house_actor_slot_assignments[actor_id] = {
+		"room_id": room_id,
+		"cell": target,
+		"slot_index": chosen_index,
+		"kind": str(chosen_slot.get("kind", "stand")),
+		"pose": str(chosen_slot.get("pose", "stand")),
+		"asset_id": str(chosen_slot.get("asset_id", "")),
+	}
+	return slots[chosen_index].duplicate(true)
+
+
+func release_room_interaction_slot(actor_id: String) -> void:
+	house_actor_slot_assignments.erase(actor_id)
+
+
+func actor_interaction_state(actor_id: String) -> Dictionary:
+	return (house_actor_slot_assignments.get(actor_id, {}) as Dictionary).duplicate(true)
+
+
+func _house_interaction_target_position(actor_id: String, target: Vector2i) -> Vector3:
+	var slot := claim_room_interaction_slot(actor_id, target)
+	if slot.is_empty():
+		return _house_world(target)
+	return _interaction_slot_house_position(slot, "position")
+
+
+func _interaction_slot_house_position(slot: Dictionary, field: String) -> Vector3:
+	var local_position: Vector3 = slot.get(field, Vector3.ZERO)
+	var composer := house_root.get_node_or_null("KenneyFormalComposer") as Node3D
+	if composer == null:
+		return local_position
+	return composer.transform * local_position
 
 
 func _add_move_hover_mesh(pos: Vector2i) -> void:
@@ -2862,21 +3012,40 @@ func _screen_to_plane(screen_pos: Vector2, plane_y: float) -> Variant:
 
 func _make_build_offers(target: Vector2i) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
-	var legal_room: Dictionary = {}
-	for room in remaining_rooms:
+	var candidates: Array[Dictionary] = []
+	for room: Dictionary in remaining_rooms:
 		if not room_rules.valid_rotations(target, room).is_empty():
-			legal_room = room
-			break
-	if not legal_room.is_empty():
-		result.append(legal_room)
-	var candidates: Array[Dictionary] = remaining_rooms.duplicate(true)
+			candidates.append(room)
 	_shuffle_variants(candidates)
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var score_a := _layout_profile_offer_score(a)
+		var score_b := _layout_profile_offer_score(b)
+		if score_a != score_b:
+			return score_a > score_b
+		return posmod((str(a.get("id", "")) + str(run_seed)).hash(), 10007) < posmod((str(b.get("id", "")) + str(run_seed)).hash(), 10007)
+	)
 	for room in candidates:
 		if result.size() >= 3:
 			break
-		if not _contains_room(result, str(room.get("id", ""))) and not room_rules.valid_rotations(target, room).is_empty():
-			result.append(room)
+		result.append(room)
 	return result
+
+
+func _layout_profile_offer_score(room: Dictionary) -> int:
+	var shape := str(room.get("footprint_kind", "single"))
+	var category := "large"
+	if shape == "single":
+		category = "single"
+	elif shape == "line3":
+		category = "line3"
+	elif shape == "l3":
+		category = "l3"
+	var weights: Dictionary = run_layout_profile.get("weights", {})
+	var score := int(weights.get(category, 1)) * 100
+	if str(run_layout_profile.get("id", "")) == "mixed":
+		var desired_size: int = [1, 3, 5][posmod(run_progress - 1, 3)]
+		score += 80 if int(room.get("room_size", 1)) == desired_size else 0
+	return score
 
 
 func _select_first_valid_rotation() -> void:

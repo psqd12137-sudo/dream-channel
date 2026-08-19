@@ -14,7 +14,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	game.go_home()
-	game.start_new_run(false)
+	game.start_new_run(false, 2026081901)
 	game.choose_omen(0)
 
 	var elite_room: Dictionary = game._find_catalog_room("hall")
@@ -50,7 +50,11 @@ func _run() -> void:
 			if str(game.room_rules.placed[pos].get("instance_id", "")) == instance_id:
 				occupied.append(pos)
 		_check(occupied.size() == 5, "placing one elite ticket must reserve exactly five map cells")
-		_check(game._find_room_instance_nodes(chosen_frontier).size() == 5, "the placement animation must address the complete five-cell room instance")
+		var animated_nodes: Array[Node3D] = game._find_room_instance_nodes(chosen_frontier)
+		if game.kenney_build_lab_mode:
+			_check(animated_nodes.size() == 1 and int(animated_nodes[0].get_meta("room_size", 0)) == 5, "the Kenney placement animation must address one complete five-cell room root")
+		else:
+			_check(animated_nodes.size() == 5, "the legacy placement animation must address all five cell nodes")
 
 		game.enter_room(chosen_frontier)
 		_check(game.phase == "room_ready", "first entry through any occupied cell must open the room event")

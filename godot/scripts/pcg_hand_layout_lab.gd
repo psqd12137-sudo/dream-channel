@@ -68,6 +68,7 @@ func _generate_room_layout() -> void:
 		_add_room(shape_id, candidate, elevation, room_id if not room_id.is_empty() else "R%02d" % room_index)
 		var generated_room: Dictionary = rooms[room_index]
 		generated_room["name"] = str(piece.get_meta("room_name", room_id))
+		generated_room["room_type"] = str(piece.get_meta("room_type", ""))
 		generated_room["revealed"] = bool(piece.get_meta("revealed", true))
 		generated_room["visited"] = bool(piece.get_meta("visited", true))
 		generated_room["completed"] = bool(piece.get_meta("completed", false))

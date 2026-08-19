@@ -19,7 +19,7 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 	await process_frame
-	game.start_new_run(false)
+	game.start_new_run(false, 2026081901)
 
 	game.choose_omen(0)
 	var frontiers: Array[Vector2i] = game.room_rules.frontiers()
@@ -32,7 +32,8 @@ func _run() -> void:
 	var target := frontiers[0]
 	game.begin_build(target)
 	game.place_selected_offer()
-	var room_node: Node3D = game._find_room_node(target)
+	var animated_room_nodes: Array[Node3D] = game._find_room_instance_nodes(target)
+	var room_node: Node3D = animated_room_nodes[0] if not animated_room_nodes.is_empty() else null
 	_check(game.animation_busy, "room placement must lock interaction while it animates")
 	_check(game.active_animation_kind == "room_drop", "room placement must expose the room_drop animation state")
 	_check(room_node != null, "the placed room must have a single animated root")
@@ -44,7 +45,8 @@ func _run() -> void:
 	_check(game.current_room_pos != target, "entering must be ignored while the room is still landing")
 	await _wait_for_effect(game, 2.0)
 
-	room_node = game._find_room_node(target)
+	animated_room_nodes = game._find_room_instance_nodes(target)
+	room_node = animated_room_nodes[0] if not animated_room_nodes.is_empty() else null
 	_check(not game.animation_busy, "room placement animation must complete")
 	if room_node != null:
 		_check(is_zero_approx(room_node.position.y), "the room must settle onto the house plane")
@@ -64,9 +66,11 @@ func _run() -> void:
 	_check(bool(revealed_room.get("revealed", false)), "the unknown room must flip to its revealed face")
 	_check(game.phase == "room_ready", "first entry must still preserve room resolution rules")
 	_check(not game.animation_busy, "room reveal must release interaction")
-	var expected_house_yaw := atan2(float(target.x), float(target.y))
 	var arrived_token := game.house_root.get_node_or_null("LiliToken") as Node3D
-	_check(arrived_token != null and is_equal_approx(arrived_token.rotation.y, expected_house_yaw), "house-map Lili must keep facing the room she just entered after the map rebuild")
+	var arrived_slot_index := int(arrived_token.get_meta("interaction_slot_index", -1)) if arrived_token != null else -1
+	var arrived_slots: Array[Dictionary] = game.room_interaction_slots(target)
+	var expected_house_position: Vector3 = game._interaction_slot_house_position(arrived_slots[arrived_slot_index], "position") if arrived_slot_index >= 0 and arrived_slot_index < arrived_slots.size() else game._house_world(target)
+	_check(arrived_token != null and arrived_token.position.is_equal_approx(expected_house_position), "house-map Lili must settle into the room interaction slot after the map rebuild")
 
 	var combat_room: Dictionary = _find_room(game.room_catalog, "hall")
 	_check(not combat_room.is_empty(), "combat entry animation test requires the hall")

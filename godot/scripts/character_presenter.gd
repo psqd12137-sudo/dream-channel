@@ -104,6 +104,46 @@ func play_state(state: String, callout: String = "") -> void:
 	action_tween.tween_callback(_return_to_idle)
 
 
+func set_interaction_pose(pose: String, kind: String) -> void:
+	if sprite == null and model_root == null:
+		return
+	if action_tween != null and action_tween.is_valid():
+		action_tween.kill()
+	current_state = "interact_%s" % kind
+	state_changed.emit(current_state)
+	position = base_position
+	rotation = Vector3.ZERO
+	scale = Vector3.ONE
+	match pose:
+		"sit":
+			position.y = base_position.y - 0.12
+			scale = Vector3(1.0, 0.82, 1.0)
+		"rest":
+			position.y = base_position.y - 0.18
+			rotation.z = deg_to_rad(68.0)
+			scale = Vector3.ONE * 0.88
+		"work":
+			rotation.x = deg_to_rad(-8.0)
+			scale = Vector3(1.0, 0.96, 1.0)
+	_play_model_animation(pose)
+	if action_label != null:
+		action_label.text = _interaction_callout(kind)
+		action_label.modulate = Color(0.78, 0.94, 0.88, 0.72) if kind != "stand" else Color.TRANSPARENT
+
+
+func _interaction_callout(kind: String) -> String:
+	match kind:
+		"sit": return "休息"
+		"rest": return "小憩"
+		"cook": return "烹饪"
+		"work": return "工作"
+		"tend": return "照料"
+		"gather": return "交谈"
+		"browse": return "阅读"
+		"warm": return "取暖"
+	return ""
+
+
 func _return_to_idle() -> void:
 	current_state = "idle"
 	state_changed.emit("idle")

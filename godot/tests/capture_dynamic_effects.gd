@@ -18,7 +18,7 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 	await process_frame
-	game.start_new_run(false)
+	game.start_new_run(false, 2026081901)
 	game.choose_omen(0)
 	var target: Vector2i = game.room_rules.frontiers()[0]
 	game.begin_build(target)

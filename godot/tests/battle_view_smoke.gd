@@ -19,7 +19,7 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 	await process_frame
-	game.start_new_run(false)
+	game.start_new_run(false, 2026081901)
 	var hud = game.get_node("HUD/HUDRoot")
 	var desktop_sizes: Array[Vector2] = [Vector2(1024, 640), Vector2(1280, 800), Vector2(1600, 900), Vector2(1920, 1080)]
 	for viewport_size: Vector2 in desktop_sizes:

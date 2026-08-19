@@ -16,7 +16,7 @@ func _run() -> void:
 
 	# 1. 正式开局（打开电视机）必须默认走 Kenney 桌模建造，而不是旧几何路线。
 	game.go_home()
-	game.start_new_run(false)
+	game.start_new_run(false, 2026081901)
 	await process_frame
 	_check(game.phase == "omen", "formal start_new_run must enter the omen phase")
 	_check(game.kenney_build_lab_mode, "formal start_new_run must keep the promoted Kaykit table-model build enabled")

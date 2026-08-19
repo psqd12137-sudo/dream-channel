@@ -24,7 +24,7 @@ func _run() -> void:
 		_check(not video.paused, "home video must not be paused on home screen")
 
 	# 进入游戏后视频应隐藏并停止
-	game.start_new_run(false)
+	game.start_new_run(false, 2026081901)
 	await process_frame
 	_check(not video.visible, "home video must hide after starting a run")
 

@@ -14,7 +14,24 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	game._clear_run_save()
+	game.go_home()
 	game.start_new_run(false)
+	var first_random_seed: int = game.run_seed
+	game.go_home()
+	game.start_new_run(false)
+	var second_random_seed: int = game.run_seed
+	_check(first_random_seed != second_random_seed and first_random_seed > 0 and second_random_seed > 0, "each normal new run must receive a different positive random seed")
+	game.reset_run(1)
+	var first_layout_profile := str(game.run_layout_profile.get("id", ""))
+	game.reset_run(2)
+	var second_layout_profile := str(game.run_layout_profile.get("id", ""))
+	_check(not first_layout_profile.is_empty() and first_layout_profile != second_layout_profile, "different seeds must select different structural layout profiles")
+	game.go_home()
+	_check(game.start_run_from_seed_text("2522061406") and game.run_seed == 2522061406, "legacy ten-digit seed codes must remain replayable")
+	game.go_home()
+	_check(game.start_run_from_seed_text("2026081901"), "a valid seed code must start a reproducible run from the title flow")
+	_check(game.run_seed == 2026081901 and int(game.content.get("run_seed", 0)) == game.run_seed, "an explicit seed must keep automated runs reproducible")
+	_check(not game.current_layout_profile_label().is_empty(), "a seeded run must expose its structural layout profile")
 	game.choose_omen(0)
 	_check(game.run_deck.size() == game.content.get("starter_deck", []).size(), "new run must own a persistent copy of the Web starter deck")
 	game.player_hp = 3
@@ -46,6 +63,7 @@ func _run() -> void:
 	game.run_deck.clear()
 	game.player_speed = 1
 	_check(game.continue_saved_run(), "continue must restore a compatible EXE-based save")
+	_check(game.run_seed == 2026081901, "continue must preserve the saved run seed instead of rolling a new one")
 	_check(game.run_deck.size() == deck_before + 1, "continue must restore the grown deck")
 	_check(game.player_speed == 5 and game.player_hp == 4, "continue must restore persistent player stats")
 

@@ -20,7 +20,7 @@ func _run() -> void:
 	await _capture("res://artifacts/combat_height_portal_choice.png")
 
 	game.go_home()
-	game.start_new_run(false)
+	game.start_new_run(false, 2026081901)
 	game.choose_omen(0)
 	game.begin_build(game.room_rules.frontiers()[0])
 	game.rotate_offer()

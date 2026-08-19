@@ -24,7 +24,7 @@
 | [现行主策划](./design/织梦频道_channel_dream_策划案与招标书.md) | 产品定位、体验支柱、范围和里程碑 | 现行决策 |
 | [未决设计](./open-questions.md) | 尚未拍板的问题与临时口径 | 持续维护 |
 | [玩法拓展与设计轴](./design/玩法拓展概念与设计轴.md) | 设计分析和候选拓展顺序 | 分析材料 |
-| [多人山屋设想](../cabin-slice/data/multiplayer-haunt-sketch.md) | 多人、半场奸徒和整图终局概念 | 远期短稿 |
+| [多人节目终局设想](../cabin-slice/data/multiplayer-haunt-sketch.md) | 多人、半场改剧本和整图终局概念 | 远期短稿 |
 | [历史归档说明](./design/archive/README.md) | 旧方案边界与索引 | 只读说明 |
 
 ### Web 客户端
@@ -53,6 +53,7 @@
 | 文档 | 用途 |
 | --- | --- |
 | [协作指南](../CONTRIBUTING.md) | 文件归属、测试和 Git 约定 |
+| [Agent 交接区](./handoffs/README.md) | 每次功能提交的改动、验证和后续工作记录 |
 | [新电脑接入](./setup/另一台电脑一键拉取.md) | 从 GitHub clone 并运行两个客户端 |
 | [Cursor 接入 DeepSeek](./setup/Cursor接入DeepSeek.md) | 可选开发工具配置 |
 | [Cursor 接入火山方舟](./setup/Cursor接入火山方舟.md) | 可选开发工具配置 |
