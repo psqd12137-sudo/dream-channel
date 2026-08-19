@@ -7,6 +7,9 @@ const COMBAT_UI_LAYOUT = preload("res://scenes/combat_ui_layout.tscn")
 const CARD_BACK_BLUE = preload("res://assets/ui/channel_concept/card_blue.png")
 const CARD_BACK_RED = preload("res://assets/ui/channel_concept/card_red.png")
 const CARD_BACK_YELLOW = preload("res://assets/ui/channel_concept/card_yellow.png")
+const CARD_FRAME_YELLOW = preload("res://assets/ui/cards/Front_Yellow.png")
+const CARD_FRAME_BLUE = preload("res://assets/ui/cards/Front_Blue.png")
+const CARD_FRAME_RED = preload("res://assets/ui/cards/Front_Red.png")
 const EVENT_PANEL_TEXTURE = preload("res://assets/ui/channel_concept/UI_HUD_Panel_EventProgram_Normal.png")
 const ACTION_PANEL_TEXTURE = preload("res://assets/ui/channel_concept/UI_HUD_Panel_ActionPanel_Normal.png")
 const BTN_START_TEXTURE = preload("res://assets/ui/unity_buttons/SP_StartGame.png")
@@ -85,6 +88,11 @@ var hovered_combat_card := -1
 var combat_card_hover_amount := 0.0
 var dragged_combat_card := -1
 var dragged_card_position := Vector2.ZERO
+var card_flight_offsets: Dictionary = {}
+var card_flight_tweens: Dictionary = {}
+var last_hand_key := ""
+var deck_flight_origin := Vector2(94, 600)
+var discard_flight_origin := Vector2(910, 600)
 var board_left_pressed := false
 var board_left_dragged := false
 var board_left_distance := 0.0
@@ -126,6 +134,85 @@ func _process(delta: float) -> void:
 	combat_card_hover_amount = move_toward(combat_card_hover_amount, target, delta * 8.5)
 	if not is_equal_approx(previous, combat_card_hover_amount):
 		queue_redraw()
+	# 发牌/收牌动效推进（flight offsets 归零后自动清除）
+	if not card_flight_offsets.is_empty():
+		queue_redraw()
+
+
+func _update_card_flights(old_key: String, new_key: String) -> void:
+	# 计算新旧手牌的差异：新增的卡从牌堆飞入，消失的卡飞向弃牌堆
+	var old_ids: Array[String] = []
+	for raw_id: String in (old_key.split(",") if not old_key.is_empty() else []):
+		if not raw_id.is_empty():
+			old_ids.append(raw_id)
+	var new_ids: Array[String] = []
+	for raw_id: String in (new_key.split(",") if not new_key.is_empty() else []):
+		if not raw_id.is_empty():
+			new_ids.append(raw_id)
+	var new_set: Dictionary = {}
+	for id: String in new_ids:
+		if not id.is_empty():
+			new_set[id] = true
+	var old_set: Dictionary = {}
+	for id: String in old_ids:
+		if not id.is_empty():
+			old_set[id] = true
+	# 新卡：从牌堆位置飞入（首次进入战斗也触发）
+	for id: String in new_ids:
+		if id.is_empty() or old_set.has(id):
+			continue
+		if card_flight_offsets.has(id):
+			card_flight_offsets.erase(id)
+		var start_offset := deck_flight_origin - _hand_card_anchor_position(id, new_ids)
+		card_flight_offsets[id] = start_offset
+		_tween_card_flight(id, Vector2.ZERO)
+	# 消失的卡：飞向弃牌堆（收牌动效由主逻辑处理，这里只清残留）
+	for id: String in old_ids:
+		if id.is_empty() or new_set.has(id) or not card_flight_offsets.has(id):
+			continue
+		card_flight_offsets.erase(id)
+
+
+func _hand_card_anchor_position(card_id: String, hand_ids: Array) -> Vector2:
+	# 估算卡在弧形手牌中的目标位置（供飞行动画起点计算）
+	var idx := hand_ids.find(card_id)
+	if idx < 0:
+		return Vector2(250, 514)
+	var hand_rect := _combat_layout_rect("HandArea", Rect2(250, 514, 580, 168))
+	var count := maxi(1, hand_ids.size())
+	var card_width := minf(124.0, hand_rect.size.x / float(count))
+	var total_width := card_width + minf(card_width, (hand_rect.size.x - card_width) / maxf(1.0, float(count - 1))) * maxf(0.0, float(count - 1))
+	var start_x := hand_rect.position.x + (hand_rect.size.x - total_width) * 0.5
+	var t_value := float(idx) / maxf(1.0, float(count - 1))
+	var inv := 1.0 - t_value
+	var x := lerpf(start_x, start_x + total_width - card_width, t_value)
+	var base_y := hand_rect.position.y + hand_rect.size.y - card_width * 154.0 / 124.0
+	var arc_y := inv * inv * (base_y - 26.0) + 2.0 * inv * t_value * (base_y + 30.0) + t_value * t_value * (base_y - 26.0)
+	return Vector2(x + card_width * 0.5, arc_y + card_width * 0.3)
+
+
+func _tween_card_flight(card_id: String, target_offset: Vector2) -> void:
+	if card_flight_tweens.has(card_id):
+		var existing: Tween = card_flight_tweens[card_id]
+		if existing != null and existing.is_valid():
+			existing.kill()
+	var start_offset: Vector2 = card_flight_offsets.get(card_id, target_offset)
+	var flight := create_tween()
+	card_flight_tweens[card_id] = flight
+	flight.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	flight.tween_method(_apply_card_flight.bind(card_id), start_offset, target_offset, 0.28)
+	flight.tween_callback(_finish_card_flight.bind(card_id))
+
+
+func _apply_card_flight(offset: Vector2, card_id: String) -> void:
+	card_flight_offsets[card_id] = offset
+	queue_redraw()
+
+
+func _finish_card_flight(card_id: String) -> void:
+	card_flight_offsets.erase(card_id)
+	card_flight_tweens.erase(card_id)
+	queue_redraw()
 
 
 func sync_layout() -> void:
@@ -497,6 +584,10 @@ func _draw_combat_hud() -> void:
 	_draw_chip(Rect2(deck_rect.position + Vector2(5, deck_rect.size.y - 25), Vector2(deck_rect.size.x - 10, 22)), "抽牌 %d" % combat.deck.size(), TEAL, TEXT, 10)
 	_draw_chip(Rect2(discard_rect.position + Vector2(5, discard_rect.size.y - 25), Vector2(discard_rect.size.x - 10, 22)), "弃牌 %d" % combat.discard.size(), RED, TEXT, 10)
 	combat_card_rects.clear()
+	var hand_key := ",".join(combat.hand)
+	if hand_key != last_hand_key:
+		_update_card_flights(last_hand_key, hand_key)
+		last_hand_key = hand_key
 	var card_width := minf(124.0, hand_rect.size.x / maxf(1.0, float(combat.hand.size())))
 	var card_height := minf(card_width * 154.0 / 124.0, hand_rect.size.y - 8.0)
 	var spacing := card_width
@@ -505,9 +596,22 @@ func _draw_combat_hud() -> void:
 	var total_width := card_width + spacing * maxf(0.0, float(combat.hand.size() - 1))
 	var start_x := hand_rect.position.x + (hand_rect.size.x - total_width) * 0.5
 	var middle := float(combat.hand.size() - 1) * 0.5
+	# 弧形手牌：二次贝塞尔弧线，中间低、两端高（对齐 Unity Spline 扇形排布）
+	var arc_control_y := hand_rect.position.y + hand_rect.size.y * 0.28
 	for i in range(combat.hand.size()):
-		var arc_drop := absf(float(i) - middle) * 5.0
-		var rect := Rect2(start_x + float(i) * spacing, hand_rect.position.y + arc_drop, card_width, card_height)
+		var t_value := float(i) / maxf(1.0, float(combat.hand.size() - 1))
+		var inv := 1.0 - t_value
+		var x := lerpf(start_x, start_x + total_width - card_width, t_value)
+		var base_y := hand_rect.position.y + hand_rect.size.y - card_height
+		# 弧线：y = (1-t)²*P0 + 2(1-t)t*C + t²*P1，P0/P1 两端抬起，C 中心下沉
+		var arc_y := inv * inv * (base_y - 26.0) + 2.0 * inv * t_value * (base_y + 30.0) + t_value * t_value * (base_y - 26.0)
+		var rect := Rect2(x, arc_y, card_width, card_height)
+		# 发牌动效：从牌堆位置飞入
+		var card_id := str(combat.hand[i])
+		if card_flight_offsets.has(card_id):
+			rect.position += card_flight_offsets[card_id]
+		# 旋转：越靠边倾斜越大
+		var tilt_deg := lerpf(-7.0, 7.0, t_value)
 		if i == hovered_combat_card and dragged_combat_card < 0:
 			var hover_scale := lerpf(1.0, 1.28, combat_card_hover_amount)
 			var hover_size := rect.size * hover_scale
@@ -515,7 +619,7 @@ func _draw_combat_hud() -> void:
 			rect = Rect2(Vector2(rect.get_center().x - hover_size.x * 0.5, hover_y), hover_size)
 		combat_card_rects.append(rect)
 		var card: Dictionary = combat.cards.get(combat.hand[i], {})
-		_draw_combat_card(rect, str(combat.hand[i]), card, combat.card_cost(card), i == game.selected_card)
+		_draw_combat_card(rect, str(combat.hand[i]), card, combat.card_cost(card), i == game.selected_card, tilt_deg)
 	if dragged_combat_card >= 0 and dragged_combat_card < combat.hand.size():
 		_draw_card_target_arrow(combat_card_rects[dragged_combat_card].get_center(), dragged_card_position)
 	if combat.outcome == "":
@@ -673,25 +777,48 @@ func _draw_action_ticket(rect: Rect2) -> void:
 	_label("固定预算", rect.position + Vector2(177, 96), 9, Color("7a6044"))
 
 
-func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int, selected: bool) -> void:
+func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int, selected: bool, tilt_deg: float = 0.0) -> void:
 	var kind := str(card.get("type", "skill"))
 	var accent := GOLD if kind == "place" else MAGENTA if kind == "ready" else RED if kind == "medicine" else TEAL
-	var card_texture: Texture2D = CARD_BACK_YELLOW if kind == "place" else CARD_BACK_RED if kind == "medicine" else CARD_BACK_BLUE
+	var frame: Texture2D = CARD_FRAME_YELLOW if kind == "place" else CARD_FRAME_RED if kind == "medicine" else CARD_FRAME_BLUE
 	var card_scale := rect.size.x / 124.0
 	var scaled := func(value: float) -> float: return value * card_scale
+	if not is_zero_approx(tilt_deg):
+		var pivot := rect.get_center()
+		draw_set_transform(pivot, deg_to_rad(tilt_deg), Vector2.ONE)
+		rect = Rect2(rect.position - pivot, rect.size)
+	# 底阴影
 	draw_rect(Rect2(rect.position + Vector2(0, scaled.call(3.0)), rect.size), Color("03070a"), true)
-	draw_rect(rect, accent.darkened(0.32), true)
-	draw_rect(rect.grow(-scaled.call(7.0)), Color("f8e9c7f2"), true)
+	# Unity 原版卡面背景（三色拉伸）
+	if frame != null:
+		draw_texture_rect(frame, rect, false, Color(1, 1, 1, 1.0))
+	else:
+		draw_rect(rect, accent.darkened(0.32), true)
+	# 左侧费用条
 	draw_rect(Rect2(rect.position + Vector2(scaled.call(7.0), scaled.call(7.0)), Vector2(scaled.call(30.0), rect.size.y - scaled.call(14.0))), Color(accent, 0.92), true)
+	# 选中描边
 	draw_rect(rect, GOLD if selected else Color("987452"), false, scaled.call(4.0 if selected else 1.5))
+	# 费用数字
 	_draw_centered(str(cost), Rect2(rect.position + Vector2(scaled.call(7.0), scaled.call(9.0)), Vector2(scaled.call(30.0), scaled.call(30.0))), maxi(9, roundi(scaled.call(15.0))), INK if accent.get_luminance() > 0.55 else TEXT)
+	# 卡名
 	_label(_shorten(str(card.get("name", card_id)), 8), rect.position + Vector2(scaled.call(43.0), scaled.call(29.0)), maxi(9, roundi(scaled.call(14.0))), INK)
+	# 类型标签
 	_label(_card_kind_label(kind), rect.position + Vector2(scaled.call(43.0), scaled.call(48.0)), maxi(7, roundi(scaled.call(9.0))), accent.darkened(0.25))
 	if rect.size.y >= scaled.call(110.0):
+		# 中央道具图标（Unity 原图，取自 presentation.items[card_id]）
 		var art_rect := Rect2(rect.position + Vector2(scaled.call(43.0), scaled.call(55.0)), Vector2(rect.size.x - scaled.call(51.0), scaled.call(58.0)))
-		_draw_texture_contained(card_texture, art_rect, Color(1, 1, 1, 0.96))
+		var item_path := str((game.presentation.get("items", {}) as Dictionary).get(card_id, ""))
+		if not item_path.is_empty():
+			var icon := load(item_path) as Texture2D
+			if icon != null:
+				_draw_texture_contained(icon, art_rect, Color(1, 1, 1, 0.98))
+		else:
+			draw_texture_rect(frame, art_rect, false, Color(1, 1, 1, 0.96))
 		draw_rect(art_rect, accent.darkened(0.25), false, scaled.call(1.5))
+		# 效果描述
 		_draw_wrapped(_shorten(str(card.get("text", "")), 42), Vector2(rect.position.x + scaled.call(43.0), art_rect.end.y + scaled.call(13.0)), rect.size.x - scaled.call(51.0), maxi(7, roundi(scaled.call(10.0))), Color("544a43"))
+	if not is_zero_approx(tilt_deg):
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func _draw_texture_contained(texture: Texture2D, rect: Rect2, modulate: Color = Color.WHITE) -> void:

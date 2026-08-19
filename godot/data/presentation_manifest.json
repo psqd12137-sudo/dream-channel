@@ -1,98 +1,132 @@
 {
-  "version": 1,
-  "source": "CabinSlice_织梦频道.exe@EEC4C574CC22",
-  "actors": {
-    "player": {
-      "idle_frames": [
-        "res://assets/web_show/characters/lili/idle/frame_01.png",
-        "res://assets/web_show/characters/lili/idle/frame_02.png",
-        "res://assets/web_show/characters/lili/idle/frame_03.png",
-        "res://assets/web_show/characters/lili/idle/frame_04.png",
-        "res://assets/web_show/characters/lili/idle/frame_05.png",
-        "res://assets/web_show/characters/lili/idle/frame_06.png",
-        "res://assets/web_show/characters/lili/idle/frame_07.png",
-        "res://assets/web_show/characters/lili/idle/frame_08.png",
-        "res://assets/web_show/characters/lili/idle/frame_09.png",
-        "res://assets/web_show/characters/lili/idle/frame_10.png",
-        "res://assets/web_show/characters/lili/idle/frame_11.png",
-        "res://assets/web_show/characters/lili/idle/frame_12.png"
-      ],
-      "idle_fps": 8.0,
-      "model_path": "res://assets/quaternius/animated_characters/Casual_Female.gltf",
-      "model_scale": 0.525,
-      "model_y": 0.0,
-      "model_yaw": 0.0,
-      "label_y": 1.3,
-      "animation_map": {
-        "idle": "Idle",
-        "move": "Walk",
-        "ready": "Idle",
-        "attack": "Punch",
-        "hurt": "RecieveHit"
-      },
-      "animations": {
-        "idle": {
-          "frames": [
-            "res://assets/web_show/characters/lili/idle/frame_01.png",
-            "res://assets/web_show/characters/lili/idle/frame_02.png",
-            "res://assets/web_show/characters/lili/idle/frame_03.png",
-            "res://assets/web_show/characters/lili/idle/frame_04.png",
-            "res://assets/web_show/characters/lili/idle/frame_05.png",
-            "res://assets/web_show/characters/lili/idle/frame_06.png",
-            "res://assets/web_show/characters/lili/idle/frame_07.png",
-            "res://assets/web_show/characters/lili/idle/frame_08.png",
-            "res://assets/web_show/characters/lili/idle/frame_09.png",
-            "res://assets/web_show/characters/lili/idle/frame_10.png",
-            "res://assets/web_show/characters/lili/idle/frame_11.png",
-            "res://assets/web_show/characters/lili/idle/frame_12.png"
-          ],
-          "fps": 8.0,
-          "loop": true
-        }
-      },
-      "pixel_size": 0.00215,
-      "visual_y": 0.94
-    },
-    "enemy": {
-      "idle_frames": ["res://assets/web_show/characters/enemy/idle.png"],
-      "idle_fps": 1.0,
-      "model_path": "res://assets/quaternius/animated_characters/Demon.gltf",
-      "model_scale": 0.575,
-      "model_y": 0.0,
-      "model_yaw": 0.0,
-      "label_y": 1.4,
-      "animation_map": {
-        "idle": "Idle",
-        "move": "Walk",
-        "ready": "Idle",
-        "attack": "Bite_InPlace",
-        "hurt": "HitRecieve"
-      },
-      "animations": {
-        "idle": {
-          "frames": ["res://assets/web_show/characters/enemy/idle.png"],
-          "fps": 1.0,
-          "loop": true
-        }
-      },
-      "pixel_size": 0.00245,
-      "visual_y": 0.82
-    }
-  },
-  "items": {
-    "jab": "res://assets/web_show/items/AnimalTrap.png",
-    "snare": "res://assets/web_show/items/AnimalTrap.png",
-    "warp_trap": "res://assets/web_show/items/TeleportTrap.png",
-    "decoy": "res://assets/web_show/items/ToyBear.png",
-    "flare": "res://assets/web_show/items/SignalJammer.png",
-    "glare": "res://assets/web_show/items/SignalJammer.png",
-    "strobe": "res://assets/web_show/items/SignalJammer.png"
-  },
-  "decor": {
-    "door": "res://assets/web_show/decor/door.png",
-    "window": "res://assets/web_show/decor/window.png",
-    "pendant_lamp": "res://assets/web_show/decor/pendant_lamp.png",
-    "signal_anchor": "res://assets/web_show/decor/signal_anchor.png"
-  },
-  "file_integrity": "SMB-safe manifest footer; keep this field when replacing temporary character models."
+    "version":  1,
+    "source":  "CabinSlice_织梦频道.exe@EEC4C574CC22",
+    "actors":  {
+                   "player":  {
+                                  "idle_frames":  [
+                                                      "res://assets/web_show/characters/lili/idle/frame_01.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_02.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_03.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_04.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_05.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_06.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_07.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_08.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_09.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_10.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_11.png",
+                                                      "res://assets/web_show/characters/lili/idle/frame_12.png"
+                                                  ],
+                                  "idle_fps":  8.0,
+                                  "model_path":  "res://assets/quaternius/animated_characters/Casual_Female.gltf",
+                                  "model_scale":  0.525,
+                                  "model_y":  0.0,
+                                  "model_yaw":  0.0,
+                                  "label_y":  1.3,
+                                  "animation_map":  {
+                                                        "idle":  "Idle",
+                                                        "move":  "Walk",
+                                                        "ready":  "Idle",
+                                                        "attack":  "Punch",
+                                                        "hurt":  "RecieveHit"
+                                                    },
+                                  "animations":  {
+                                                     "idle":  {
+                                                                  "frames":  [
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_01.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_02.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_03.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_04.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_05.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_06.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_07.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_08.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_09.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_10.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_11.png",
+                                                                                 "res://assets/web_show/characters/lili/idle/frame_12.png"
+                                                                             ],
+                                                                  "fps":  8.0,
+                                                                  "loop":  true
+                                                              }
+                                                 },
+                                  "pixel_size":  0.00215,
+                                  "visual_y":  0.94
+                              },
+                   "enemy":  {
+                                 "idle_frames":  [
+                                                     "res://assets/web_show/characters/enemy/idle.png"
+                                                 ],
+                                 "idle_fps":  1.0,
+                                 "model_path":  "res://assets/quaternius/animated_characters/Demon.gltf",
+                                 "model_scale":  0.575,
+                                 "model_y":  0.0,
+                                 "model_yaw":  0.0,
+                                 "label_y":  1.4,
+                                 "animation_map":  {
+                                                       "idle":  "Idle",
+                                                       "move":  "Walk",
+                                                       "ready":  "Idle",
+                                                       "attack":  "Bite_InPlace",
+                                                       "hurt":  "HitRecieve"
+                                                   },
+                                 "animations":  {
+                                                    "idle":  {
+                                                                 "frames":  [
+                                                                                "res://assets/web_show/characters/enemy/idle.png"
+                                                                            ],
+                                                                 "fps":  1.0,
+                                                                 "loop":  true
+                                                             }
+                                                },
+                                 "pixel_size":  0.00245,
+                                 "visual_y":  0.82
+                             }
+               },
+    "items":  {
+                  "adrenaline":  "res://assets/ui/cards/BloodyCity.png",
+                  "afterimage":  "res://assets/ui/cards/MagicCube.png",
+                  "brace":  "res://assets/ui/cards/RecordPlayer.png",
+                  "breach":  "res://assets/ui/cards/BouncingBomb.png",
+                  "chisel":  "res://assets/ui/cards/HornedAxe.png",
+                  "decoy":  "res://assets/ui/cards/ToyBear.png",
+                  "drop_hammer":  "res://assets/ui/cards/DeadlyBurger.png",
+                  "flare":  "res://assets/ui/cards/BouncingBomb.png",
+                  "fling":  "res://assets/ui/cards/DrummingMonkeyToy.png",
+                  "focus":  "res://assets/ui/cards/FlashyGlasses.png",
+                  "foothold":  "res://assets/ui/cards/TVTeleport.png",
+                  "glare":  "res://assets/ui/cards/FlashyGlasses.png",
+                  "guard":  "res://assets/ui/cards/SoulLink.png",
+                  "heavy":  "res://assets/ui/cards/DeadlyBurger.png",
+                  "jab":  "res://assets/ui/cards/AnimalTrap.png",
+                  "keepsake":  "res://assets/ui/cards/LuckyRabbitFoot.png",
+                  "plans":  "res://assets/ui/cards/DirectorLog.png",
+                  "poise":  "res://assets/ui/cards/MagicCube.png",
+                  "puppet_bang":  "res://assets/ui/cards/ToyBear.png",
+                  "rift_fling":  "res://assets/ui/cards/TeleportTrap.png",
+                  "riposte":  "res://assets/ui/cards/HornedAxe.png",
+                  "rupture":  "res://assets/ui/cards/LotteryWheel.png",
+                  "salt_lash":  "res://assets/ui/cards/SoulLink.png",
+                  "shove":  "res://assets/ui/cards/HornedAxe.png",
+                  "snare":  "res://assets/ui/cards/AnimalTrap.png",
+                  "stash":  "res://assets/ui/cards/ThiefGloves.png",
+                  "strobe":  "res://assets/ui/cards/BouncingBomb.png",
+                  "tonic":  "res://assets/ui/cards/WaterGun.png",
+                  "topple":  "res://assets/ui/cards/RecordPlayer.png",
+                  "usher":  "res://assets/ui/cards/TVTeleport.png",
+                  "warp_trap":  "res://assets/ui/cards/TeleportTrap.png"
+              },
+    "decor":  {
+                  "door":  "res://assets/web_show/decor/door.png",
+                  "window":  "res://assets/web_show/decor/window.png",
+                  "pendant_lamp":  "res://assets/web_show/decor/pendant_lamp.png",
+                  "signal_anchor":  "res://assets/web_show/decor/signal_anchor.png"
+              },
+    "file_integrity":  "SMB-safe manifest footer; keep this field when replacing temporary character models.",
+    "card_frames":  {
+                        "place":  "res://assets/ui/cards/Front_Yellow.png",
+                        "ready":  "res://assets/ui/cards/Front_Blue.png",
+                        "skill":  "res://assets/ui/cards/Front_Blue.png",
+                        "medicine":  "res://assets/ui/cards/Front_Red.png"
+                    }
 }
