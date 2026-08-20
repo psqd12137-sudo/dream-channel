@@ -385,8 +385,8 @@ func _update_camera_follow(delta: float) -> void:
 			if battle_camera_return_delay <= 0.0 and not battle_camera_user_hold:
 				_start_battle_camera_return()
 		if battle_camera_following and not battle_camera_user_hold and not battle_camera_returning:
-			var follow_target := _battle_pawn_world(combat.player_pos, true) + _battle_camera_frame_offset()
-			var factor := 1.0 - exp(-BATTLE_CAMERA_FOLLOW_RATE * delta)
+			var follow_target := _battle_follow_target_position() + _battle_camera_frame_offset()
+			var factor := 1.0 - exp(-HOUSE_CAMERA_FOLLOW_RATE * delta)
 			var next_target := battle_camera_target.lerp(follow_target, factor)
 			if not next_target.is_equal_approx(battle_camera_target):
 				battle_camera_target = next_target
@@ -413,6 +413,14 @@ func _battle_camera_frame_offset() -> Vector3:
 	return camera.global_transform.basis.y * (camera.size * BATTLE_CAMERA_FRAME_OFFSET)
 
 
+func _battle_follow_target_position() -> Vector3:
+	if combat == null:
+		return Vector3.ZERO
+	var player_world := _battle_pawn_world(combat.player_pos, true)
+	var enemy_world := _battle_world(combat.enemy_pos)
+	return (player_world + enemy_world) * 0.5
+
+
 func release_battle_camera_gesture() -> void:
 	battle_camera_user_hold = false
 	if not battle_camera_returning:
@@ -431,7 +439,7 @@ func _start_battle_camera_return() -> void:
 	if camera == null or combat == null:
 		return
 	battle_camera_returning = true
-	var player_pos := _battle_pawn_world(combat.player_pos, true) + _battle_camera_frame_offset()
+	var player_pos := _battle_follow_target_position() + _battle_camera_frame_offset()
 	var duration := BATTLE_CAMERA_RETURN_DURATION * animation_duration_scale
 	if duration <= 0.0:
 		battle_camera_target = player_pos
@@ -2170,11 +2178,15 @@ func reset_battle_camera() -> void:
 	var max_height := 0.0
 	for raw_height in combat.heights.values():
 		max_height = maxf(max_height, float(raw_height))
-	battle_camera_target = Vector3(0.0, max_height * 0.18, 0.0)
+	battle_camera_target = _battle_follow_target_position()
+	battle_camera_target.y = max_height * 0.18
 	battle_camera_yaw = atan2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z)
 	battle_camera_pitch = atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
 	battle_camera_zoom_ratio = 1.0
 	_refit_battle_camera(false)
+	# 镜头自始至终对准玩家与怪物中点的偏上区域（偏下构图，含偏上偏移的纵向分量）
+	battle_camera_target = _battle_follow_target_position() + _battle_camera_frame_offset()
+	_apply_battle_camera()
 
 
 func _refit_battle_camera(preserve_zoom: bool) -> void:
@@ -2191,6 +2203,9 @@ func _refit_battle_camera(preserve_zoom: bool) -> void:
 	var half_z := (float(combat.rows - 1) * 0.5 + 0.65) * BATTLE_CELL
 	var max_y := maxf(max_height * 0.64 + 2.25, BATTLE_SHELL_WALL_HEIGHT + 1.0)
 	var horizontal_radius := Vector2(half_x, half_z).length()
+	# 镜头始终偏上构图（对准点向屏幕上方平移约 size*FRAME_OFFSET），fit 需把该偏移量计入半径，
+	# 保证全棋盘在偏上对准下仍然可见
+	horizontal_radius += BATTLE_CAMERA_FRAME_OFFSET * (horizontal_radius * 2.0 + 10.0)
 	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0)
 	camera.size = battle_camera_fit_size * battle_camera_zoom_ratio
 	_apply_battle_camera()

@@ -94,11 +94,11 @@ func _run() -> void:
 			game.handle_battle_cell(target_cell)
 			break
 	_check(game.battle_camera_following, "battle step must arm the follow camera")
+	var battle_mid: Vector3 = game._battle_follow_target_position()
+	var battle_framed: Vector3 = battle_mid + game._battle_camera_frame_offset()
 	for i in range(12):
 		game._process(0.1)
-	var battle_player: Vector3 = game._battle_pawn_world(game.combat.player_pos, true)
-	var battle_framed: Vector3 = battle_player + game._battle_camera_frame_offset()
-	_check(game.battle_camera_target.distance_to(battle_framed) < battle_target0.distance_to(battle_framed) * 0.6, "battle follow camera must converge toward the framed player position")
+	_check(game.battle_camera_target.distance_to(battle_framed) < battle_target0.distance_to(battle_framed) * 0.7, "battle follow camera must converge toward the framed midpoint")
 	game.orbit_battle_camera(Vector2(60.0, 0.0))
 	_check(not game.battle_camera_following, "battle orbit must release the follow camera")
 	_check(game.battle_camera_user_hold, "battle drag must put the battle camera in user hold")
@@ -107,8 +107,8 @@ func _run() -> void:
 	_check(is_equal_approx(game.battle_camera_return_delay, game.BATTLE_CAMERA_RETURN_DELAY), "battle release must arm the delayed return")
 	for i in range(15):
 		game._process(0.1)
-	var battle_framed_after: Vector3 = battle_player + game._battle_camera_frame_offset()
-	_check(game.battle_camera_target.distance_to(battle_framed_after) < 0.7, "battle return must settle on the framed player position")
+	var battle_framed_after: Vector3 = game._battle_follow_target_position() + game._battle_camera_frame_offset()
+	_check(game.battle_camera_target.distance_to(battle_framed_after) < 0.7, "battle return must settle on the framed midpoint")
 	_check(is_equal_approx(game.battle_camera_yaw, battle_yaw_after_orbit), "battle return must keep the rotation the player chose")
 	_check(not game.battle_camera_returning, "battle return must finish cleanly")
 

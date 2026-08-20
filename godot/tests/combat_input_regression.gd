@@ -26,10 +26,12 @@ func _run() -> void:
 	_check(_inside(game.combat.enemy_pos, game.combat.cols, game.combat.rows), "enemy must spawn on the board")
 	var camera_yaw_before: float = game.battle_camera_yaw
 	var camera_pitch_before: float = game.battle_camera_pitch
+	var target_before: Vector3 = game.battle_camera_target
+	_check(target_before.distance_to(game._battle_follow_target_position() + game._battle_camera_frame_offset()) < 0.5, "battle camera must start on the framed player-enemy midpoint")
 	game.orbit_battle_camera(Vector2(24, -8))
 	_check(not is_equal_approx(game.battle_camera_yaw, camera_yaw_before), "battle camera must rotate when the empty board drag gesture supplies motion")
 	_check(is_equal_approx(game.battle_camera_pitch, camera_pitch_before), "battle orbit must ignore vertical drag and keep a fixed pitch")
-	_check(is_equal_approx(game.battle_camera_target.x, 0.0) and is_equal_approx(game.battle_camera_target.z, 0.0), "battle orbit must use the board center instead of the player")
+	_check(game.battle_camera_target.is_equal_approx(target_before), "battle orbit must keep the framed player-enemy midpoint target")
 
 	game.combat.hand.assign(["jab", "guard"])
 	game.combat.energy = 4

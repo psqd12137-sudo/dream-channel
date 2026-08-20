@@ -234,7 +234,7 @@ func _hand_card_anchor_position(card_id: String, hand_ids: Array) -> Vector2:
 	var start_x := hand_rect.position.x + (hand_rect.size.x - total_width) * 0.5
 	var x := start_x + float(idx) * spacing
 	var stagger := (float(posmod(idx, 3)) - 1.0) * 5.0
-	var base_y := hand_rect.end.y - card_height - 6.0 + stagger
+	var base_y := 800.0 - 104.0 + stagger
 	return Vector2(x + card_width * 0.5, base_y + card_height * 0.5)
 
 
@@ -395,12 +395,9 @@ func _draw() -> void:
 		_draw_reward_modal()
 		return
 	var board_design := _design_world_rect(game.phase)
-	if game.phase != "lab_puzzle":
+	if game.phase != "lab_puzzle" and game.phase != "combat":
 		draw_rect(board_design.grow(4.0), Color("091116"), false, 8.0)
-		if game.phase == "combat":
-			draw_rect(board_design.grow(-2.0), Color("0a1218cc"), true)
-		else:
-			draw_rect(board_design, TEAL if game.phase != "combat" else GOLD, false, 2.0)
+		draw_rect(board_design, TEAL, false, 2.0)
 	_draw_top_bar()
 	if game.phase == "combat":
 		_draw_combat_hud()
@@ -711,7 +708,9 @@ func _draw_combat_hud() -> void:
 	var spacing := card_width * 0.62
 	var total_width := card_width + spacing * maxf(0.0, float(combat.hand.size() - 1))
 	var start_x := hand_rect.position.x + (hand_rect.size.x - total_width) * 0.5
-	var base_y := hand_rect.end.y - card_height - 6.0
+	# 杀戮尖塔式：卡牌沉到画布底部，静止时只露出上半部分；悬停时升起完整显示并放大
+	var exposed_height := 104.0
+	var base_y := 800.0 - exposed_height
 	var card_draw_entries: Array[Dictionary] = []
 	for i in range(combat.hand.size()):
 		var x := start_x + float(i) * spacing
@@ -726,7 +725,7 @@ func _draw_combat_hud() -> void:
 		if i == hovered_combat_card and dragged_combat_card < 0:
 			var hover_scale := lerpf(1.0, 1.16, combat_card_hover_amount)
 			var hover_size := rect.size * hover_scale
-			var hover_y := lerpf(rect.position.y, hand_rect.position.y - 44.0, combat_card_hover_amount)
+			var hover_y := lerpf(rect.position.y, 800.0 - hover_size.y, combat_card_hover_amount)
 			rect = Rect2(Vector2(rect.get_center().x - hover_size.x * 0.5, hover_y), hover_size)
 		combat_card_rects.append(rect)
 		var card: Dictionary = combat.cards.get(combat.hand[i], {})
