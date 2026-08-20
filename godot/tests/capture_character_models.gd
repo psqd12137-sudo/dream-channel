@@ -6,6 +6,11 @@ func _init() -> void:
 
 
 func _run() -> void:
+	var manifest_file := FileAccess.open("res://data/presentation_manifest.json", FileAccess.READ)
+	var manifest: Dictionary = JSON.parse_string(manifest_file.get_as_text())
+	var actors: Dictionary = manifest.get("actors", {})
+	var player_config: Dictionary = actors.get("player", {})
+	var enemy_config: Dictionary = actors.get("enemy", {})
 	var stage := Node3D.new()
 	root.add_child(stage)
 	var environment_node := WorldEnvironment.new()
@@ -31,8 +36,8 @@ func _run() -> void:
 	floor_material.albedo_color = Color("d9c99f")
 	floor.material_override = floor_material
 	stage.add_child(floor)
-	_spawn_character(stage, "res://assets/quaternius/animated_characters/Casual_Female.gltf", Vector3(-1.35, 0.0, 0.0), 1.05)
-	_spawn_character(stage, "res://assets/quaternius/animated_characters/Demon.gltf", Vector3(1.35, 0.0, 0.0), 1.15)
+	_spawn_character(stage, player_config, Vector3(-1.35, 0.0, 0.0))
+	_spawn_character(stage, enemy_config, Vector3(1.35, 0.0, 0.0))
 	var camera := Camera3D.new()
 	camera.current = true
 	camera.position = Vector3(4.8, 3.4, 6.6)
@@ -50,18 +55,20 @@ func _run() -> void:
 		quit(0)
 
 
-func _spawn_character(parent: Node3D, path: String, at: Vector3, scale_value: float) -> void:
+func _spawn_character(parent: Node3D, config: Dictionary, at: Vector3) -> void:
+	var path := str(config.get("model_path", ""))
 	var packed := load(path) as PackedScene
 	var character := packed.instantiate() as Node3D
 	character.position = at
-	character.rotation.y = 0.0
-	character.scale = Vector3.ONE * scale_value
+	character.rotation.y = deg_to_rad(float(config.get("model_yaw", 0.0)))
+	character.scale = Vector3.ONE * float(config.get("model_scale", 1.0))
 	parent.add_child(character)
 	var players := character.find_children("*", "AnimationPlayer", true, false)
 	if not players.is_empty():
 		var animation_player := players[0] as AnimationPlayer
+		var requested := str(config.get("animation_map", {}).get("idle", "Idle"))
 		for raw_name: StringName in animation_player.get_animation_list():
-			if str(raw_name).to_lower() == "idle":
+			if str(raw_name).to_lower() == requested.to_lower():
 				var animation := animation_player.get_animation(raw_name)
 				animation.loop_mode = Animation.LOOP_LINEAR
 				animation_player.play(raw_name)

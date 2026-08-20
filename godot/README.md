@@ -101,16 +101,17 @@ Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再�
 - 家具和节目装置不加入连接账本，不封堵门洞、楼梯、开放通道、玩家出生点和建造接口。
 - 正常播出与节目失控复用同一套房间拓扑；异常主要通过灯光、音频、字幕、动画与少量道具状态切换表现。
 
-## CC0 临时角色模型
+## 角色模型
 
-战斗与大地图中的玩家暂用 Quaternius `Ultimate Animated Character Pack` 的 `Casual_Female`，怪物暂用 `Cute Animated Monsters Pack` 的 `Demon`。两者都是 CC0 glTF，并通过 `data/presentation_manifest.json` 配置模型路径、比例和动画名称：
+战斗与大地图中的玩家使用项目方提供的莉莉黏土角色 FBX，包含 41 根骨骼、蒙皮和完整动作集；怪物暂用 Quaternius `Cute Animated Monsters Pack` 的 CC0 `Demon`。两者都通过 `data/presentation_manifest.json` 配置模型路径、比例和动画名称：
 
-- 待机：玩家和怪物分别循环原模型的 `Idle`；临时模型现按此前尺寸的 50% 显示，逻辑占格不变
-- 移动：房间行走和战斗逐格移动期间播放 `Walk`，角色根节点同时平滑移动并转向目标格；移动结束后会保留最后朝向，地图或战场重建、切回待机都不会自动回正
-- 攻击/受击：玩家使用 `Punch / RecieveHit`，怪物使用 `Bite_InPlace / HitRecieve`
+- 待机：莉莉循环 `preset_biped_idle`，怪物循环原模型的 `Idle`；逻辑占格不变
+- 移动：房间行走和战斗逐格移动期间，莉莉播放 `preset_biped_walk`；角色根节点同时平滑移动并转向目标格，移动结束后保留最后朝向
+- 攻击/受击：莉莉使用 `preset_biped_slash / preset_biped_afraid`，怪物使用 `Bite_InPlace / HitRecieve`
+- 家具互动：坐下和休息使用 `preset_biped_sit`，工作使用 `preset_biped_chop`；没有专用动作时由表现层回退到待机
 - 未揭示怪物仍使用原有暗色剪影，进入视野后才切换到 3D 模型
 
-`scripts/character_presenter.gd` 保留原 2D 帧动画作为模型加载失败时的后备。以后替换正式 3D 角色只需更新清单中的 `model_path`、缩放、朝向和 `animation_map`，战斗规则与棋盘移动不需要重写。来源与许可见 `assets/quaternius/animated_characters/SOURCE.md`。
+`scripts/character_presenter.gd` 保留原 2D 帧动画作为模型加载失败时的后备。以后替换或迭代正式 3D 角色只需更新清单中的 `model_path`、缩放、朝向和 `animation_map`，战斗规则与棋盘移动不需要重写。莉莉模型来源见 `assets/characters/lili_clay/SOURCE.md`，怪物来源与许可见 `assets/quaternius/animated_characters/SOURCE.md`。
 
 ## 手调战斗 UI
 

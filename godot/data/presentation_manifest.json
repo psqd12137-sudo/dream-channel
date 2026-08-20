@@ -18,17 +18,20 @@
                                                       "res://assets/web_show/characters/lili/idle/frame_12.png"
                                                   ],
                                   "idle_fps":  8.0,
-                                  "model_path":  "res://assets/quaternius/animated_characters/Casual_Female.gltf",
-                                  "model_scale":  0.525,
+                                  "model_path":  "res://assets/characters/lili_clay/tripo_convert_8e754eba-03b8-4662-b406-9aad40ea0935.fbx",
+                                  "model_scale":  1.68,
                                   "model_y":  0.0,
                                   "model_yaw":  0.0,
                                   "label_y":  1.3,
                                   "animation_map":  {
-                                                        "idle":  "Idle",
-                                                        "move":  "Walk",
-                                                        "ready":  "Idle",
-                                                        "attack":  "Punch",
-                                                        "hurt":  "RecieveHit"
+                                                        "idle":  "Lili_Idle",
+                                                        "move":  "Lili_Walk_InPlace",
+                                                        "ready":  "Lili_Ready",
+                                                        "attack":  "Lili_Attack",
+                                                        "hurt":  "Lili_Hurt",
+                                                        "sit":  "Lili_Sit",
+                                                        "rest":  "Lili_Sit",
+                                                        "work":  "Lili_Work"
                                                     },
                                   "animations":  {
                                                      "idle":  {

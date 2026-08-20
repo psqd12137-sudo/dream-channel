@@ -21,7 +21,7 @@ func _run() -> void:
 	await process_frame
 	game.start_new_run(false, 2026081901)
 	var hud = game.get_node("HUD/HUDRoot")
-	var desktop_sizes: Array[Vector2] = [Vector2(1024, 640), Vector2(1280, 800), Vector2(1600, 900), Vector2(1920, 1080)]
+	var desktop_sizes: Array[Vector2] = [Vector2(1024, 640), Vector2(1280, 800), Vector2(1600, 900), Vector2(1920, 1080), Vector2(2560, 1440)]
 	for viewport_size: Vector2 in desktop_sizes:
 		var layout: Dictionary = hud.calculate_layout(viewport_size, "combat")
 		var board: Rect2 = layout["board_rect"]

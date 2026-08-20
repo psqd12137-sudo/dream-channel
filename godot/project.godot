@@ -14,17 +14,28 @@ config/name="织梦频道 · Godot 3D"
 run/main_scene="res://channel_3d.tscn"
 config/features=PackedStringArray("4.7")
 
+[autoload]
+
+MCPScreenshot="*res://addons/godot_mcp/mcp_screenshot_service.gd"
+MCPInputService="*res://addons/godot_mcp/mcp_input_service.gd"
+MCPGameInspector="*res://addons/godot_mcp/mcp_game_inspector_service.gd"
+
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=800
-window/size/window_width_override=1280
-window/size/window_height_override=800
+window/size/window_width_override=1920
+window/size/window_height_override=1080
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/godot_mcp/plugin.cfg")
+
+[filesystem]
+
+import/blender/enabled=false
 
 [rendering]
 

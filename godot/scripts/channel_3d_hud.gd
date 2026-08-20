@@ -63,6 +63,14 @@ const HOME_TEST_PUZZLE_RECT := Rect2(780, 174, 205, 42)
 const HOME_TEST_SEARCH_RECT := Rect2(997, 174, 205, 42)
 const HOME_TEST_CHASE_RECT := Rect2(780, 228, 205, 42)
 const HOME_TEST_DIORAMA_RECT := Rect2(997, 228, 205, 42)
+const HOME_TEST_CHARACTER_ANIMATION_RECT := Rect2(780, 282, 422, 42)
+const HOME_RESOLUTION_RECT := Rect2(780, 670, 190, 38)
+const HOME_WINDOW_MODE_RECT := Rect2(982, 670, 105, 38)
+const HOME_QUIT_RECT := Rect2(1099, 670, 105, 38)
+const CHARACTER_IDLE_RECT := Rect2(1015, 506, 110, 38)
+const CHARACTER_STEP_RECT := Rect2(1135, 506, 110, 38)
+const CHARACTER_ATTACK_RECT := Rect2(1015, 552, 110, 38)
+const CHARACTER_HURT_RECT := Rect2(1135, 552, 110, 38)
 const LAB_EXIT_RECT := Rect2(1100, 28, 150, 40)
 const LAB_REROLL_RECT := Rect2(520, 86, 180, 32)
 const LAB_HAND_RECT := Rect2(720, 86, 200, 32)
@@ -433,8 +441,8 @@ func _draw_home() -> void:
 	_draw_button(HOME_SEED_COPY_RECT, "复制种子", Color("394852"), TEXT)
 	_draw_button(HOME_TESTS_RECT, "关闭后台" if game.home_tests_open else "后台测试", Color("34263d"), TEXT)
 	if game.home_tests_open:
-		draw_rect(Rect2(764, 96, 454, 188), Color("100b17ed"), true)
-		draw_rect(Rect2(764, 96, 454, 188), Color("8f6aa2"), false, 2.0)
+		draw_rect(Rect2(764, 96, 454, 242), Color("100b17ed"), true)
+		draw_rect(Rect2(764, 96, 454, 242), Color("8f6aa2"), false, 2.0)
 		_label("节目后台 · 仅供开发检查", Vector2(780, 112), 10, Color("cbb6d4"))
 		_draw_button(HOME_TEST_COMBAT_RECT, "战斗意图实验", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_SIDE_RECT, "WASD 横版手感", TEAL, TEXT)
@@ -442,6 +450,13 @@ func _draw_home() -> void:
 		_draw_button(HOME_TEST_SEARCH_RECT, "3D 微缩搜物", Color("7863a5"), TEXT)
 		_draw_button(HOME_TEST_CHASE_RECT, "警察抓小偷", RED, TEXT)
 		_draw_button(HOME_TEST_DIORAMA_RECT, "桌模扩建 PCG", Color("5967a8"), TEXT)
+		_draw_button(HOME_TEST_CHARACTER_ANIMATION_RECT, "角色动画检查", Color("3e8b78"), TEXT)
+	draw_rect(Rect2(764, 626, 454, 96), Color("100b17d9"), true)
+	draw_rect(Rect2(764, 626, 454, 96), Color("725184"), false, 2.0)
+	_label("显示设置", Vector2(780, 650), 11, Color("cbb6d4"))
+	_draw_button(HOME_RESOLUTION_RECT, game.display_resolution_label(), Color("355e5d"), TEXT)
+	_draw_button(HOME_WINDOW_MODE_RECT, game.display_mode_label(), Color("394852"), TEXT)
+	_draw_button(HOME_QUIT_RECT, "退出", RED, TEXT)
 	_label("纸盒布景 · 黏土演员 · 每次开播都是不同的一集", Vector2(84, 734), 13, Color("c9afd5"))
 
 
@@ -735,6 +750,14 @@ func _draw_combat_hud() -> void:
 	if dragged_combat_card >= 0 and dragged_combat_card < combat.hand.size():
 		_draw_card_target_arrow(combat_card_rects[dragged_combat_card].get_center(), dragged_card_position)
 	if combat.outcome == "":
+		if game.character_animation_demo_mode:
+			draw_rect(Rect2(1008, 474, 244, 124), Color("142d2bee"), true)
+			draw_rect(Rect2(1008, 474, 244, 124), TEAL, false, 2.0)
+			_label("角色动画演示", Vector2(1020, 496), 12, TEXT)
+			_draw_button(CHARACTER_IDLE_RECT, "待机", Color("355e5d"), TEXT)
+			_draw_button(CHARACTER_STEP_RECT, "走一格", TEAL, TEXT)
+			_draw_button(CHARACTER_ATTACK_RECT, "攻击", MAGENTA, TEXT)
+			_draw_button(CHARACTER_HURT_RECT, "受击", RED, TEXT)
 		if combat.player_on_portal():
 			draw_rect(Rect2(1008, 596, 244, 102), Color("2c2441ee"), true)
 			draw_rect(Rect2(1008, 596, 244, 102), Color("9a70da"), false, 3.0)
@@ -1021,6 +1044,10 @@ func _input(event: InputEvent) -> void:
 func _combat_overlay_has_point(point: Vector2) -> bool:
 	if game == null or game.phase != "combat" or game.combat == null:
 		return false
+	if game.character_animation_demo_mode:
+		for rect: Rect2 in [CHARACTER_IDLE_RECT, CHARACTER_STEP_RECT, CHARACTER_ATTACK_RECT, CHARACTER_HURT_RECT]:
+			if rect.has_point(point):
+				return true
 	if game.combat.outcome != "":
 		return RETURN_RECT.has_point(point)
 	if END_TURN_RECT.has_point(point):
@@ -1230,6 +1257,14 @@ func _gui_input(event: InputEvent) -> void:
 			game.start_chase_lab()
 		elif game.home_tests_open and HOME_TEST_DIORAMA_RECT.has_point(point):
 			game.start_kenney_build_lab()
+		elif game.home_tests_open and HOME_TEST_CHARACTER_ANIMATION_RECT.has_point(point):
+			game.start_character_animation_lab()
+		elif HOME_RESOLUTION_RECT.has_point(point):
+			game.cycle_display_resolution()
+		elif HOME_WINDOW_MODE_RECT.has_point(point):
+			game.toggle_display_mode()
+		elif HOME_QUIT_RECT.has_point(point):
+			game.quit_game()
 		return
 	if game.phase.begins_with("lab_"):
 		if LAB_EXIT_RECT.has_point(point):
@@ -1317,6 +1352,19 @@ func _gui_input(event: InputEvent) -> void:
 		game.enter_room(game.pending_room_pos)
 		return
 	if game.phase == "combat":
+		if game.character_animation_demo_mode:
+			if CHARACTER_IDLE_RECT.has_point(point):
+				game.demo_character_idle()
+				return
+			if CHARACTER_STEP_RECT.has_point(point):
+				game.demo_character_grid_step()
+				return
+			if CHARACTER_ATTACK_RECT.has_point(point):
+				game.demo_character_attack()
+				return
+			if CHARACTER_HURT_RECT.has_point(point):
+				game.demo_character_hurt()
+				return
 		if game.combat.player_on_portal() and PORTAL_USE_RECT.has_point(point):
 			game.use_player_portal()
 			return

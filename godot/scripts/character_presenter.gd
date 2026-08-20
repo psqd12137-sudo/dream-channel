@@ -9,9 +9,9 @@ var config: Dictionary = {}
 var sprite: AnimatedSprite3D = null
 var model_root: Node3D = null
 var model_animation_player: AnimationPlayer = null
-var action_label: Label3D = null
 var action_tween: Tween = null
 var base_position := Vector3.ZERO
+var preview_generation := 0
 
 
 func configure(next_actor_id: String, next_config: Dictionary) -> void:
@@ -30,22 +30,12 @@ func configure(next_actor_id: String, next_config: Dictionary) -> void:
 	sprite.sprite_frames = _build_frames(config)
 	sprite.visible = model_root == null
 	add_child(sprite)
-	action_label = Label3D.new()
-	action_label.name = "ActionCallout"
-	action_label.position = Vector3(0, float(config.get("label_y", float(config.get("visual_y", 0.85)) + 1.05)), 0)
-	action_label.font_size = 32
-	action_label.pixel_size = 0.012
-	action_label.modulate = Color.TRANSPARENT
-	action_label.outline_modulate = Color("111820")
-	action_label.outline_size = 10
-	action_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	action_label.no_depth_test = true
-	add_child(action_label)
 	sprite.play("idle")
 	_play_model_animation("idle")
 
 
 func play_state(state: String, callout: String = "") -> void:
+	preview_generation += 1
 	if sprite == null and model_root == null:
 		return
 	if action_tween != null and action_tween.is_valid():
@@ -63,18 +53,11 @@ func play_state(state: String, callout: String = "") -> void:
 		sprite.play(state)
 	else:
 		sprite.play("idle")
-	action_label.text = callout if not callout.is_empty() else _default_callout(state)
-	action_label.modulate = _state_color(state)
-	if state in ["ready", "attack", "hurt"]:
-		_spawn_burst(_state_color(state))
 	action_tween = create_tween()
 	match state:
 		"move":
-			action_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-			action_tween.tween_property(self, "position:y", base_position.y + 0.32, 0.10)
-			action_tween.tween_property(self, "position:y", base_position.y, 0.12)
-			action_tween.tween_property(self, "rotation:z", deg_to_rad(-6.0), 0.07)
-			action_tween.tween_property(self, "rotation:z", 0.0, 0.08)
+			# Grid movement owns translation. The skeletal clip only supplies the gait.
+			action_tween.tween_interval(0.30)
 		"ready":
 			if sprite != null:
 				sprite.modulate = Color("ffe4a0")
@@ -100,8 +83,42 @@ func play_state(state: String, callout: String = "") -> void:
 			action_tween.tween_property(self, "scale", Vector3.ONE, 0.15)
 		_:
 			action_tween.tween_interval(0.18)
-	action_tween.tween_property(action_label, "modulate:a", 0.0, 0.24)
+	action_tween.tween_interval(0.24)
 	action_tween.tween_callback(_return_to_idle)
+
+
+func preview_model_animation(state: String, playback_speed: float = 1.0) -> float:
+	if model_animation_player == null:
+		return 0.0
+	if action_tween != null and action_tween.is_valid():
+		action_tween.kill()
+	preview_generation += 1
+	var generation := preview_generation
+	current_state = state
+	state_changed.emit(state)
+	position = base_position
+	rotation = Vector3.ZERO
+	scale = Vector3.ONE
+	if sprite != null:
+		sprite.modulate = Color.WHITE
+	var animation_map: Dictionary = config.get("animation_map", {})
+	var resolved := _resolve_model_animation(str(animation_map.get(state, "")))
+	if resolved.is_empty():
+		return 0.0
+	var animation := model_animation_player.get_animation(resolved)
+	if animation == null:
+		return 0.0
+	var speed := maxf(playback_speed, 0.05)
+	animation.loop_mode = Animation.LOOP_LINEAR if state == "idle" else Animation.LOOP_NONE
+	model_animation_player.play(resolved, 0.08, speed)
+	if state != "idle":
+		var duration := animation.length / speed
+		get_tree().create_timer(duration).timeout.connect(func() -> void:
+			if generation == preview_generation and is_inside_tree():
+				_return_to_idle()
+		)
+		return duration
+	return INF
 
 
 func set_interaction_pose(pose: String, kind: String) -> void:
@@ -126,25 +143,10 @@ func set_interaction_pose(pose: String, kind: String) -> void:
 			rotation.x = deg_to_rad(-8.0)
 			scale = Vector3(1.0, 0.96, 1.0)
 	_play_model_animation(pose)
-	if action_label != null:
-		action_label.text = _interaction_callout(kind)
-		action_label.modulate = Color(0.78, 0.94, 0.88, 0.72) if kind != "stand" else Color.TRANSPARENT
-
-
-func _interaction_callout(kind: String) -> String:
-	match kind:
-		"sit": return "休息"
-		"rest": return "小憩"
-		"cook": return "烹饪"
-		"work": return "工作"
-		"tend": return "照料"
-		"gather": return "交谈"
-		"browse": return "阅读"
-		"warm": return "取暖"
-	return ""
 
 
 func _return_to_idle() -> void:
+	preview_generation += 1
 	current_state = "idle"
 	state_changed.emit("idle")
 	position = base_position
@@ -170,6 +172,15 @@ func has_3d_model() -> bool:
 
 func current_model_animation() -> String:
 	return model_animation_player.current_animation if model_animation_player != null else ""
+
+
+func model_animation_names() -> Array[String]:
+	var names: Array[String] = []
+	if model_animation_player == null:
+		return names
+	for raw_name: StringName in model_animation_player.get_animation_list():
+		names.append(str(raw_name))
+	return names
 
 
 func _configure_model() -> void:
@@ -216,31 +227,9 @@ func _play_model_animation(state: String) -> void:
 func _resolve_model_animation(requested: String) -> String:
 	for raw_name: StringName in model_animation_player.get_animation_list():
 		var name := str(raw_name)
-		if name == requested or name.to_lower() == requested.to_lower() or name.get_file().to_lower() == requested.to_lower():
+		if name == requested or name.to_lower() == requested.to_lower() or name.get_file().to_lower() == requested.to_lower() or name.to_lower().ends_with("|" + requested.to_lower()):
 			return name
 	return ""
-
-
-func _spawn_burst(color: Color) -> void:
-	var burst := Label3D.new()
-	burst.name = "ActionBurst"
-	burst.text = "✦  ✦  ✦"
-	burst.position = Vector3(0, float(config.get("visual_y", 0.85)) + 0.60, 0.03)
-	burst.font_size = 54
-	burst.pixel_size = 0.015
-	burst.modulate = color
-	burst.outline_modulate = Color("101820")
-	burst.outline_size = 8
-	burst.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	burst.no_depth_test = true
-	burst.scale = Vector3(0.35, 0.35, 0.35)
-	add_child(burst)
-	var tween := burst.create_tween()
-	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(burst, "scale", Vector3(1.25, 1.25, 1.25), 0.16)
-	tween.parallel().tween_property(burst, "position:y", burst.position.y + 0.42, 0.30)
-	tween.tween_property(burst, "modulate:a", 0.0, 0.16)
-	tween.tween_callback(burst.queue_free)
 
 
 func _build_frames(actor_config: Dictionary) -> SpriteFrames:
@@ -264,15 +253,6 @@ func _add_animation(frames: SpriteFrames, state: String, paths: Array, fps: floa
 		var texture := load(str(raw_path)) as Texture2D
 		if texture != null:
 			frames.add_frame(state, texture)
-
-
-func _default_callout(state: String) -> String:
-	match state:
-		"move": return "走!"
-		"ready": return "预备!"
-		"attack": return "出手!"
-		"hurt": return "受击!"
-	return ""
 
 
 func _state_color(state: String) -> Color:

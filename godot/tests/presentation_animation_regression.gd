@@ -15,16 +15,18 @@ func _run() -> void:
 	await process_frame
 	var house_presenter = game.house_root.get_node_or_null("LiliToken/Presenter")
 	_check(house_presenter != null and house_presenter.has_3d_model(), "the house-map Lili token must reuse the replaceable 3D player presenter")
+	_check(_count_type(game.house_root.get_node_or_null("LiliToken"), "Label3D") == 0, "house player hierarchy must not contain overhead UI")
 	game.start_combat_lab("hall")
 	var player_presenter = game.battle_root.get_node_or_null("Player/Presenter")
 	var enemy_presenter = game.battle_root.get_node_or_null("Enemy/Presenter")
 	_check(player_presenter != null and player_presenter.sprite is AnimatedSprite3D, "player pawn must use the replaceable character presenter")
 	_check(enemy_presenter != null and enemy_presenter.sprite is AnimatedSprite3D, "enemy pawn must use the replaceable character presenter")
 	if player_presenter != null:
+		_check(_count_type(player_presenter, "Label3D") == 0, "player presenter hierarchy must not contain overhead UI")
 		_check(player_presenter.sprite.sprite_frames.get_frame_count("idle") == 12, "Lili idle must use all twelve Web frames")
 		_check(is_equal_approx(player_presenter.sprite.sprite_frames.get_animation_speed("idle"), 8.0), "Lili idle must preserve the Web 8 FPS timing")
-		_check(player_presenter.has_3d_model(), "player presenter must instantiate the temporary Quaternius model and animation player")
-		_check(player_presenter.current_model_animation().to_lower().contains("idle"), "player model must begin in its skeletal Idle loop")
+		_check(player_presenter.has_3d_model(), "player presenter must instantiate the configured Lili model and animation player")
+		_check(player_presenter.current_model_animation().ends_with("Lili_Idle"), "player model must begin in its repaired Idle loop")
 	if enemy_presenter != null:
 		_check(enemy_presenter.has_3d_model(), "enemy presenter must instantiate the temporary Quaternius model and animation player")
 		_check(enemy_presenter.current_model_animation().to_lower().contains("idle"), "enemy model must begin in its skeletal Idle loop")
@@ -39,11 +41,12 @@ func _run() -> void:
 	game.handle_battle_cell(Vector2i(3, 1))
 	player_presenter = game.battle_root.get_node_or_null("Player/Presenter")
 	_check(game.animation_busy, "a real player grid step must lock input while the pawn moves")
-	_check(player_presenter != null and player_presenter.current_model_animation().to_lower().contains("walk"), "player grid movement must play the model Walk loop")
+	_check(player_presenter != null and player_presenter.current_model_animation().ends_with("Lili_Walk_InPlace"), "player grid movement must play the repaired in-place Walk loop")
 	while game.animation_busy:
 		await process_frame
 	var moved_player := game.battle_root.get_node_or_null("Player") as Node3D
 	_check(moved_player != null and moved_player.position.distance_to(game._battle_world(Vector2i(3, 1))) < 0.01, "player model must settle on the authoritative destination cell")
+	_check(moved_player != null and moved_player.get_node_or_null("PawnLabel") == null, "player hierarchy must not contain overhead UI")
 	var last_player_yaw: float = game.battle_player_facing_yaw
 	_check(is_equal_approx(last_player_yaw, PI * 0.5), "moving right must record the player's final facing direction")
 	game.build_battle_world()
@@ -72,7 +75,8 @@ func _run() -> void:
 	_check(game.combat.enemy_hp < hp_before, "the presentation test attack must use a real combat hit")
 	_check(player_presenter != null and player_presenter.current_state == "attack", "a real player hit must trigger the attack pose")
 	_check(enemy_presenter != null and enemy_presenter.current_state == "hurt", "enemy HP loss must trigger the hurt reaction")
-	_check(player_presenter != null and player_presenter.current_model_animation().to_lower().contains("punch"), "player attack must play the temporary model Punch animation")
+	var player_attack_animation := str(game.presentation.get("actors", {}).get("player", {}).get("animation_map", {}).get("attack", ""))
+	_check(player_presenter != null and player_presenter.current_model_animation().ends_with(player_attack_animation), "player attack must play the animation declared by the presentation manifest")
 	_check(enemy_presenter != null and enemy_presenter.current_model_animation().to_lower().contains("hitreact"), "enemy damage must play the archetype model hit reaction")
 
 	_check(_count_named_prefix(game.battle_root, "StageDoor") == 1, "battle stage must include the imported Web door decoration")
@@ -94,6 +98,13 @@ func _count_named_prefix(node: Node, prefix: String) -> int:
 	var count := 1 if str(node.name).begins_with(prefix) else 0
 	for child in node.get_children():
 		count += _count_named_prefix(child, prefix)
+	return count
+
+
+func _count_type(node: Node, type_name: String) -> int:
+	var count := 1 if node.is_class(type_name) else 0
+	for child in node.get_children():
+		count += _count_type(child, type_name)
 	return count
 
 

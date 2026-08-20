@@ -16,6 +16,8 @@ const EXE_SOURCE_ID := "CabinSlice_织梦频道.exe@EEC4C574CC22"
 const SNAPSHOT_ROOT := "res://data/exe_snapshot/"
 const PRESENTATION_MANIFEST := "res://data/presentation_manifest.json"
 const RUN_SAVE_PATH := "user://channel_run_v1.json"
+const DISPLAY_SETTINGS_PATH := "user://channel_display.cfg"
+const DISPLAY_RESOLUTIONS := [Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(2560, 1440)]
 const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interior/"
 const BATTLE_HEIGHT_ASSETS := {
 	1: ["Table_RoundLarge.fbx", "Couch_Medium1.fbx", "Kitchen_Oven.fbx"],
@@ -175,6 +177,7 @@ var lab_root: Node3D = null
 var home_tests_open := false
 var show_house_diagnostics := false
 var large_room_mix_test_mode := false
+var character_animation_demo_mode := false
 var kenney_build_lab_mode := true  # 桌模建造已转正：主游玩默认用 Kaykit/Kenney 桌模渲染房间
 var lab_move_axis := 0.0
 var lab_jump_held := false
@@ -210,9 +213,13 @@ var lab_camera_yaw := 0.0
 var lab_camera_pitch := 0.24
 var lab_camera_distance := 14.0
 var pcg_diorama_seed := 20260816
+var display_resolution_index := 2
+var display_fullscreen := false
+var display_change_generation := 0
 
 
 func _ready() -> void:
+	_load_display_settings()
 	_configure_environment()
 	_configure_home_video()
 	presentation = _load_json_dictionary(PRESENTATION_MANIFEST)
@@ -223,6 +230,78 @@ func _ready() -> void:
 	hud.sync_layout()
 	reset_run(run_seed)
 	go_home()
+
+
+func display_resolution_label() -> String:
+	var resolution: Vector2i = DISPLAY_RESOLUTIONS[display_resolution_index]
+	return "%d×%d" % [resolution.x, resolution.y]
+
+
+func display_mode_label() -> String:
+	return "全屏" if display_fullscreen else "窗口"
+
+
+func cycle_display_resolution() -> void:
+	display_resolution_index = (display_resolution_index + 1) % DISPLAY_RESOLUTIONS.size()
+	_apply_display_settings(true)
+	_refresh_hud()
+
+
+func toggle_display_mode() -> void:
+	display_fullscreen = not display_fullscreen
+	_apply_display_settings(true)
+	_refresh_hud()
+
+
+func quit_game() -> void:
+	get_tree().quit()
+
+
+func _load_display_settings() -> void:
+	var settings := ConfigFile.new()
+	if settings.load(DISPLAY_SETTINGS_PATH) == OK:
+		display_resolution_index = clampi(int(settings.get_value("display", "resolution_index", 2)), 0, DISPLAY_RESOLUTIONS.size() - 1)
+		display_fullscreen = bool(settings.get_value("display", "fullscreen", false))
+	_apply_display_settings(false)
+
+
+func _apply_display_settings(save_settings: bool) -> void:
+	display_change_generation += 1
+	var generation := display_change_generation
+	var requested_fullscreen := display_fullscreen
+	if display_fullscreen:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	await get_tree().process_frame
+	if generation != display_change_generation:
+		return
+	if not requested_fullscreen:
+		var usable := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+		var resolution := _fit_windowed_resolution(DISPLAY_RESOLUTIONS[display_resolution_index], usable.size)
+		DisplayServer.window_set_size(resolution)
+		DisplayServer.window_set_position(usable.position + (usable.size - resolution) / 2)
+	await get_tree().process_frame
+	if generation != display_change_generation:
+		return
+	var actual_mode := DisplayServer.window_get_mode()
+	display_fullscreen = actual_mode in [DisplayServer.WINDOW_MODE_FULLSCREEN, DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN]
+	if hud != null:
+		hud.sync_layout()
+	if save_settings:
+		var settings := ConfigFile.new()
+		settings.set_value("display", "resolution_index", display_resolution_index)
+		settings.set_value("display", "fullscreen", display_fullscreen)
+		settings.save(DISPLAY_SETTINGS_PATH)
+	_refresh_hud()
+
+
+func _fit_windowed_resolution(requested: Vector2i, usable_size: Vector2i) -> Vector2i:
+	var maximum := Vector2i(maxi(640, usable_size.x - 64), maxi(360, usable_size.y - 96))
+	if requested.x <= maximum.x and requested.y <= maximum.y:
+		return requested
+	var ratio := minf(float(maximum.x) / float(requested.x), float(maximum.y) / float(requested.y))
+	return Vector2i(maxi(640, roundi(float(requested.x) * ratio)), maxi(360, roundi(float(requested.y) * ratio)))
 
 
 func _configure_home_video() -> void:
@@ -304,6 +383,7 @@ func reset_run(seed_value: int = 0) -> void:
 	_cancel_dynamic_effect()
 	show_house_diagnostics = false
 	large_room_mix_test_mode = false
+	character_animation_demo_mode = false
 	camera.environment = null
 	world_container.visible = true
 	house_root.visible = true
@@ -406,6 +486,7 @@ func copy_current_seed() -> void:
 
 func go_home() -> void:
 	_cancel_dynamic_effect()
+	character_animation_demo_mode = false
 	camera.environment = null
 	phase = "home"
 	home_tests_open = false
@@ -515,6 +596,62 @@ func start_diorama_art_lab() -> void:
 	camera.environment = _make_visual_polish_environment()
 	status_message = "A 验证暖色焦点、接触阴影、实体剖切墙与信号发光；B/C 保留资产基线，便于直接判断增强是否真的改善层次。"
 	_set_diorama_camera_defaults()
+	_refresh_hud()
+
+
+func start_character_animation_lab() -> void:
+	character_animation_demo_mode = true
+	start_combat_lab("hall")
+	character_animation_demo_mode = true
+	combat.energy = maxi(combat.energy, 20)
+	status_message = "角色动画实景检查：使用正式战斗房、地格、家具、镜头与移动链路。右侧按钮可重复检查待机、走格、攻击和受击。"
+	_refresh_hud()
+
+
+func demo_character_idle() -> void:
+	if not character_animation_demo_mode or phase != "combat":
+		return
+	var presenter := battle_root.get_node_or_null("Player/Presenter")
+	if presenter != null and presenter.has_method("preview_model_animation"):
+		presenter.preview_model_animation("idle")
+	status_message = "待机：正在播放 FBX preset_biped_idle。"
+	_refresh_hud()
+
+
+func demo_character_grid_step() -> void:
+	if not character_animation_demo_mode or phase != "combat" or animation_busy:
+		return
+	combat.energy = maxi(combat.energy, 20)
+	for direction: Vector2i in [Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT, Vector2i.UP]:
+		var target: Vector2i = combat.player_pos + direction
+		if combat.can_move_player(target):
+			handle_battle_cell(target)
+			status_message = "走一格：调用正式寻路、占格、朝向和 0.25 秒跳格动画。"
+			_refresh_hud()
+			return
+	status_message = "当前格四周没有可走地格，请用镜头查看阻挡。"
+	_refresh_hud()
+
+
+func demo_character_attack() -> void:
+	if not character_animation_demo_mode or phase != "combat":
+		return
+	var presenter := battle_root.get_node_or_null("Player/Presenter")
+	var duration := 0.0
+	if presenter != null and presenter.has_method("preview_model_animation"):
+		duration = presenter.preview_model_animation("attack", 1.5)
+	status_message = "攻击：完整预览 FBX preset_biped_slash（%.1f 秒），结束后自动回到待机。" % duration
+	_refresh_hud()
+
+
+func demo_character_hurt() -> void:
+	if not character_animation_demo_mode or phase != "combat":
+		return
+	var presenter := battle_root.get_node_or_null("Player/Presenter")
+	var duration := 0.0
+	if presenter != null and presenter.has_method("preview_model_animation"):
+		duration = presenter.preview_model_animation("hurt", 1.25)
+	status_message = "受击：完整预览 FBX preset_biped_afraid（%.1f 秒），不改变生命值。" % duration
 	_refresh_hud()
 
 
@@ -1700,7 +1837,8 @@ func _set_battle_actor_step_motion(weight: float, actor_node: Node3D, start_posi
 	if not is_instance_valid(actor_node):
 		return
 	var smooth_weight := weight * weight * (3.0 - 2.0 * weight)
-	actor_node.position = start_position.lerp(target_position, smooth_weight) + Vector3.UP * sin(smooth_weight * PI) * 0.16
+	# The board owns all world translation; the FBX clip supplies limb motion only.
+	actor_node.position = start_position.lerp(target_position, smooth_weight)
 	var direction := target_position - start_position
 	direction.y = 0.0
 	if direction.length_squared() > 0.001:
@@ -2402,7 +2540,6 @@ func _add_house_player() -> void:
 	presenter.configure("player", (presentation.get("actors", {}).get("player", {}) as Dictionary))
 	if not interaction_slot.is_empty() and presenter.has_method("set_interaction_pose"):
 		presenter.set_interaction_pose(str(interaction_slot.get("pose", "stand")), str(interaction_slot.get("kind", "stand")))
-	_add_label(node, "Name", "LILI", Vector3(0, 2.48, 0), Color.WHITE, 34)
 
 
 func room_interaction_slots(target: Vector2i) -> Array[Dictionary]:
@@ -2485,7 +2622,6 @@ func _add_move_hover_mesh(pos: Vector2i) -> void:
 	node.position = _house_world(pos)
 	house_root.add_child(node)
 	_add_box(node, "MoveHoverPad", Vector3(0, 0.15, 0), Vector3(HOUSE_CELL * 0.94, 0.10, HOUSE_CELL * 0.94), _material(Color(0.45, 0.88, 1.0, 0.38), true))
-	_add_label(node, "MoveHint", "移动", Vector3(0, 1.08, 0), Color("bde8ff"), 30)
 
 
 func _apply_current_room_cutaway() -> void:
@@ -2687,7 +2823,8 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
 	presenter.state_changed.connect(_on_presenter_state_changed)
 	if not is_player:
 		presenter.set_obscured(not revealed)
-	_add_label(node, "PawnLabel", "你" if is_player else ("怪" if revealed else "?"), Vector3(0, floor_y + 2.05, 0), Color.WHITE if revealed or is_player else COL_GOLD, 31)
+	if not is_player:
+		_add_label(node, "PawnLabel", "怪" if revealed else "?", Vector3(0, floor_y + 2.05, 0), Color.WHITE if revealed else COL_GOLD, 31)
 
 
 func _battle_actor_presentation(actor_key: String) -> Dictionary:
