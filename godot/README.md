@@ -130,11 +130,11 @@ Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再�
 
 打开 `scenes/diorama_art_lab.tscn` 可以手调三组完全隔离的样板：`CurrentBaseline` 是现有软装与几何墙体，`KenneyMiniDungeon` 是桌面模型候选，`QuaterniusRuins` 是破损墙体、石拱门与资产高差候选。每个模型都是场景树里的真实节点，可直接在 Inspector 修改 Transform；这份场景不会被主游戏当作房间布局读取。
 
-运行项目后，在标题页展开“节目测试台”，点击“桌模扩建 PCG”进入正式大地图摆放测试。A/B/C 单格场景仍可直接运行 `scenes/diorama_art_lab.tscn` 检查资产；其中 Modular Ruins 只保留为历史对比，不再用于当前 PCG 桌模方案。
+运行项目后，在标题页展开“后台测试”，点击“桌模扩建 PCG”进入大房间节奏实验。该入口暂时把客厅、厨房、温室、卧室、育儿室升为三格房，把后院升为五格地标；正式开局仍使用原房型表。A/B/C 单格场景仍可直接运行 `scenes/diorama_art_lab.tscn` 检查资产；其中 Modular Ruins 只保留为历史对比，不再用于当前 PCG 桌模方案。
 
 ### PCG 连片箱庭实验
 
-`scenes/pcg_diorama_stitch_lab.tscn` 保留为自动 Seed 整体构图测试；玩家实际评审入口改为标题页“节目测试台 → 桌模扩建 PCG”。该入口直接进入正式 `explore/build` 阶段：点击黄色扩建格、选择票根、按“旋转 90°”查看完整 1/3/5 格 Kenney 预览，确认“摆下”后再从真实 `room_rules.placed` 重算整栋外观，而且不会写入本局存档。
+`scenes/pcg_diorama_stitch_lab.tscn` 保留为自动 Seed 整体构图测试；玩家实际评审入口是标题页“后台测试 → 桌模扩建 PCG”。该入口直接复用 `explore/build` 交互，但启用隔离的 `large_room_mix_test_mode`：三选一按尺寸分桶，参考 `1,3,3,5,3,1,3,5,3,1,3,1` 的 12 房节奏，玄关后不连续推荐单格，并让同一多格房统一使用一种地板 finish。点击黄色扩建格、选择票根、旋转并摆放仍走真实 `room_rules`；实验过程不会写入正式存档，回到正式开局后房型覆盖和地板开关都会重置。
 
 当前 PCG 壳体分为四层：KayKit Dungeon 只保留木地板与高差楼梯；墙、纸盒门扇和转角柱改为程序化涂漆纸板；KayKit Furniture Bits 与 Quaternius 提供生活家具；每个已揭示房间额外生成演员走位胶带，以及场记板、假窗或播出灯牌之一。Modular Ruins 与 Mini Dungeon 石墙不再进入正式大地图链路。
 
@@ -207,11 +207,12 @@ D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject -
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/run_progression_save_regression.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/kenney_formal_build_flow_regression.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/kaykit_asset_bounds_probe.gd
+D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/large_room_mix_lab_regression.gd
 ```
 
 `latest_3d_smoke.gd` 覆盖二选一预兆、三张票根、摆下后隐藏、进入后揭示、3D 房屋网格与 3D 战斗网格；`dynamic_effects_smoke.gd` 额外覆盖房间翻转悬落、角色移动、未知揭示与输入锁。
 
-截图脚本会把视觉校验图写入本机 `artifacts/`；该目录与 `.godot/` 一样属于可再生成产物，不提交到仓库。`capture_completion_pass.gd` 同时覆盖关闭/展开后台测试的主页，`capture_progression_ui.gd` 覆盖预兆双卡和奖励三卡，`capture_combat_selection.gd` 覆盖战斗选牌状态。
+截图脚本会把视觉校验图写入本机 `artifacts/`；该目录与 `.godot/` 一样属于可再生成产物，不提交到仓库。`capture_completion_pass.gd` 同时覆盖关闭/展开后台测试的主页，`capture_progression_ui.gd` 覆盖预兆双卡和奖励三卡，`capture_combat_selection.gd` 覆盖战斗选牌状态，`capture_large_room_mix_lab.gd` 覆盖大房间票根、落位和进入后的统一地板效果。
 
 ## 近期改动（2026-08-20）
 

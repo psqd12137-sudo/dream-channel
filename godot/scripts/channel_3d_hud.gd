@@ -563,8 +563,9 @@ func _draw_house_hud() -> void:
 	var room: Dictionary = game.current_room()
 	var revealed := bool(room.get("revealed", false)) or bool(room.get("completed", false))
 	if game.show_house_diagnostics:
-		_draw_chip(Rect2(32, 102, 245, 30), "KAYKIT 桌模 · 布景扩建", Color("3e8b78"), TEXT, 11)
+		_draw_chip(Rect2(32, 102, 245, 30), "大房间节奏实验", Color("3e8b78"), TEXT, 11)
 		_draw_chip(Rect2(290, 102, 680, 30), game.pcg_cutaway_debug_text(), Color("394852"), TEXT, 10)
+		_draw_chip(Rect2(32, 138, 245, 28), game.large_room_mix_debug_text(), Color("654b79"), TEXT, 9)
 		_draw_chip(Rect2(290, 138, 500, 28), game.pcg_room_state_debug_text(), Color("46545b"), TEXT, 10)
 		_draw_chip(Rect2(802, 138, 168, 28), "小型 + = 扩建口", Color("c88b2f"), INK, 10)
 	var side := Rect2(1004, 88, 260, 680)

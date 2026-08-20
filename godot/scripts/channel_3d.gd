@@ -1,6 +1,7 @@
 extends Node3D
 
 const RoomRules = preload("res://scripts/room_rules.gd")
+const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
 const CombatRules = preload("res://scripts/combat_rules.gd")
 const WebContentAdapter = preload("res://scripts/web_content_adapter.gd")
 const CharacterPresenter = preload("res://scripts/character_presenter.gd")
@@ -89,6 +90,16 @@ const RUN_LAYOUT_PROFILES := [
 	{"id": "courtyard", "label": "庭院大宅", "weights": {"single": 1, "line3": 3, "l3": 3, "large": 7}},
 	{"id": "mixed", "label": "错层公寓", "weights": {"single": 3, "line3": 5, "l3": 4, "large": 5}},
 ]
+const LARGE_ROOM_TEST_SEQUENCE := [1, 3, 3, 5, 3, 1, 3, 5, 3, 1, 3, 1]
+const LARGE_ROOM_TEST_TARGETS := {1: 4, 3: 6, 5: 2}
+const LARGE_ROOM_TEST_SHAPE_OVERRIDES := {
+	"living": "l3",
+	"kitchen": "line3",
+	"greenhouse": "l3",
+	"bedroom": "line3",
+	"nursery": "l3",
+	"yard": "plus5",
+}
 
 @onready var world_container: SubViewportContainer = $WorldLayer/WorldContainer
 @onready var world_viewport: SubViewport = $WorldLayer/WorldContainer/WorldViewport
@@ -163,6 +174,7 @@ var build_preview_tween: Tween = null
 var lab_root: Node3D = null
 var home_tests_open := false
 var show_house_diagnostics := false
+var large_room_mix_test_mode := false
 var kenney_build_lab_mode := true  # 桌模建造已转正：主游玩默认用 Kaykit/Kenney 桌模渲染房间
 var lab_move_axis := 0.0
 var lab_jump_held := false
@@ -291,6 +303,7 @@ func is_world_view_point(screen_pos: Vector2) -> bool:
 func reset_run(seed_value: int = 0) -> void:
 	_cancel_dynamic_effect()
 	show_house_diagnostics = false
+	large_room_mix_test_mode = false
 	camera.environment = null
 	world_container.visible = true
 	house_root.visible = true
@@ -483,10 +496,12 @@ func start_kenney_build_lab() -> void:
 	kenney_build_lab_mode = true
 	reset_run(run_seed + 101)
 	show_house_diagnostics = true
+	large_room_mix_test_mode = true
+	_apply_large_room_test_catalog()
 	camera.environment = _make_visual_polish_environment()
 	phase = "explore"
 	omen_options.clear()
-	status_message = "正式 PCG 验证：1/3/5 格票根仍由 room_rules 摆放；朝镜头外墙与当前房间近侧隔墙会实体剖切，门洞和边账本保持不变。"
+	status_message = "大房间节奏实验：三选一优先展示不同尺寸；生活房升格，整房统一地板，正式开局暂不受影响。"
 	build_house_world()
 	_set_house_camera()
 	_refresh_hud()
@@ -2020,7 +2035,7 @@ func reward_description(reward: Dictionary) -> String:
 
 
 func _save_run() -> void:
-	if phase == "home" or phase.begins_with("lab_") and event_context.is_empty():
+	if large_room_mix_test_mode or phase == "home" or phase.begins_with("lab_") and event_context.is_empty():
 		return
 	var placed_entries: Array[Dictionary] = []
 	for raw_pos in room_rules.placed.keys():
@@ -2098,6 +2113,7 @@ func _add_kenney_formal_composer() -> void:
 	composer.show_room_ids = true
 	composer.kenney_only = true
 	composer.use_kaykit_room_shell = true
+	composer.unify_room_floor_finish = large_room_mix_test_mode
 	composer.open_visited_connections = true
 	composer.show_summary_title = false
 	composer.explicit_connection_edges = _formal_connection_edge_keys()
@@ -2495,6 +2511,11 @@ func pcg_room_state_debug_text() -> String:
 	if composer == null or not composer.has_method("room_state_debug_summary"):
 		return "房态等待生成"
 	return "%s · 扩建插槽%d" % [str(composer.room_state_debug_summary()), room_rules.frontiers().size()]
+
+
+func large_room_mix_debug_text() -> String:
+	var counts := _placed_room_size_counts()
+	return "节奏 1格 %d/4 · 3格 %d/6 · 5格 %d/2" % [int(counts[1]), int(counts[3]), int(counts[5])]
 
 
 func frontier_markers_are_compact() -> bool:
@@ -3081,6 +3102,8 @@ func _make_build_offers(target: Vector2i) -> Array[Dictionary]:
 		if not room_rules.valid_rotations(target, room).is_empty():
 			candidates.append(room)
 	_shuffle_variants(candidates)
+	if large_room_mix_test_mode:
+		return _make_large_room_test_offers(candidates)
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var score_a := _layout_profile_offer_score(a)
 		var score_b := _layout_profile_offer_score(b)
@@ -3093,6 +3116,96 @@ func _make_build_offers(target: Vector2i) -> Array[Dictionary]:
 			break
 		result.append(room)
 	return result
+
+
+func _make_large_room_test_offers(candidates: Array[Dictionary]) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var buckets := {1: [], 3: [], 5: []}
+	for room: Dictionary in candidates:
+		var size := int(room.get("room_size", 1))
+		if buckets.has(size):
+			(buckets[size] as Array).append(room)
+	var counts := _placed_room_size_counts()
+	var placed_count := room_rules.instance_count()
+	var desired_size := int(LARGE_ROOM_TEST_SEQUENCE[mini(placed_count, LARGE_ROOM_TEST_SEQUENCE.size() - 1)])
+	var last_size := _latest_placed_room_size()
+	var size_order: Array[int] = [desired_size]
+	var alternatives: Array[int] = [3, 5, 1]
+	alternatives.sort_custom(func(a: int, b: int) -> bool:
+		var remaining_a := int(LARGE_ROOM_TEST_TARGETS[a]) - int(counts[a])
+		var remaining_b := int(LARGE_ROOM_TEST_TARGETS[b]) - int(counts[b])
+		if remaining_a != remaining_b:
+			return remaining_a > remaining_b
+		return a > b
+	)
+	for size: int in alternatives:
+		if size not in size_order:
+			size_order.append(size)
+	for size: int in size_order:
+		if result.size() >= 3:
+			break
+		if int(counts[size]) >= int(LARGE_ROOM_TEST_TARGETS[size]):
+			continue
+		if size == 1 and last_size == 1:
+			continue
+		var bucket: Array = buckets[size]
+		if not bucket.is_empty():
+			result.append(bucket[0])
+	for room: Dictionary in candidates:
+		if result.size() >= 3:
+			break
+		var size := int(room.get("room_size", 1))
+		var within_target := buckets.has(size) and int(counts[size]) < int(LARGE_ROOM_TEST_TARGETS[size])
+		var respects_cadence := size != 1 or last_size != 1
+		if within_target and respects_cadence and not _contains_room(result, str(room.get("id", ""))):
+			result.append(room)
+	if result.size() < 3:
+		for room: Dictionary in candidates:
+			if result.size() >= 3:
+				break
+			if not _contains_room(result, str(room.get("id", ""))):
+				result.append(room)
+	return result
+
+
+func _placed_room_size_counts() -> Dictionary:
+	var counts := {1: 0, 3: 0, 5: 0}
+	var seen: Dictionary = {}
+	for raw_pos: Variant in room_rules.placed.keys():
+		var room: Dictionary = room_rules.placed[raw_pos]
+		var instance_id := str(room.get("instance_id", ""))
+		if seen.has(instance_id):
+			continue
+		seen[instance_id] = true
+		var size := int(room.get("room_size", 1))
+		if counts.has(size):
+			counts[size] = int(counts[size]) + 1
+	return counts
+
+
+func _latest_placed_room_size() -> int:
+	return int(current_room().get("room_size", 1))
+
+
+func _apply_large_room_test_catalog() -> void:
+	run_layout_profile = {"id": "large_room_test", "label": "大房间节奏实验", "weights": {}}
+	for index in range(room_catalog.size()):
+		room_catalog[index] = _large_room_test_room(room_catalog[index])
+	for index in range(remaining_rooms.size()):
+		remaining_rooms[index] = _large_room_test_room(remaining_rooms[index])
+
+
+func _large_room_test_room(source: Dictionary) -> Dictionary:
+	var room := source.duplicate(true)
+	var room_id := str(room.get("id", ""))
+	if not LARGE_ROOM_TEST_SHAPE_OVERRIDES.has(room_id):
+		return room
+	var shape_id := str(LARGE_ROOM_TEST_SHAPE_OVERRIDES[room_id])
+	var footprint: Array = (RoomFootprintCatalog.SHAPES[shape_id] as Array).duplicate(true)
+	room["footprint_kind"] = shape_id
+	room["footprint"] = footprint
+	room["room_size"] = footprint.size()
+	return room
 
 
 func _layout_profile_offer_score(room: Dictionary) -> int:

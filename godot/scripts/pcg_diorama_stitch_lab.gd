@@ -28,6 +28,7 @@ const SHAPE_SEQUENCE := ["single", "plus5", "l3", "single", "line3", "single", "
 @export var use_kaykit_room_shell := true
 @export var use_toy_show_cardboard_shell := true
 @export var use_toy_show_shell_palette := true
+@export var unify_room_floor_finish := false
 @export var open_visited_connections := false
 @export_range(0.08, 0.8, 0.01) var room_drop_duration := 0.24
 @export_range(0.0, 0.4, 0.01) var room_drop_gap := 0.06
@@ -342,7 +343,8 @@ func _build_cell(cell: Vector2i, center: Vector2) -> void:
 	var world := _cell_world(cell, center)
 	var room_color := _room_base_color(room_index, elevation)
 	_add_box("Base_%d_%d" % [cell.x, cell.y], world + Vector3(0, (elevation - 0.42) * 0.5, 0), Vector3(CELL, elevation + 0.42, CELL), room_color, room_index)
-	var floor_asset := KAYKIT_ROOT + ("floor_wood_large_dark.gltf.glb" if use_kaykit_room_shell and posmod(cell.x * 17 + cell.y * 31 + generation_seed, 7) == 0 else "floor_wood_large.gltf.glb") if use_kaykit_room_shell else KENNEY_ROOT + ("floor-detail.fbx" if posmod(cell.x * 17 + cell.y * 31 + generation_seed, 7) == 0 else "floor.fbx")
+	var floor_variant_key := str(room.get("id", room_index)).hash() + generation_seed if unify_room_floor_finish else cell.x * 17 + cell.y * 31 + generation_seed
+	var floor_asset := KAYKIT_ROOT + ("floor_wood_large_dark.gltf.glb" if use_kaykit_room_shell and posmod(floor_variant_key, 7) == 0 else "floor_wood_large.gltf.glb") if use_kaykit_room_shell else KENNEY_ROOT + ("floor-detail.fbx" if posmod(floor_variant_key, 7) == 0 else "floor.fbx")
 	var floor_scale := KAYKIT_FLOOR_SCALE if use_kaykit_room_shell else Vector3.ONE * CELL
 	_add_model("Floor_%d_%d" % [cell.x, cell.y], floor_asset, world + Vector3(0, elevation + 0.025, 0), floor_scale, 0.0, room_index)
 
