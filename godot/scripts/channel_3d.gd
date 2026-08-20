@@ -54,7 +54,6 @@ const CAMERA_ORBIT_SENSITIVITY := 0.008
 const CAMERA_INTRO_FAR_SCALE := 2.4
 const CAMERA_INTRO_DURATION := 1.35
 const HOUSE_CAMERA_FOLLOW_RATE := 3.4
-const HOUSE_CAMERA_YAW_FOLLOW_RATE := 3.0
 const HOUSE_CAMERA_RETURN_DELAY := 1.5
 const HOUSE_CAMERA_RETURN_DURATION := 1.05
 const BATTLE_CAMERA_FOLLOW_RATE := 4.5
@@ -370,8 +369,6 @@ func _update_camera_follow(delta: float) -> void:
 			var next_target := house_camera_target.lerp(follow_target, factor)
 			if not next_target.is_equal_approx(house_camera_target):
 				house_camera_target = next_target
-				var yaw_factor := 1.0 - exp(-HOUSE_CAMERA_YAW_FOLLOW_RATE * delta)
-				house_camera_yaw = lerp_angle(house_camera_yaw, house_player_facing_yaw, yaw_factor)
 				_clamp_house_camera_target()
 				_apply_house_camera()
 	elif phase == "combat" and combat != null and camera != null:
@@ -3305,33 +3302,18 @@ func _start_house_camera_return() -> void:
 		return
 	house_camera_returning = true
 	var player_pos := _house_follow_target_position()
-	var default_yaw := atan2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z)
-	var default_pitch := atan2(HOUSE_CAMERA_DIRECTION.y, Vector2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z).length())
-	var default_distance := HOUSE_CAMERA_DIRECTION.length()
 	var duration := HOUSE_CAMERA_RETURN_DURATION * animation_duration_scale
 	if duration <= 0.0:
 		house_camera_target = player_pos
-		house_camera_yaw = default_yaw
-		house_camera_pitch = default_pitch
-		house_camera_distance = default_distance
-		house_camera_zoom_ratio = 1.0
 		house_camera_returning = false
 		_clamp_house_camera_target()
 		_apply_house_camera()
 		return
 	var start_target := house_camera_target
-	var start_yaw := house_camera_yaw
-	var start_pitch := house_camera_pitch
-	var start_distance := house_camera_distance
-	var start_zoom := house_camera_zoom_ratio
 	house_camera_return_tween = create_tween()
 	house_camera_return_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	house_camera_return_tween.tween_method(func(weight: float) -> void:
 		house_camera_target = start_target.lerp(player_pos, weight)
-		house_camera_yaw = lerp_angle(start_yaw, default_yaw, weight)
-		house_camera_pitch = lerpf(start_pitch, default_pitch, weight)
-		house_camera_distance = lerpf(start_distance, default_distance, weight)
-		house_camera_zoom_ratio = lerpf(start_zoom, 1.0, weight)
 		_clamp_house_camera_target()
 		_apply_house_camera()
 	, 0.0, 1.0, duration)
