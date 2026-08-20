@@ -1720,8 +1720,12 @@ func handle_battle_cell(target: Vector2i) -> void:
 			status_message = "%s不能放在这里，已自动取消选牌；现在可点击绿色格移动。" % card_name
 	else:
 		var source: Vector2i = combat.player_pos
+		var movement_cost: int = combat.player_move_cost(target)
 		if combat.move_player(target):
-			status_message = "你站在传送门上：可花 %d 行动力穿门，也可继续行动。" % combat.move_cost if combat.player_on_portal() else "移动完成。选择手牌布置陷阱，或直接砸向有视野的敌人格。"
+			if target == combat.enemy_pos:
+				status_message = "你挤进敌人所在格，消耗 %d 行动力；仍可从另一侧离开。" % movement_cost
+			else:
+				status_message = "你站在传送门上：可花 %d 行动力穿门，也可继续行动。" % combat.move_cost if combat.player_on_portal() else "移动完成。选择手牌布置陷阱，或直接砸向有视野的敌人格。"
 			_after_combat_action()
 			_animate_player_battle_step(source, target)
 			return
@@ -1741,7 +1745,7 @@ func _animate_player_battle_step(source: Vector2i, target: Vector2i) -> void:
 	var source_height := float(combat.heights.get(source, 0)) * 0.64
 	var target_height := float(combat.heights.get(target, 0)) * 0.64
 	var start_position := _battle_world(source) + Vector3.UP * (source_height - target_height)
-	var target_position := _battle_world(target)
+	var target_position := _battle_pawn_world(target, true)
 	player_node.position = start_position
 	var tween := create_tween()
 	active_motion_tween = tween
@@ -2651,7 +2655,7 @@ func _portal_endpoint_label(pos: Vector2i) -> String:
 func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
 	var node := Node3D.new()
 	node.name = "Player" if is_player else "Enemy"
-	node.position = _battle_world(pos)
+	node.position = _battle_pawn_world(pos, is_player)
 	node.rotation.y = battle_player_facing_yaw if is_player else battle_enemy_facing_yaw
 	battle_root.add_child(node)
 	var floor_y := 0.39 + float(combat.heights.get(pos, 0)) * 0.64
@@ -2661,11 +2665,30 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
 	presenter.position = Vector3(0, floor_y + 0.05, 0)
 	node.add_child(presenter)
 	var actor_key := "player" if is_player else "enemy"
-	presenter.configure(actor_key, (presentation.get("actors", {}).get(actor_key, {}) as Dictionary))
+	var presenter_id := actor_key if is_player else "%s:%s" % [actor_key, combat.enemy_archetype]
+	presenter.configure(presenter_id, _battle_actor_presentation(actor_key))
 	presenter.state_changed.connect(_on_presenter_state_changed)
 	if not is_player:
 		presenter.set_obscured(not revealed)
 	_add_label(node, "PawnLabel", "你" if is_player else ("怪" if revealed else "?"), Vector3(0, floor_y + 2.05, 0), Color.WHITE if revealed or is_player else COL_GOLD, 31)
+
+
+func _battle_actor_presentation(actor_key: String) -> Dictionary:
+	var actors: Dictionary = presentation.get("actors", {})
+	var config: Dictionary = (actors.get(actor_key, {}) as Dictionary).duplicate(true)
+	if actor_key != "enemy" or combat == null:
+		return config
+	var archetypes: Dictionary = presentation.get("enemy_archetypes", {})
+	var variant: Dictionary = archetypes.get(combat.enemy_archetype, {})
+	config.merge(variant, true)
+	return config
+
+
+func _battle_pawn_world(pos: Vector2i, is_player: bool) -> Vector3:
+	var world := _battle_world(pos)
+	if combat != null and combat.player_pos == combat.enemy_pos and pos == combat.player_pos:
+		world += Vector3(-0.30, 0.0, 0.20) if is_player else Vector3(0.30, 0.0, -0.20)
+	return world
 
 
 func _add_decoy_pawn(pos: Vector2i) -> void:

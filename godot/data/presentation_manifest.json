@@ -83,6 +83,78 @@
                                  "visual_y":  0.82
                              }
                },
+    "enemy_archetypes":  {
+                              "execute":  {
+                                              "model_path":  "res://assets/third_party/quaternius_ultimate_monsters/Alien.gltf",
+                                              "model_scale":  0.62,
+                                              "model_y":  0.0,
+                                              "model_yaw":  0.0,
+                                              "label_y":  1.4,
+                                              "animation_map":  {
+                                                                    "idle":  "Idle",
+                                                                    "move":  "Walk",
+                                                                    "ready":  "Idle",
+                                                                    "attack":  "Punch",
+                                                                    "hurt":  "HitReact"
+                                                                }
+                                          },
+                              "armor":  {
+                                            "model_path":  "res://assets/third_party/quaternius_ultimate_monsters/Yeti.gltf",
+                                            "model_scale":  0.54,
+                                            "model_y":  0.0,
+                                            "model_yaw":  0.0,
+                                            "label_y":  1.55,
+                                            "animation_map":  {
+                                                                  "idle":  "Idle",
+                                                                  "move":  "Walk",
+                                                                  "ready":  "Idle",
+                                                                  "attack":  "Punch",
+                                                                  "hurt":  "HitReact"
+                                                              }
+                                        },
+                              "stagger":  {
+                                              "model_path":  "res://assets/third_party/quaternius_ultimate_monsters/Orc_Skull.gltf",
+                                              "model_scale":  0.58,
+                                              "model_y":  0.0,
+                                              "model_yaw":  0.0,
+                                              "label_y":  1.48,
+                                              "animation_map":  {
+                                                                    "idle":  "Idle",
+                                                                    "move":  "Walk",
+                                                                    "ready":  "Idle",
+                                                                    "attack":  "Punch",
+                                                                    "hurt":  "HitReact"
+                                                                }
+                                          },
+                              "crush":  {
+                                            "model_path":  "res://assets/third_party/quaternius_ultimate_monsters/MushroomKing.gltf",
+                                            "model_scale":  0.58,
+                                            "model_y":  0.0,
+                                            "model_yaw":  0.0,
+                                            "label_y":  1.5,
+                                            "animation_map":  {
+                                                                  "idle":  "Idle",
+                                                                  "move":  "Walk",
+                                                                  "ready":  "Idle",
+                                                                  "attack":  "Punch",
+                                                                  "hurt":  "HitReact"
+                                                              }
+                                        },
+                              "wire":  {
+                                           "model_path":  "res://assets/third_party/quaternius_ultimate_monsters/BlueDemon.gltf",
+                                           "model_scale":  0.58,
+                                           "model_y":  0.0,
+                                           "model_yaw":  0.0,
+                                           "label_y":  1.48,
+                                           "animation_map":  {
+                                                                 "idle":  "Idle",
+                                                                 "move":  "Walk",
+                                                                 "ready":  "Idle",
+                                                                 "attack":  "Punch",
+                                                                 "hurt":  "HitReact"
+                                                             }
+                                       }
+                          },
     "items":  {
                   "adrenaline":  "res://assets/ui/cards/BloodyCity.png",
                   "afterimage":  "res://assets/ui/cards/MagicCube.png",

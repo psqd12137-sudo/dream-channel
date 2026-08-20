@@ -23,6 +23,7 @@ var base_energy := 5
 var turn_energy_max := 5
 var hand_size := 4
 var move_cost := 1
+var hostile_pass_cost := 1
 var dice_faces: Array = []
 var energy_bonus := 0
 var placement_discount := 0
@@ -104,6 +105,7 @@ func setup(arena: Dictionary, enemy: Dictionary, card_defs: Dictionary, starter:
 	base_energy = maxi(1, int(run_rules.get("base_energy", base_speed + 2)))
 	hand_size = int(run_rules.get("hand_size", 4))
 	move_cost = int(run_rules.get("move_cost", 1))
+	hostile_pass_cost = int(run_rules.get("hostile_pass_cost", 1))
 	# Kept empty as a compatibility field for the archived 2D prototype. The
 	# production 3D rules use a fixed action-point budget and never roll speed dice.
 	dice_faces.clear()
@@ -182,15 +184,20 @@ func setup(arena: Dictionary, enemy: Dictionary, card_defs: Dictionary, starter:
 func move_player(target: Vector2i) -> bool:
 	if not can_move_player(target):
 		return false
+	var cost := player_move_cost(target)
 	player_pos = target
-	energy -= move_cost
+	energy -= cost
 	_refresh_enemy_visibility()
-	event_log.append("PlayerMoved pos=%s energy=%d" % [player_pos, energy])
+	event_log.append("PlayerMoved pos=%s cost=%d shared=%s energy=%d" % [player_pos, cost, str(player_pos == enemy_pos), energy])
 	return true
 
 
 func can_move_player(target: Vector2i) -> bool:
-	return outcome == "" and energy >= move_cost and is_walkable(target) and target != enemy_pos and target != decoy_pos and manhattan(player_pos, target) == 1
+	return outcome == "" and energy >= player_move_cost(target) and is_walkable(target) and target != decoy_pos and manhattan(player_pos, target) == 1
+
+
+func player_move_cost(target: Vector2i) -> int:
+	return move_cost + (hostile_pass_cost if target == enemy_pos else 0)
 
 
 func player_on_portal() -> bool:
@@ -363,7 +370,7 @@ func preview_intent() -> Dictionary:
 		result["type"] = "attack"
 		result["attack_kind"] = "decoy"
 		return result
-	if enemy_sees_player and manhattan(enemy_pos, player_pos) == 1 and remaining < _effective_attack_cost():
+	if enemy_sees_player and manhattan(enemy_pos, player_pos) <= 1 and remaining < _effective_attack_cost():
 		result["label"] = "等待攻击窗口"
 		result["detail"] = "已经贴近目标，但剩余行动力不足以发动攻击。"
 		result["type"] = "stall"
@@ -464,7 +471,7 @@ func enemy_turn() -> Array[Dictionary]:
 			turn_events.append(_resolve_decoy_attack())
 			remaining -= _effective_attack_cost()
 			continue
-		if enemy_sees_player and manhattan(enemy_pos, player_pos) == 1 and remaining < _effective_attack_cost():
+		if enemy_sees_player and manhattan(enemy_pos, player_pos) <= 1 and remaining < _effective_attack_cost():
 			turn_events.append({"kind": "wait", "label": "等待攻击窗口"})
 			break
 		var attack_plan := _enemy_attack_plan(enemy_pos, remaining, enemy_sees_player)
@@ -530,7 +537,7 @@ func _enemy_attack_plan(origin: Vector2i, remaining: int, sees_player: bool) -> 
 		var beam_cells := _beam_cells(origin, player_pos)
 		if player_pos in beam_cells:
 			return {"kind": "beam_charge", "cost": attack_cost, "cells": beam_cells}
-	if distance == 1 and remaining >= attack_cost:
+	if distance <= 1 and remaining >= attack_cost:
 		if _has_trait("guardBreak") and _player_defense_total(origin) > 0 and remaining >= attack_cost + 1:
 			return {"kind": "guardBreak", "cost": attack_cost + 1, "cells": [player_pos]}
 		return {"kind": "melee", "cost": attack_cost, "cells": [player_pos]}
@@ -1042,7 +1049,7 @@ func _play_climb() -> bool:
 		var dir: Vector2i = raw_dir
 		var candidate: Vector2i = player_pos + dir
 		var height := _tile_height(candidate)
-		if is_walkable(candidate) and candidate != enemy_pos and height > target_height:
+		if is_walkable(candidate) and height > target_height:
 			target = candidate
 			target_height = height
 	if target.x < 0:

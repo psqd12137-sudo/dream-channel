@@ -73,7 +73,7 @@ func _run() -> void:
 	_check(player_presenter != null and player_presenter.current_state == "attack", "a real player hit must trigger the attack pose")
 	_check(enemy_presenter != null and enemy_presenter.current_state == "hurt", "enemy HP loss must trigger the hurt reaction")
 	_check(player_presenter != null and player_presenter.current_model_animation().to_lower().contains("punch"), "player attack must play the temporary model Punch animation")
-	_check(enemy_presenter != null and enemy_presenter.current_model_animation().to_lower().contains("hitrecieve"), "enemy damage must play the temporary model hit reaction")
+	_check(enemy_presenter != null and enemy_presenter.current_model_animation().to_lower().contains("hitreact"), "enemy damage must play the archetype model hit reaction")
 
 	_check(_count_named_prefix(game.battle_root, "StageDoor") == 1, "battle stage must include the imported Web door decoration")
 	_check(_count_named_prefix(game.battle_root, "StageLamp") == 1, "battle stage must include the imported Web lamp decoration")
