@@ -5,17 +5,22 @@
 
 ## 打开项目与场景
 
-- Godot 项目：`godot/project.godot`
+- Godot 项目：仓库内 `godot/project.godot`（以 git 仓库相对路径为准，两台开发机各自 clone 的绝对路径不同，不要再写死盘符）
 - 当前 3D 主场景：`godot/channel_3d.tscn`
-- 旧版 2D 对照场景：`godot/main.tscn`
+- 旧版 2D 对照场景：`godot/main.tscn` —— 仅保留作历史原型比对，**不要运行或在其上开发**
 
-`application/run/main_scene` 已通过 Godot MCP 设置为 `res://channel_3d.tscn`。在编辑器里按 F6 可运行当前场景，按 F5 可运行项目主场景。
+技术要求：
+
+- 引擎：**Godot 4.7.x**（`config/features` 为 `4.7`；用 4.6 打开会告警且行为不受保证）
+- `application/run/main_scene` 已设置为 `res://channel_3d.tscn`；编辑器里按 **F5** 运行项目主场景（F6 只运行当前打开的场景，若当前开着 `main.tscn` 就会看到旧原型）
+- 启动示例（`<repo>` = clone 出的仓库根，`<godot>` = 本机 Godot 4.7.1 可执行文件）：
 
 ```powershell
-D:\godot\Godot_v4.7.1-stable_win64.exe --path "G:\dream-channel\godot" --editor
+<godot> --path "<repo>\godot" --editor
 ```
 
-Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再依赖网络共享；项目内资源统一使用 `res://`，移动目录不影响内部引用。
+- **不要**双击仓库外层目录里的 `DreamChannel.exe`（那是 2025 年的 Unity 旧构建，与本仓库无关）
+- Godot 开发以各自本机仓库为准，不依赖网络共享；项目内资源统一使用 `res://`，移动目录不影响内部引用。
 
 ## 历史 Web 参考快照
 
@@ -60,7 +65,7 @@ Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再�
 - 战斗规则：`scripts/combat_rules.gd`
 - 最新 Web 数据适配：`scripts/web_content_adapter.gd`
 
-大地图与战斗地图镜头操作：
+大地图与战斗地图镜头操作（2026-08-21 镜头系统）：
 
 - 左键：移动、选择格子或放置卡牌
 - 左键拖动大地图或战场空白：围绕当前观察目标做连续 360° 水平旋转，俯角固定；旋转保持当前缩放和平移，未超过 5px 时仍按普通地格点击处理
@@ -69,7 +74,15 @@ Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再�
 - 放置牌再次点击、右键、`Esc` 或“取消选牌”：退出金色摆放模式并恢复绿色移动目标
 - 中键拖动：平移地图（探索、房间摆放与战斗均可用）
 - 鼠标滚轮：以指针位置为中心缩放
-- 顶栏“地图复位/镜头复位”：恢复当前地图的默认角度和完整取景；扩建预览重建时会保留玩家当前旋转、缩放和平移
+- 顶栏“地图复位/镜头复位”：恢复当前地图的默认角度和完整取景，并退出镜头跟随；扩建预览重建时会保留玩家当前旋转、缩放和平移
+
+镜头自动化（详见 `scripts/channel_3d.gd` 相机系统分区与 `scripts/camera_follow_math.gd`）：
+
+- 每次开局/读档进入场景播放**入场运镜**（由远至近，正交视野 2.4× 缓动收敛到适配视野）
+- 玩家移动（进入房间/战斗走格）时镜头**延迟平滑跟随**：只做位置跟随，不自动旋转；旋转始终由玩家拖动选择（未拖动则为默认俯瞰角）
+- 玩家显示在**画幅偏下**（探索偏移 `HOUSE_CAMERA_FRAME_OFFSET=0.15`）：上方留出视野
+- 拖动相机松手后延迟 1.5s **回位**到玩家正上方（探索）——只回位置，旋转与缩放保持玩家选择
+- 战斗镜头**自始至终对准玩家与怪物直线中点的偏上区域**（`BATTLE_CAMERA_FRAME_OFFSET=0.12` 偏上对准），走格跟随速率与探索一致（3.4）；fit 尺寸已把偏移计入，偏上对准下全棋盘仍可见
 
 战斗格使用深色格缝和交替纸面色；蓝框表示敌人路径，红框表示必伤格，绿色角标表示可移动，金色角标表示卡牌目标，`H1/H2` 表示可站立的家具高台，`A/B` 表示传送门端点。
 
@@ -115,11 +128,17 @@ Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再�
 
 ## 手调战斗 UI
 
-打开 `scenes/combat_ui_layout.tscn`。这个场景以 1280 × 800 的设计分辨率显示战斗 HUD 的五个布局区域：`IntentArea`（敌人意图）、`ActionArea`（右侧行动栏）、`HandArea`（底部手牌）、`DeckArea`（抽牌堆）和 `DiscardArea`（弃牌堆）。在 2D 视图中选中节点，用移动工具拖动，或在 Inspector 的 `Layout / Transform` 修改 Position 与 Size，保存后主游戏会读取这些 Rect；不要重命名这五个节点。
+打开 `scenes/combat_ui_layout.tscn`。这个场景以 1280 × 800 的设计分辨率保存战斗 HUD 的五个布局区域：`IntentArea`（历史意图区，已停用）、`ActionArea`（右侧行动栏）、`HandArea`（底部手牌区）、`DeckArea`（抽牌堆）和 `DiscardArea`（弃牌堆）。在 2D 视图中选中节点，用移动工具拖动，或在 Inspector 的 `Layout / Transform` 修改 Position 与 Size，保存后主游戏会读取这些 Rect；不要重命名这五个节点。
 
-当前第一版已接入 `E:/doc/channel doc/ai/1x` 中的红、蓝、黄电视卡背，以及事件与行动面板图集。手牌按 `HandArea` 自动横向展开并形成轻微弧线；抽牌堆和弃牌堆会显示实时数量。原始图集保存在 `assets/ui/channel_concept/`，后续可以继续切分生命条、攻击/移动/搜索图标，而不需要改战斗规则。
+当前战斗界面为**杀戮尖塔式**（2026-08-21）：
 
-战斗视窗占满左右宽度，但在 `1280 × 800` 设计坐标的 `y=600` 前截止；底部 `y=608` 起是独立手牌安全区。战斗导播已移除，状态文字和 3D 点击区都不会遮挡手牌。卡牌使用约 `110 × 183` 的固定窄高比例，按轻微弧线排列；悬浮牌最后绘制并上浮放大，边框、字体、内边距和插画使用同一倍率，插画采用等比例 `contain` 显示而不会被拉伸。
+- 战斗棋盘占顶栏下全幅场景（`COMBAT_VIEW_RECT` 20,88,1244,540），**无边框、无蒙层**，与手牌无硬分隔
+- 手牌沉到画布底部，静止只露出上半（约 104px），**鼠标悬停升起完整显示并放大**；卡牌固定宽度 120px、均匀重叠错落排布
+- 敌人意图显示在 3D 敌人头顶 `Label3D`（billboard，类型配色：攻击红 / 追击橙 / 搜索蓝 / 巡逻青 / 埋伏品红；攻击含伤害数字）
+- 玩家/敌人状态条悬浮棋盘顶角，ActionArea（速度/行动力）在右下，抽/弃牌堆在底部两角
+- 卡牌使用约 `120 × 199` 的固定比例；悬浮牌最后绘制并上浮放大，边框、字体、内边距和插画使用同一倍率，插画采用等比例 `contain` 显示而不会被拉伸
+
+进一步的视觉打磨需求见仓库根 `docs/battle_ui_polish_prompt.md`（交给 Codex 的审美优化提示词）。
 
 ### 手调全部房间
 
@@ -179,41 +198,59 @@ Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再�
 
 ## 自检
 
+> 路径约定：`<godot>` = 本机 Godot 4.7.1 可执行文件（console 版可用），`<repo>` = 本机 clone 出的仓库根。
+> 两台开发机的绝对路径不同，命令一律用相对路径 `--path "<repo>\godot"`。
+
 ```powershell
-$godotProject = "G:\dream-channel\godot"
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/smoke_test.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/web_snapshot_smoke.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/combat_mechanics_smoke.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/enemy_traits_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/shared_cell_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/enemy_archetype_presentation_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/latest_3d_smoke.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/battle_view_smoke.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/camera_orbit_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/dynamic_effects_smoke.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/quaternius_room_art_smoke.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/room_footprint_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/multi_room_build_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/enemy_patrol_intent_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/enemy_vision_state_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/enemy_turn_animation_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/completion_labs_smoke.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/diorama_art_lab_smoke.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/pcg_diorama_stitch_smoke.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/pcg_hand_layout_lab_smoke.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/combat_input_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/input_intent_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/portal_height_build_preview_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/presentation_animation_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/run_progression_save_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/kenney_formal_build_flow_regression.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/kaykit_asset_bounds_probe.gd
-D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/large_room_mix_lab_regression.gd
+$g = "<godot>"; $p = "<repo>\godot"
+$tests = @(
+  "smoke_test", "latest_3d_smoke", "web_snapshot_smoke", "combat_mechanics_smoke",
+  "battle_view_smoke", "camera_orbit_regression", "camera_dolly_follow_regression",
+  "ui_hit_regression", "combat_input_regression", "input_intent_regression",
+  "card_system_regression", "dynamic_effects_smoke", "quaternius_room_art_smoke",
+  "room_footprint_regression", "multi_room_build_regression", "large_room_mix_lab_regression",
+  "enemy_patrol_intent_regression", "enemy_vision_state_regression",
+  "enemy_turn_animation_regression", "enemy_traits_regression", "shared_cell_regression",
+  "enemy_archetype_presentation_regression", "turn_timing_regression",
+  "completion_labs_smoke", "diorama_art_lab_smoke", "pcg_diorama_stitch_smoke",
+  "pcg_hand_layout_lab_smoke", "portal_height_build_preview_regression",
+  "presentation_animation_regression", "home_video_regression",
+  "run_progression_save_regression", "kenney_formal_build_flow_regression",
+  "formal_build_promoted_regression", "kaykit_asset_bounds_probe", "character_animation_lab_smoke"
+)
+foreach ($t in $tests) {
+  & $g --headless --path $p --script "res://tests/$t.gd"
+  if ($LASTEXITCODE -ne 0) { Write-Host "FAILED: $t" }
+}
 ```
 
-`latest_3d_smoke.gd` 覆盖二选一预兆、三张票根、摆下后隐藏、进入后揭示、3D 房屋网格与 3D 战斗网格；`dynamic_effects_smoke.gd` 额外覆盖房间翻转悬落、角色移动、未知揭示与输入锁。
+- `latest_3d_smoke.gd` 覆盖二选一预兆、三张票根、摆下后隐藏、进入后揭示、3D 房屋网格与 3D 战斗网格；`dynamic_effects_smoke.gd` 额外覆盖房间翻转悬落、角色移动、未知揭示与输入锁。
+- `camera_dolly_follow_regression.gd` 覆盖开局由远至近运镜、玩家移动延迟跟随（只平移不旋转）、松手延迟回位（保持玩家选择的旋转）、战斗镜头对准玩家-怪物中点偏上。
+- `ui_hit_regression.gd` 覆盖按钮命中、phase 切换重排 world rect、全屏/分辨率切换后的布局与命中。
+- 个别依赖 `user://` 写入的测试（如 `run_progression_save_regression`、`formal_build_promoted_regression`）在无用户目录写入权限的受限环境会失败，属环境限制；正常开发机可直接运行。
 
 截图脚本会把视觉校验图写入本机 `artifacts/`；该目录与 `.godot/` 一样属于可再生成产物，不提交到仓库。`capture_completion_pass.gd` 同时覆盖关闭/展开后台测试的主页，`capture_progression_ui.gd` 覆盖预兆双卡和奖励三卡，`capture_combat_selection.gd` 覆盖战斗选牌状态，`capture_large_room_mix_lab.gd` 覆盖大房间票根、落位和进入后的统一地板效果。
+
+## 近期改动（2026-08-21）
+
+### 镜头系统：运镜、延迟跟随与松手回位
+
+- 开局/读档进入场景播放**入场运镜**（由远至近，正交视野 2.4× 缓动收敛到适配视野，`CAMERA_INTRO_DURATION=1.35s`）。
+- 玩家移动（进入房间/战斗走格）时镜头**延迟平滑跟随**（指数平滑，速率 `HOUSE_CAMERA_FOLLOW_RATE=3.4`）：只做位置跟随、**不自动旋转**，旋转始终由玩家拖动选择（未拖动则为默认俯瞰角）。
+- 玩家显示在**画幅偏下**（`HOUSE_CAMERA_FRAME_OFFSET=0.15`），上方留出视野；战斗镜头**自始至终对准玩家与怪物直线中点的偏上区域**（`BATTLE_CAMERA_FRAME_OFFSET=0.12`），fit 已把偏移计入半径。
+- 拖动相机松手后延迟 1.5s **回位**到玩家正上方：只回位置，旋转与缩放保持玩家选择。
+- 修复：跟随/回位期间 `_set_house_camera` 不再把对准点重置为布局中心（建房、战斗返回时的镜头跳变）；“地图复位”同时退出跟随恢复全图。
+- 共享数学（平滑因子、屏幕上方偏移）抽到 `scripts/camera_follow_math.gd`；house/battle 两套镜头分区维护。
+
+### 战斗 UI 杀戮尖塔式改造
+
+- 战斗棋盘占顶栏下全幅场景，**去掉边框与黑层**；手牌沉到画布底部、静止只露上半、悬停升起完整显示并放大（杀戮尖塔式）。
+- 敌人意图移到 3D 敌人头顶 `Label3D`（billboard、类型配色、攻击含伤害数字）；玩家/敌人状态条悬浮棋盘顶角。
+- 视觉打磨需求已整理为提示词：仓库根 `docs/battle_ui_polish_prompt.md`（可交给 Codex 执行）。
+
+### UI 点击对应修复
+
+- 根因：`sync_layout` 只在窗口 resize 时刷新，phase 切换（home→omen→explore/build/combat）后世界区矩形不同步，导致点击判定与实际渲染错位；现按 phase 变化自动重排，并新增 `ui_hit_regression.gd` 约束。
 
 ## 近期改动（2026-08-20）
 

@@ -30,7 +30,7 @@
 \\192.168.1.21\bytedance\Shared\new channel
 ```
 
-（本机也可通过 Z: 映射访问；本地权威仓库位于 `G:\dream-channel`，Godot 开发一律在本机进行。）
+（本机也可通过 Z: 映射访问。仓库以 git 为准：两台开发机各自 clone，绝对路径不同，因此文档一律使用仓库相对路径；Godot 开发在各自本机进行。）
 
 - Web 修改在 `web/` 进行。
 - Godot 修改在 `godot/` 进行。
@@ -44,7 +44,7 @@
 ### Web
 
 ```powershell
-Set-Location "G:\dream-channel\web"
+Set-Location "<repo>\web"   # <repo> = 本机 clone 出的仓库根
 python -m http.server 8787
 ```
 
@@ -52,13 +52,16 @@ python -m http.server 8787
 
 ### Godot
 
-打开 [godot/project.godot](./godot/project.godot)，或运行：
+技术要求：**Godot 4.7.x**（4.6 及更早版本不受支持）。打开 [godot/project.godot](./godot/project.godot)，或运行：
 
 ```powershell
-D:\godot\Godot_v4.7.1-stable_win64.exe --path "G:\dream-channel\godot" --editor
+<godot> --path "<repo>\godot" --editor
+# <godot> = 本机 Godot 4.7.1 可执行文件；<repo> = 本机 clone 出的仓库根
 ```
 
-Godot 开发以本机为准（本地仓库），不再依赖网络共享；首次资源导入后由 `.godot/` 缓存加速。
+- 主场景是 `godot/channel_3d.tscn`（`run/main_scene` 已指向它），编辑器里按 **F5** 运行；`godot/main.tscn` 是旧版 2D 原型，仅供历史对照，不要在其上开发。
+- **不要**运行仓库外层目录里的 `DreamChannel.exe`——那是 2025 年的 Unity 旧构建，与本仓库无关。
+- Godot 开发以各自本机仓库为准，不再依赖网络共享；首次资源导入后由 `.godot/` 缓存加速。详细技术要求与自检见 [Godot README](./godot/README.md)。
 
 ## 仓库结构
 
