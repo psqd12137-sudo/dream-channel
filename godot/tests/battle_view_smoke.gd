@@ -29,8 +29,9 @@ func _run() -> void:
 		var layout_scale: float = layout["scale"]
 		_check(board.size.x >= 1240.0 * layout_scale, "combat board should reclaim the removed sidebar width at %s" % viewport_size)
 		_check(board.size.y >= 380.0 * layout_scale, "combat board should preserve a readable playfield at %s" % viewport_size)
-		var hand_safe_top: float = float(layout["offset"].y) + 608.0 * layout_scale
-		_check(board.end.y <= hand_safe_top, "combat board must stop before the hand-card safe area at %s" % viewport_size)
+		var hand_design := Rect2(170, 470, 940, 290)
+		var hand_screen := Rect2(Vector2(layout["offset"]) + hand_design.position * layout_scale, hand_design.size * layout_scale)
+		_check(hand_screen.position.y < board.end.y and hand_screen.end.y <= float(layout["offset"].y) + 800.0 * layout_scale, "hand cards must float over the combat board inside the canvas at %s" % viewport_size)
 
 	game.choose_omen(0)
 	var hall: Dictionary = _find_room(game.room_catalog, "hall")

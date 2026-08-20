@@ -58,6 +58,9 @@ const HOUSE_CAMERA_FRAME_OFFSET := 0.15
 const HOUSE_CAMERA_RETURN_DELAY := 1.5
 const HOUSE_CAMERA_RETURN_DURATION := 1.05
 const BATTLE_CAMERA_FOLLOW_RATE := 4.5
+const BATTLE_CAMERA_FRAME_OFFSET := 0.12
+const BATTLE_CAMERA_RETURN_DELAY := 1.5
+const BATTLE_CAMERA_RETURN_DURATION := 0.9
 const INVALID_CELL := Vector2i(-999, -999)
 const UNITY_ROOM_DROP_DURATION := 0.25
 const UNITY_ROOM_DROP_HEIGHT_CELLS := 0.65
@@ -178,6 +181,10 @@ var house_camera_intro_weight := 1.0
 var house_camera_intro_tween: Tween = null
 var house_camera_return_tween: Tween = null
 var battle_camera_following := false
+var battle_camera_user_hold := false
+var battle_camera_return_delay := 0.0
+var battle_camera_returning := false
+var battle_camera_return_tween: Tween = null
 var battle_room_title := "房间"
 var battle_shell_edge_records: Dictionary = {}
 var battle_shell_culled_count := 0
@@ -373,8 +380,12 @@ func _update_camera_follow(delta: float) -> void:
 				_clamp_house_camera_target()
 				_apply_house_camera()
 	elif phase == "combat" and combat != null and camera != null:
-		if battle_camera_following:
-			var follow_target := _battle_pawn_world(combat.player_pos, true)
+		if battle_camera_return_delay > 0.0:
+			battle_camera_return_delay = maxf(0.0, battle_camera_return_delay - delta)
+			if battle_camera_return_delay <= 0.0 and not battle_camera_user_hold:
+				_start_battle_camera_return()
+		if battle_camera_following and not battle_camera_user_hold and not battle_camera_returning:
+			var follow_target := _battle_pawn_world(combat.player_pos, true) + _battle_camera_frame_offset()
 			var factor := 1.0 - exp(-BATTLE_CAMERA_FOLLOW_RATE * delta)
 			var next_target := battle_camera_target.lerp(follow_target, factor)
 			if not next_target.is_equal_approx(battle_camera_target):
@@ -394,6 +405,55 @@ func _house_camera_frame_offset() -> Vector3:
 	if camera == null:
 		return Vector3.ZERO
 	return camera.global_transform.basis.y * (camera.size * HOUSE_CAMERA_FRAME_OFFSET)
+
+
+func _battle_camera_frame_offset() -> Vector3:
+	if camera == null:
+		return Vector3.ZERO
+	return camera.global_transform.basis.y * (camera.size * BATTLE_CAMERA_FRAME_OFFSET)
+
+
+func release_battle_camera_gesture() -> void:
+	battle_camera_user_hold = false
+	if not battle_camera_returning:
+		battle_camera_return_delay = BATTLE_CAMERA_RETURN_DELAY
+
+
+func _cancel_battle_camera_return() -> void:
+	battle_camera_return_delay = 0.0
+	battle_camera_returning = false
+	if battle_camera_return_tween != null and battle_camera_return_tween.is_valid():
+		battle_camera_return_tween.kill()
+		battle_camera_return_tween = null
+
+
+func _start_battle_camera_return() -> void:
+	if camera == null or combat == null:
+		return
+	battle_camera_returning = true
+	var player_pos := _battle_pawn_world(combat.player_pos, true) + _battle_camera_frame_offset()
+	var duration := BATTLE_CAMERA_RETURN_DURATION * animation_duration_scale
+	if duration <= 0.0:
+		battle_camera_target = player_pos
+		battle_camera_returning = false
+		_clamp_battle_camera_target()
+		_apply_battle_camera()
+		return
+	var start_target := battle_camera_target
+	battle_camera_return_tween = create_tween()
+	battle_camera_return_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	battle_camera_return_tween.tween_method(func(weight: float) -> void:
+		battle_camera_target = start_target.lerp(player_pos, weight)
+		_clamp_battle_camera_target()
+		_apply_battle_camera()
+	, 0.0, 1.0, duration)
+	battle_camera_return_tween.finished.connect(func() -> void:
+		battle_camera_returning = false
+		battle_camera_return_delay = 0.0
+		battle_camera_return_tween = null
+		_clamp_battle_camera_target()
+		_apply_battle_camera()
+	)
 
 
 func _configure_environment() -> void:
@@ -2100,6 +2160,13 @@ func clear_house_hover() -> void:
 func reset_battle_camera() -> void:
 	if combat == null or camera == null:
 		return
+	battle_camera_following = false
+	battle_camera_user_hold = false
+	battle_camera_return_delay = 0.0
+	battle_camera_returning = false
+	if battle_camera_return_tween != null and battle_camera_return_tween.is_valid():
+		battle_camera_return_tween.kill()
+		battle_camera_return_tween = null
 	var max_height := 0.0
 	for raw_height in combat.heights.values():
 		max_height = maxf(max_height, float(raw_height))
@@ -2133,6 +2200,8 @@ func pan_battle_camera(pixel_delta: Vector2) -> void:
 	if phase != "combat" or combat == null:
 		return
 	battle_camera_following = false
+	battle_camera_user_hold = true
+	_cancel_battle_camera_return()
 	var units_per_pixel := camera.size / maxf(1.0, world_view_rect.size.y)
 	var right := Vector3(camera.global_transform.basis.x.x, 0.0, camera.global_transform.basis.x.z).normalized()
 	var screen_up := Vector3(camera.global_transform.basis.y.x, 0.0, camera.global_transform.basis.y.z).normalized()
@@ -2145,6 +2214,8 @@ func orbit_battle_camera(pixel_delta: Vector2) -> void:
 	if phase != "combat" or combat == null:
 		return
 	battle_camera_following = false
+	battle_camera_user_hold = true
+	_cancel_battle_camera_return()
 	battle_camera_yaw = fposmod(battle_camera_yaw - pixel_delta.x * CAMERA_ORBIT_SENSITIVITY, TAU)
 	_apply_battle_camera()
 
@@ -2153,6 +2224,7 @@ func zoom_battle_camera(view_pos: Vector2, zoom_factor: float) -> void:
 	if phase != "combat" or combat == null:
 		return
 	battle_camera_following = false
+	_cancel_battle_camera_return()
 	var before: Variant = _screen_to_plane(view_pos, 0.0)
 	camera.size = clampf(camera.size * zoom_factor, battle_camera_fit_size * CAMERA_ZOOM_MIN, battle_camera_fit_size * CAMERA_ZOOM_MAX)
 	battle_camera_zoom_ratio = camera.size / maxf(0.001, battle_camera_fit_size)
@@ -2168,8 +2240,8 @@ func zoom_battle_camera(view_pos: Vector2, zoom_factor: float) -> void:
 func _clamp_battle_camera_target() -> void:
 	if combat == null:
 		return
-	var limit_x := (float(combat.cols - 1) * 0.5 + 1.0) * BATTLE_CELL
-	var limit_z := (float(combat.rows - 1) * 0.5 + 1.0) * BATTLE_CELL
+	var limit_x := (float(combat.cols - 1) * 0.5 + 1.6) * BATTLE_CELL
+	var limit_z := (float(combat.rows - 1) * 0.5 + 1.6) * BATTLE_CELL
 	battle_camera_target.x = clampf(battle_camera_target.x, -limit_x, limit_x)
 	battle_camera_target.z = clampf(battle_camera_target.z, -limit_z, limit_z)
 
@@ -2903,6 +2975,31 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
 		presenter.set_obscured(not revealed)
 	if not is_player:
 		_add_label(node, "PawnLabel", "怪" if revealed else "?", Vector3(0, floor_y + 2.05, 0), Color.WHITE if revealed else COL_GOLD, 31)
+		if revealed and combat != null and str(combat.outcome) == "":
+			var intent: Dictionary = combat.preview_intent()
+			var intent_label := Label3D.new()
+			intent_label.name = "EnemyIntent"
+			intent_label.position = Vector3(0, floor_y + 2.62, 0)
+			intent_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			intent_label.no_depth_test = true
+			intent_label.font_size = 42
+			intent_label.outline_size = 10
+			intent_label.outline_modulate = Color("10151c")
+			intent_label.modulate = _battle_intent_color(str(intent.get("type", "stall")))
+			intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			var intent_text := str(intent.get("label", ""))
+			intent_label.text = intent_text if not intent_text.is_empty() else "观望"
+			node.add_child(intent_label)
+
+
+func _battle_intent_color(intent_type: String) -> Color:
+	match intent_type:
+		"attack": return Color("ff5a4e")
+		"chase": return Color("ff9c4a")
+		"search": return Color("6ab7e8")
+		"patrol": return Color("5fd6c6")
+		"ambush": return Color("e06bb4")
+	return Color("c8d4d8")
 
 
 func _battle_actor_presentation(actor_key: String) -> Dictionary:
@@ -3334,7 +3431,7 @@ func _start_house_camera_return() -> void:
 
 
 func _clamp_house_camera_target() -> void:
-	var limit := maxf(HOUSE_CELL * 2.0, house_camera_fit_size * 0.85)
+	var limit := maxf(HOUSE_CELL * 6.0, house_camera_fit_size * 1.5)
 	house_camera_target.x = clampf(house_camera_target.x, -limit, limit)
 	house_camera_target.z = clampf(house_camera_target.z, -limit, limit)
 

@@ -40,15 +40,20 @@ func _run() -> void:
 	_check(game.combat != null and game.combat.hand.size() > 0, "combat must deal a hand")
 	if game.combat != null and not game.combat.hand.is_empty():
 		var hud: Control = game.hud
+		# 等发牌飞行动画结束（flight offsets 清空）再检查静态布局
+		await create_timer(0.5).timeout
+		hud.queue_redraw()
 		await process_frame
-		# 手牌布局：弧形（中间卡高于两端卡）
+		# 手牌布局：固定宽度、均匀重叠错落（不再按数量压扁）
 		var rects: Array = hud.combat_card_rects
 		_check(rects.size() == game.combat.hand.size(), "combat card rects must match hand size")
-		if rects.size() >= 3:
-			var mid_idx := int(float(rects.size() - 1) * 0.5)
-			var mid_y: float = (rects[mid_idx] as Rect2).position.y
-			var edge_y: float = (rects[0] as Rect2).position.y
-			_check(mid_y < edge_y, "arc layout: middle card should sit higher than edge cards (mid=%.1f edge=%.1f)" % [mid_y, edge_y])
+		if rects.size() >= 2:
+			var first_w: float = (rects[0] as Rect2).size.x
+			var gap: float = (rects[1] as Rect2).position.x - (rects[0] as Rect2).position.x
+			_check(is_equal_approx(first_w, 120.0), "hand cards must keep a fixed width")
+			_check(gap > 0.0 and gap < first_w, "hand cards must overlap with fixed spacing")
+			for i in range(1, rects.size()):
+				_check(is_equal_approx((rects[i] as Rect2).position.x - (rects[i - 1] as Rect2).position.x, gap), "hand spacing must stay uniform")
 		# 发牌动效：逐张飞行（stagger 延迟应使不同卡同时处于不同进度）
 		hud._update_card_flights("", ",".join(game.combat.hand))
 		await create_timer(0.06).timeout
@@ -93,7 +98,7 @@ func _check(condition: bool, message: String) -> void:
 
 func _finish() -> void:
 	if failures.is_empty():
-		print("CHANNEL_CARD_SYSTEM: PASS frames icons arc-layout deal-flight")
+		print("CHANNEL_CARD_SYSTEM: PASS frames icons staggered-hand deal-flight")
 		quit(0)
 	else:
 		for failure: String in failures:
