@@ -31,18 +31,18 @@ const RED := Color("d9574f")
 const BLUE := Color("4c92bd")
 
 const DESIGN_SIZE := Vector2(1280, 800)
-const HOUSE_VIEW_RECT := Rect2(20, 96, 952, 578)
-const BUILD_VIEW_RECT := Rect2(20, 96, 952, 340)
-const COMBAT_VIEW_RECT := Rect2(20, 224, 1244, 544)
+const HOUSE_VIEW_RECT := Rect2(20, 88, 968, 586)
+const BUILD_VIEW_RECT := Rect2(20, 88, 968, 376)
+const COMBAT_VIEW_RECT := Rect2(20, 216, 1244, 384)
 
-const RESET_RECT := Rect2(1142, 24, 110, 38)
-const CAMERA_RESET_RECT := Rect2(1040, 22, 94, 34)
+const RESET_RECT := Rect2(1142, 17, 110, 38)
+const CAMERA_RESET_RECT := Rect2(1040, 19, 94, 34)
 const OMEN_A_RECT := Rect2(300, 570, 260, 46)
 const OMEN_B_RECT := Rect2(720, 570, 260, 46)
-const BUILD_CARD_RECTS := [Rect2(118, 498, 235, 146), Rect2(371, 498, 235, 146), Rect2(624, 498, 235, 146)]
-const BUILD_ROTATE_RECT := Rect2(118, 670, 220, 48)
-const BUILD_PLACE_RECT := Rect2(353, 670, 302, 48)
-const BUILD_CANCEL_RECT := Rect2(670, 670, 189, 48)
+const BUILD_CARD_RECTS := [Rect2(44, 526, 210, 150), Rect2(270, 526, 210, 150), Rect2(496, 526, 210, 150)]
+const BUILD_ROTATE_RECT := Rect2(734, 526, 230, 42)
+const BUILD_PLACE_RECT := Rect2(734, 580, 230, 48)
+const BUILD_CANCEL_RECT := Rect2(734, 640, 230, 38)
 const ROOM_ACTION_RECT := Rect2(1020, 682, 220, 50)
 const ENTER_PENDING_RECT := Rect2(1020, 620, 220, 46)
 const END_TURN_RECT := Rect2(1015, 704, 230, 48)
@@ -50,19 +50,19 @@ const RETURN_RECT := Rect2(1015, 704, 230, 48)
 const CARD_CANCEL_RECT := Rect2(1015, 668, 230, 28)
 const PORTAL_USE_RECT := Rect2(1015, 646, 112, 44)
 const PORTAL_STAY_RECT := Rect2(1135, 646, 110, 44)
-const HOME_START_RECT := Rect2(576, 350, 255, 48)
-const HOME_TUTORIAL_RECT := Rect2(842, 350, 200, 48)
-const HOME_CONTINUE_RECT := Rect2(1052, 350, 180, 48)
-const HOME_SEED_INPUT_RECT := Rect2(576, 410, 255, 40)
-const HOME_SEED_START_RECT := Rect2(842, 410, 200, 40)
-const HOME_SEED_COPY_RECT := Rect2(1052, 410, 180, 40)
-const HOME_TESTS_RECT := Rect2(576, 464, 230, 38)
-const HOME_TEST_COMBAT_RECT := Rect2(585, 514, 205, 42)
-const HOME_TEST_SIDE_RECT := Rect2(800, 514, 205, 42)
-const HOME_TEST_PUZZLE_RECT := Rect2(585, 566, 205, 42)
-const HOME_TEST_SEARCH_RECT := Rect2(800, 566, 205, 42)
-const HOME_TEST_CHASE_RECT := Rect2(585, 618, 205, 42)
-const HOME_TEST_DIORAMA_RECT := Rect2(800, 618, 205, 42)
+const HOME_START_RECT := Rect2(80, 350, 320, 56)
+const HOME_TUTORIAL_RECT := Rect2(80, 418, 154, 44)
+const HOME_CONTINUE_RECT := Rect2(246, 418, 154, 44)
+const HOME_SEED_INPUT_RECT := Rect2(92, 516, 296, 38)
+const HOME_SEED_START_RECT := Rect2(92, 564, 142, 38)
+const HOME_SEED_COPY_RECT := Rect2(246, 564, 142, 38)
+const HOME_TESTS_RECT := Rect2(1060, 20, 172, 34)
+const HOME_TEST_COMBAT_RECT := Rect2(780, 120, 205, 42)
+const HOME_TEST_SIDE_RECT := Rect2(997, 120, 205, 42)
+const HOME_TEST_PUZZLE_RECT := Rect2(780, 174, 205, 42)
+const HOME_TEST_SEARCH_RECT := Rect2(997, 174, 205, 42)
+const HOME_TEST_CHASE_RECT := Rect2(780, 228, 205, 42)
+const HOME_TEST_DIORAMA_RECT := Rect2(997, 228, 205, 42)
 const LAB_EXIT_RECT := Rect2(1100, 28, 150, 40)
 const LAB_REROLL_RECT := Rect2(520, 86, 180, 32)
 const LAB_HAND_RECT := Rect2(720, 86, 200, 32)
@@ -70,8 +70,8 @@ const LAB_SWITCH_RECT := Rect2(940, 86, 220, 32)
 const PUZZLE_REFRESH_RECT := Rect2(850, 650, 190, 44)
 const CHASE_START_RECT := Rect2(480, 590, 190, 48)
 const CHASE_FORFEIT_RECT := Rect2(690, 590, 190, 48)
-const REWARD_CARD_RECTS := [Rect2(205, 280, 260, 250), Rect2(510, 280, 260, 250), Rect2(815, 280, 260, 250)]
-const REWARD_SKIP_RECT := Rect2(520, 570, 240, 48)
+const REWARD_CARD_RECTS := [Rect2(205, 230, 260, 330), Rect2(510, 230, 260, 330), Rect2(815, 230, 260, 330)]
+const REWARD_SKIP_RECT := Rect2(520, 590, 240, 44)
 
 var game = null
 var combat_card_rects: Array[Rect2] = []
@@ -94,8 +94,8 @@ var card_exit_alphas: Dictionary = {}
 var card_icon_cache: Dictionary = {}
 var exiting_cards: Array[Dictionary] = []
 var last_hand_key := ""
-var deck_flight_origin := Vector2(94, 600)
-var discard_flight_origin := Vector2(910, 600)
+var deck_flight_origin := Vector2(78, 710)
+var discard_flight_origin := Vector2(930, 710)
 var board_left_pressed := false
 var board_left_dragged := false
 var board_left_distance := 0.0
@@ -111,6 +111,20 @@ func _ready() -> void:
 	seed_input.placeholder_text = "输入种子码"
 	seed_input.max_length = 10
 	seed_input.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	seed_input.add_theme_color_override("font_color", TEXT)
+	seed_input.add_theme_color_override("font_placeholder_color", Color("b9a9c3"))
+	var seed_style := StyleBoxFlat.new()
+	seed_style.bg_color = Color("17101fd9")
+	seed_style.border_color = Color("8f6aa2")
+	seed_style.set_border_width_all(2)
+	seed_style.corner_radius_top_left = 3
+	seed_style.corner_radius_top_right = 3
+	seed_style.corner_radius_bottom_left = 3
+	seed_style.corner_radius_bottom_right = 3
+	seed_input.add_theme_stylebox_override("normal", seed_style)
+	var seed_focus := seed_style.duplicate() as StyleBoxFlat
+	seed_focus.border_color = MAGENTA
+	seed_input.add_theme_stylebox_override("focus", seed_focus)
 	seed_input.text_submitted.connect(_submit_seed_input)
 	add_child(seed_input)
 	set_process_input(true)
@@ -200,18 +214,19 @@ func _hand_card_anchor_position(card_id: String, hand_ids: Array) -> Vector2:
 	var idx := hand_ids.find(card_id)
 	if idx < 0:
 		return Vector2(250, 514)
-	var hand_rect := _combat_layout_rect("HandArea", Rect2(250, 514, 580, 168))
+	var hand_rect := _combat_layout_rect("HandArea", Rect2(190, 608, 660, 188))
 	var count := maxi(1, hand_ids.size())
-	var card_width := minf(124.0, hand_rect.size.x / float(count))
-	var card_height := minf(card_width * 154.0 / 124.0, hand_rect.size.y - 8.0)
-	var total_width := card_width + minf(card_width, (hand_rect.size.x - card_width) / maxf(1.0, float(count - 1))) * maxf(0.0, float(count - 1))
+	var card_width := minf(110.0, hand_rect.size.x / float(count))
+	var card_height := minf(card_width * 1.66, hand_rect.size.y - 8.0)
+	var spacing := minf(card_width * 0.86, (hand_rect.size.x - card_width) / maxf(1.0, float(count - 1)))
+	var total_width := card_width + spacing * maxf(0.0, float(count - 1))
 	var start_x := hand_rect.position.x + (hand_rect.size.x - total_width) * 0.5
 	var t_curve: float = 0.0
 	if count > 1:
 		t_curve = (float(idx) / float(count - 1)) * 2.0 - 1.0
 	var x := lerpf(start_x, start_x + total_width - card_width, (t_curve + 1.0) * 0.5)
-	var base_y := hand_rect.position.y + hand_rect.size.y - card_height
-	var arc_y := base_y + 30.0 * (t_curve * t_curve) - 6.0
+	var base_y := hand_rect.end.y - card_height - 4.0
+	var arc_y := base_y - 18.0 * (1.0 - t_curve * t_curve)
 	return Vector2(x + card_width * 0.5, arc_y + card_height * 0.5)
 
 
@@ -316,13 +331,13 @@ func calculate_layout(viewport_size: Vector2, phase_name: String) -> Dictionary:
 	scale_value = maxf(0.1, scale_value)
 	var offset_value := (viewport_size - DESIGN_SIZE * scale_value) * 0.5
 	var board_design := _design_world_rect(phase_name)
-	var coach_design := Rect2(20, 690, 952, 68) if phase_name == "combat" else Rect2(24, 686, 948, 74)
+	var coach_design := Rect2(20, 690, 968, 68) if phase_name == "combat" else Rect2(20, 686, 968, 74)
 	return {
 		"scale": scale_value,
 		"offset": offset_value,
 		"board_rect": _scale_rect(board_design, scale_value, offset_value),
-		"top_rect": _scale_rect(Rect2(0, 0, 1280, 84), scale_value, offset_value),
-		"side_rect": _scale_rect(Rect2(996, 96, 268, 672), scale_value, offset_value),
+		"top_rect": _scale_rect(Rect2(0, 0, 1280, 72), scale_value, offset_value),
+		"side_rect": _scale_rect(Rect2(1004, 88, 260, 680), scale_value, offset_value),
 		"coach_rect": _scale_rect(coach_design, scale_value, offset_value),
 	}
 
@@ -380,14 +395,18 @@ func _draw() -> void:
 
 
 func _draw_top_bar() -> void:
-	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 84), Color("101820ee"), true)
-	draw_rect(Rect2(0, 80, DESIGN_SIZE.x, 4), TEAL, true)
-	_label("织梦频道 · 3D BRIDGE", Vector2(24, 34), 23, TEXT)
-	_label("%s · SEED %d" % [game.latest_source_label(), game.run_seed], Vector2(24, 60), 12, Color("70cdbf"))
-	_draw_chip(Rect2(560, 22, 112, 34), "速度 %d" % int(game.player_speed), TEAL, TEXT, 12)
-	_draw_chip(Rect2(680, 22, 112, 34), "生命 %d/%d" % [game.player_hp, game.player_max_hp], RED, TEXT, 12)
-	_draw_chip(Rect2(800, 22, 112, 34), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 12)
-	_draw_chip(Rect2(920, 22, 112, 34), "%s" % _phase_label(), MAGENTA if game.phase == "combat" else Color("344751"), TEXT, 11)
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 72), Color("101820f4"), true)
+	draw_rect(Rect2(0, 69, DESIGN_SIZE.x, 3), TEAL, true)
+	_label("织梦频道", Vector2(24, 29), 21, TEXT)
+	_label("第 %02d 集 · 种子 %010d" % [game.run_progress, game.run_seed], Vector2(24, 52), 11, Color("70cdbf"))
+	if game.phase == "combat":
+		_draw_chip(Rect2(800, 18, 112, 32), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 11)
+		_draw_chip(Rect2(920, 18, 112, 32), _phase_label(), MAGENTA, TEXT, 11)
+	else:
+		_draw_chip(Rect2(560, 18, 112, 32), "速度 %d" % int(game.player_speed), TEAL, TEXT, 11)
+		_draw_chip(Rect2(680, 18, 112, 32), "生命 %d/%d" % [game.player_hp, game.player_max_hp], RED, TEXT, 11)
+		_draw_chip(Rect2(800, 18, 112, 32), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 11)
+		_draw_chip(Rect2(920, 18, 112, 32), _phase_label(), Color("344751"), TEXT, 11)
 	if game.phase == "combat" or game.phase in ["explore", "build", "room_ready"]:
 		_draw_button(CAMERA_RESET_RECT, "镜头复位" if game.phase == "combat" else "地图复位", TEAL, TEXT)
 	if not game.phase.begins_with("lab_"):
@@ -395,37 +414,35 @@ func _draw_top_bar() -> void:
 
 
 func _draw_home() -> void:
-	# 视频循环动画已在背后播放；这里只铺一层半透明暗色让文字可读。
-	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, DESIGN_SIZE.y), Color(0.05, 0.02, 0.07, 0.55), true)
-	# 顶部品牌条
-	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 74), Color("0d0512d9"), true)
-	draw_rect(Rect2(0, 72, DESIGN_SIZE.x, 3), Color("452655"), true)
-	_label("channel dream", Vector2(34, 34), 13, Color("8e699e"))
-	_label("织梦频道", Vector2(34, 58), 20, Color("f7e8ff"))
-	# 主标题区
-	_label("信号锁定 · CH-198X", Vector2(84, 150), 13, Color("a98cc0"))
-	_label("山屋奇妙夜", Vector2(80, 196), 56, Color("f4ecff"))
-	_draw_wrapped("拧开织梦频道的旋钮，走进一栋会咬人的山屋。出牌就是往场地放道具；跑动逼怪把行动力花在追你身上。", Vector2(84, 252), 620, 15, Color("d6c6e6"))
-	# 主按钮：打开电视机（洋红贴图）
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, DESIGN_SIZE.y), Color(0.04, 0.015, 0.055, 0.48), true)
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 68), Color("0d0512e8"), true)
+	draw_rect(Rect2(0, 66, DESIGN_SIZE.x, 3), Color("6c3a7e"), true)
+	_label("CHANNEL DREAM · CH-198X", Vector2(34, 41), 13, Color("b997c8"))
+	_label("今晚播出 · 纸盒片场正在失控", Vector2(84, 132), 13, Color("d7a7e7"))
+	_label("织梦频道", Vector2(78, 204), 62, Color("fff7ff"))
+	_label("一档会记住你的荒诞儿童玩具秀", Vector2(84, 246), 20, Color("f3c96b"))
+	_draw_wrapped("拧开旧电视，走进会咬人的纸盒布景。把道具摆进场地，用走位把怪家伙引进一场场节目事故。", Vector2(84, 286), 470, 15, Color("dfd1e7"))
 	_draw_texture_button(HOME_START_RECT, "打开电视机", BTN_START_TEXTURE, Color.WHITE, 15)
-	# 次按钮：新手教学 / 接着看上集（青贴图）
 	_draw_texture_button(HOME_TUTORIAL_RECT, "新手教学", BTN_END_TEXTURE, Color.WHITE, 14)
 	if game.has_saved_run():
 		_draw_texture_button(HOME_CONTINUE_RECT, "接着看上集", BTN_END_TEXTURE, Color.WHITE, 13)
+	draw_rect(Rect2(72, 482, 336, 132), Color("100b17d9"), true)
+	draw_rect(Rect2(72, 482, 336, 132), Color("725184"), false, 2.0)
+	_label("自定义播出", Vector2(92, 505), 11, Color("cbb6d4"))
 	_draw_button(HOME_SEED_START_RECT, "按种子开局", Color("355e5d"), TEXT)
-	_draw_button(HOME_SEED_COPY_RECT, "复制当前种子", Color("394852"), TEXT)
-	# 节目测试台（米白面板，保留原功能）
-	_draw_button(HOME_TESTS_RECT, "▼ 节目测试台" if game.home_tests_open else "▶ 节目测试台", Color("f7e8c5"), INK)
+	_draw_button(HOME_SEED_COPY_RECT, "复制种子", Color("394852"), TEXT)
+	_draw_button(HOME_TESTS_RECT, "关闭后台" if game.home_tests_open else "后台测试", Color("34263d"), TEXT)
 	if game.home_tests_open:
-		draw_rect(Rect2(565, 504, 460, 166), Color("fff8e8"), true)
-		draw_rect(Rect2(565, 504, 460, 166), INK, false, 2.0)
+		draw_rect(Rect2(764, 96, 454, 188), Color("100b17ed"), true)
+		draw_rect(Rect2(764, 96, 454, 188), Color("8f6aa2"), false, 2.0)
+		_label("节目后台 · 仅供开发检查", Vector2(780, 112), 10, Color("cbb6d4"))
 		_draw_button(HOME_TEST_COMBAT_RECT, "战斗意图实验", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_SIDE_RECT, "WASD 横版手感", TEAL, TEXT)
 		_draw_button(HOME_TEST_PUZZLE_RECT, "八数码拼图", GOLD, INK)
 		_draw_button(HOME_TEST_SEARCH_RECT, "3D 微缩搜物", Color("7863a5"), TEXT)
 		_draw_button(HOME_TEST_CHASE_RECT, "警察抓小偷", RED, TEXT)
 		_draw_button(HOME_TEST_DIORAMA_RECT, "桌模扩建 PCG", Color("5967a8"), TEXT)
-	_label("走位引怪踩机关 · 不同怪物破韧奖励不同 · 悬停卡牌听旁白", Vector2(84, 720), 13, Color("b49fd0"))
+	_label("纸盒布景 · 黏土演员 · 每次开播都是不同的一集", Vector2(84, 734), 13, Color("c9afd5"))
 
 
 func _draw_lab_hud() -> void:
@@ -516,55 +533,67 @@ func _draw_chase() -> void:
 
 
 func _draw_reward_modal() -> void:
-	draw_rect(Rect2(0, 84, DESIGN_SIZE.x, DESIGN_SIZE.y - 84), Color("071116f2"), true)
-	_label("节目奖励 · 本局成长", Vector2(475, 180), 28, TEXT)
-	_label("选择一项加入本集；后续战斗会继续使用现在这副牌库。", Vector2(408, 218), 14, MUTED)
+	draw_rect(Rect2(0, 72, DESIGN_SIZE.x, DESIGN_SIZE.y - 72), Color("071116fb"), true)
+	_label("本集道具台", Vector2(536, 138), 30, TEXT)
+	_label("节目组只准带走一件；它会继续跟着演员参与本集。", Vector2(430, 174), 14, MUTED)
 	for i in range(mini(REWARD_CARD_RECTS.size(), game.reward_options.size())):
 		var reward: Dictionary = game.reward_options[i]
 		var rect: Rect2 = REWARD_CARD_RECTS[i]
+		var kind := str(reward.get("kind", "stat"))
+		var accent: Color = TEAL if kind == "card" else MAGENTA if kind == "relic" else GOLD
 		draw_rect(Rect2(rect.position + Vector2(0, 6), rect.size), Color("03070a"), true)
 		draw_rect(rect, PAPER, true)
-		draw_rect(Rect2(rect.position, Vector2(rect.size.x, 12)), [TEAL, GOLD, MAGENTA][i], true)
+		draw_rect(Rect2(rect.position, Vector2(rect.size.x, 12)), accent, true)
 		draw_rect(rect, INK, false, 2.0)
-		_label(game.reward_title(reward), rect.position + Vector2(22, 58), 20, INK)
-		_draw_wrapped(game.reward_description(reward), rect.position + Vector2(22, 100), rect.size.x - 44, 13, Color("584d43"))
-		_draw_button(Rect2(rect.position + Vector2(35, 190), Vector2(190, 42)), "收下", [TEAL, GOLD, MAGENTA][i], TEXT if i != 1 else INK)
-	_draw_button(REWARD_SKIP_RECT, "跳过，保持精简", Color("4f5960"), TEXT)
+		_draw_chip(Rect2(rect.position + Vector2(18, 26), Vector2(86, 24)), _reward_kind_label(kind), accent, TEXT if kind != "stat" else INK, 10)
+		var art_rect := Rect2(rect.position + Vector2(54, 58), Vector2(152, 104))
+		var reward_icon: Texture2D = _reward_icon(reward)
+		if reward_icon != null:
+			_draw_texture_contained(reward_icon, art_rect, Color.WHITE)
+		else:
+			draw_circle(art_rect.get_center(), 42.0, Color(accent, 0.18))
+			_draw_centered("+", art_rect, 46, accent)
+		_label(_shorten(game.reward_title(reward), 13), rect.position + Vector2(22, 194), 20, INK)
+		_draw_wrapped(_shorten(game.reward_description(reward), 66), rect.position + Vector2(22, 226), rect.size.x - 44, 12, Color("584d43"))
+		_draw_button(Rect2(rect.position + Vector2(35, 274), Vector2(190, 40)), "带走", accent, TEXT if kind != "stat" else INK)
+	_draw_button(REWARD_SKIP_RECT, "什么也不拿", Color("4f5960"), TEXT)
 
 
 func _draw_house_hud() -> void:
 	var room: Dictionary = game.current_room()
 	var revealed := bool(room.get("revealed", false)) or bool(room.get("completed", false))
-	if game.kenney_build_lab_mode:
-		_draw_chip(Rect2(32, 102, 245, 30), "KAYKIT 桌模 · 山屋扩建", Color("3e8b78"), TEXT, 11)
+	if game.show_house_diagnostics:
+		_draw_chip(Rect2(32, 102, 245, 30), "KAYKIT 桌模 · 布景扩建", Color("3e8b78"), TEXT, 11)
 		_draw_chip(Rect2(290, 102, 680, 30), game.pcg_cutaway_debug_text(), Color("394852"), TEXT, 10)
 		_draw_chip(Rect2(290, 138, 500, 28), game.pcg_room_state_debug_text(), Color("46545b"), TEXT, 10)
 		_draw_chip(Rect2(802, 138, 168, 28), "小型 + = 扩建口", Color("c88b2f"), INK, 10)
-	var side := Rect2(996, 96, 268, 672)
+	var side := Rect2(1004, 88, 260, 680)
 	draw_rect(side, Color("f8e9c7f5"), true)
 	draw_rect(side, INK, false, 3.0)
-	draw_rect(Rect2(996, 96, 10, 672), TEAL, true)
-	_label("当前房间", Vector2(1020, 126), 11, Color("806448"))
-	_label(str(room.get("name", "玄关")) if revealed else "未知房", Vector2(1020, 158), 23, INK)
-	_draw_chip(Rect2(1020, 174, 116, 30), _room_kind_label(room) if revealed else "未揭示", _room_kind_color(room) if revealed else Color("4f5960"), TEXT, 11)
-	_label("今天的行程", Vector2(1020, 234), 11, Color("806448"))
-	_draw_bar(Rect2(1020, 247, 220, 13), game.run_progress, int(game.content.get("run_length", 12)), GOLD, Color("bba781"))
-	_label("%d / %d" % [game.run_progress, int(game.content.get("run_length", 12))], Vector2(1020, 282), 14, INK)
+	draw_rect(Rect2(1004, 88, 8, 680), TEAL, true)
+	_label("正在播出", Vector2(1024, 120), 11, Color("806448"))
+	_label(str(room.get("name", "玄关")) if revealed else "未知布景", Vector2(1024, 154), 23, INK)
+	_draw_chip(Rect2(1024, 170, 116, 30), _room_kind_label(room) if revealed else "信号未解码", _room_kind_color(room) if revealed else Color("4f5960"), TEXT, 11)
+	draw_rect(Rect2(1024, 218, 216, 1), Color("bda981"), true)
+	_label("本集进度", Vector2(1024, 248), 11, Color("806448"))
+	_draw_bar(Rect2(1024, 261, 216, 13), game.run_progress, int(game.content.get("run_length", 12)), GOLD, Color("bba781"))
+	_label("%d / %d 个布景" % [game.run_progress, int(game.content.get("run_length", 12))], Vector2(1024, 296), 13, INK)
 
-	_label("行前预兆", Vector2(1020, 326), 11, Color("806448"))
+	_label("随身预兆", Vector2(1024, 338), 11, Color("806448"))
 	var omen: Dictionary = game.current_omen()
 	if omen.is_empty():
-		_label("尚未选择", Vector2(1020, 352), 14, Color("8b6b56"))
+		_label("尚未选择", Vector2(1024, 364), 14, Color("8b6b56"))
 	else:
-		draw_texture_rect(OMEN_ICON, Rect2(1018, 340, 36, 36), false)
-		_label(_shorten(str(omen.get("name", "预兆")), 12), Vector2(1062, 361), 14, Color("834b21"))
-		_draw_wrapped(_shorten(str(omen.get("desc", "")), 48), Vector2(1020, 392), 220, 11, Color("594f45"))
+		draw_texture_rect(OMEN_ICON, Rect2(1022, 350, 36, 36), false)
+		_label(_shorten(str(omen.get("name", "预兆")), 12), Vector2(1066, 373), 14, Color("834b21"))
+		_draw_wrapped(_shorten(str(omen.get("desc", "")), 48), Vector2(1024, 404), 216, 11, Color("594f45"))
 
-	_label("旁白碎碎念", Vector2(1020, 452), 11, Color("806448"))
+	draw_rect(Rect2(1024, 448, 216, 1), Color("bda981"), true)
+	_label("导播记录", Vector2(1024, 478), 11, Color("806448"))
 	var log_start := maxi(0, game.event_log.size() - 3)
-	var y := 477.0
+	var y := 503.0
 	for i in range(log_start, game.event_log.size()):
-		_draw_wrapped("• " + _shorten(str(game.event_log[i]), 30), Vector2(1020, y), 220, 10, Color("554e48"))
+		_draw_wrapped("• " + _shorten(str(game.event_log[i]), 30), Vector2(1024, y), 216, 10, Color("554e48"))
 		y += 42.0
 
 	if game.phase == "room_ready":
@@ -573,69 +602,74 @@ func _draw_house_hud() -> void:
 	elif game.phase == "explore" and game.pending_room_pos != game.current_room_pos and game._rooms_connected(game.current_room_pos, game.pending_room_pos):
 		_draw_button(ENTER_PENDING_RECT, "走进新房间", MAGENTA, TEXT)
 
-	_draw_coach(Rect2(24, 686, 948, 74), "导播耳语", game.status_message)
 	if game.phase == "build":
 		_draw_build_dock()
+	else:
+		_draw_coach(Rect2(20, 686, 968, 74), "导播耳语", game.status_message)
 
 
 func _draw_build_dock() -> void:
-	draw_rect(Rect2(88, 448, 802, 292), Color("111b23ed"), true)
-	draw_rect(Rect2(88, 448, 802, 292), Color("6bbeb1"), false, 3.0)
-	_label("盖屋 · 扩建 %s" % game.selected_frontier, Vector2(112, 478), 16, TEXT)
-	_label("三张票根只显示房名和门型；走进去才知道是安静、事件还是惊吓。", Vector2(335, 478), 11, MUTED)
+	draw_rect(Rect2(20, 478, 968, 290), Color("111b23f5"), true)
+	draw_rect(Rect2(20, 478, 968, 290), Color("6bbeb1"), false, 3.0)
+	draw_rect(Rect2(20, 478, 968, 8), TEAL, true)
+	_label("下一块布景", Vector2(44, 511), 17, TEXT)
+	_label("选票根、对门位、摆上节目台；内容要等演员走进去才揭晓。", Vector2(194, 511), 11, MUTED)
 	for i in range(mini(3, game.build_offers.size())):
 		var room: Dictionary = game.build_offers[i]
 		var rect: Rect2 = BUILD_CARD_RECTS[i]
 		var selected: bool = i == int(game.selected_offer)
 		draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), Color("050a0e"), true)
 		draw_rect(rect, PAPER, true)
-		draw_rect(Rect2(rect.position, Vector2(38, rect.size.y)), GOLD, true)
+		draw_rect(Rect2(rect.position, Vector2(34, rect.size.y)), GOLD, true)
 		draw_rect(rect, TEAL if selected else Color("9f7a55"), false, 4.0 if selected else 2.0)
 		if selected and game.can_place_selected_offer():
-			_draw_chip(Rect2(rect.position + Vector2(50, 8), Vector2(96, 24)), "门已对上", GREEN, TEXT, 9)
-		_label("?", rect.position + Vector2(13, 69), 28, MAGENTA)
-		_label(_shorten(str(room.get("name", "房间")), 10), rect.position + Vector2(54, 72), 18, INK)
-		_label("%d格 %s · %s" % [int(room.get("room_size", 1)), str(room.get("footprint_kind", "single")), _door_shape(room.get("doors", []))], rect.position + Vector2(54, 104), 11, Color("776553"))
+			_draw_chip(Rect2(rect.position + Vector2(44, 8), Vector2(88, 24)), "可以摆下", GREEN, TEXT, 9)
+		_label("?", rect.position + Vector2(10, 74), 26, MAGENTA)
+		_label(_shorten(str(room.get("name", "房间")), 9), rect.position + Vector2(44, 66), 17, INK)
+		_label("%d格 · %s" % [int(room.get("room_size", 1)), _footprint_label(str(room.get("footprint_kind", "single")))], rect.position + Vector2(44, 94), 10, Color("776553"))
+		_label("%s门" % _door_shape(room.get("doors", [])), rect.position + Vector2(44, 116), 10, Color("776553"))
 		if selected:
-			_label("ROT %d° · %s" % [game.offer_rotation * 90, _door_text(game.room_rules.rotated_doors(room.get("doors", []), game.offer_rotation))], rect.position + Vector2(54, 128), 10, Color("5e5146"))
-	_draw_button(BUILD_ROTATE_RECT, "↻ 房间转向 90°", TEAL, TEXT)
-	_draw_button(BUILD_PLACE_RECT, "摆下", GREEN if game.can_place_selected_offer() else Color("6a5554"), TEXT)
-	_draw_button(BUILD_CANCEL_RECT, "× 取消", Color("303947"), TEXT)
+			_label("朝向 %d° · 门：%s" % [game.offer_rotation * 90, _door_text(game.room_rules.rotated_doors(room.get("doors", []), game.offer_rotation))], rect.position + Vector2(44, 138), 9, Color("5e5146"))
+	_draw_button(BUILD_ROTATE_RECT, "房间转向 90°", TEAL, TEXT)
+	_draw_button(BUILD_PLACE_RECT, "摆上节目台", GREEN if game.can_place_selected_offer() else Color("6a5554"), TEXT)
+	_draw_button(BUILD_CANCEL_RECT, "取消扩建", Color("303947"), TEXT)
 
 
 func _draw_omen_modal() -> void:
-	draw_rect(Rect2(0, 84, DESIGN_SIZE.x, DESIGN_SIZE.y - 84), Color("071116d9"), true)
-	_draw_ticket_panel(Rect2(210, 132, 860, 520), PAPER, GOLD)
-	_label("行前预兆", Vector2(250, 182), 30, INK)
-	_label("拧开旋钮前，频道送来两枚预兆——选一枚随身带走。", Vector2(250, 216), 14, Color("6b5d50"))
+	draw_rect(Rect2(0, 72, DESIGN_SIZE.x, DESIGN_SIZE.y - 72), Color("071116f7"), true)
+	_label("开播前的两张提词卡", Vector2(438, 148), 30, TEXT)
+	_label("频道会兑现其中一条；另一条会被剪掉。", Vector2(492, 184), 14, MUTED)
 	for i in range(mini(2, game.omen_options.size())):
 		var relic_id: String = game.omen_options[i]
 		var relic: Dictionary = game.content.get("relics", {}).get(relic_id, {})
 		var x := 270.0 + i * 420.0
 		var rect := Rect2(x, 260, 320, 275)
-		draw_rect(Rect2(rect.position + Vector2(0, 5), rect.size), Color("5b432d66"), true)
+		var accent := TEAL if i == 0 else MAGENTA
+		draw_rect(Rect2(rect.position + Vector2(0, 6), rect.size), Color("03070a"), true)
 		draw_rect(rect, Color("fff4d8"), true)
-		draw_rect(Rect2(rect.position, Vector2(rect.size.x, 12)), TEAL if i == 0 else MAGENTA, true)
-		draw_rect(rect, Color("8f7155"), false, 2.0)
-		draw_texture_rect(OMEN_ICON, Rect2(x + 24, 290, 62, 62), false)
-		_label(str(relic.get("name", relic_id)), Vector2(x + 102, 326), 21, INK)
-		_draw_chip(Rect2(x + 102, 342, 92, 28), "预兆 · 常驻", TEAL if i == 0 else MAGENTA, TEXT, 10)
-		_draw_wrapped(str(relic.get("desc", "")), Vector2(x + 24, 408), 270, 14, Color("584d43"))
-	_draw_button(OMEN_A_RECT, "带上左边预兆", TEAL, TEXT)
-	_draw_button(OMEN_B_RECT, "带上右边预兆", MAGENTA, TEXT)
+		draw_rect(Rect2(rect.position, Vector2(rect.size.x, 12)), accent, true)
+		draw_rect(rect, accent, false, 2.0)
+		draw_circle(Vector2(x + 52, 310), 28.0, Color(accent, 0.18))
+		draw_texture_rect(OMEN_ICON, Rect2(x + 26, 284, 52, 52), false, Color(1, 1, 1, 0.92))
+		_label("A" if i == 0 else "B", Vector2(x + 278, 302), 18, accent)
+		_label(_shorten(str(relic.get("name", relic_id)), 12), Vector2(x + 96, 318), 21, INK)
+		_draw_chip(Rect2(x + 96, 336, 96, 26), "全程生效", accent, TEXT, 10)
+		_draw_wrapped(_shorten(str(relic.get("desc", "")), 80), Vector2(x + 26, 404), 268, 13, Color("584d43"))
+	_draw_button(OMEN_A_RECT, "采用 A 提词卡", TEAL, TEXT)
+	_draw_button(OMEN_B_RECT, "采用 B 提词卡", MAGENTA, TEXT)
 
 
 func _draw_combat_hud() -> void:
 	var combat = game.combat
 	var intent: Dictionary = combat.preview_intent()
-	var intent_rect := _combat_layout_rect("IntentArea", Rect2(310, 100, 330, 112))
-	var action_rect := _combat_layout_rect("ActionArea", Rect2(996, 96, 268, 116))
-	var hand_rect := _combat_layout_rect("HandArea", Rect2(250, 514, 580, 168))
-	var deck_rect := _combat_layout_rect("DeckArea", Rect2(42, 532, 104, 140))
-	var discard_rect := _combat_layout_rect("DiscardArea", Rect2(858, 532, 104, 140))
-	_draw_actor_strip(Rect2(20, 100, 278, 112), PLAYER_PROFILE, "小主角", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_block, 4, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
+	var intent_rect := _combat_layout_rect("IntentArea", Rect2(310, 92, 330, 112))
+	var action_rect := _combat_layout_rect("ActionArea", Rect2(996, 92, 268, 112))
+	var hand_rect := _combat_layout_rect("HandArea", Rect2(190, 608, 660, 188))
+	var deck_rect := _combat_layout_rect("DeckArea", Rect2(24, 632, 108, 156))
+	var discard_rect := _combat_layout_rect("DiscardArea", Rect2(876, 632, 108, 156))
+	_draw_actor_strip(Rect2(20, 92, 278, 112), PLAYER_PROFILE, "莉莉", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_block, 4, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
 	_draw_intent_strip(intent_rect, intent)
-	_draw_actor_strip(Rect2(652, 100, 320, 112), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, combat.enemy_hp if combat.enemy_revealed else -1, combat.enemy_max_hp, "韧性", combat.enemy_toughness if combat.enemy_revealed else 0, combat.enemy_max_toughness, "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
+	_draw_actor_strip(Rect2(652, 92, 320, 112), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, combat.enemy_hp if combat.enemy_revealed else -1, combat.enemy_max_hp, "韧性", combat.enemy_toughness if combat.enemy_revealed else 0, combat.enemy_max_toughness, "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
 
 	draw_rect(action_rect, Color("101820f4"), true)
 	draw_rect(action_rect, GOLD, false, 3.0)
@@ -649,40 +683,44 @@ func _draw_combat_hud() -> void:
 	if hand_key != last_hand_key:
 		_update_card_flights(last_hand_key, hand_key)
 		last_hand_key = hand_key
-	var card_width := minf(124.0, hand_rect.size.x / maxf(1.0, float(combat.hand.size())))
-	var card_height := minf(card_width * 154.0 / 124.0, hand_rect.size.y - 8.0)
-	var spacing := card_width
+	var card_width := minf(110.0, hand_rect.size.x / maxf(1.0, float(combat.hand.size())))
+	var card_height := minf(card_width * 1.66, hand_rect.size.y - 8.0)
+	var spacing := card_width * 0.86
 	if combat.hand.size() > 1:
-		spacing = minf(card_width, (hand_rect.size.x - card_width) / float(combat.hand.size() - 1))
+		spacing = minf(spacing, (hand_rect.size.x - card_width) / float(combat.hand.size() - 1))
 	var total_width := card_width + spacing * maxf(0.0, float(combat.hand.size() - 1))
 	var start_x := hand_rect.position.x + (hand_rect.size.x - total_width) * 0.5
-	var middle := float(combat.hand.size() - 1) * 0.5
-	# 弧形手牌：抛物线 y = -a·t² + 顶点，中间最高、两端最低（杀戮尖塔扇形）
+	var card_draw_entries: Array[Dictionary] = []
 	for i in range(combat.hand.size()):
 		var t_value: float = 0.0
 		if combat.hand.size() > 1:
 			t_value = (float(i) / float(combat.hand.size() - 1)) * 2.0 - 1.0
 		var x := lerpf(start_x, start_x + total_width - card_width, (t_value + 1.0) * 0.5)
-		var base_y := hand_rect.position.y + hand_rect.size.y - card_height
-		# 弧形高度：中间 0 偏移（最高），两端下沉 30px
-		var arc_drop := 30.0 * (t_value * t_value)
-		var arc_y := base_y + arc_drop - 6.0
+		var base_y := hand_rect.end.y - card_height - 4.0
+		var arc_y := base_y - 18.0 * (1.0 - t_value * t_value)
 		var rect := Rect2(x, arc_y, card_width, card_height)
-		# 发牌动效：从牌堆位置飞入
 		var card_id := str(combat.hand[i])
 		if card_flight_offsets.has(card_id):
 			rect.position += card_flight_offsets[card_id]
-		# 旋转：越靠边倾斜越大（正弧度逆时针）
-		var tilt_deg := t_value * 7.0
+		if i == game.selected_card:
+			rect.position.y -= 8.0
+		var tilt_deg := t_value * 4.0
 		if i == hovered_combat_card and dragged_combat_card < 0:
-			var hover_scale := lerpf(1.0, 1.28, combat_card_hover_amount)
+			var hover_scale := lerpf(1.0, 1.18, combat_card_hover_amount)
 			var hover_size := rect.size * hover_scale
-			var hover_y := lerpf(rect.position.y, hand_rect.position.y - 42.0, combat_card_hover_amount)
+			var hover_y := lerpf(rect.position.y, hand_rect.position.y - 40.0, combat_card_hover_amount)
 			rect = Rect2(Vector2(rect.get_center().x - hover_size.x * 0.5, hover_y), hover_size)
 			tilt_deg = 0.0
 		combat_card_rects.append(rect)
 		var card: Dictionary = combat.cards.get(combat.hand[i], {})
-		_draw_combat_card(rect, str(combat.hand[i]), card, combat.card_cost(card), i == game.selected_card, tilt_deg)
+		card_draw_entries.append({"index": i, "rect": rect, "id": card_id, "card": card, "cost": combat.card_cost(card), "selected": i == game.selected_card, "tilt": tilt_deg})
+	for entry: Dictionary in card_draw_entries:
+		if int(entry["index"]) == hovered_combat_card and dragged_combat_card < 0:
+			continue
+		_draw_combat_card(entry["rect"], str(entry["id"]), entry["card"], int(entry["cost"]), bool(entry["selected"]), float(entry["tilt"]))
+	if hovered_combat_card >= 0 and hovered_combat_card < card_draw_entries.size() and dragged_combat_card < 0:
+		var hovered_entry: Dictionary = card_draw_entries[hovered_combat_card]
+		_draw_combat_card(hovered_entry["rect"], str(hovered_entry["id"]), hovered_entry["card"], int(hovered_entry["cost"]), bool(hovered_entry["selected"]), 0.0)
 	# 离场卡（正在飞向弃牌堆）绘制在手牌之上
 	for entry: Dictionary in exiting_cards:
 		var exit_id := str(entry.get("id", ""))
@@ -705,7 +743,7 @@ func _draw_combat_hud() -> void:
 			_draw_button(CARD_CANCEL_RECT, "取消选牌", Color("4f5960"), TEXT)
 		_draw_button(END_TURN_RECT, "回合结束", GOLD, INK)
 	else:
-		_draw_button(RETURN_RECT, "返回山屋" if combat.outcome == "victory" else "重开本集", GREEN if combat.outcome == "victory" else RED, TEXT)
+		_draw_button(RETURN_RECT, "返回节目布景" if combat.outcome == "victory" else "重开本集", GREEN if combat.outcome == "victory" else RED, TEXT)
 
 
 func _draw_card_target_arrow(start: Vector2, target: Vector2) -> void:
@@ -846,49 +884,43 @@ func _draw_action_ticket(rect: Rect2) -> void:
 	_label("S%d" % game.combat.base_speed, rect.position + Vector2(15, 64), 26, INK)
 	_label("行动力", rect.position + Vector2(86, 28), 10, Color("7a6044"))
 	_label("%d AP" % game.combat.energy, rect.position + Vector2(84, 61), 24, INK)
-	_draw_stat_pips(rect.position + Vector2(91, 91), game.combat.energy, game.combat.turn_energy_max, TEAL)
-	_label("固定预算", rect.position + Vector2(177, 96), 9, Color("7a6044"))
+	_draw_stat_pips(rect.position + Vector2(91, 86), game.combat.energy, game.combat.turn_energy_max, TEAL)
+	_label("本回合", rect.position + Vector2(177, 89), 9, Color("7a6044"))
 
 
 func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int, selected: bool, tilt_deg: float = 0.0, alpha_override: float = -1.0) -> void:
 	var kind := str(card.get("type", "skill"))
 	var accent := GOLD if kind == "place" else MAGENTA if kind == "ready" else RED if kind == "medicine" else TEAL
-	var frame: Texture2D = CARD_FRAME_YELLOW if kind == "place" else CARD_FRAME_RED if kind == "medicine" else CARD_FRAME_BLUE
-	var card_scale := rect.size.x / 124.0
+	var frame: Texture2D = CARD_FRAME_YELLOW if kind == "place" else CARD_FRAME_RED if kind in ["medicine", "ready"] else CARD_FRAME_BLUE
+	var card_scale := rect.size.x / 110.0
 	var scaled := func(value: float) -> float: return value * card_scale
 	var fade := Color(1, 1, 1, alpha_override if alpha_override >= 0.0 else float(card_exit_alphas.get(card_id, 1.0)))
+	var unaffordable: bool = game != null and game.combat != null and cost > int(game.combat.energy)
 	if not is_zero_approx(tilt_deg):
 		var pivot := rect.get_center()
 		draw_set_transform(pivot, deg_to_rad(tilt_deg), Vector2.ONE)
 		rect = Rect2(rect.position - pivot, rect.size)
-	# 底阴影
-	draw_rect(Rect2(rect.position + Vector2(0, scaled.call(3.0)), rect.size), Color(0.012, 0.027, 0.039, 1.0) * fade, true)
-	# Unity 原版卡面背景（三色，按卡面比例裁切避免拉伸变形）
+	draw_rect(Rect2(rect.position + Vector2(0, scaled.call(4.0)), rect.size), Color(0.012, 0.027, 0.039, 0.92) * fade, true)
 	if frame != null:
 		_draw_card_frame_contained(frame, rect, fade)
 	else:
 		draw_rect(rect, Color(accent.darkened(0.32), 1.0) * fade, true)
-	# 左侧费用条
-	draw_rect(Rect2(rect.position + Vector2(scaled.call(7.0), scaled.call(7.0)), Vector2(scaled.call(30.0), rect.size.y - scaled.call(14.0))), Color(accent, 0.92) * fade, true)
-	# 选中描边
-	draw_rect(rect, Color(GOLD if selected else Color("987452"), fade.a), false, scaled.call(4.0 if selected else 1.5))
-	# 费用数字
-	_draw_centered(str(cost), Rect2(rect.position + Vector2(scaled.call(7.0), scaled.call(9.0)), Vector2(scaled.call(30.0), scaled.call(30.0))), maxi(9, roundi(scaled.call(15.0))), Color(INK if accent.get_luminance() > 0.55 else TEXT, fade.a))
-	# 卡名
-	_label(_shorten(str(card.get("name", card_id)), 8), rect.position + Vector2(scaled.call(43.0), scaled.call(29.0)), maxi(9, roundi(scaled.call(14.0))), Color(INK, fade.a))
-	# 类型标签
-	_label(_card_kind_label(kind), rect.position + Vector2(scaled.call(43.0), scaled.call(48.0)), maxi(7, roundi(scaled.call(9.0))), Color(accent.darkened(0.25), fade.a))
-	if rect.size.y >= scaled.call(110.0):
-		# 中央道具图标（Unity 原图，取自 presentation.items[card_id]，缓存避免每帧 load）
-		var art_rect := Rect2(rect.position + Vector2(scaled.call(43.0), scaled.call(55.0)), Vector2(rect.size.x - scaled.call(51.0), scaled.call(58.0)))
-		var icon := _card_icon(card_id)
-		if icon != null:
-			_draw_texture_contained(icon, art_rect, Color(1, 1, 1, 0.98) * fade)
-		else:
-			draw_texture_rect(frame, art_rect, false, Color(1, 1, 1, 0.96) * fade)
-		draw_rect(art_rect, Color(accent.darkened(0.25), fade.a), false, scaled.call(1.5))
-		# 效果描述
-		_draw_wrapped(_shorten(str(card.get("text", "")), 42), Vector2(rect.position.x + scaled.call(43.0), art_rect.end.y + scaled.call(13.0)), rect.size.x - scaled.call(51.0), maxi(7, roundi(scaled.call(10.0))), Color("544a43", fade.a))
+	draw_rect(rect, Color(GOLD if selected else accent.darkened(0.30), fade.a), false, scaled.call(4.0 if selected else 1.5))
+	var cost_center := rect.position + Vector2(scaled.call(22.0), scaled.call(23.0))
+	draw_circle(cost_center, scaled.call(15.0), Color(accent, fade.a))
+	draw_circle(cost_center, scaled.call(15.0), Color(INK, fade.a), false, scaled.call(1.5))
+	_draw_centered(str(cost), Rect2(cost_center - Vector2.ONE * scaled.call(15.0), Vector2.ONE * scaled.call(30.0)), maxi(9, roundi(scaled.call(14.0))), Color(INK if accent.get_luminance() > 0.55 else TEXT, fade.a))
+	_label(_shorten(str(card.get("name", card_id)), 7), rect.position + Vector2(scaled.call(42.0), scaled.call(24.0)), maxi(9, roundi(scaled.call(12.0))), Color(INK, fade.a))
+	_label(_card_kind_label(kind), rect.position + Vector2(scaled.call(42.0), scaled.call(42.0)), maxi(7, roundi(scaled.call(8.0))), Color(accent.darkened(0.28), fade.a))
+	var art_rect := Rect2(rect.position + Vector2(scaled.call(12.0), scaled.call(52.0)), Vector2(rect.size.x - scaled.call(24.0), scaled.call(78.0)))
+	var icon := _card_icon(card_id)
+	if icon != null:
+		_draw_texture_contained(icon, art_rect, Color(1, 1, 1, 0.98) * fade)
+	draw_rect(art_rect, Color(accent.darkened(0.25), fade.a), false, scaled.call(1.3))
+	_draw_wrapped_lines(_shorten(str(card.get("text", "")), 36), Vector2(rect.position.x + scaled.call(12.0), art_rect.end.y + scaled.call(12.0)), rect.size.x - scaled.call(24.0), maxi(7, roundi(scaled.call(9.0))), Color("514940", fade.a), 3)
+	if unaffordable:
+		draw_rect(rect.grow(-scaled.call(4.0)), Color("10182078"), true)
+		_draw_chip(Rect2(rect.position + Vector2(scaled.call(18.0), rect.size.y - scaled.call(28.0)), Vector2(rect.size.x - scaled.call(36.0), scaled.call(20.0))), "行动力不足", Color("4d3940"), TEXT, maxi(7, roundi(scaled.call(8.0))))
 	if not is_zero_approx(tilt_deg):
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
@@ -1360,6 +1392,10 @@ func _draw_wrapped(value: String, pos: Vector2, width: float, font_size: int, co
 	draw_multiline_string(ThemeDB.fallback_font, pos, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, -1, color)
 
 
+func _draw_wrapped_lines(value: String, pos: Vector2, width: float, font_size: int, color: Color, max_lines: int) -> void:
+	draw_multiline_string(ThemeDB.fallback_font, pos, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, max_lines, color)
+
+
 func _phase_label() -> String:
 	if game.animation_busy:
 		return "动态演出"
@@ -1377,7 +1413,7 @@ func _phase_label() -> String:
 		return "节目奖励"
 	if game.phase == "combat":
 		return "惊吓时间"
-	return "山屋探索"
+	return "布景探索"
 
 
 func _room_kind_label(room: Dictionary) -> String:
@@ -1405,12 +1441,42 @@ func _door_shape(raw: Array) -> String:
 
 
 func _door_text(doors: Array) -> String:
-	var labels := ["N", "E", "S", "W"]
+	var labels := ["北", "东", "南", "西"]
 	var result: Array[String] = []
 	for i in range(mini(4, doors.size())):
 		if bool(doors[i]):
 			result.append(labels[i])
 	return "-" if result.is_empty() else "/".join(result)
+
+
+func _footprint_label(kind: String) -> String:
+	match kind:
+		"single": return "单格"
+		"line3": return "直廊"
+		"l3": return "折角房"
+		"plus5": return "十字厅"
+		"t5": return "三岔厅"
+		"p5": return "错层房"
+		"stair5": return "阶梯房"
+		"u5": return "回廊房"
+	return "组合房"
+
+
+func _reward_kind_label(kind: String) -> String:
+	match kind:
+		"card": return "新道具"
+		"relic": return "常驻预兆"
+		"stat": return "演员成长"
+	return "节目奖励"
+
+
+func _reward_icon(reward: Dictionary) -> Texture2D:
+	match str(reward.get("kind", "stat")):
+		"card":
+			return _card_icon(str(reward.get("id", "")))
+		"relic":
+			return OMEN_ICON
+	return null
 
 
 func _card_kind_label(kind: String) -> String:

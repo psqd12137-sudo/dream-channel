@@ -162,6 +162,7 @@ var active_motion_tween: Tween = null
 var build_preview_tween: Tween = null
 var lab_root: Node3D = null
 var home_tests_open := false
+var show_house_diagnostics := false
 var kenney_build_lab_mode := true  # 桌模建造已转正：主游玩默认用 Kaykit/Kenney 桌模渲染房间
 var lab_move_axis := 0.0
 var lab_jump_held := false
@@ -289,6 +290,7 @@ func is_world_view_point(screen_pos: Vector2) -> bool:
 
 func reset_run(seed_value: int = 0) -> void:
 	_cancel_dynamic_effect()
+	show_house_diagnostics = false
 	camera.environment = null
 	world_container.visible = true
 	house_root.visible = true
@@ -371,7 +373,7 @@ func _random_run_seed() -> int:
 
 
 func current_layout_profile_label() -> String:
-	return str(run_layout_profile.get("label", "随机山屋"))
+	return str(run_layout_profile.get("label", "随机片场"))
 
 
 func start_run_from_seed_text(seed_text: String, tutorial_mode: bool = false) -> bool:
@@ -480,6 +482,7 @@ func start_kenney_build_lab() -> void:
 	_set_home_video(false)
 	kenney_build_lab_mode = true
 	reset_run(run_seed + 101)
+	show_house_diagnostics = true
 	camera.environment = _make_visual_polish_environment()
 	phase = "explore"
 	omen_options.clear()
@@ -2062,10 +2065,6 @@ func _array_to_pos(raw_value: Variant) -> Vector2i:
 	if raw_value is Array and raw_value.size() >= 2:
 		return Vector2i(int(raw_value[0]), int(raw_value[1]))
 	return Vector2i.ZERO
-
-
-func latest_source_label() -> String:
-	return "EXE 08-11 · EEC4C574CC22"
 
 
 func build_house_world() -> void:

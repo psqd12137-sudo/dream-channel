@@ -28,7 +28,9 @@ func _run() -> void:
 		_check(not board.intersects(layout["top_rect"]), "board must not overlap top HUD at %s" % viewport_size)
 		var layout_scale: float = layout["scale"]
 		_check(board.size.x >= 1240.0 * layout_scale, "combat board should reclaim the removed sidebar width at %s" % viewport_size)
-		_check(board.size.y >= 540.0 * layout_scale, "combat board should reclaim the removed coach-bar height at %s" % viewport_size)
+		_check(board.size.y >= 380.0 * layout_scale, "combat board should preserve a readable playfield at %s" % viewport_size)
+		var hand_safe_top: float = float(layout["offset"].y) + 608.0 * layout_scale
+		_check(board.end.y <= hand_safe_top, "combat board must stop before the hand-card safe area at %s" % viewport_size)
 
 	game.choose_omen(0)
 	var hall: Dictionary = _find_room(game.room_catalog, "hall")

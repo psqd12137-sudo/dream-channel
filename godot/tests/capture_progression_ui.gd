@@ -13,6 +13,7 @@ func _run() -> void:
 	await process_frame
 	game._clear_run_save()
 	game.start_new_run(false, 2026081901)
+	await _capture("res://artifacts/progression_00_omen.png")
 	game.choose_omen(0)
 	game._start_card_reward("capture")
 	await _capture("res://artifacts/progression_01_reward.png")

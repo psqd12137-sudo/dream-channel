@@ -14,6 +14,7 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 	await process_frame
+	await _capture("completion_00_home.png")
 	game.toggle_home_tests()
 	await _capture("completion_01_home_tests.png")
 
