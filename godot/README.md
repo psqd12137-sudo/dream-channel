@@ -63,13 +63,13 @@ Godot 开发以本机为准（本地权威仓库 `G:\dream-channel`），不再�
 大地图与战斗地图镜头操作：
 
 - 左键：移动、选择格子或放置卡牌
-- 左键拖动战场空白：围绕整个棋盘中心做水平旋转，俯角固定；未形成拖动时仍按普通地格点击处理
+- 左键拖动大地图或战场空白：围绕当前观察目标做连续 360° 水平旋转，俯角固定；旋转保持当前缩放和平移，未超过 5px 时仍按普通地格点击处理
 - 从底部拖动放置牌时会拉出目标箭头，箭头落到有效格并释放即可布置；拖到战场外会返回手牌，卡牌本体不会遮挡棋盘
 - 鼠标悬停手牌：卡牌上浮放大，显示插画与完整一些的效果说明
 - 放置牌再次点击、右键、`Esc` 或“取消选牌”：退出金色摆放模式并恢复绿色移动目标
 - 中键拖动：平移地图（探索、房间摆放与战斗均可用）
 - 鼠标滚轮：以指针位置为中心缩放
-- 顶栏“地图复位/镜头复位”：恢复当前地图的完整取景；扩建预览重建时会保留玩家当前缩放和平移
+- 顶栏“地图复位/镜头复位”：恢复当前地图的默认角度和完整取景；扩建预览重建时会保留玩家当前旋转、缩放和平移
 
 战斗格使用深色格缝和交替纸面色；蓝框表示敌人路径，红框表示必伤格，绿色角标表示可移动，金色角标表示卡牌目标，`H1/H2` 表示可站立的家具高台，`A/B` 表示传送门端点。
 
@@ -188,6 +188,7 @@ D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject -
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/enemy_archetype_presentation_regression.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/latest_3d_smoke.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/battle_view_smoke.gd
+D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/camera_orbit_regression.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/dynamic_effects_smoke.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/quaternius_room_art_smoke.gd
 D:\godot\Godot_v4.7.1-stable_win64_console.exe --headless --path $godotProject --script res://tests/room_footprint_regression.gd

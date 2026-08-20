@@ -44,8 +44,10 @@ const COL_FLOOR_H2 := Color("343b40")
 const COL_WALL_GREEN := Color("3d6e53")
 
 const CAMERA_DIRECTION := Vector3(9.5, 12.5, 11.5)
+const HOUSE_CAMERA_DIRECTION := Vector3(10.5, 13.5, 11.5)
 const CAMERA_ZOOM_MIN := 0.55
 const CAMERA_ZOOM_MAX := 1.35
+const CAMERA_ORBIT_SENSITIVITY := 0.008
 const INVALID_CELL := Vector2i(-999, -999)
 const UNITY_ROOM_DROP_DURATION := 0.25
 const UNITY_ROOM_DROP_HEIGHT_CELLS := 0.65
@@ -135,10 +137,14 @@ var house_camera_target := Vector3.ZERO
 var house_camera_fit_size := 12.0
 var house_camera_zoom_ratio := 1.0
 var house_camera_user_adjusted := false
+var house_camera_distance := HOUSE_CAMERA_DIRECTION.length()
+var house_camera_yaw := atan2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z)
+var house_camera_pitch := atan2(HOUSE_CAMERA_DIRECTION.y, Vector2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z).length())
 var house_player_facing_yaw := 0.0
 var house_actor_slot_assignments: Dictionary = {}
 var battle_camera_target := Vector3.ZERO
 var battle_camera_fit_size := 12.0
+var battle_camera_zoom_ratio := 1.0
 var battle_camera_distance := 20.0
 var battle_camera_yaw := atan2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z)
 var battle_camera_pitch := atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
@@ -266,7 +272,7 @@ func set_world_view_rect(rect: Rect2) -> void:
 	if not changed or camera == null:
 		return
 	if phase == "combat" and combat != null:
-		reset_battle_camera()
+		_refit_battle_camera(true)
 	elif phase in ["lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
 		_apply_search_camera()
 	else:
@@ -326,6 +332,9 @@ func reset_run(seed_value: int = 0) -> void:
 	house_camera_fit_size = 12.0
 	house_camera_zoom_ratio = 1.0
 	house_camera_user_adjusted = false
+	house_camera_yaw = atan2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z)
+	house_camera_pitch = atan2(HOUSE_CAMERA_DIRECTION.y, Vector2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z).length())
+	house_camera_distance = HOUSE_CAMERA_DIRECTION.length()
 	house_player_facing_yaw = 0.0
 	house_actor_slot_assignments.clear()
 	battle_player_facing_yaw = 0.0
@@ -1866,40 +1875,26 @@ func reset_battle_camera() -> void:
 	battle_camera_target = Vector3(0.0, max_height * 0.18, 0.0)
 	battle_camera_yaw = atan2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z)
 	battle_camera_pitch = atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
-	_apply_battle_camera()
+	battle_camera_zoom_ratio = 1.0
 	_refit_battle_camera(false)
 
 
 func _refit_battle_camera(preserve_zoom: bool) -> void:
-	var zoom_ratio := camera.size / maxf(0.001, battle_camera_fit_size) if preserve_zoom else 1.0
+	if combat == null or camera == null:
+		return
+	if preserve_zoom:
+		battle_camera_zoom_ratio = clampf(battle_camera_zoom_ratio, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX)
+	else:
+		battle_camera_zoom_ratio = 1.0
 	var max_height := 0.0
 	for raw_height in combat.heights.values():
 		max_height = maxf(max_height, float(raw_height))
 	var half_x := (float(combat.cols - 1) * 0.5 + 0.65) * BATTLE_CELL
 	var half_z := (float(combat.rows - 1) * 0.5 + 0.65) * BATTLE_CELL
 	var max_y := maxf(max_height * 0.64 + 2.25, BATTLE_SHELL_WALL_HEIGHT + 1.0)
-	var min_x := INF
-	var max_x := -INF
-	var min_y := INF
-	var max_y_projected := -INF
-	var right := camera.global_transform.basis.x.normalized()
-	var up := camera.global_transform.basis.y.normalized()
-	for x_value in [-half_x, half_x]:
-		for z_value in [-half_z, half_z]:
-			for y_value in [0.0, max_y]:
-				var relative := Vector3(x_value, y_value, z_value) - battle_camera_target
-				var projected_x := relative.dot(right)
-				var projected_y := relative.dot(up)
-				min_x = minf(min_x, projected_x)
-				max_x = maxf(max_x, projected_x)
-				min_y = minf(min_y, projected_y)
-				max_y_projected = maxf(max_y_projected, projected_y)
-	var viewport_size := world_view_rect.size
-	var aspect := viewport_size.x / maxf(1.0, viewport_size.y)
-	var projected_width := max_x - min_x + 0.8
-	var projected_height := max_y_projected - min_y + 0.8
-	battle_camera_fit_size = maxf(6.0, maxf(projected_height, projected_width / maxf(0.5, aspect)) * 1.08)
-	camera.size = battle_camera_fit_size * clampf(zoom_ratio, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX)
+	var horizontal_radius := Vector2(half_x, half_z).length()
+	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0)
+	camera.size = battle_camera_fit_size * battle_camera_zoom_ratio
 	_apply_battle_camera()
 
 
@@ -1917,14 +1912,8 @@ func pan_battle_camera(pixel_delta: Vector2) -> void:
 func orbit_battle_camera(pixel_delta: Vector2) -> void:
 	if phase != "combat" or combat == null:
 		return
-	battle_camera_yaw -= pixel_delta.x * 0.008
-	battle_camera_pitch = atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
-	var max_height := 0.0
-	for raw_height in combat.heights.values():
-		max_height = maxf(max_height, float(raw_height))
-	battle_camera_target = Vector3(0.0, max_height * 0.18, 0.0)
+	battle_camera_yaw = fposmod(battle_camera_yaw - pixel_delta.x * CAMERA_ORBIT_SENSITIVITY, TAU)
 	_apply_battle_camera()
-	_refit_battle_camera(true)
 
 
 func zoom_battle_camera(view_pos: Vector2, zoom_factor: float) -> void:
@@ -1932,6 +1921,7 @@ func zoom_battle_camera(view_pos: Vector2, zoom_factor: float) -> void:
 		return
 	var before: Variant = _screen_to_plane(view_pos, 0.0)
 	camera.size = clampf(camera.size * zoom_factor, battle_camera_fit_size * CAMERA_ZOOM_MIN, battle_camera_fit_size * CAMERA_ZOOM_MAX)
+	battle_camera_zoom_ratio = camera.size / maxf(0.001, battle_camera_fit_size)
 	_apply_battle_camera()
 	var after: Variant = _screen_to_plane(view_pos, 0.0)
 	if before is Vector3 and after is Vector3:
@@ -1957,6 +1947,13 @@ func _apply_battle_camera() -> void:
 	camera.position = battle_camera_target + direction
 	camera.look_at(battle_camera_target + Vector3(0, 0.2, 0), Vector3.UP)
 	_apply_battle_room_cutaway()
+
+
+func _rotation_invariant_fit_size(horizontal_radius: float, vertical_span: float, pitch: float, padding: float, minimum: float) -> float:
+	var aspect := world_view_rect.size.x / maxf(1.0, world_view_rect.size.y)
+	var projected_width := horizontal_radius * 2.0 + padding
+	var projected_height := horizontal_radius * 2.0 * absf(sin(pitch)) + vertical_span * absf(cos(pitch)) + padding
+	return maxf(minimum, maxf(projected_height, projected_width / maxf(0.5, aspect)) * 1.08)
 
 
 func _after_combat_action() -> void:
@@ -2877,9 +2874,13 @@ func _apply_battle_room_cutaway() -> void:
 		var side := int(record["side"])
 		var direction: Vector2i = RoomRules.DIRS[side]
 		var outward := Vector2(float(direction.x), float(direction.y))
-		var culled := outward.dot(viewer_direction) > 0.35
-		(record["full"] as Node3D).visible = not culled
-		(record["cutaway"] as Node3D).visible = culled
+		var full := record["full"] as Node3D
+		var cutaway := record["cutaway"] as Node3D
+		var was_culled := cutaway.visible and not full.visible
+		var threshold := 0.28 if was_culled else 0.42
+		var culled := outward.dot(viewer_direction) > threshold
+		full.visible = not culled
+		cutaway.visible = culled
 		if culled:
 			battle_shell_culled_count += 1
 		else:
@@ -2965,10 +2966,11 @@ func _set_house_camera() -> void:
 		center += point
 	if not points.is_empty():
 		center /= float(points.size())
-	var span := 12.0
+	var horizontal_radius := 0.0
 	for point in points:
-		span = maxf(span, maxf(absf(point.x - center.x) * 2.2 + 5.0, absf(point.z - center.z) * 2.2 + 5.0))
-	house_camera_fit_size = minf(28.0, span)
+		horizontal_radius = maxf(horizontal_radius, Vector2(point.x - center.x, point.z - center.z).length())
+	horizontal_radius += HOUSE_CELL * 1.15
+	house_camera_fit_size = minf(28.0, _rotation_invariant_fit_size(horizontal_radius, HOUSE_CELL * 1.65, house_camera_pitch, 0.8, 12.0))
 	if not house_camera_user_adjusted:
 		house_camera_target = center
 	camera.size = clampf(house_camera_fit_size * house_camera_zoom_ratio, house_camera_fit_size * CAMERA_ZOOM_MIN, house_camera_fit_size * CAMERA_ZOOM_MAX)
@@ -2984,6 +2986,14 @@ func pan_house_camera(pixel_delta: Vector2) -> void:
 	house_camera_target += (-right * pixel_delta.x + screen_up * pixel_delta.y) * units_per_pixel
 	house_camera_user_adjusted = true
 	_clamp_house_camera_target()
+	_apply_house_camera()
+
+
+func orbit_house_camera(pixel_delta: Vector2) -> void:
+	if phase not in ["explore", "build", "room_ready"]:
+		return
+	house_camera_yaw = fposmod(house_camera_yaw - pixel_delta.x * CAMERA_ORBIT_SENSITIVITY, TAU)
+	house_camera_user_adjusted = true
 	_apply_house_camera()
 
 
@@ -3007,6 +3017,9 @@ func zoom_house_camera(view_pos: Vector2, zoom_factor: float) -> void:
 func reset_house_camera() -> void:
 	house_camera_zoom_ratio = 1.0
 	house_camera_user_adjusted = false
+	house_camera_yaw = atan2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z)
+	house_camera_pitch = atan2(HOUSE_CAMERA_DIRECTION.y, Vector2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z).length())
+	house_camera_distance = HOUSE_CAMERA_DIRECTION.length()
 	_set_house_camera()
 
 
@@ -3018,7 +3031,9 @@ func _clamp_house_camera_target() -> void:
 
 func _apply_house_camera() -> void:
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.position = house_camera_target + Vector3(10.5, 13.5, 11.5)
+	var horizontal := cos(house_camera_pitch) * house_camera_distance
+	var direction := Vector3(sin(house_camera_yaw) * horizontal, sin(house_camera_pitch) * house_camera_distance, cos(house_camera_yaw) * horizontal)
+	camera.position = house_camera_target + direction
 	camera.look_at(house_camera_target + Vector3(0, 0.2, 0), Vector3.UP)
 	if kenney_build_lab_mode:
 		_apply_current_room_cutaway()

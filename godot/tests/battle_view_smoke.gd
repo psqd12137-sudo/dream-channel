@@ -80,7 +80,7 @@ func _run() -> void:
 	for y in range(game.combat.rows):
 		for x in range(game.combat.cols):
 			var rotated_screen_pos: Vector2 = camera.unproject_position(game._battle_world(Vector2i(x, y)))
-			_check(rotated_screen_pos.x >= 0.0 and rotated_screen_pos.y >= 0.0 and rotated_screen_pos.x <= world_viewport.size.x and rotated_screen_pos.y <= world_viewport.size.y, "angle-aware fit must keep rotated cell %s visible" % Vector2i(x, y))
+			_check(rotated_screen_pos.x >= 0.0 and rotated_screen_pos.y >= 0.0 and rotated_screen_pos.x <= world_viewport.size.x and rotated_screen_pos.y <= world_viewport.size.y, "rotation-invariant fit must keep rotated cell %s visible" % Vector2i(x, y))
 	game.reset_battle_camera()
 
 	var initial_size: float = camera.size

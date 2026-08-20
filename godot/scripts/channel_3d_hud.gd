@@ -598,7 +598,7 @@ func _draw_build_dock() -> void:
 		_label("%d格 %s · %s" % [int(room.get("room_size", 1)), str(room.get("footprint_kind", "single")), _door_shape(room.get("doors", []))], rect.position + Vector2(54, 104), 11, Color("776553"))
 		if selected:
 			_label("ROT %d° · %s" % [game.offer_rotation * 90, _door_text(game.room_rules.rotated_doors(room.get("doors", []), game.offer_rotation))], rect.position + Vector2(54, 128), 10, Color("5e5146"))
-	_draw_button(BUILD_ROTATE_RECT, "↻ 旋转 90°", TEAL, TEXT)
+	_draw_button(BUILD_ROTATE_RECT, "↻ 房间转向 90°", TEAL, TEXT)
 	_draw_button(BUILD_PLACE_RECT, "摆下", GREEN if game.can_place_selected_offer() else Color("6a5554"), TEXT)
 	_draw_button(BUILD_CANCEL_RECT, "× 取消", Color("303947"), TEXT)
 
@@ -997,6 +997,22 @@ func _combat_overlay_has_point(point: Vector2) -> bool:
 	return game.selected_card >= 0 and CARD_CANCEL_RECT.has_point(point)
 
 
+func _house_overlay_has_point(point: Vector2) -> bool:
+	if RESET_RECT.has_point(point) or CAMERA_RESET_RECT.has_point(point):
+		return true
+	if game.phase == "build":
+		if BUILD_ROTATE_RECT.has_point(point) or BUILD_PLACE_RECT.has_point(point) or BUILD_CANCEL_RECT.has_point(point):
+			return true
+		for rect: Rect2 in BUILD_CARD_RECTS:
+			if rect.has_point(point):
+				return true
+	if game.phase == "room_ready":
+		return ROOM_ACTION_RECT.has_point(point)
+	if game.phase == "explore":
+		return ENTER_PENDING_RECT.has_point(point)
+	return false
+
+
 func _gui_input(event: InputEvent) -> void:
 	if game == null:
 		return
@@ -1010,12 +1026,16 @@ func _gui_input(event: InputEvent) -> void:
 				game.clear_battle_hover()
 			queue_redraw()
 			accept_event()
-		elif board_left_pressed and game.phase == "combat":
+		elif board_left_pressed and game.phase in ["combat", "explore", "build", "room_ready"]:
 			board_left_distance += event.relative.length()
 			if board_left_distance >= 5.0:
 				board_left_dragged = true
-				game.orbit_battle_camera(event.relative)
-				game.clear_battle_hover()
+				if game.phase == "combat":
+					game.orbit_battle_camera(event.relative)
+					game.clear_battle_hover()
+				else:
+					game.orbit_house_camera(event.relative)
+					game.clear_house_hover()
 			accept_event()
 		elif middle_dragging and game.phase == "combat":
 			game.pan_battle_camera(event.relative)
@@ -1097,6 +1117,22 @@ func _gui_input(event: InputEvent) -> void:
 				board_left_distance = 0.0
 				accept_event()
 				return
+	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase in ["explore", "build", "room_ready"]:
+		if not mouse_event.pressed and board_left_pressed:
+			var should_click := not board_left_dragged and world_view_rect_screen.has_point(mouse_event.position)
+			board_left_pressed = false
+			board_left_dragged = false
+			board_left_distance = 0.0
+			if should_click:
+				game.handle_screen_click(mouse_event.position - world_view_rect_screen.position)
+			accept_event()
+			return
+		if mouse_event.pressed and world_view_rect_screen.has_point(mouse_event.position) and not _house_overlay_has_point(point):
+			board_left_pressed = true
+			board_left_dragged = false
+			board_left_distance = 0.0
+			accept_event()
+			return
 	if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
 		if mouse_event.pressed and game.phase in ["combat", "explore", "build", "room_ready", "lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"] and world_view_rect_screen.has_point(mouse_event.position):
 			middle_dragging = true
