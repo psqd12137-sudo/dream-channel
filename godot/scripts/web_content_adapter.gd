@@ -153,6 +153,11 @@ func _scale_enemy(enemy: Dictionary, room_id: String, combat_index: int, pressur
 	result["archetype"] = archetype_id
 	result["archetype_label"] = str(archetype.get("label", archetype_id))
 	result["archetype_desc"] = str(archetype.get("desc", ""))
+	var traits: Array[String] = []
+	for raw_trait in pressure.get("roomTraits", {}).get(room_id, []):
+		traits.append(str(raw_trait))
+	result["traits"] = traits
+	result["trait_labels"] = pressure.get("traitLabels", {}).duplicate(true)
 	return result
 
 

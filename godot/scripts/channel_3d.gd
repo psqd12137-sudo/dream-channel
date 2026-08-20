@@ -1630,12 +1630,31 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 				tween.tween_method(_set_enemy_step_motion.bind(enemy_node, _battle_world(source), _battle_world(target)), 0.0, 1.0, ENEMY_STEP_DURATION * animation_duration_scale)
 			tween.tween_interval(0.035 * animation_duration_scale)
 		elif kind == "attack":
-			tween.tween_callback(_play_actor_state.bind("Enemy", "attack", "袭击!"))
-			if event.get("target", INVALID_CELL) == combat.player_pos:
+			var attack_kind := str(event.get("attack_kind", "attack"))
+			var attack_callouts := {"lunge": "突进!", "faceShock": "突脸!", "guardBreak": "破防!", "slam": "砸地!", "beam": "激光!"}
+			tween.tween_callback(_play_actor_state.bind("Enemy", "attack", str(attack_callouts.get(attack_kind, "袭击!"))))
+			if event.get("target", INVALID_CELL) == combat.player_pos and int(event.get("damage", 0)) > 0:
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "受击!"))
 			tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			tween.tween_property(enemy_node, "scale", Vector3(1.22, 0.82, 1.22), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
+		elif kind == "face_shock":
+			tween.tween_callback(_play_actor_state.bind("Enemy", "attack", "突脸!"))
+			if int(event.get("damage", 0)) > 0:
+				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "惊吓!"))
+			tween.tween_property(enemy_node, "scale", Vector3(1.18, 1.18, 1.18), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
+			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
+		elif kind == "beam_charge":
+			tween.tween_callback(_play_actor_state.bind("Enemy", "ready", "蓄力!"))
+			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			tween.tween_property(enemy_node, "scale", Vector3(0.86, 1.28, 0.86), 0.24 * animation_duration_scale)
+			tween.tween_property(enemy_node, "scale", Vector3.ONE, 0.18 * animation_duration_scale)
+		elif kind == "beam_fire":
+			tween.tween_callback(_play_actor_state.bind("Enemy", "attack", "激光!"))
+			if int(event.get("damage", 0)) > 0:
+				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "命中!"))
+			tween.tween_property(enemy_node, "scale", Vector3(1.30, 0.76, 1.30), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
 		else:
 			tween.tween_interval(0.18 * animation_duration_scale)
@@ -2533,7 +2552,12 @@ func build_battle_world() -> void:
 			var path_index: int = (intent.get("path", []) as Array).find(pos)
 			if is_hurt_cell:
 				_add_box(cell_node, "IntentAttackOverlay", Vector3(0, top_y + 0.035, 0), Vector3(BATTLE_CELL - 0.43, 0.065, BATTLE_CELL - 0.43), _material(Color(COL_RED, 0.78), true, 0.08))
-				_add_label(cell_node, "IntentAttackGlyph", "攻!", Vector3(0.0, top_y + 0.48, 0.0), Color.WHITE, 34)
+				var attack_kind := str(intent.get("attack_kind", "attack"))
+				var glyphs := {"lunge": "突", "faceShock": "惊", "guardBreak": "破", "slam": "砸", "beam": "激"}
+				var attack_glyph := "蓄" if bool(intent.get("pending", false)) else str(glyphs.get(attack_kind, "攻"))
+				if int(intent.get("hits", 1)) > 1:
+					attack_glyph = "%s×%d" % [attack_glyph, int(intent.get("hits", 1))]
+				_add_label(cell_node, "IntentAttackGlyph", attack_glyph, Vector3(0.0, top_y + 0.48, 0.0), Color.WHITE, 30)
 			elif path_index >= 0:
 				_add_box(cell_node, "IntentMoveOverlay", Vector3(0, top_y + 0.035, 0), Vector3(BATTLE_CELL - 0.43, 0.065, BATTLE_CELL - 0.43), _material(Color(COL_BLUE, 0.66), true, 0.06))
 				_add_label(cell_node, "IntentMoveGlyph", "走%d" % (path_index + 1), Vector3(0.0, top_y + 0.45, 0.0), Color.WHITE, 29)

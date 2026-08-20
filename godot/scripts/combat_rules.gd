@@ -59,10 +59,15 @@ var patrol_goal := INVALID_CELL
 var enemy_archetype := "execute"
 var enemy_archetype_label := "处决匣"
 var enemy_archetype_desc := ""
+var enemy_traits: Array[String] = []
+var enemy_trait_labels: Dictionary = {}
 var enemy_broken := false
 var execute_bonus_pending := false
 var crush_bonus_pending := false
 var stagger_pending := false
+var player_exposed := false
+var beam_pending_cells: Array[Vector2i] = []
+var beam_pending_damage := 0
 
 var cards: Dictionary = {}
 var deck: Array[String] = []
@@ -139,10 +144,17 @@ func setup(arena: Dictionary, enemy: Dictionary, card_defs: Dictionary, starter:
 	enemy_archetype = str(enemy.get("archetype", "execute"))
 	enemy_archetype_label = str(enemy.get("archetype_label", enemy_archetype))
 	enemy_archetype_desc = str(enemy.get("archetype_desc", ""))
+	enemy_traits.clear()
+	for raw_trait in enemy.get("traits", []):
+		enemy_traits.append(str(raw_trait))
+	enemy_trait_labels = (enemy.get("trait_labels", {}) as Dictionary).duplicate(true)
 	enemy_broken = enemy_toughness <= 0
 	execute_bonus_pending = false
 	crush_bonus_pending = false
 	stagger_pending = false
+	player_exposed = false
+	beam_pending_cells.clear()
+	beam_pending_damage = 0
 	cards = card_defs.duplicate(true)
 	deck.clear()
 	for card_id in starter:
@@ -306,8 +318,17 @@ func card_cost(card: Dictionary) -> int:
 
 
 func preview_intent() -> Dictionary:
-	var result := {"path": [], "hurt": [], "label": "观望", "detail": "", "type": "stall", "enemy_revealed": enemy_revealed, "sees_player": enemy_sees_player}
+	var result := {"path": [], "hurt": [], "label": "观望", "detail": "", "type": "stall", "enemy_revealed": enemy_revealed, "sees_player": enemy_sees_player, "attack_kind": "", "hits": 0, "pending": false}
 	if outcome != "":
+		return result
+	if not beam_pending_cells.is_empty():
+		result["hurt"] = beam_pending_cells.duplicate()
+		result["label"] = "激光即将发射 %d" % beam_pending_damage
+		result["detail"] = "上一拍锁定的红色射线将在敌方回合落下；离开红格即可躲避。"
+		result["type"] = "attack"
+		result["attack_kind"] = "beam"
+		result["hits"] = 1
+		result["pending"] = true
 		return result
 	if enemy_blind_turns > 0:
 		result["label"] = "闪瞎 / Blinded"
@@ -319,32 +340,46 @@ func preview_intent() -> Dictionary:
 		result["detail"] = "它最多藏这一拍；下个敌方回合会离开出生点巡逻。"
 		result["type"] = "ambush"
 		return result
+	if player_exposed and _has_trait("faceShock") and enemy_sees_player:
+		var exposed_plan := _enemy_attack_plan(enemy_pos, _enemy_turn_budget(), true)
+		if exposed_plan.is_empty():
+			result["hurt"] = [player_pos]
+			result["label"] = "突脸惊吓 1"
+			result["detail"] = "你重新暴露在视线中；即使它够不着也会造成 1 点惊吓。"
+			result["type"] = "attack"
+			result["attack_kind"] = "faceShock"
+			result["hits"] = 1
+			return result
 	var goal := _enemy_goal()
 	if goal == INVALID_CELL:
 		result["label"] = "搜寻出口"
 		result["detail"] = "暂时没有可达巡逻点。"
 		return result
-	var simulated := enemy_pos
-	var remaining := maxi(1, enemy_action_points - 2) if stagger_pending else enemy_action_points
-	while remaining > 0:
-		if manhattan(simulated, goal) == 1 and (enemy_sees_player or has_decoy()):
-			if remaining >= enemy_attack_cost:
-				result["hurt"].append(goal)
-				result["label"] = "撕碎纸影" if has_decoy() else "攻击 %d / Hit %d" % [enemy_damage, enemy_damage]
-				result["detail"] = "纸影会替你承受这一击；敌人若仍有行动力会继续行动。" if has_decoy() else "红格将在敌方回合受到 %d 点伤害。" % enemy_damage
-				result["type"] = "attack"
-			break
-		var path := _find_path(simulated, goal)
-		if path.size() < 2:
-			break
-		var next: Vector2i = path[1]
-		if next == goal:
-			break
-		result["path"].append(next)
-		simulated = next
-		remaining -= 1
-		if traps.has(simulated):
-			remaining -= int((traps[simulated] as Dictionary).get("slow", 0))
+	var remaining := _enemy_turn_budget()
+	if has_decoy() and manhattan(enemy_pos, decoy_pos) == 1 and remaining >= _effective_attack_cost():
+		result["hurt"] = [decoy_pos]
+		result["label"] = "撕碎纸影"
+		result["detail"] = "纸影会替你承受这一击；敌人若仍有行动力会继续行动。"
+		result["type"] = "attack"
+		result["attack_kind"] = "decoy"
+		return result
+	if enemy_sees_player and manhattan(enemy_pos, player_pos) == 1 and remaining < _effective_attack_cost():
+		result["label"] = "等待攻击窗口"
+		result["detail"] = "已经贴近目标，但剩余行动力不足以发动攻击。"
+		result["type"] = "stall"
+		return result
+	var plan := _enemy_attack_plan(enemy_pos, remaining, enemy_sees_player)
+	if not plan.is_empty():
+		return _intent_from_attack_plan(plan, result)
+	var step := _choose_enemy_step(enemy_pos, goal)
+	if step != INVALID_CELL and step != goal and remaining > 0:
+		result["path"] = [step]
+		var after_remaining := remaining - 1 - int((traps.get(step, {}) as Dictionary).get("slow", 0))
+		var sees_after := _has_line_of_sight(step, player_pos) and enemy_blind_turns <= 0
+		var after_plan := _enemy_attack_plan(step, after_remaining, sees_after)
+		if not after_plan.is_empty():
+			result = _intent_from_attack_plan(after_plan, result)
+			result["path"] = [step]
 	if result["type"] != "attack":
 		if enemy_sees_player:
 			result["type"] = "chase"
@@ -358,7 +393,7 @@ func preview_intent() -> Dictionary:
 			result["type"] = "patrol"
 			result["label"] = "巡逻 %d步" % result["path"].size()
 			result["detail"] = "尚未发现你；蓝色编号是它即将巡逻的路线。"
-	if result["path"].is_empty() and result["type"] != "attack":
+	if (result["path"] as Array).is_empty() and result["type"] != "attack":
 		result["label"] = "重新选点"
 		result["detail"] = "当前巡逻点已到达，下回合会选择新的搜查方向。"
 	return result
@@ -370,6 +405,22 @@ func enemy_turn() -> Array[Dictionary]:
 		return turn_events
 	_discard_unretained_hand()
 	_refresh_vision(false)
+	if not beam_pending_cells.is_empty():
+		var firing_cells := beam_pending_cells.duplicate()
+		var firing_damage := beam_pending_damage
+		beam_pending_cells.clear()
+		beam_pending_damage = 0
+		var hit := player_pos in firing_cells
+		var fire_event := {"kind": "beam_fire", "cells": firing_cells, "target": player_pos, "damage": 0, "label": "激光落下"}
+		if hit:
+			var hit_result := _apply_player_hit("beam", firing_damage)
+			fire_event.merge(hit_result, true)
+		else:
+			fire_event["label"] = "激光落空"
+		turn_events.append(fire_event)
+		event_log.append("EnemyBeamFired cells=%s hit=%s" % [str(firing_cells), str(hit)])
+		_finish_enemy_turn()
+		return turn_events
 	if ambush_active and not enemy_sees_player:
 		ambush_idle_turns += 1
 		if ambush_idle_turns <= 1:
@@ -381,71 +432,348 @@ func enemy_turn() -> Array[Dictionary]:
 		patrol_goal = INVALID_CELL
 		event_log.append("AmbushReleasedToPatrol")
 		turn_events.append({"kind": "alert", "label": "离开埋伏点，开始巡逻"})
-	var remaining := maxi(1, enemy_action_points - 2) if stagger_pending else enemy_action_points
-	while remaining > 0 and outcome == "":
+	var remaining := _enemy_turn_budget()
+	var guard := 20
+	while remaining > 0 and outcome == "" and guard > 0:
+		guard -= 1
 		_refresh_vision(false)
+		if player_exposed and enemy_sees_player:
+			player_exposed = false
+			if _has_trait("cornerCut"):
+				var free_step := _choose_enemy_step(enemy_pos, player_pos)
+				if free_step != INVALID_CELL and free_step != player_pos:
+					_move_enemy_to(free_step, "抄近路", turn_events, true)
+					if outcome != "":
+						break
+			if _has_trait("faceShock"):
+				var shock_plan := _enemy_attack_plan(enemy_pos, remaining, enemy_sees_player)
+				if shock_plan.is_empty():
+					var shock_result := _apply_player_hit("faceShock", 1)
+					shock_result["kind"] = "face_shock"
+					shock_result["target"] = player_pos
+					shock_result["label"] = "突脸惊吓"
+					turn_events.append(shock_result)
+					event_log.append("EnemyFaceShock damage=%d" % int(shock_result.get("damage", 0)))
+				else:
+					var shock_execution := _execute_enemy_attack_plan(shock_plan, remaining, "faceShock")
+					turn_events.append_array(shock_execution.get("events", []))
+					remaining -= int(shock_execution.get("cost", 0))
+				break
 		var adjacent_to_decoy := has_decoy() and manhattan(enemy_pos, decoy_pos) == 1
-		var adjacent_to_player := enemy_sees_player and manhattan(enemy_pos, player_pos) == 1
-		if (adjacent_to_decoy or adjacent_to_player) and remaining >= enemy_attack_cost:
-			var attack_event := _resolve_enemy_attack()
-			turn_events.append(attack_event)
-			remaining -= enemy_attack_cost
-			if adjacent_to_decoy:
-				continue
+		if adjacent_to_decoy and remaining >= _effective_attack_cost():
+			turn_events.append(_resolve_decoy_attack())
+			remaining -= _effective_attack_cost()
+			continue
+		if enemy_sees_player and manhattan(enemy_pos, player_pos) == 1 and remaining < _effective_attack_cost():
+			turn_events.append({"kind": "wait", "label": "等待攻击窗口"})
+			break
+		var attack_plan := _enemy_attack_plan(enemy_pos, remaining, enemy_sees_player)
+		if not attack_plan.is_empty():
+			var execution := _execute_enemy_attack_plan(attack_plan, remaining)
+			turn_events.append_array(execution.get("events", []))
+			remaining -= int(execution.get("cost", 0))
 			break
 		var goal := _enemy_goal()
 		if goal == INVALID_CELL:
 			turn_events.append({"kind": "wait", "label": "没有可达的搜查点"})
 			break
-		var path := _find_path(enemy_pos, goal)
-		if path.size() < 2:
+		var raw_step := _choose_enemy_step(enemy_pos, goal)
+		if raw_step == INVALID_CELL:
 			if not enemy_sees_player and last_seen == INVALID_CELL:
 				patrol_goal = INVALID_CELL
 				goal = _enemy_goal()
-				path = _find_path(enemy_pos, goal) if goal != INVALID_CELL else []
-			if path.size() < 2:
+				raw_step = _choose_enemy_step(enemy_pos, goal) if goal != INVALID_CELL else INVALID_CELL
+			if raw_step == INVALID_CELL:
 				turn_events.append({"kind": "wait", "label": "在遮挡后重新判断方向"})
 				break
-		var raw_step: Vector2i = path[1]
 		if raw_step == player_pos or (has_decoy() and raw_step == decoy_pos):
 			turn_events.append({"kind": "wait", "label": "等待攻击窗口"})
 			break
-		var was_adjacent := manhattan(enemy_pos, player_pos) == 1
-		var from := enemy_pos
-		enemy_just_portaled = portals.get(from, INVALID_CELL) == raw_step
-		enemy_pos = raw_step
 		var verb := "追击" if enemy_sees_player else "搜索" if last_seen != INVALID_CELL else "巡逻"
-		turn_events.append({"kind": "move", "from": from, "to": enemy_pos, "via_portal": enemy_just_portaled, "label": verb})
-		event_log.append("Enemy%s from=%s to=%s" % [verb, from, enemy_pos])
+		_move_enemy_to(raw_step, verb, turn_events)
 		remaining -= 1
-		_trigger_trap(enemy_pos, has_decoy() and goal == decoy_pos)
 		if traps.has(enemy_pos):
 			remaining -= int((traps[enemy_pos] as Dictionary).get("slow", 0))
-		_refresh_vision(true)
-		if not was_adjacent and manhattan(enemy_pos, player_pos) == 1:
-			_trigger_ready()
 		if not enemy_sees_player and last_seen == INVALID_CELL and enemy_pos == patrol_goal:
 			patrol_goal = INVALID_CELL
 	_finish_enemy_turn()
 	return turn_events
 
 
-func _resolve_enemy_attack() -> Dictionary:
-	if has_decoy() and manhattan(enemy_pos, decoy_pos) == 1:
-		var target := decoy_pos
-		event_log.append("EnemyDestroyedDecoy pos=%s" % decoy_pos)
-		decoy_pos = Vector2i(-1, -1)
-		return {"kind": "attack", "target": target, "damage": 0, "label": "撕碎纸影"}
-	var cover := int((traps.get(player_pos, {}) as Dictionary).get("cover_block", 0)) if traps.has(player_pos) else 0
-	var absorbed := mini(player_block + cover, enemy_damage)
-	player_block -= mini(player_block, absorbed)
-	var damage := enemy_damage - absorbed
+func _resolve_decoy_attack() -> Dictionary:
+	var target := decoy_pos
+	event_log.append("EnemyDestroyedDecoy pos=%s" % decoy_pos)
+	decoy_pos = Vector2i(-1, -1)
+	return {"kind": "attack", "target": target, "damage": 0, "label": "撕碎纸影", "attack_kind": "decoy"}
+
+
+func _enemy_turn_budget() -> int:
+	return maxi(1, enemy_action_points - 2) if stagger_pending else enemy_action_points
+
+
+func _has_trait(trait_id: String) -> bool:
+	return trait_id in enemy_traits
+
+
+func _effective_attack_cost() -> int:
+	return 1 if _has_trait("relentless") and enemy_sees_player else enemy_attack_cost
+
+
+func _enemy_attack_plan(origin: Vector2i, remaining: int, sees_player: bool) -> Dictionary:
+	if not sees_player or remaining <= 0:
+		return {}
+	var distance := manhattan(origin, player_pos)
+	var attack_cost := 1 if _has_trait("relentless") else enemy_attack_cost
+	if _has_trait("slam") and distance <= 1 and remaining >= attack_cost:
+		return {"kind": "slam", "cost": attack_cost, "cells": _slam_cells(origin, player_pos)}
+	if _has_trait("beam") and distance >= 2 and distance <= 3 and (origin.x == player_pos.x or origin.y == player_pos.y) and remaining >= attack_cost:
+		var beam_cells := _beam_cells(origin, player_pos)
+		if player_pos in beam_cells:
+			return {"kind": "beam_charge", "cost": attack_cost, "cells": beam_cells}
+	if distance == 1 and remaining >= attack_cost:
+		if _has_trait("guardBreak") and _player_defense_total(origin) > 0 and remaining >= attack_cost + 1:
+			return {"kind": "guardBreak", "cost": attack_cost + 1, "cells": [player_pos]}
+		return {"kind": "melee", "cost": attack_cost, "cells": [player_pos]}
+	if _has_trait("lunge") and distance == 2:
+		var landing := _lunge_landing(origin)
+		if landing != INVALID_CELL and remaining >= attack_cost + 1:
+			return {"kind": "lunge", "cost": attack_cost + 1, "cells": [landing, player_pos], "landing": landing}
+	return {}
+
+
+func _intent_from_attack_plan(plan: Dictionary, base: Dictionary) -> Dictionary:
+	var result := base.duplicate(true)
+	var kind := str(plan.get("kind", "melee"))
+	var display_kind := "beam" if kind == "beam_charge" else kind
+	var hits := _planned_attack_hits(plan, _enemy_turn_budget())
+	var damage := _raw_enemy_damage(enemy_pos)
+	result["hurt"] = (plan.get("cells", [player_pos]) as Array).duplicate()
+	result["type"] = "attack"
+	result["attack_kind"] = display_kind
+	result["hits"] = hits
+	result["pending"] = kind == "beam_charge"
+	var labels := {
+		"melee": "挥击",
+		"lunge": "突进",
+		"guardBreak": "破防",
+		"slam": "砸地",
+		"beam_charge": "激光蓄力",
+	}
+	var action_label := str(labels.get(kind, "攻击"))
+	result["label"] = "%s %d%s" % [action_label, damage, "×%d" % hits if hits > 1 else ""]
+	if kind == "beam_charge":
+		result["detail"] = "本回合锁定红色射线，下一敌方回合落下；期间可以离开红格。"
+	elif kind == "guardBreak":
+		result["detail"] = "无视格挡、掩体与高差防护；额外消耗 1 点敌方行动力。"
+	elif hits > 1:
+		result["detail"] = "连击 %d 段，每段 %d 点；格挡池会逐段消耗。" % [hits, damage]
+	else:
+		result["detail"] = "红格将在敌方回合受到攻击；攻击和预警使用同一份行动计划。"
+	return result
+
+
+func _planned_attack_hits(plan: Dictionary, remaining: int) -> int:
+	if not _has_trait("flurry") or str(plan.get("kind", "")) == "beam_charge":
+		return 1
+	var first_cost := int(plan.get("cost", _effective_attack_cost()))
+	return 2 if remaining - first_cost >= _effective_attack_cost() else 1
+
+
+func _execute_enemy_attack_plan(plan: Dictionary, remaining: int, hit_kind_override: String = "") -> Dictionary:
+	var events: Array[Dictionary] = []
+	var kind := str(plan.get("kind", "melee"))
+	var cost := int(plan.get("cost", _effective_attack_cost()))
+	if kind == "beam_charge":
+		beam_pending_cells.clear()
+		for raw_cell in plan.get("cells", []):
+			beam_pending_cells.append(raw_cell as Vector2i)
+		beam_pending_damage = _raw_enemy_damage(enemy_pos)
+		events.append({"kind": "beam_charge", "cells": beam_pending_cells.duplicate(), "damage": beam_pending_damage, "label": "激光蓄力"})
+		event_log.append("EnemyBeamCharged cells=%s damage=%d" % [str(beam_pending_cells), beam_pending_damage])
+		return {"events": events, "cost": cost}
+	if kind == "lunge":
+		var landing: Vector2i = plan.get("landing", INVALID_CELL)
+		if landing != INVALID_CELL:
+			_move_enemy_to(landing, "突进", events)
+			if outcome != "":
+				return {"events": events, "cost": cost}
+	var hits := _planned_attack_hits(plan, remaining)
+	var attack_kind := hit_kind_override if not hit_kind_override.is_empty() else kind
+	for hit_index in range(hits):
+		var hit_result := _apply_player_hit(attack_kind)
+		hit_result["kind"] = "attack"
+		hit_result["target"] = player_pos
+		hit_result["attack_kind"] = attack_kind
+		hit_result["hit_index"] = hit_index + 1
+		hit_result["hits"] = hits
+		hit_result["cells"] = (plan.get("cells", [player_pos]) as Array).duplicate()
+		hit_result["label"] = _attack_label(attack_kind, hit_index + 1, hits)
+		events.append(hit_result)
+		var stolen_id := str(hit_result.get("stolen_card", ""))
+		if not stolen_id.is_empty():
+			var stolen_name := str((cards.get(stolen_id, {}) as Dictionary).get("name", stolen_id))
+			events.append({"kind": "grab", "card_id": stolen_id, "label": "搜刮·%s" % stolen_name})
+		if outcome != "":
+			break
+	var total_cost := cost + maxi(0, hits - 1) * _effective_attack_cost()
+	return {"events": events, "cost": total_cost}
+
+
+func _apply_player_hit(kind: String, damage_override: int = -1) -> Dictionary:
+	var raw_damage := damage_override if damage_override >= 0 else _raw_enemy_damage(enemy_pos)
+	var blocked := 0
+	var damage := raw_damage
+	if kind == "guardBreak":
+		player_block = 0
+	else:
+		var cover := int((traps.get(player_pos, {}) as Dictionary).get("cover_block", 0)) if traps.has(player_pos) else 0
+		var height_cover := 1 if _tile_height(player_pos) > _tile_height(enemy_pos) else 0
+		var innate_block := mini(cover + height_cover, damage)
+		damage -= innate_block
+		var card_block := mini(player_block, damage)
+		player_block -= card_block
+		damage -= card_block
+		blocked = innate_block + card_block
 	player_hp -= damage
-	event_log.append("EnemyAttack damage=%d blocked=%d hp=%d" % [damage, absorbed, player_hp])
+	var stolen_id := ""
+	if damage > 0 and _has_trait("grab"):
+		stolen_id = _steal_player_card()
+	event_log.append("EnemyAttack kind=%s damage=%d blocked=%d hp=%d" % [kind, damage, blocked, player_hp])
+	if not stolen_id.is_empty():
+		event_log.append("EnemyGrab card=%s" % stolen_id)
 	if player_hp <= 0:
 		outcome = "defeat"
 		event_log.append("CombatEnded outcome=defeat")
-	return {"kind": "attack", "target": player_pos, "damage": damage, "blocked": absorbed, "label": "攻击"}
+	return {"damage": damage, "blocked": blocked, "raw_damage": raw_damage, "stolen_card": stolen_id}
+
+
+func _steal_player_card() -> String:
+	for zone in [hand, discard, deck]:
+		for index in range(zone.size()):
+			var card_id := str(zone[index])
+			if bool((cards.get(card_id, {}) as Dictionary).get("stealable", false)):
+				zone.remove_at(index)
+				return card_id
+	for zone in [hand, discard, deck]:
+		if not zone.is_empty():
+			return str(zone.pop_front())
+	return ""
+
+
+func _attack_label(kind: String, hit_index: int, hits: int) -> String:
+	var labels := {"melee": "攻击", "faceShock": "突脸惊吓", "lunge": "突进", "guardBreak": "破防", "slam": "砸地", "beam": "激光"}
+	var label := str(labels.get(kind, "攻击"))
+	return "%s %d/%d" % [label, hit_index, hits] if hits > 1 else label
+
+
+func _raw_enemy_damage(origin: Vector2i) -> int:
+	return enemy_damage + (1 if _tile_height(origin) > _tile_height(player_pos) else 0)
+
+
+func _player_defense_total(origin: Vector2i) -> int:
+	var cover := int((traps.get(player_pos, {}) as Dictionary).get("cover_block", 0)) if traps.has(player_pos) else 0
+	return player_block + cover + (1 if _tile_height(player_pos) > _tile_height(origin) else 0)
+
+
+func _slam_cells(origin: Vector2i, target: Vector2i) -> Array[Vector2i]:
+	var dx := signi(origin.x - target.x)
+	var dy := signi(origin.y - target.y)
+	var xs: Array[int] = []
+	var ys: Array[int] = []
+	xs.assign([target.x - 1, target.x] if dx < 0 else [target.x, target.x + 1])
+	ys.assign([target.y - 1, target.y] if dy < 0 else [target.y, target.y + 1])
+	var cells: Array[Vector2i] = []
+	for y in ys:
+		for x in xs:
+			var cell := Vector2i(x, y)
+			if is_walkable(cell):
+				cells.append(cell)
+	return cells
+
+
+func _beam_cells(origin: Vector2i, target: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var direction := Vector2i.ZERO
+	if origin.x == target.x:
+		direction.y = signi(target.y - origin.y)
+	elif origin.y == target.y:
+		direction.x = signi(target.x - origin.x)
+	for distance in range(1, 4):
+		var cell := origin + direction * distance
+		if direction == Vector2i.ZERO or not is_walkable(cell):
+			break
+		cells.append(cell)
+	return cells
+
+
+func _lunge_landing(origin: Vector2i) -> Vector2i:
+	var candidates: Array[Vector2i] = []
+	for direction in DIRS:
+		var cell: Vector2i = origin + direction
+		if is_walkable(cell) and cell != player_pos and cell != decoy_pos and manhattan(cell, player_pos) == 1:
+			candidates.append(cell)
+	if candidates.is_empty():
+		return INVALID_CELL
+	candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		var cost_a := int((traps.get(a, {}) as Dictionary).get("slow", 0))
+		var cost_b := int((traps.get(b, {}) as Dictionary).get("slow", 0))
+		return cost_a < cost_b
+	)
+	return candidates[0]
+
+
+func _choose_enemy_step(origin: Vector2i, goal: Vector2i) -> Vector2i:
+	if goal == INVALID_CELL:
+		return INVALID_CELL
+	var candidates: Array[Dictionary] = []
+	for direction in DIRS:
+		var cell: Vector2i = origin + direction
+		if not is_walkable(cell) or cell == player_pos or cell == decoy_pos:
+			continue
+		var path := _find_path(cell, goal)
+		if path.size() < 2 and cell != goal:
+			continue
+		var trap: Dictionary = traps.get(cell, {})
+		var hazard := 2 if int(trap.get("damage", 0)) > 0 else 1 if int(trap.get("slow", 0)) > 0 else 0
+		candidates.append({"cell": cell, "distance": path.size(), "hazard": hazard, "height": _tile_height(cell)})
+	if portals.has(origin):
+		var portal_cell: Vector2i = portals[origin]
+		if is_walkable(portal_cell) and portal_cell != player_pos and portal_cell != decoy_pos:
+			var portal_path := _find_path(portal_cell, goal)
+			candidates.append({"cell": portal_cell, "distance": portal_path.size(), "hazard": 0, "height": _tile_height(portal_cell)})
+	if candidates.is_empty():
+		return INVALID_CELL
+	if _has_trait("vault"):
+		var current_distance := manhattan(origin, goal)
+		var climb_options := candidates.filter(func(option: Dictionary) -> bool:
+			return int(option["height"]) > _tile_height(origin) and manhattan(option["cell"], goal) <= current_distance
+		)
+		if not climb_options.is_empty():
+			climb_options.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["height"]) > int(b["height"]))
+			return climb_options[0]["cell"]
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if int(a["distance"]) != int(b["distance"]):
+			return int(a["distance"]) < int(b["distance"])
+		if _has_trait("trapAware") and int(a["hazard"]) != int(b["hazard"]):
+			return int(a["hazard"]) < int(b["hazard"])
+		if _has_trait("vault") and int(a["height"]) != int(b["height"]):
+			return int(a["height"]) > int(b["height"])
+		return str(a["cell"]) < str(b["cell"])
+	)
+	return candidates[0]["cell"]
+
+
+func _move_enemy_to(target: Vector2i, verb: String, events: Array[Dictionary], free_step: bool = false) -> void:
+	var was_adjacent := manhattan(enemy_pos, player_pos) == 1
+	var from := enemy_pos
+	enemy_just_portaled = portals.get(from, INVALID_CELL) == target
+	enemy_pos = target
+	events.append({"kind": "move", "from": from, "to": enemy_pos, "via_portal": enemy_just_portaled, "free": free_step, "label": verb})
+	event_log.append("Enemy%s from=%s to=%s free=%s" % [verb, from, enemy_pos, str(free_step)])
+	_trigger_trap(enemy_pos, has_decoy() and _enemy_goal() == decoy_pos)
+	_refresh_vision(true)
+	if not was_adjacent and manhattan(enemy_pos, player_pos) == 1:
+		_trigger_ready()
 
 
 func _finish_enemy_turn() -> void:
@@ -835,6 +1163,8 @@ func _refresh_vision(emit_events: bool = true) -> void:
 		last_seen = player_pos
 		last_seen_age = 0
 		patrol_goal = INVALID_CELL
+		if emit_events and not had_enemy_los:
+			player_exposed = true
 		if ambush_active:
 			ambush_active = false
 			if emit_events:
