@@ -51,6 +51,13 @@ const HOUSE_CAMERA_DIRECTION := Vector3(10.5, 13.5, 11.5)
 const CAMERA_ZOOM_MIN := 0.55
 const CAMERA_ZOOM_MAX := 1.35
 const CAMERA_ORBIT_SENSITIVITY := 0.008
+const CAMERA_INTRO_FAR_SCALE := 2.4
+const CAMERA_INTRO_DURATION := 1.35
+const HOUSE_CAMERA_FOLLOW_RATE := 3.4
+const HOUSE_CAMERA_YAW_FOLLOW_RATE := 3.0
+const HOUSE_CAMERA_RETURN_DELAY := 1.5
+const HOUSE_CAMERA_RETURN_DURATION := 1.05
+const BATTLE_CAMERA_FOLLOW_RATE := 4.5
 const INVALID_CELL := Vector2i(-999, -999)
 const UNITY_ROOM_DROP_DURATION := 0.25
 const UNITY_ROOM_DROP_HEIGHT_CELLS := 0.65
@@ -163,6 +170,14 @@ var battle_camera_yaw := atan2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z)
 var battle_camera_pitch := atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
 var battle_player_facing_yaw := 0.0
 var battle_enemy_facing_yaw := PI
+var house_camera_following := false
+var house_camera_user_hold := false
+var house_camera_return_delay := 0.0
+var house_camera_returning := false
+var house_camera_intro_weight := 1.0
+var house_camera_intro_tween: Tween = null
+var house_camera_return_tween: Tween = null
+var battle_camera_following := false
 var battle_room_title := "房间"
 var battle_shell_edge_records: Dictionary = {}
 var battle_shell_culled_count := 0
@@ -340,6 +355,41 @@ func _process(delta: float) -> void:
 		_update_sideview(delta)
 	elif phase == "lab_chase":
 		_update_chase(delta)
+	_update_camera_follow(delta)
+
+
+func _update_camera_follow(delta: float) -> void:
+	if house_camera_return_delay > 0.0:
+		house_camera_return_delay = maxf(0.0, house_camera_return_delay - delta)
+		if house_camera_return_delay <= 0.0 and not house_camera_user_hold:
+			_start_house_camera_return()
+	if phase in ["explore", "build", "room_ready"] and camera != null:
+		if house_camera_following and not house_camera_user_hold and not house_camera_returning:
+			var follow_target := _house_follow_target_position()
+			var factor := 1.0 - exp(-HOUSE_CAMERA_FOLLOW_RATE * delta)
+			var next_target := house_camera_target.lerp(follow_target, factor)
+			if not next_target.is_equal_approx(house_camera_target):
+				house_camera_target = next_target
+				var yaw_factor := 1.0 - exp(-HOUSE_CAMERA_YAW_FOLLOW_RATE * delta)
+				house_camera_yaw = lerp_angle(house_camera_yaw, house_player_facing_yaw, yaw_factor)
+				_clamp_house_camera_target()
+				_apply_house_camera()
+	elif phase == "combat" and combat != null and camera != null:
+		if battle_camera_following:
+			var follow_target := _battle_pawn_world(combat.player_pos, true)
+			var factor := 1.0 - exp(-BATTLE_CAMERA_FOLLOW_RATE * delta)
+			var next_target := battle_camera_target.lerp(follow_target, factor)
+			if not next_target.is_equal_approx(battle_camera_target):
+				battle_camera_target = next_target
+				_clamp_battle_camera_target()
+				_apply_battle_camera()
+
+
+func _house_follow_target_position() -> Vector3:
+	var token := house_root.get_node_or_null("LiliToken") as Node3D
+	if token != null:
+		return Vector3(token.position.x, 0.0, token.position.z)
+	return _house_world(current_room_pos)
 
 
 func _configure_environment() -> void:
@@ -430,6 +480,11 @@ func reset_run(seed_value: int = 0) -> void:
 	house_camera_yaw = atan2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z)
 	house_camera_pitch = atan2(HOUSE_CAMERA_DIRECTION.y, Vector2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z).length())
 	house_camera_distance = HOUSE_CAMERA_DIRECTION.length()
+	house_camera_following = false
+	house_camera_user_hold = false
+	house_camera_return_delay = 0.0
+	house_camera_returning = false
+	battle_camera_following = false
 	house_player_facing_yaw = 0.0
 	house_actor_slot_assignments.clear()
 	battle_player_facing_yaw = 0.0
@@ -444,6 +499,7 @@ func reset_run(seed_value: int = 0) -> void:
 	status_message = "行前先从两枚预兆里选一枚；玄关只作为出发坐标。"
 	build_house_world()
 	_set_house_camera()
+	_start_camera_intro()
 	_refresh_hud()
 
 
@@ -488,6 +544,17 @@ func go_home() -> void:
 	_cancel_dynamic_effect()
 	character_animation_demo_mode = false
 	camera.environment = null
+	house_camera_following = false
+	house_camera_user_hold = false
+	house_camera_return_delay = 0.0
+	house_camera_returning = false
+	house_camera_intro_weight = 1.0
+	battle_camera_following = false
+	if house_camera_return_tween != null and house_camera_return_tween.is_valid():
+		house_camera_return_tween.kill()
+		house_camera_return_tween = null
+	if house_camera_intro_tween != null and house_camera_intro_tween.is_valid():
+		house_camera_intro_tween.kill()
 	phase = "home"
 	home_tests_open = false
 	house_root.visible = false
@@ -1348,6 +1415,9 @@ func enter_room(target: Vector2i) -> void:
 		return
 	animation_busy = true
 	active_animation_kind = "room_entry"
+	house_camera_following = true
+	house_camera_user_hold = false
+	_cancel_house_camera_return()
 	status_message = "莉莉正走进未知房间……"
 	_refresh_hud()
 	_animate_enter_room(target)
@@ -1900,6 +1970,7 @@ func handle_battle_cell(target: Vector2i) -> void:
 
 
 func _animate_player_battle_step(source: Vector2i, target: Vector2i) -> void:
+	battle_camera_following = true
 	_play_actor_state("Player", "move")
 	var player_node := battle_root.get_node_or_null("Player") as Node3D
 	var duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
@@ -2057,6 +2128,7 @@ func _refit_battle_camera(preserve_zoom: bool) -> void:
 func pan_battle_camera(pixel_delta: Vector2) -> void:
 	if phase != "combat" or combat == null:
 		return
+	battle_camera_following = false
 	var units_per_pixel := camera.size / maxf(1.0, world_view_rect.size.y)
 	var right := Vector3(camera.global_transform.basis.x.x, 0.0, camera.global_transform.basis.x.z).normalized()
 	var screen_up := Vector3(camera.global_transform.basis.y.x, 0.0, camera.global_transform.basis.y.z).normalized()
@@ -2068,6 +2140,7 @@ func pan_battle_camera(pixel_delta: Vector2) -> void:
 func orbit_battle_camera(pixel_delta: Vector2) -> void:
 	if phase != "combat" or combat == null:
 		return
+	battle_camera_following = false
 	battle_camera_yaw = fposmod(battle_camera_yaw - pixel_delta.x * CAMERA_ORBIT_SENSITIVITY, TAU)
 	_apply_battle_camera()
 
@@ -2075,6 +2148,7 @@ func orbit_battle_camera(pixel_delta: Vector2) -> void:
 func zoom_battle_camera(view_pos: Vector2, zoom_factor: float) -> void:
 	if phase != "combat" or combat == null:
 		return
+	battle_camera_following = false
 	var before: Variant = _screen_to_plane(view_pos, 0.0)
 	camera.size = clampf(camera.size * zoom_factor, battle_camera_fit_size * CAMERA_ZOOM_MIN, battle_camera_fit_size * CAMERA_ZOOM_MAX)
 	battle_camera_zoom_ratio = camera.size / maxf(0.001, battle_camera_fit_size)
@@ -3137,6 +3211,8 @@ func _set_house_camera() -> void:
 func pan_house_camera(pixel_delta: Vector2) -> void:
 	if phase not in ["explore", "build", "room_ready"]:
 		return
+	house_camera_user_hold = true
+	_cancel_house_camera_return()
 	var units_per_pixel := camera.size / maxf(1.0, world_view_rect.size.y)
 	var right := Vector3(camera.global_transform.basis.x.x, 0.0, camera.global_transform.basis.x.z).normalized()
 	var screen_up := Vector3(camera.global_transform.basis.y.x, 0.0, camera.global_transform.basis.y.z).normalized()
@@ -3149,6 +3225,8 @@ func pan_house_camera(pixel_delta: Vector2) -> void:
 func orbit_house_camera(pixel_delta: Vector2) -> void:
 	if phase not in ["explore", "build", "room_ready"]:
 		return
+	house_camera_user_hold = true
+	_cancel_house_camera_return()
 	house_camera_yaw = fposmod(house_camera_yaw - pixel_delta.x * CAMERA_ORBIT_SENSITIVITY, TAU)
 	house_camera_user_adjusted = true
 	_apply_house_camera()
@@ -3157,6 +3235,7 @@ func orbit_house_camera(pixel_delta: Vector2) -> void:
 func zoom_house_camera(view_pos: Vector2, zoom_factor: float) -> void:
 	if phase not in ["explore", "build", "room_ready"]:
 		return
+	_cancel_house_camera_return()
 	var before: Variant = _screen_to_plane(view_pos, 0.0)
 	var next_size := clampf(camera.size * zoom_factor, house_camera_fit_size * CAMERA_ZOOM_MIN, house_camera_fit_size * CAMERA_ZOOM_MAX)
 	camera.size = next_size
@@ -3180,6 +3259,91 @@ func reset_house_camera() -> void:
 	_set_house_camera()
 
 
+func _start_camera_intro() -> void:
+	if camera == null:
+		return
+	house_camera_following = false
+	house_camera_user_hold = false
+	house_camera_return_delay = 0.0
+	house_camera_returning = false
+	if house_camera_return_tween != null and house_camera_return_tween.is_valid():
+		house_camera_return_tween.kill()
+		house_camera_return_tween = null
+	if house_camera_intro_tween != null and house_camera_intro_tween.is_valid():
+		house_camera_intro_tween.kill()
+	var duration := CAMERA_INTRO_DURATION * animation_duration_scale
+	if duration <= 0.0:
+		house_camera_intro_weight = 1.0
+		_apply_house_camera()
+		return
+	house_camera_intro_weight = 0.0
+	_apply_house_camera()
+	house_camera_intro_tween = create_tween()
+	house_camera_intro_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	house_camera_intro_tween.tween_method(func(weight: float) -> void:
+		house_camera_intro_weight = weight
+		_apply_house_camera()
+	, 0.0, 1.0, duration)
+
+
+func release_house_camera_gesture() -> void:
+	house_camera_user_hold = false
+	if house_camera_following and not house_camera_returning:
+		house_camera_return_delay = HOUSE_CAMERA_RETURN_DELAY
+
+
+func _cancel_house_camera_return() -> void:
+	house_camera_return_delay = 0.0
+	house_camera_returning = false
+	if house_camera_return_tween != null and house_camera_return_tween.is_valid():
+		house_camera_return_tween.kill()
+		house_camera_return_tween = null
+
+
+func _start_house_camera_return() -> void:
+	if camera == null or phase not in ["explore", "build", "room_ready"]:
+		return
+	house_camera_returning = true
+	var player_pos := _house_follow_target_position()
+	var default_yaw := atan2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z)
+	var default_pitch := atan2(HOUSE_CAMERA_DIRECTION.y, Vector2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z).length())
+	var default_distance := HOUSE_CAMERA_DIRECTION.length()
+	var duration := HOUSE_CAMERA_RETURN_DURATION * animation_duration_scale
+	if duration <= 0.0:
+		house_camera_target = player_pos
+		house_camera_yaw = default_yaw
+		house_camera_pitch = default_pitch
+		house_camera_distance = default_distance
+		house_camera_zoom_ratio = 1.0
+		house_camera_returning = false
+		_clamp_house_camera_target()
+		_apply_house_camera()
+		return
+	var start_target := house_camera_target
+	var start_yaw := house_camera_yaw
+	var start_pitch := house_camera_pitch
+	var start_distance := house_camera_distance
+	var start_zoom := house_camera_zoom_ratio
+	house_camera_return_tween = create_tween()
+	house_camera_return_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	house_camera_return_tween.tween_method(func(weight: float) -> void:
+		house_camera_target = start_target.lerp(player_pos, weight)
+		house_camera_yaw = lerp_angle(start_yaw, default_yaw, weight)
+		house_camera_pitch = lerpf(start_pitch, default_pitch, weight)
+		house_camera_distance = lerpf(start_distance, default_distance, weight)
+		house_camera_zoom_ratio = lerpf(start_zoom, 1.0, weight)
+		_clamp_house_camera_target()
+		_apply_house_camera()
+	, 0.0, 1.0, duration)
+	house_camera_return_tween.finished.connect(func() -> void:
+		house_camera_returning = false
+		house_camera_return_delay = 0.0
+		house_camera_return_tween = null
+		_clamp_house_camera_target()
+		_apply_house_camera()
+	)
+
+
 func _clamp_house_camera_target() -> void:
 	var limit := maxf(HOUSE_CELL * 2.0, house_camera_fit_size * 0.85)
 	house_camera_target.x = clampf(house_camera_target.x, -limit, limit)
@@ -3192,6 +3356,7 @@ func _apply_house_camera() -> void:
 	var direction := Vector3(sin(house_camera_yaw) * horizontal, sin(house_camera_pitch) * house_camera_distance, cos(house_camera_yaw) * horizontal)
 	camera.position = house_camera_target + direction
 	camera.look_at(house_camera_target + Vector3(0, 0.2, 0), Vector3.UP)
+	camera.size = clampf(house_camera_fit_size * house_camera_zoom_ratio, house_camera_fit_size * CAMERA_ZOOM_MIN, house_camera_fit_size * CAMERA_ZOOM_MAX) * lerpf(CAMERA_INTRO_FAR_SCALE, 1.0, house_camera_intro_weight)
 	if kenney_build_lab_mode:
 		_apply_current_room_cutaway()
 

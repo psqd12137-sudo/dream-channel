@@ -88,6 +88,7 @@ var ui_offset := Vector2.ZERO
 var world_view_rect_screen := HOUSE_VIEW_RECT
 var middle_dragging := false
 var last_layout_size := Vector2.ZERO
+var last_layout_phase := ""
 var side_left := false
 var side_right := false
 var combat_ui_layout: Control
@@ -152,6 +153,8 @@ func _notification(what: int) -> void:
 
 
 func _process(delta: float) -> void:
+	if game != null and last_layout_phase != game.phase:
+		sync_layout()
 	if seed_input != null:
 		seed_input.visible = game != null and game.phase == "home"
 	# 离开战斗时清理残留的飞行动画状态
@@ -300,10 +303,11 @@ func combat_cards() -> Dictionary:
 
 
 func sync_layout() -> void:
-	var viewport_size := size
+	var viewport_size := get_viewport_rect().size
 	if viewport_size.x < 1.0 or viewport_size.y < 1.0:
-		viewport_size = get_viewport_rect().size
-	var layout := calculate_layout(viewport_size, game.phase if game != null else "explore")
+		viewport_size = size
+	last_layout_phase = game.phase if game != null else ""
+	var layout := calculate_layout(viewport_size, last_layout_phase)
 	ui_scale = float(layout["scale"])
 	ui_offset = layout["offset"]
 	world_view_rect_screen = layout["board_rect"]
@@ -372,6 +376,12 @@ func _scale_rect(rect: Rect2, scale_value: float, offset_value: Vector2) -> Rect
 
 func _to_design(point: Vector2) -> Vector2:
 	return (point - ui_offset) / maxf(0.001, ui_scale)
+
+
+func _ensure_input_layout() -> void:
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x > 0.0 and viewport_size.y > 0.0 and not last_layout_size.is_equal_approx(viewport_size):
+		sync_layout()
 
 
 func _draw() -> void:
@@ -1076,6 +1086,7 @@ func _house_overlay_has_point(point: Vector2) -> bool:
 func _gui_input(event: InputEvent) -> void:
 	if game == null:
 		return
+	_ensure_input_layout()
 	if event is InputEventMouseMotion:
 		var design_point := _to_design(event.position)
 		if dragged_combat_card >= 0 and game.phase == "combat":
@@ -1180,9 +1191,12 @@ func _gui_input(event: InputEvent) -> void:
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase in ["explore", "build", "room_ready"]:
 		if not mouse_event.pressed and board_left_pressed:
 			var should_click := not board_left_dragged and world_view_rect_screen.has_point(mouse_event.position)
+			var was_dragged := board_left_dragged
 			board_left_pressed = false
 			board_left_dragged = false
 			board_left_distance = 0.0
+			if was_dragged:
+				game.release_house_camera_gesture()
 			if should_click:
 				game.handle_screen_click(mouse_event.position - world_view_rect_screen.position)
 			accept_event()
@@ -1201,6 +1215,8 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 		elif not mouse_event.pressed:
 			middle_dragging = false
+			if game.phase in ["explore", "build", "room_ready"]:
+				game.release_house_camera_gesture()
 			accept_event()
 		return
 	if mouse_event.pressed and game.phase == "combat" and world_view_rect_screen.has_point(mouse_event.position):
