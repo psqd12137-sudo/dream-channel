@@ -54,6 +54,7 @@ const CAMERA_ORBIT_SENSITIVITY := 0.008
 const CAMERA_INTRO_FAR_SCALE := 2.4
 const CAMERA_INTRO_DURATION := 1.35
 const HOUSE_CAMERA_FOLLOW_RATE := 3.4
+const HOUSE_CAMERA_FRAME_OFFSET := 0.15
 const HOUSE_CAMERA_RETURN_DELAY := 1.5
 const HOUSE_CAMERA_RETURN_DURATION := 1.05
 const BATTLE_CAMERA_FOLLOW_RATE := 4.5
@@ -364,7 +365,7 @@ func _update_camera_follow(delta: float) -> void:
 			_start_house_camera_return()
 	if phase in ["explore", "build", "room_ready"] and camera != null:
 		if house_camera_following and not house_camera_user_hold and not house_camera_returning:
-			var follow_target := _house_follow_target_position()
+			var follow_target := _house_follow_target_position() + _house_camera_frame_offset()
 			var factor := 1.0 - exp(-HOUSE_CAMERA_FOLLOW_RATE * delta)
 			var next_target := house_camera_target.lerp(follow_target, factor)
 			if not next_target.is_equal_approx(house_camera_target):
@@ -387,6 +388,12 @@ func _house_follow_target_position() -> Vector3:
 	if token != null:
 		return Vector3(token.position.x, 0.0, token.position.z)
 	return _house_world(current_room_pos)
+
+
+func _house_camera_frame_offset() -> Vector3:
+	if camera == null:
+		return Vector3.ZERO
+	return camera.global_transform.basis.y * (camera.size * HOUSE_CAMERA_FRAME_OFFSET)
 
 
 func _configure_environment() -> void:
@@ -3301,7 +3308,7 @@ func _start_house_camera_return() -> void:
 	if camera == null or phase not in ["explore", "build", "room_ready"]:
 		return
 	house_camera_returning = true
-	var player_pos := _house_follow_target_position()
+	var player_pos := _house_follow_target_position() + _house_camera_frame_offset()
 	var duration := HOUSE_CAMERA_RETURN_DURATION * animation_duration_scale
 	if duration <= 0.0:
 		house_camera_target = player_pos
