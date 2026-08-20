@@ -5,6 +5,7 @@ const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
 const CombatRules = preload("res://scripts/combat_rules.gd")
 const WebContentAdapter = preload("res://scripts/web_content_adapter.gd")
 const CharacterPresenter = preload("res://scripts/character_presenter.gd")
+const CameraFollowMath = preload("res://scripts/camera_follow_math.gd")
 const RoomArtRegistry = preload("res://scripts/room_art_registry.gd")
 const DIORAMA_ART_LAB = preload("res://scenes/diorama_art_lab.tscn")
 const PCG_DIORAMA_STITCH_LAB = preload("res://scenes/pcg_diorama_stitch_lab.tscn")
@@ -365,6 +366,12 @@ func _process(delta: float) -> void:
 	_update_camera_follow(delta)
 
 
+## 相机系统分区：
+## - 探索地图（house）：`house_camera_*` 状态 + `_update_camera_follow` 的 house 分支，
+##   入场运镜（_start_camera_intro）、延迟跟随（enter_room 激活）、松手延迟回位、玩家偏下构图。
+## - 战斗（battle）：`battle_camera_*` 状态 + `_update_camera_follow` 的 battle 分支，
+##   走格跟随玩家-怪物中点、松手延迟回位、偏上对准。
+## - 共享数学在 `camera_follow_math.gd`（平滑因子、屏幕上方偏移）。
 func _update_camera_follow(delta: float) -> void:
 	if house_camera_return_delay > 0.0:
 		house_camera_return_delay = maxf(0.0, house_camera_return_delay - delta)
@@ -373,7 +380,7 @@ func _update_camera_follow(delta: float) -> void:
 	if phase in ["explore", "build", "room_ready"] and camera != null:
 		if house_camera_following and not house_camera_user_hold and not house_camera_returning:
 			var follow_target := _house_follow_target_position() + _house_camera_frame_offset()
-			var factor := 1.0 - exp(-HOUSE_CAMERA_FOLLOW_RATE * delta)
+			var factor := CameraFollowMath.smooth_factor(HOUSE_CAMERA_FOLLOW_RATE, delta)
 			var next_target := house_camera_target.lerp(follow_target, factor)
 			if not next_target.is_equal_approx(house_camera_target):
 				house_camera_target = next_target
@@ -386,7 +393,7 @@ func _update_camera_follow(delta: float) -> void:
 				_start_battle_camera_return()
 		if battle_camera_following and not battle_camera_user_hold and not battle_camera_returning:
 			var follow_target := _battle_follow_target_position() + _battle_camera_frame_offset()
-			var factor := 1.0 - exp(-HOUSE_CAMERA_FOLLOW_RATE * delta)
+			var factor := CameraFollowMath.smooth_factor(HOUSE_CAMERA_FOLLOW_RATE, delta)
 			var next_target := battle_camera_target.lerp(follow_target, factor)
 			if not next_target.is_equal_approx(battle_camera_target):
 				battle_camera_target = next_target
@@ -402,15 +409,11 @@ func _house_follow_target_position() -> Vector3:
 
 
 func _house_camera_frame_offset() -> Vector3:
-	if camera == null:
-		return Vector3.ZERO
-	return camera.global_transform.basis.y * (camera.size * HOUSE_CAMERA_FRAME_OFFSET)
+	return CameraFollowMath.screen_up_offset(camera, HOUSE_CAMERA_FRAME_OFFSET)
 
 
 func _battle_camera_frame_offset() -> Vector3:
-	if camera == null:
-		return Vector3.ZERO
-	return camera.global_transform.basis.y * (camera.size * BATTLE_CAMERA_FRAME_OFFSET)
+	return CameraFollowMath.screen_up_offset(camera, BATTLE_CAMERA_FRAME_OFFSET)
 
 
 func _battle_follow_target_position() -> Vector3:
@@ -3318,7 +3321,8 @@ func _set_house_camera() -> void:
 		horizontal_radius = maxf(horizontal_radius, Vector2(point.x - center.x, point.z - center.z).length())
 	horizontal_radius += HOUSE_CELL * 1.15
 	house_camera_fit_size = minf(28.0, _rotation_invariant_fit_size(horizontal_radius, HOUSE_CELL * 1.65, house_camera_pitch, 0.8, 12.0))
-	if not house_camera_user_adjusted:
+	# 跟随/回位/用户操作期间保持镜头对准点（玩家偏上构图），只有空闲态才重置为布局中心
+	if not house_camera_user_adjusted and not house_camera_following and not house_camera_returning and not house_camera_user_hold:
 		house_camera_target = center
 	camera.size = clampf(house_camera_fit_size * house_camera_zoom_ratio, house_camera_fit_size * CAMERA_ZOOM_MIN, house_camera_fit_size * CAMERA_ZOOM_MAX)
 	_apply_house_camera()
@@ -3367,6 +3371,13 @@ func zoom_house_camera(view_pos: Vector2, zoom_factor: float) -> void:
 
 
 func reset_house_camera() -> void:
+	house_camera_following = false
+	house_camera_user_hold = false
+	house_camera_return_delay = 0.0
+	house_camera_returning = false
+	if house_camera_return_tween != null and house_camera_return_tween.is_valid():
+		house_camera_return_tween.kill()
+		house_camera_return_tween = null
 	house_camera_zoom_ratio = 1.0
 	house_camera_user_adjusted = false
 	house_camera_yaw = atan2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z)
