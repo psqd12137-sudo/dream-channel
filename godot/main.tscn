@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource path="res://scripts/prototype.gd" type="Script" id="1"]
+[ext_resource type="Theme" path="res://assets/fonts/app_theme.tres" id="2_app_theme"]
 
 [node name="ChannelGodotBridgeTest" type="Control"]
 layout_mode = 3
@@ -10,5 +11,6 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
+theme = ExtResource("2_app_theme")
 script = ExtResource("1")
 

@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://cumj76m68qje3"
 path.s3tc="res://.godot/imported/Demon_Demon_Texture.png-4f201301c21530818988bcd239ab3aff.s3tc.ctex"
+path.etc2="res://.godot/imported/Demon_Demon_Texture.png-4f201301c21530818988bcd239ab3aff.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/quaternius/animated_characters/Demon_Demon_Texture.png"
-dest_files=["res://.godot/imported/Demon_Demon_Texture.png-4f201301c21530818988bcd239ab3aff.s3tc.ctex"]
+dest_files=["res://.godot/imported/Demon_Demon_Texture.png-4f201301c21530818988bcd239ab3aff.s3tc.ctex", "res://.godot/imported/Demon_Demon_Texture.png-4f201301c21530818988bcd239ab3aff.etc2.ctex"]
 
 [params]
 

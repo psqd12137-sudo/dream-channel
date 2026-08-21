@@ -10,6 +10,7 @@ Thumbs.db
 # Local caches / tools (not part of the game)
 .tools/
 downloads/
+godot/builds/
 
 # Unrelated local experiments in this folder
 Quark_Magnet_Search/

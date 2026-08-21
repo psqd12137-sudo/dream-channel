@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://ckkkkymuov2qq"
 path.s3tc="res://.godot/imported/colormap.png-b4f0c0637567931cedf0d271973491b4.s3tc.ctex"
+path.etc2="res://.godot/imported/colormap.png-b4f0c0637567931cedf0d271973491b4.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/third_party/kenney_mini_dungeon/models/Textures/colormap.png"
-dest_files=["res://.godot/imported/colormap.png-b4f0c0637567931cedf0d271973491b4.s3tc.ctex"]
+dest_files=["res://.godot/imported/colormap.png-b4f0c0637567931cedf0d271973491b4.s3tc.ctex", "res://.godot/imported/colormap.png-b4f0c0637567931cedf0d271973491b4.etc2.ctex"]
 
 [params]
 

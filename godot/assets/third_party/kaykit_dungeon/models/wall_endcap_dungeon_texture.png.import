@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://bm1beeakb0gxm"
 path.s3tc="res://.godot/imported/wall_endcap_dungeon_texture.png-76b40513671dbe76a0e5edcf5768cefe.s3tc.ctex"
+path.etc2="res://.godot/imported/wall_endcap_dungeon_texture.png-76b40513671dbe76a0e5edcf5768cefe.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/third_party/kaykit_dungeon/models/wall_endcap_dungeon_texture.png"
-dest_files=["res://.godot/imported/wall_endcap_dungeon_texture.png-76b40513671dbe76a0e5edcf5768cefe.s3tc.ctex"]
+dest_files=["res://.godot/imported/wall_endcap_dungeon_texture.png-76b40513671dbe76a0e5edcf5768cefe.s3tc.ctex", "res://.godot/imported/wall_endcap_dungeon_texture.png-76b40513671dbe76a0e5edcf5768cefe.etc2.ctex"]
 
 [params]
 

@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cfyerewcojram" path="res://scripts/channel_3d.gd" id="1_l8mse"]
 [ext_resource type="Script" uid="uid://83jksqd5227f" path="res://scripts/channel_3d_hud.gd" id="2_6ggqb"]
+[ext_resource type="Theme" path="res://assets/fonts/app_theme.tres" id="3_app_theme"]
 
 [node name="Channel3D" type="Node3D" unique_id=1873107915]
 script = ExtResource("1_l8mse")
@@ -68,4 +69,5 @@ layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+theme = ExtResource("3_app_theme")
 script = ExtResource("2_6ggqb")

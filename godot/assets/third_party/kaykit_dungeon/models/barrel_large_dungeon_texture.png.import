@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://3dvbp1duh6ur"
 path.s3tc="res://.godot/imported/barrel_large_dungeon_texture.png-a8f088fad3fa3facf49e67e3b12ecb81.s3tc.ctex"
+path.etc2="res://.godot/imported/barrel_large_dungeon_texture.png-a8f088fad3fa3facf49e67e3b12ecb81.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/third_party/kaykit_dungeon/models/barrel_large_dungeon_texture.png"
-dest_files=["res://.godot/imported/barrel_large_dungeon_texture.png-a8f088fad3fa3facf49e67e3b12ecb81.s3tc.ctex"]
+dest_files=["res://.godot/imported/barrel_large_dungeon_texture.png-a8f088fad3fa3facf49e67e3b12ecb81.s3tc.ctex", "res://.godot/imported/barrel_large_dungeon_texture.png-a8f088fad3fa3facf49e67e3b12ecb81.etc2.ctex"]
 
 [params]
 

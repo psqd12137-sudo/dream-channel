@@ -12,6 +12,7 @@ const PCG_DIORAMA_STITCH_LAB = preload("res://scenes/pcg_diorama_stitch_lab.tscn
 const PCG_HAND_LAYOUT_LAB = preload("res://scenes/pcg_hand_layout_lab.tscn")
 const PCG_HAND_ROOM_SCRIPT = preload("res://scripts/pcg_hand_room.gd")
 const KAYKIT_DUNGEON_ROOT := "res://assets/third_party/kaykit_dungeon/models/"
+const APP_FONT: Font = preload("res://assets/fonts/NotoSansCJKsc-Regular.otf")
 
 const EXE_SOURCE_ID := "CabinSlice_织梦频道.exe@EEC4C574CC22"
 const SNAPSHOT_ROOT := "res://data/exe_snapshot/"
@@ -2996,6 +2997,7 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
 		if revealed and combat != null and str(combat.outcome) == "":
 			var intent: Dictionary = combat.preview_intent()
 			var intent_label := Label3D.new()
+			intent_label.font = APP_FONT
 			intent_label.name = "EnemyIntent"
 			intent_label.position = Vector3(0, floor_y + 2.62, 0)
 			intent_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -3062,6 +3064,7 @@ func _show_actor_damage_feedback(actor_node_name: String, damage: int) -> void:
 	if actor == null or damage <= 0:
 		return
 	var popup := Label3D.new()
+	popup.font = APP_FONT
 	popup.name = "DamageFeedback"
 	popup.text = "✦  -%d  ✦" % damage
 	popup.position = Vector3(0, 1.28, 0.12)
@@ -3124,6 +3127,7 @@ func _add_battle_room_shell() -> void:
 			_add_battle_shell_edge(shell, side, index, half_x, half_z, is_entrance)
 	_add_battle_boundary_outline(shell, half_x, half_z)
 	var label := Label3D.new()
+	label.font = APP_FONT
 	label.name = "BattleRoomStateLabel"
 	label.text = "%s · 当前房间" % battle_room_title
 	label.position = Vector3(0, BATTLE_SHELL_WALL_HEIGHT + 0.75, -half_z - 0.10)
@@ -3732,6 +3736,7 @@ func _add_cylinder(parent: Node3D, node_name: String, local_position: Vector3, r
 
 func _add_label(parent: Node3D, node_name: String, text_value: String, local_position: Vector3, color: Color, font_size: int) -> Label3D:
 	var label := Label3D.new()
+	label.font = APP_FONT
 	label.name = node_name
 	label.text = text_value
 	label.position = local_position

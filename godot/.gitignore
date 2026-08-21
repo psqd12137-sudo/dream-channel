@@ -1,5 +1,6 @@
 .godot/
 addons/godot_mcp/
+assets/fonts/*.import
 *.log
 .mcp.json
 artifacts/

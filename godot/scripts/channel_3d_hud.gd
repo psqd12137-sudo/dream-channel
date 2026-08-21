@@ -15,6 +15,7 @@ const ACTION_PANEL_TEXTURE = preload("res://assets/ui/channel_concept/UI_HUD_Pan
 const BTN_START_TEXTURE = preload("res://assets/ui/unity_buttons/SP_StartGame.png")
 const BTN_END_TEXTURE = preload("res://assets/ui/unity_buttons/SP_EndGame.png")
 const BTN_MENU_TEXTURE = preload("res://assets/ui/unity_buttons/SP_Menu.png")
+const APP_FONT: Font = preload("res://assets/fonts/NotoSansCJKsc-Regular.otf")
 
 const INK := Color("171c25")
 const DARK := Color("101820")
@@ -122,6 +123,7 @@ func _ready() -> void:
 	seed_input.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	seed_input.add_theme_color_override("font_color", TEXT)
 	seed_input.add_theme_color_override("font_placeholder_color", Color("b9a9c3"))
+	seed_input.add_theme_font_override("font", APP_FONT)
 	var seed_style := StyleBoxFlat.new()
 	seed_style.bg_color = Color("17101fd9")
 	seed_style.border_color = Color("8f6aa2")
@@ -535,12 +537,12 @@ func _draw_chase() -> void:
 	var typed: String = str(game.chase_sentence).left(int(game.chase_typed))
 	var remaining: String = str(game.chase_sentence).substr(int(game.chase_typed))
 	_label(typed, Vector2(245, 430), 21, TEAL)
-	var typed_width := ThemeDB.fallback_font.get_string_size(typed, HORIZONTAL_ALIGNMENT_LEFT, -1, 21).x
+	var typed_width := APP_FONT.get_string_size(typed, HORIZONTAL_ALIGNMENT_LEFT, -1, 21).x
 	if not remaining.is_empty():
 		var next_character := remaining.left(1)
 		var next_color: Color = RED if game.chase_miss_flash_remaining > 0.0 else MAGENTA
 		_label(next_character, Vector2(245 + typed_width, 430), 21, next_color)
-		var next_width := ThemeDB.fallback_font.get_string_size(next_character, HORIZONTAL_ALIGNMENT_LEFT, -1, 21).x
+		var next_width := APP_FONT.get_string_size(next_character, HORIZONTAL_ALIGNMENT_LEFT, -1, 21).x
 		_label(remaining.substr(1), Vector2(245 + typed_width + next_width, 430), 21, INK)
 	var gap: float = maxf(0.0, game.chase_player_progress - game.chase_police_progress)
 	_label("间距 %.1f · 终点 %d · 本句剩 %d 字" % [gap, int(game.CHASE_TRACK_LENGTH), max(0, game.chase_sentence.length() - game.chase_typed)], Vector2(245, 472), 13, Color("665746"))
@@ -1439,21 +1441,21 @@ func _draw_bar(rect: Rect2, value: int, maximum: int, fill: Color, empty: Color)
 
 
 func _label(value: String, pos: Vector2, font_size: int, color: Color) -> void:
-	draw_string(ThemeDB.fallback_font, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+	draw_string(APP_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 
 func _draw_centered(value: String, rect: Rect2, font_size: int, color: Color) -> void:
-	var bounds := ThemeDB.fallback_font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	var bounds := APP_FONT.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	var pos := rect.position + Vector2((rect.size.x - bounds.x) * 0.5, (rect.size.y + bounds.y) * 0.5 - 2.0)
 	_label(value, pos, font_size, color)
 
 
 func _draw_wrapped(value: String, pos: Vector2, width: float, font_size: int, color: Color) -> void:
-	draw_multiline_string(ThemeDB.fallback_font, pos, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, -1, color)
+	draw_multiline_string(APP_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, -1, color)
 
 
 func _draw_wrapped_lines(value: String, pos: Vector2, width: float, font_size: int, color: Color, max_lines: int) -> void:
-	draw_multiline_string(ThemeDB.fallback_font, pos, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, max_lines, color)
+	draw_multiline_string(APP_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, max_lines, color)
 
 
 func _phase_label() -> String:

@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://dswrtdsc51x4e"
 path.s3tc="res://.godot/imported/tripo_convert_8e754eba-03b8-4662-b406-9aad40ea0935_0.png-141fca3d58bacad5c5951e19da7cd575.s3tc.ctex"
+path.etc2="res://.godot/imported/tripo_convert_8e754eba-03b8-4662-b406-9aad40ea0935_0.png-141fca3d58bacad5c5951e19da7cd575.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/lili_clay/tripo_convert_8e754eba-03b8-4662-b406-9aad40ea0935_0.png"
-dest_files=["res://.godot/imported/tripo_convert_8e754eba-03b8-4662-b406-9aad40ea0935_0.png-141fca3d58bacad5c5951e19da7cd575.s3tc.ctex"]
+dest_files=["res://.godot/imported/tripo_convert_8e754eba-03b8-4662-b406-9aad40ea0935_0.png-141fca3d58bacad5c5951e19da7cd575.s3tc.ctex", "res://.godot/imported/tripo_convert_8e754eba-03b8-4662-b406-9aad40ea0935_0.png-141fca3d58bacad5c5951e19da7cd575.etc2.ctex"]
 
 [params]
 

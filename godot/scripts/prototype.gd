@@ -1,5 +1,7 @@
 extends Control
 
+const APP_FONT: Font = preload("res://assets/fonts/NotoSansCJKsc-Regular.otf")
+
 const RoomRules = preload("res://scripts/room_rules.gd")
 const CombatRules = preload("res://scripts/combat_rules.gd")
 const WebContentAdapter = preload("res://scripts/web_content_adapter.gd")
@@ -557,17 +559,17 @@ func _draw_button(rect: Rect2, caption: String, color: Color) -> void:
 
 
 func _label(value: String, pos: Vector2, font_size: int, color: Color) -> void:
-	draw_string(ThemeDB.fallback_font, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+	draw_string(APP_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 
 func _draw_centered(value: String, rect: Rect2, font_size: int, color: Color) -> void:
-	var bounds := ThemeDB.fallback_font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	var bounds := APP_FONT.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	var pos := rect.position + Vector2((rect.size.x - bounds.x) * 0.5, (rect.size.y + bounds.y) * 0.5 - 2.0)
 	_label(value, pos, font_size, color)
 
 
 func _draw_wrapped(value: String, pos: Vector2, width: float, font_size: int, color: Color) -> void:
-	draw_multiline_string(ThemeDB.fallback_font, pos, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, -1, color)
+	draw_multiline_string(APP_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, -1, color)
 
 
 func _kind_color(kind: String) -> Color:
