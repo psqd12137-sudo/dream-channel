@@ -74,6 +74,12 @@ const INTERACTION_PROFILES := {
 	"q_oven": {"kind": "cook", "pose": "work", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.30), "anchor": Vector3(0.0, 0.0, 0.30), "spacing": 0.0, "facing_offset": PI},
 	"kk_cactus_medium": {"kind": "tend", "pose": "work", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.27), "anchor": Vector3(0.0, 0.0, 0.27), "spacing": 0.0, "facing_offset": PI},
 	"q_houseplant": {"kind": "tend", "pose": "work", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.27), "anchor": Vector3(0.0, 0.0, 0.27), "spacing": 0.0, "facing_offset": PI},
+	# Editor-authored override ids.  Keep these aliases here so saved templates
+	# receive the same interaction/animation semantics as generated props.
+	"kk_bedside": {"kind": "stand", "pose": "stand", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.28), "anchor": Vector3.ZERO, "spacing": 0.0, "facing_offset": PI},
+	"kk_table_medium": {"kind": "gather", "pose": "stand", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.32), "anchor": Vector3(0.0, 0.0, 0.32), "spacing": 0.0, "facing_offset": PI},
+	"kk_plant_cactus_med": {"kind": "tend", "pose": "work", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.25), "anchor": Vector3(0.0, 0.0, 0.25), "spacing": 0.0, "facing_offset": PI},
+	"kk_lamp_table": {"kind": "stand", "pose": "stand", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.25), "anchor": Vector3.ZERO, "spacing": 0.0, "facing_offset": PI},
 }
 const THEME_ALIASES := {
 	"foyer": "living",

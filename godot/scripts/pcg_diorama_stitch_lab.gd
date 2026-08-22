@@ -11,6 +11,7 @@ const KENNEY_ROOT := "res://assets/third_party/kenney_mini_dungeon/models/"
 const KAYKIT_ROOT := "res://assets/third_party/kaykit_dungeon/models/"
 const RUINS_ROOT := "res://assets/third_party/quaternius_ultimate_modular_ruins/models/"
 const CELL := 1.55
+const OVERRIDE_SCALE_FACTOR := 1.25
 const ELEVATION_STEP := 0.58
 const KAYKIT_WALL_HEIGHT := 1.08
 const KAYKIT_JUNCTION_WIDTH := 0.28
@@ -945,6 +946,7 @@ func _apply_room_override(room_index: int, room_type: String, room_root: Node3D)
 	var revealed := bool(room.get("revealed", false)) or bool(room.get("visited", false)) or bool(room.get("completed", false))
 	if not revealed:
 		return 0
+	_remove_room_interaction_slots(room_index, room_root)
 	# Keep floor/base and canonical edge ledgers intact for cutaway/topology
 	# diagnostics, but hide the generated furniture/shell visuals in this room.
 	for child: Node in room_root.get_children():
@@ -986,14 +988,17 @@ func _apply_room_override(room_index: int, room_type: String, room_root: Node3D)
 		model.name = "OverrideProp_%02d_%s" % [asset_count, asset_id]
 		model.position = _override_local_position(_array_vec3(asset.get("position", [])), center, room_elevation, room_turns)
 		model.rotation.y = float(asset.get("yaw", 0.0)) + float(room_turns) * PI * 0.5
-		model.scale = _array_vec3(asset.get("scale", []))
+		var requested_scale := _array_vec3(asset.get("scale", []))
+		model.scale = _fit_override_scale(asset_id, model.position, model.rotation.y, requested_scale * OVERRIDE_SCALE_FACTOR, override_data)
 		model.set_meta("room_override", true)
 		model.set_meta("override_asset_id", asset_id)
+		model.set_meta("override_scale_factor", OVERRIDE_SCALE_FACTOR)
 		furniture_root.add_child(model)
 		for raw_mesh: Node in model.find_children("*", "MeshInstance3D", true, false):
 			var mesh := raw_mesh as MeshInstance3D
 			if mesh != null:
 				mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		_add_override_interaction_slot(room_index, room_root, override_data, asset, model, asset_count)
 		asset_count += 1
 	var wall_count := 0
 	var color_index := posmod(room_index, CardboardShellBuilder.PAPER_PALETTE.size())
@@ -1036,6 +1041,130 @@ func _apply_room_override(room_index: int, room_type: String, room_root: Node3D)
 	room_root.set_meta("room_override_walls", wall_count)
 	room_override_records.append({"room_index": room_index, "room_id": room_type, "assets": asset_count, "walls": wall_count})
 	return asset_count + wall_count
+
+
+func _remove_room_interaction_slots(room_index: int, room_root: Node3D) -> void:
+	var retained: Array[Dictionary] = []
+	for slot: Dictionary in interaction_slot_records:
+		if int(slot.get("room_index", -1)) != room_index:
+			retained.append(slot)
+	interaction_slot_records = retained
+	for child: Node in room_root.get_children():
+		var marker := child as Node3D
+		if marker == null:
+			continue
+		if not marker.has_meta("interaction_slot"):
+			continue
+		var slot_meta: Variant = marker.get_meta("interaction_slot")
+		if slot_meta is Dictionary and int((slot_meta as Dictionary).get("room_index", -1)) == room_index:
+			room_root.remove_child(marker)
+			marker.free()
+
+
+func _add_override_interaction_slot(room_index: int, room_root: Node3D, override_data: Dictionary, asset: Dictionary, model: Node3D, slot_index: int) -> void:
+	var profile := RoomPropCatalog.interaction_profile(str(asset.get("id", asset.get("asset_id", ""))))
+	if profile.is_empty():
+		profile = {
+			"kind": "stand",
+			"pose": "stand",
+			"approach": Vector3(0.0, 0.0, 0.30),
+			"anchor": Vector3.ZERO,
+		}
+	var asset_id := str(asset.get("id", asset.get("asset_id", "")))
+	var room: Dictionary = rooms[room_index]
+	var room_id := str(room.get("id", "R%02d" % room_index))
+	var approach := profile.get("approach", Vector3(0.0, 0.0, 0.30)) as Vector3
+	var anchor := profile.get("anchor", Vector3.ZERO) as Vector3
+	var scale_factor := OVERRIDE_SCALE_FACTOR
+	var local_yaw := model.rotation.y
+	var approach_offset := Vector3(approach.x, 0.0, approach.z) * scale_factor
+	var anchor_offset := Vector3(anchor.x, 0.0, anchor.z) * scale_factor
+	approach_offset = approach_offset.rotated(Vector3.UP, local_yaw)
+	anchor_offset = anchor_offset.rotated(Vector3.UP, local_yaw)
+	var room_ground := room_root.position.y + float(room.get("elevation", 0.0)) + 0.045
+	var owner_world := room_root.position + Vector3(model.position.x, 0.0, model.position.z)
+	owner_world.y = room_ground
+	var slot_position := owner_world + approach_offset
+	var anchor_position := owner_world + anchor_offset
+	anchor_position.y += float(anchor.y) * scale_factor
+	var cell := _nearest_room_cell(room_index, room_root, model.position)
+	var facing_yaw := atan2(owner_world.x - slot_position.x, owner_world.z - slot_position.z)
+	var slot := {
+		"room_index": room_index,
+		"room_id": room_id,
+		"cell": cell,
+		"kind": str(profile.get("kind", "stand")),
+		"pose": str(profile.get("pose", "stand")),
+		"asset_id": asset_id,
+		"owner_position": owner_world,
+		"position": slot_position,
+		"anchor_position": anchor_position,
+		"facing_yaw": facing_yaw,
+		"slot_index": slot_index,
+		"room_override": true,
+		"aabb_in_room": _override_asset_aabb_in_room(model.position, model.rotation.y, model.scale, asset_id, override_data),
+	}
+	interaction_slot_records.append(slot)
+	var marker := Node3D.new()
+	marker.name = "OverrideInteractionSlot_%02d_%02d" % [room_index, slot_index]
+	marker.set_meta("interaction_slot", slot)
+	_add_to_visual_root(marker, room_index, slot_position)
+
+
+func _nearest_room_cell(room_index: int, room_root: Node3D, local_position: Vector3) -> Vector2i:
+	var room: Dictionary = rooms[room_index]
+	var cells: Array[Vector2i] = room["cells"]
+	var nearest := cells[0] if not cells.is_empty() else Vector2i.ZERO
+	var best_distance := INF
+	for cell: Vector2i in cells:
+		var cell_local := _cell_world(cell, layout_center) - room_root.position
+		var distance := Vector2(local_position.x - cell_local.x, local_position.z - cell_local.z).length_squared()
+		if distance < best_distance:
+			best_distance = distance
+			nearest = cell
+	return nearest
+
+
+func _override_asset_footprint(asset_id: String) -> Vector2:
+	match asset_id:
+		"kk_couch":
+			return Vector2(0.78, 0.34)
+		"kk_bedside":
+			return Vector2(0.32, 0.30)
+		"kk_table_medium":
+			return Vector2(0.56, 0.56)
+		"kk_plant_cactus_med":
+			return Vector2(0.30, 0.30)
+		"kk_lamp_table":
+			return Vector2(0.20, 0.20)
+		_:
+			return Vector2(0.28, 0.28)
+
+
+func _override_asset_aabb_in_room(local_position: Vector3, yaw: float, scale_value: Vector3, asset_id: String, override_data: Dictionary) -> bool:
+	var footprint := _override_asset_footprint(asset_id) * maxf(0.01, scale_value.x / 0.28)
+	var half := footprint * 0.5
+	var cosine := absf(cos(yaw))
+	var sine := absf(sin(yaw))
+	var extent_x := cosine * half.x + sine * half.y
+	var extent_z := sine * half.x + cosine * half.y
+	var local_aabb := AABB(
+		Vector3(local_position.x - extent_x, 0.0, local_position.z - extent_z),
+		Vector3(extent_x * 2.0, maxf(0.10, scale_value.y), extent_z * 2.0)
+	)
+	var template_center := _override_template_center(override_data)
+	local_aabb.position += Vector3(template_center.x, 0.0, template_center.z)
+	var cells := DioramaRules.rotated_cells(str(override_data.get("room_shape", "single")), int(override_data.get("room_rotation_quarters", 0)))
+	return DioramaRules.aabb_in_room(local_aabb, cells)
+
+
+func _fit_override_scale(asset_id: String, local_position: Vector3, yaw: float, requested: Vector3, override_data: Dictionary) -> Vector3:
+	var candidates := [requested, requested * 0.92, requested * 0.84, requested * 0.76]
+	for candidate: Vector3 in candidates:
+		if _override_asset_aabb_in_room(local_position, yaw, candidate, asset_id, override_data):
+			return candidate
+	push_warning("Override asset %s could not fit room bounds at requested scale" % asset_id)
+	return requested * 0.76
 
 
 func _override_template_center(override_data: Dictionary) -> Vector3:

@@ -1006,6 +1006,10 @@ func _input(event: InputEvent) -> void:
 		game.chase_type_character(char(key_event.unicode))
 		get_viewport().set_input_as_handled()
 		return
+	if key_event.pressed and not key_event.echo and key_event.keycode == KEY_C and game.phase in ["explore", "build", "room_ready"]:
+		game.toggle_house_camera_closeup()
+		get_viewport().set_input_as_handled()
+		return
 	if key_event.pressed and not key_event.echo and game.phase.begins_with("lab_") and key_event.keycode == KEY_ESCAPE:
 		if not game.event_context.is_empty():
 			game.finish_event_trial(false)

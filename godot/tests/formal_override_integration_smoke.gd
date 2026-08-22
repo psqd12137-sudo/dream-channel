@@ -25,6 +25,15 @@ func _run() -> void:
 	assert(root_node.get_node_or_null("OverrideWalls_living") != null, "override wall root missing")
 	assert(root_node.get_meta("room_override_assets", 0) == 5, "override furniture count mismatch")
 	assert(root_node.get_meta("room_override_walls", 0) == 4, "override wall count mismatch")
+	var override_slots: Array[Dictionary] = generator.interaction_slots_for_room_index(0)
+	assert(override_slots.size() == 5, "override furniture must replace default interaction slots")
+	for slot: Dictionary in override_slots:
+		assert(bool(slot.get("room_override", false)), "override slot metadata missing")
+		assert(bool(slot.get("aabb_in_room", false)), "override asset escaped room bounds")
+		assert(not (slot.get("asset_id", "") as String).is_empty(), "override slot asset id missing")
+	var couch := root_node.get_node("OverrideFurniture_living/OverrideProp_00_kk_couch") as Node3D
+	assert(couch != null and couch.scale.x > 0.28, "override scale factor must enlarge furniture")
+	assert(couch != null and is_equal_approx(float(couch.get_meta("override_scale_factor", 0.0)), 1.25), "override scale factor metadata missing")
 	var rotated: Vector3 = generator.call("_override_local_position", Vector3(0.2, 0.0, 0.4), Vector3.ZERO, 0.0, 1)
 	assert(rotated.is_equal_approx(Vector3(-0.4, 0.0, 0.2)), "room rotation must rotate override coordinates around the room center")
 	# v: override walls must participate in camera cutaway — the wall facing the

@@ -59,6 +59,8 @@ const HOUSE_CAMERA_FOLLOW_RATE := 3.4
 const HOUSE_CAMERA_FRAME_OFFSET := 0.15
 const HOUSE_CAMERA_RETURN_DELAY := 1.5
 const HOUSE_CAMERA_RETURN_DURATION := 1.05
+const HOUSE_CAMERA_CLOSEUP_SIZE := HOUSE_CELL * 2.6
+const HOUSE_CAMERA_SIZE_SMOOTH_RATE := 5.5
 const BATTLE_CAMERA_FOLLOW_RATE := 4.5
 const BATTLE_CAMERA_FRAME_OFFSET := 0.12
 const BATTLE_CAMERA_RETURN_DELAY := 1.5
@@ -176,6 +178,9 @@ var battle_camera_pitch := atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x,
 var battle_player_facing_yaw := 0.0
 var battle_enemy_facing_yaw := PI
 var house_camera_following := false
+var house_camera_closeup := false
+var house_camera_size_current := 0.0
+var house_camera_size_target := 0.0
 var house_camera_user_hold := false
 var house_camera_return_delay := 0.0
 var house_camera_returning := false
@@ -379,6 +384,12 @@ func _update_camera_follow(delta: float) -> void:
 		if house_camera_return_delay <= 0.0 and not house_camera_user_hold:
 			_start_house_camera_return()
 	if phase in ["explore", "build", "room_ready"] and camera != null:
+		var target_size := _house_camera_size_target()
+		var size_factor := CameraFollowMath.smooth_factor(HOUSE_CAMERA_SIZE_SMOOTH_RATE, delta)
+		var next_size := lerpf(house_camera_size_current, target_size, size_factor)
+		if absf(next_size - house_camera_size_current) > 0.001:
+			house_camera_size_current = next_size
+			_apply_house_camera()
 		if house_camera_following and not house_camera_user_hold and not house_camera_returning:
 			var follow_target := _house_follow_target_position() + _house_camera_frame_offset()
 			var factor := CameraFollowMath.smooth_factor(HOUSE_CAMERA_FOLLOW_RATE, delta)
@@ -403,10 +414,33 @@ func _update_camera_follow(delta: float) -> void:
 
 
 func _house_follow_target_position() -> Vector3:
+	if not house_camera_closeup:
+		return _house_camera_overview_target()
 	var token := house_root.get_node_or_null("LiliToken") as Node3D
 	if token != null:
 		return Vector3(token.position.x, 0.0, token.position.z)
 	return _house_world(current_room_pos)
+
+
+func _house_camera_overview_target() -> Vector3:
+	var points: Array[Vector3] = []
+	for raw_pos in room_rules.placed.keys():
+		points.append(_house_world(raw_pos))
+	for frontier in room_rules.frontiers():
+		points.append(_house_world(frontier))
+	var center := Vector3.ZERO
+	for point in points:
+		center += point
+	if not points.is_empty():
+		center /= float(points.size())
+	return center
+
+
+func _house_camera_size_target() -> float:
+	var base_size := house_camera_fit_size
+	if house_camera_closeup:
+		base_size = minf(base_size, HOUSE_CAMERA_CLOSEUP_SIZE)
+	return clampf(base_size * house_camera_zoom_ratio, base_size * CAMERA_ZOOM_MIN, base_size * CAMERA_ZOOM_MAX)
 
 
 func _house_camera_frame_offset() -> Vector3:
@@ -553,6 +587,9 @@ func reset_run(seed_value: int = 0) -> void:
 	house_camera_fit_size = 12.0
 	house_camera_zoom_ratio = 1.0
 	house_camera_user_adjusted = false
+	house_camera_closeup = false
+	house_camera_size_current = 0.0
+	house_camera_size_target = 0.0
 	house_camera_yaw = atan2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z)
 	house_camera_pitch = atan2(HOUSE_CAMERA_DIRECTION.y, Vector2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z).length())
 	house_camera_distance = HOUSE_CAMERA_DIRECTION.length()
@@ -621,6 +658,7 @@ func go_home() -> void:
 	character_animation_demo_mode = false
 	camera.environment = null
 	house_camera_following = false
+	house_camera_closeup = false
 	house_camera_user_hold = false
 	house_camera_return_delay = 0.0
 	house_camera_returning = false
@@ -682,6 +720,8 @@ func continue_saved_run() -> bool:
 	phase = str(save.get("phase", "explore"))
 	if phase not in ["omen", "explore", "room_ready", "reward"]:
 		phase = "room_ready" if not bool(current_room().get("completed", false)) else "explore"
+	house_camera_closeup = phase == "room_ready"
+	house_camera_following = house_camera_closeup
 	world_container.visible = true
 	house_root.visible = true
 	battle_root.visible = false
@@ -1491,6 +1531,7 @@ func enter_room(target: Vector2i) -> void:
 		return
 	animation_busy = true
 	active_animation_kind = "room_entry"
+	house_camera_closeup = false
 	house_camera_following = true
 	house_camera_user_hold = false
 	_cancel_house_camera_return()
@@ -1576,6 +1617,8 @@ func _set_house_token_path_motion(weight: float, token: Node3D, start_position: 
 
 func _finish_enter_room(target: Vector2i) -> void:
 	current_room_pos = target
+	house_camera_closeup = true
+	house_camera_following = true
 	var room: Dictionary = room_rules.placed[target]
 	var first_visit := not bool(room.get("visited", false))
 	room_rules.set_instance_flag(target, "revealed", true)
@@ -2296,6 +2339,8 @@ func return_from_combat() -> void:
 	if animation_busy or phase != "combat" or combat == null or combat.outcome == "":
 		return
 	if combat.outcome == "victory":
+		house_camera_closeup = false
+		house_camera_following = false
 		_collect_combat_deck()
 		_complete_current_room()
 		_start_card_reward("combat")
@@ -3331,11 +3376,26 @@ func _set_house_camera() -> void:
 		horizontal_radius = maxf(horizontal_radius, Vector2(point.x - center.x, point.z - center.z).length())
 	horizontal_radius += HOUSE_CELL * 1.15
 	house_camera_fit_size = minf(28.0, _rotation_invariant_fit_size(horizontal_radius, HOUSE_CELL * 1.65, house_camera_pitch, 0.8, 12.0))
+	house_camera_size_target = _house_camera_size_target()
+	if house_camera_size_current <= 0.0:
+		house_camera_size_current = house_camera_size_target
 	# 跟随/回位/用户操作期间保持镜头对准点（玩家偏上构图），只有空闲态才重置为布局中心
 	if not house_camera_user_adjusted and not house_camera_following and not house_camera_returning and not house_camera_user_hold:
 		house_camera_target = center
-	camera.size = clampf(house_camera_fit_size * house_camera_zoom_ratio, house_camera_fit_size * CAMERA_ZOOM_MIN, house_camera_fit_size * CAMERA_ZOOM_MAX)
 	_apply_house_camera()
+
+
+func toggle_house_camera_closeup() -> bool:
+	if phase not in ["explore", "build", "room_ready"] or camera == null:
+		return false
+	house_camera_closeup = not house_camera_closeup
+	house_camera_following = true
+	house_camera_user_hold = false
+	house_camera_user_adjusted = false
+	_cancel_house_camera_return()
+	house_camera_size_target = _house_camera_size_target()
+	_apply_house_camera()
+	return house_camera_closeup
 
 
 func pan_house_camera(pixel_delta: Vector2) -> void:
@@ -3367,9 +3427,11 @@ func zoom_house_camera(view_pos: Vector2, zoom_factor: float) -> void:
 		return
 	_cancel_house_camera_return()
 	var before: Variant = _screen_to_plane(view_pos, 0.0)
-	var next_size := clampf(camera.size * zoom_factor, house_camera_fit_size * CAMERA_ZOOM_MIN, house_camera_fit_size * CAMERA_ZOOM_MAX)
-	camera.size = next_size
-	house_camera_zoom_ratio = next_size / maxf(0.001, house_camera_fit_size)
+	var base_size := HOUSE_CAMERA_CLOSEUP_SIZE if house_camera_closeup else house_camera_fit_size
+	var next_size := clampf(house_camera_size_current * zoom_factor, base_size * CAMERA_ZOOM_MIN, base_size * CAMERA_ZOOM_MAX)
+	house_camera_size_current = next_size
+	house_camera_size_target = next_size
+	house_camera_zoom_ratio = next_size / maxf(0.001, base_size)
 	house_camera_user_adjusted = true
 	_apply_house_camera()
 	var after: Variant = _screen_to_plane(view_pos, 0.0)
@@ -3382,6 +3444,7 @@ func zoom_house_camera(view_pos: Vector2, zoom_factor: float) -> void:
 
 func reset_house_camera() -> void:
 	house_camera_following = false
+	house_camera_closeup = false
 	house_camera_user_hold = false
 	house_camera_return_delay = 0.0
 	house_camera_returning = false
@@ -3390,6 +3453,8 @@ func reset_house_camera() -> void:
 		house_camera_return_tween = null
 	house_camera_zoom_ratio = 1.0
 	house_camera_user_adjusted = false
+	house_camera_size_current = 0.0
+	house_camera_size_target = 0.0
 	house_camera_yaw = atan2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z)
 	house_camera_pitch = atan2(HOUSE_CAMERA_DIRECTION.y, Vector2(HOUSE_CAMERA_DIRECTION.x, HOUSE_CAMERA_DIRECTION.z).length())
 	house_camera_distance = HOUSE_CAMERA_DIRECTION.length()
@@ -3478,7 +3543,9 @@ func _apply_house_camera() -> void:
 	var direction := Vector3(sin(house_camera_yaw) * horizontal, sin(house_camera_pitch) * house_camera_distance, cos(house_camera_yaw) * horizontal)
 	camera.position = house_camera_target + direction
 	camera.look_at(house_camera_target + Vector3(0, 0.2, 0), Vector3.UP)
-	camera.size = clampf(house_camera_fit_size * house_camera_zoom_ratio, house_camera_fit_size * CAMERA_ZOOM_MIN, house_camera_fit_size * CAMERA_ZOOM_MAX) * lerpf(CAMERA_INTRO_FAR_SCALE, 1.0, house_camera_intro_weight)
+	if house_camera_size_current <= 0.0:
+		house_camera_size_current = _house_camera_size_target()
+	camera.size = house_camera_size_current * lerpf(CAMERA_INTRO_FAR_SCALE, 1.0, house_camera_intro_weight)
 	if kenney_build_lab_mode:
 		_apply_current_room_cutaway()
 
