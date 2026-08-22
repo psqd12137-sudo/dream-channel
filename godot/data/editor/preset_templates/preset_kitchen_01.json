@@ -1,0 +1,24 @@
+{
+	"schema_version": 2,
+	"template_name": "preset_kitchen_01",
+	"room_shape": "single",
+	"room_rotation_quarters": 0,
+	"saved_at": "2026-08-22T18:00:00",
+	"assets": [
+		{"id": "q_fridge", "position": [0.28, 0.0, 1.18], "yaw": 3.141593, "scale": [0.162, 0.162, 0.162]},
+		{"id": "q_oven", "position": [0.65, 0.0, 1.18], "yaw": 3.141593, "scale": [0.162, 0.162, 0.162]},
+		{"id": "kk_table_small", "position": [1.05, 0.0, 0.82], "yaw": 0.18, "scale": [0.168, 0.168, 0.168]},
+		{"id": "kk_stool", "position": [0.84, 0.0, 0.48], "yaw": 0.1, "scale": [0.168, 0.168, 0.168]},
+		{"id": "kk_stool", "position": [1.28, 0.0, 0.56], "yaw": -0.22, "scale": [0.168, 0.168, 0.168]}
+	],
+	"walls": [
+		{"kind": "cb_doorway", "position": [0.775, 0.02, 0.0], "yaw": 1.570796, "axis": [1, 0, 0], "cell": [0, 0]},
+		{"kind": "cb_wall", "position": [0.775, 0.02, 1.55], "yaw": 1.570796, "axis": [1, 0, 0], "cell": [0, 0]},
+		{"kind": "cb_wall", "position": [0.0, 0.02, 0.775], "yaw": 0.0, "axis": [0, 0, 1], "cell": [0, 0]},
+		{"kind": "cb_wall", "position": [1.55, 0.02, 0.775], "yaw": 0.0, "axis": [0, 0, 1], "cell": [0, 0]}
+	],
+	"fixtures": [
+		{"kind": "cue_card", "position": [0.18, 0.72, 0.02], "yaw": 1.570796}
+	]
+}
+

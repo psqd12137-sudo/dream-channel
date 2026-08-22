@@ -2449,6 +2449,12 @@ func _add_kenney_formal_composer() -> void:
 		piece.position = Vector3(float(origin.x) * 1.55, 0.0, float(origin.y) * 1.55)
 		piece.rotation.y = float(int(room.get("rotation", 0))) * PI * 0.5
 		layout.add_child(piece)
+		# DIAGNOSTIC: log every formal room's id/room_type and whether a template
+		# override file exists for it. This shows why a saved template may not line
+		# up with the room it was meant for in the live game.
+		var _base_id := RoomArtRegistry.base_room_id(str(room.get("id", "")))
+		var _has_ov := not RoomArtRegistry.load_override(_base_id).is_empty()
+		print("[OVERRIDE] compose room=%s room_id=%s room_type=%s override=%s" % [piece.name, str(record["id"]), str(room.get("id", "")), "YES" if _has_ov else "no"])
 	house_root.add_child(composer)
 
 

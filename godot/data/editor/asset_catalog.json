@@ -1,0 +1,61 @@
+{
+	"schema_version": 1,
+	"cell_size": 1.55,
+	"categories": [
+		{"id": "furniture", "name": "家具"},
+		{"id": "structure", "name": "墙体结构"},
+		{"id": "prop", "name": "道具"},
+		{"id": "decor", "name": "装饰"}
+	],
+	"assets": [
+		{"id": "kk_couch", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/couch_pillows.gltf", "category": "furniture", "name": "沙发（带枕）", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_couch_plain", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/couch.gltf", "category": "furniture", "name": "沙发（素）", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_armchair", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/armchair_pillows.gltf", "category": "furniture", "name": "扶手椅（带枕）", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_armchair_plain", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/armchair.gltf", "category": "furniture", "name": "扶手椅（素）", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_low_table", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/table_low.gltf", "category": "furniture", "name": "矮桌", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_table_medium", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/table_medium.gltf", "category": "furniture", "name": "中桌", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_table_long", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/table_medium_long.gltf", "category": "furniture", "name": "长桌/书桌", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_table_small", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/table_small.gltf", "category": "furniture", "name": "小桌/温室桌", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_chair_a", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/chair_A_wood.gltf", "category": "furniture", "name": "木椅 A", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_chair_b", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/chair_B_wood.gltf", "category": "furniture", "name": "木椅 B", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_stool", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/chair_stool_wood.gltf", "category": "furniture", "name": "木凳", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_bed_double", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/bed_double_A.gltf", "category": "furniture", "name": "双人床 A", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_bed_double_b", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/bed_double_B.gltf", "category": "furniture", "name": "双人床 B", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_bed_single", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/bed_single_A.gltf", "category": "furniture", "name": "单人床 A", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_cabinet_decor", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/cabinet_medium_decorated.gltf", "category": "furniture", "name": "装饰柜", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_bedside", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/cabinet_small_decorated.gltf", "category": "furniture", "name": "床头柜", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_bookshelf", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/shelf_B_large_decorated.gltf", "category": "furniture", "name": "大书架（满）", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_shelf_big", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/shelf_A_big.gltf", "category": "furniture", "name": "大书架（素）", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_shelf_small", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/shelf_A_small.gltf", "category": "furniture", "name": "小置物架", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_desk_chair", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/chair_C.gltf", "category": "furniture", "name": "办公椅 C", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+
+		{"id": "q_fridge", "path": "res://assets/quaternius/ultimate_house_interior/Kitchen_Fridge.fbx", "category": "furniture", "name": "冰箱", "scale": 0.27, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "q_oven", "path": "res://assets/quaternius/ultimate_house_interior/Kitchen_Oven.fbx", "category": "furniture", "name": "烤箱", "scale": 0.27, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "q_fireplace", "path": "res://assets/quaternius/ultimate_house_interior/Fireplace.fbx", "category": "furniture", "name": "壁炉", "scale": 0.30, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "q_bed_single", "path": "res://assets/quaternius/ultimate_house_interior/Bed_Single.fbx", "category": "furniture", "name": "单人床（Q）", "scale": 0.30, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "q_bookshelf", "path": "res://assets/quaternius/ultimate_house_interior/Bookshelf.fbx", "category": "furniture", "name": "书架（Q）", "scale": 0.38, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "q_round_table", "path": "res://assets/quaternius/ultimate_house_interior/Table_RoundLarge.fbx", "category": "furniture", "name": "圆桌（Q）", "scale": 0.40, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "q_chair", "path": "res://assets/quaternius/ultimate_house_interior/Chair_2.fbx", "category": "furniture", "name": "椅子（Q）", "scale": 0.38, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "q_couch", "path": "res://assets/quaternius/ultimate_house_interior/Couch_Medium1.fbx", "category": "furniture", "name": "沙发（Q）", "scale": 0.40, "yaw_steps": 4, "snap": "quarter"},
+
+
+		{"id": "kk_plant_cactus_med", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/cactus_medium_A.gltf", "category": "prop", "name": "仙人掌（中）", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_plant_cactus_small", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/cactus_small_B.gltf", "category": "prop", "name": "仙人掌（小）", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "q_houseplant", "path": "res://assets/quaternius/ultimate_house_interior/Houseplant_3.fbx", "category": "prop", "name": "盆栽（Q）", "scale": 0.30, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_lamp_standing", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/lamp_standing.gltf", "category": "prop", "name": "落地灯", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_lamp_table", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/lamp_table.gltf", "category": "prop", "name": "台灯", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_books", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/book_set.gltf", "category": "prop", "name": "一摞书", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_book_single", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/book_single.gltf", "category": "prop", "name": "单本书", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_pillow", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/pillow_A.gltf", "category": "prop", "name": "枕头", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+
+		{"id": "kk_rug_oval", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/rug_oval_A.gltf", "category": "decor", "name": "椭圆地毯", "scale": 0.28, "yaw_steps": 4, "snap": "quarter", "overlay": true},
+		{"id": "kk_rug_rect", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/rug_rectangle_A.gltf", "category": "decor", "name": "方地毯", "scale": 0.28, "yaw_steps": 4, "snap": "quarter", "overlay": true},
+		{"id": "kk_rug_stripes", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/rug_rectangle_stripes_A.gltf", "category": "decor", "name": "条纹地毯", "scale": 0.28, "yaw_steps": 4, "snap": "quarter", "overlay": true},
+		{"id": "kk_picture_large", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/pictureframe_large_A.gltf", "category": "decor", "name": "大相框", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_picture_medium", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/pictureframe_medium.gltf", "category": "decor", "name": "中相框", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "kk_picture_standing", "path": "res://assets/third_party/kaykit_furniture_bits/gltf/pictureframe_standing_A.gltf", "category": "decor", "name": "立式相框", "scale": 0.28, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "q_chandelier", "path": "res://assets/quaternius/ultimate_house_interior/Light_Chandelier.fbx", "category": "decor", "name": "吊灯（Q）", "scale": 0.25, "yaw_steps": 4, "snap": "quarter", "overlay": true},
+		{"id": "q_window", "path": "res://assets/quaternius/ultimate_house_interior/Window_Round1.fbx", "category": "decor", "name": "圆窗（Q）", "scale": 0.40, "yaw_steps": 4, "snap": "quarter"},
+		{"id": "q_door", "path": "res://assets/quaternius/ultimate_house_interior/Door_3.fbx", "category": "decor", "name": "门（Q）", "scale": 0.38, "yaw_steps": 4, "snap": "quarter"}
+	]
+}

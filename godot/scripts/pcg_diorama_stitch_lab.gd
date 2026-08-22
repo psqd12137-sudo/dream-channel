@@ -3,6 +3,9 @@ extends Node3D
 
 const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
 const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
+const DioramaRules = preload("res://scripts/asset_diorama_rules.gd")
+const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
+const RoomArtRegistry = preload("res://scripts/room_art_registry.gd")
 
 const KENNEY_ROOT := "res://assets/third_party/kenney_mini_dungeon/models/"
 const KAYKIT_ROOT := "res://assets/third_party/kaykit_dungeon/models/"
@@ -56,6 +59,8 @@ var show_evidence_records: Array[Dictionary] = []
 var show_evidence_issues: Array[String] = []
 var production_fixture_records: Array[Dictionary] = []
 var production_fixture_issues: Array[String] = []
+var room_override_records: Array[Dictionary] = []
+var override_shell_nodes: Array[Node3D] = []
 var room_broadcast_states: Dictionary = {}
 var toy_show_shell_nodes: Array[Node3D] = []
 var cardboard_shell_records: Array[Dictionary] = []
@@ -113,6 +118,8 @@ func regenerate(seed_value: int) -> void:
 	show_evidence_issues.clear()
 	production_fixture_records.clear()
 	production_fixture_issues.clear()
+	room_override_records.clear()
+	override_shell_nodes.clear()
 	room_broadcast_states.clear()
 	toy_show_shell_nodes.clear()
 	cardboard_shell_records.clear()
@@ -310,6 +317,7 @@ func _build_joined_diorama() -> void:
 		_build_cell(cell, center)
 	_build_edges(center)
 	_build_room_props(center)
+	_apply_room_overrides()
 	_build_room_state_overlays(center)
 	_build_title(size)
 
@@ -328,6 +336,7 @@ func _prepare_room_visual_roots(center: Vector2) -> void:
 		room_root.set_meta("room_index", room_index)
 		room_root.set_meta("room_size", int(room.get("size", 1)))
 		room_root.set_meta("room_id", str(room.get("id", "R%02d" % room_index)))
+		room_root.set_meta("room_type", RoomArtRegistry.base_room_id(str(room.get("room_type", ""))))
 		room_root.set_meta("revealed", bool(room.get("revealed", true)))
 		room_root.set_meta("visited", bool(room.get("visited", true)))
 		room_root.set_meta("completed", bool(room.get("completed", false)))
@@ -629,7 +638,38 @@ func apply_camera_cutaway(focus_cell: Vector2i, camera_direction: Vector2) -> Di
 				cutaway_visible_wall_count += 1
 	_update_cutaway_junction_visibility()
 	_update_wall_bound_prop_visibility()
+	_apply_override_cutaway(viewer_direction)
 	return cutaway_debug_state()
+
+
+## Override (template) walls are not part of the structural_edge_nodes ledger, so the
+## camera cutaway loop above never culls them. Apply the same "facing the camera"
+## rule here: any override wall of the focus room whose outward direction points toward
+## the viewer is hidden, so the near wall does not block the interior.
+func _apply_override_cutaway(viewer_direction: Vector2) -> void:
+	if cutaway_focus_room_index < 0 or viewer_direction.length_squared() < 0.01:
+		for shell: Node3D in override_shell_nodes:
+			if is_instance_valid(shell):
+				shell.visible = true
+		return
+	var focus_room_type := RoomArtRegistry.base_room_id(str(rooms[cutaway_focus_room_index].get("room_type", rooms[cutaway_focus_room_index].get("id", ""))))
+	var viewer := viewer_direction.normalized()
+	for shell: Node3D in override_shell_nodes:
+		if not is_instance_valid(shell):
+			continue
+		var shell_room_type := RoomArtRegistry.base_room_id(str(shell.get_meta("override_room_id", "")))
+		# Only the focus room's override walls participate in the cutaway; other rooms
+		# stay as-is so the whole house still reads correctly from the overview camera.
+		if shell_room_type != focus_room_type:
+			shell.visible = true
+			continue
+		# shell.position is local to the room root; its XZ direction from the room centre
+		# is the wall's outward normal. Hide walls facing the camera.
+		var offset := shell.position
+		offset.y = 0.0
+		var outward := Vector2(offset.x, offset.z).normalized()
+		var faces_camera := outward.dot(viewer) > 0.42
+		shell.visible = not faces_camera
 
 
 func _edge_faces_camera(outward: Vector2i, viewer_direction: Vector2, was_culled: bool = false) -> bool:
@@ -873,6 +913,158 @@ func _build_room_props(center: Vector2) -> void:
 		_build_room_production_fixture(room_index)
 		if show_room_ids:
 			_add_room_label(room, room_index, center)
+
+
+func _apply_room_overrides() -> void:
+	for room_index in range(rooms.size()):
+		var room: Dictionary = rooms[room_index]
+		var raw_type := str(room.get("room_type", room.get("id", "")))
+		var room_type := RoomArtRegistry.base_room_id(raw_type)
+		if room_type.is_empty():
+			continue
+		var ov := RoomArtRegistry.load_override(room_type)
+		# DIAGNOSTIC: log every room's override match so the user can see in the
+		# game log exactly which rooms loaded a template and which did not.
+		print("[OVERRIDE] room#%d id=%s raw_type=%s base=%s override=%s" % [room_index, str(room.get("id", "")), raw_type, room_type, "YES" if not ov.is_empty() else "no"])
+		_apply_room_override(room_index, room_type, room_visual_roots[room_index] if room_index < room_visual_roots.size() else null)
+		if not ov.is_empty():
+			print("[OVERRIDE]   -> applied %s: assets=%d walls=%d furniture_root=%s" % [room_type, int(_count_override_assets(ov)), (ov.get("walls", []) as Array).size(), str(room_visual_roots[room_index].get_node_or_null("OverrideFurniture_%s" % room_type) != null)])
+
+
+func _count_override_assets(ov: Dictionary) -> int:
+	return (ov.get("assets", []) as Array).size()
+
+
+func _apply_room_override(room_index: int, room_type: String, room_root: Node3D) -> int:
+	if room_root == null or not is_instance_valid(room_root):
+		return 0
+	var override_data := RoomArtRegistry.load_override(room_type)
+	if override_data.is_empty():
+		return 0
+	var room: Dictionary = rooms[room_index]
+	var revealed := bool(room.get("revealed", false)) or bool(room.get("visited", false)) or bool(room.get("completed", false))
+	if not revealed:
+		return 0
+	# Keep floor/base and canonical edge ledgers intact for cutaway/topology
+	# diagnostics, but hide the generated furniture/shell visuals in this room.
+	for child: Node in room_root.get_children():
+		var node := child as Node3D
+		if node == null:
+			continue
+		var node_name := str(node.name)
+		var generated_prop := node_name.begins_with("RoomProp_") or node_name.begins_with("QuaterniusProp_") or node_name.begins_with("ShowEvidence_") or node_name.begins_with("ProductionFixture_")
+		var generated_shell := bool(node.get_meta("structure_kind", "") != "") or bool(node.get_meta("cardboard_shell", false))
+		if generated_prop or generated_shell or node_name.begins_with("CutawayMarker_"):
+			node.visible = false
+	var furniture_root := Node3D.new()
+	furniture_root.name = "OverrideFurniture_%s" % room_type
+	furniture_root.set_meta("room_override", true)
+	furniture_root.set_meta("room_id", room_type)
+	room_root.add_child(furniture_root)
+	var shell_root := Node3D.new()
+	shell_root.name = "OverrideWalls_%s" % room_type
+	shell_root.set_meta("room_override", true)
+	shell_root.set_meta("room_id", room_type)
+	room_root.add_child(shell_root)
+	var center := _override_template_center(override_data)
+	var room_elevation := float(room.get("elevation", 0.0))
+	var room_turns := int(room.get("rotation", 0))
+	var asset_count := 0
+	for raw_asset: Variant in override_data.get("assets", []):
+		if not raw_asset is Dictionary:
+			continue
+		var asset: Dictionary = raw_asset
+		var asset_id := str(asset.get("id", asset.get("asset_id", "")))
+		var path := RoomArtRegistry.asset_path(asset_id)
+		var packed := load(path) as PackedScene if not path.is_empty() else null
+		if packed == null:
+			push_warning("Room override missing asset %s for %s" % [asset_id, room_type])
+			continue
+		var model := packed.instantiate() as Node3D
+		if model == null:
+			continue
+		model.name = "OverrideProp_%02d_%s" % [asset_count, asset_id]
+		model.position = _override_local_position(_array_vec3(asset.get("position", [])), center, room_elevation, room_turns)
+		model.rotation.y = float(asset.get("yaw", 0.0)) + float(room_turns) * PI * 0.5
+		model.scale = _array_vec3(asset.get("scale", []))
+		model.set_meta("room_override", true)
+		model.set_meta("override_asset_id", asset_id)
+		furniture_root.add_child(model)
+		for raw_mesh: Node in model.find_children("*", "MeshInstance3D", true, false):
+			var mesh := raw_mesh as MeshInstance3D
+			if mesh != null:
+				mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		asset_count += 1
+	var wall_count := 0
+	var color_index := posmod(room_index, CardboardShellBuilder.PAPER_PALETTE.size())
+	for raw_wall: Variant in override_data.get("walls", []):
+		if not raw_wall is Dictionary:
+			continue
+		var wall: Dictionary = raw_wall
+		var kind := DioramaRules.normalize_wall_kind(str(wall.get("kind", wall.get("wall_kind", "cb_wall"))))
+		var wall_position := _override_local_position(_array_vec3(wall.get("position", [])), center, room_elevation, room_turns)
+		var wall_yaw := float(wall.get("yaw", 0.0)) + float(room_turns) * PI * 0.5
+		var shell: Node3D = null
+		if kind == "cb_doorway":
+			shell = CardboardShellBuilder.build_doorway(wall_position, wall_yaw, color_index)
+		elif kind == "cb_junction":
+			shell = CardboardShellBuilder.build_junction(wall_position, DioramaRules.WALL_HEIGHT, color_index, [])
+		else:
+			shell = CardboardShellBuilder.build_wall(kind, wall_position, wall_yaw, color_index)
+		if shell == null:
+			continue
+		shell.name = "OverrideWall_%02d_%s" % [wall_count, kind]
+		shell.set_meta("room_override", true)
+		shell.set_meta("override_room_id", room_type)
+		shell.set_meta("override_wall_kind", kind)
+		shell_root.add_child(shell)
+		override_shell_nodes.append(shell)
+		wall_count += 1
+	for raw_fixture: Variant in override_data.get("fixtures", []):
+		if not raw_fixture is Dictionary:
+			continue
+		var fixture_data: Dictionary = raw_fixture
+		var fixture := CardboardShellBuilder.build_fixture(str(fixture_data.get("kind", "cue_card")), _override_local_position(_array_vec3(fixture_data.get("position", [])), center, room_elevation, room_turns), float(fixture_data.get("yaw", 0.0)) + float(room_turns) * PI * 0.5, color_index)
+		if fixture == null:
+			continue
+		fixture.name = "OverrideFixture_%02d" % wall_count
+		fixture.set_meta("room_override", true)
+		shell_root.add_child(fixture)
+		wall_count += 1
+	room_root.set_meta("room_override", room_type)
+	room_root.set_meta("room_override_assets", asset_count)
+	room_root.set_meta("room_override_walls", wall_count)
+	room_override_records.append({"room_index": room_index, "room_id": room_type, "assets": asset_count, "walls": wall_count})
+	return asset_count + wall_count
+
+
+func _override_template_center(override_data: Dictionary) -> Vector3:
+	var shape_id := str(override_data.get("room_shape", "single"))
+	var turns := int(override_data.get("room_rotation_quarters", 0))
+	var cells := DioramaRules.rotated_cells(shape_id, turns)
+	return DioramaRules.room_center_world(cells)
+
+
+func _override_local_position(template_position: Vector3, template_center: Vector3, room_elevation: float, room_rotation_quarters: int = 0) -> Vector3:
+	var local := template_position - template_center + Vector3(0.0, room_elevation, 0.0)
+	for _turn in posmod(room_rotation_quarters, 4):
+		local = Vector3(-local.z, local.y, local.x)
+	return local
+
+
+func room_override_is_applied(room_id: String) -> bool:
+	var clean_id := RoomArtRegistry.base_room_id(room_id)
+	for record: Dictionary in room_override_records:
+		if str(record.get("room_id", "")) == clean_id:
+			return true
+	return false
+
+
+func room_override_summary() -> String:
+	var parts: Array[String] = []
+	for record: Dictionary in room_override_records:
+		parts.append("%s:家具%d/墙%d" % [str(record.get("room_id", "")), int(record.get("assets", 0)), int(record.get("walls", 0))])
+	return ", ".join(parts)
 
 
 func _room_prop_slot_candidates(room_index: int, center: Vector2) -> Dictionary:
@@ -2139,6 +2331,13 @@ func _play_room_build_animation() -> void:
 
 func _cell_world(cell: Vector2i, center: Vector2) -> Vector3:
 	return Vector3((float(cell.x) - center.x) * CELL, 0.0, (float(cell.y) - center.y) * CELL)
+
+
+func _array_vec3(value: Variant) -> Vector3:
+	if value is Array and (value as Array).size() >= 3:
+		var values: Array = value
+		return Vector3(float(values[0]), float(values[1]), float(values[2]))
+	return Vector3.ZERO
 
 
 func _cell_bounds() -> Dictionary:

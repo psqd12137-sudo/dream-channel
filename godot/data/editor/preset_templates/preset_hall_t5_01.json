@@ -1,0 +1,33 @@
+{
+	"schema_version": 2,
+	"template_name": "preset_hall_t5_01",
+	"room_shape": "t5",
+	"room_rotation_quarters": 0,
+	"saved_at": "2026-08-22T18:00:00",
+	"assets": [
+		{"id": "kk_couch", "position": [-0.72, 0.0, 0.82], "yaw": 1.42, "scale": [0.28, 0.28, 0.28]},
+		{"id": "kk_armchair", "position": [2.24, 0.0, 0.82], "yaw": -1.3, "scale": [0.28, 0.28, 0.28]},
+		{"id": "kk_low_table", "position": [0.78, 0.0, 0.82], "yaw": 0.2, "scale": [0.28, 0.28, 0.28]},
+		{"id": "kk_bookshelf", "position": [0.34, 0.0, 3.88], "yaw": 1.570796, "scale": [0.168, 0.168, 0.168]},
+		{"id": "q_fireplace", "position": [1.19, 0.0, 3.92], "yaw": -1.570796, "scale": [0.18, 0.18, 0.18]},
+		{"id": "kk_rug_oval", "position": [0.78, 0.005, 2.42], "yaw": 0.34, "scale": [0.28, 0.28, 0.28]}
+	],
+	"walls": [
+		{"kind": "cb_wall", "position": [-0.775, 0.02, 0.0], "yaw": 1.570796, "axis": [1, 0, 0], "cell": [-1, 0]},
+		{"kind": "cb_doorway", "position": [0.775, 0.02, 0.0], "yaw": 1.570796, "axis": [1, 0, 0], "cell": [0, 0]},
+		{"kind": "cb_wall", "position": [2.325, 0.02, 0.0], "yaw": 1.570796, "axis": [1, 0, 0], "cell": [1, 0]},
+		{"kind": "cb_shelves", "position": [-0.775, 0.02, 1.55], "yaw": 1.570796, "axis": [1, 0, 0], "cell": [-1, 0]},
+		{"kind": "cb_wall", "position": [2.325, 0.02, 1.55], "yaw": 1.570796, "axis": [1, 0, 0], "cell": [1, 0]},
+		{"kind": "cb_doorway", "position": [0.775, 0.02, 4.65], "yaw": 1.570796, "axis": [1, 0, 0], "cell": [0, 2]},
+		{"kind": "cb_wall", "position": [-1.55, 0.02, 0.775], "yaw": 0.0, "axis": [0, 0, 1], "cell": [-1, 0]},
+		{"kind": "cb_wall", "position": [0.0, 0.02, 2.325], "yaw": 0.0, "axis": [0, 0, 1], "cell": [0, 1]},
+		{"kind": "cb_wall", "position": [0.0, 0.02, 3.875], "yaw": 0.0, "axis": [0, 0, 1], "cell": [0, 2]},
+		{"kind": "cb_wall", "position": [3.1, 0.02, 0.775], "yaw": 0.0, "axis": [0, 0, 1], "cell": [1, 0]},
+		{"kind": "cb_wall", "position": [1.55, 0.02, 2.325], "yaw": 0.0, "axis": [0, 0, 1], "cell": [0, 1]},
+		{"kind": "cb_wall", "position": [1.55, 0.02, 3.875], "yaw": 0.0, "axis": [0, 0, 1], "cell": [0, 2]}
+	],
+	"fixtures": [
+		{"kind": "on_air", "position": [1.55, 0.78, 4.62], "yaw": 0.0}
+	]
+}
+

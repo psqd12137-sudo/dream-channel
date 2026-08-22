@@ -1,0 +1,272 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/asset_editor_3d.gd" id="1_editor"]
+[ext_resource type="PackedScene" path="res://scripts/gizmo_3d.tscn" id="2_gizmo"]
+
+[sub_resource type="Environment" id="Environment_editor"]
+background_mode = 1
+background_color = Color(0.055, 0.07, 0.08, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.54, 0.61, 0.64, 1)
+ambient_light_energy = 0.78
+tonemap_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="Material_ground"]
+albedo_color = Color(0.164706, 0.180392, 0.211765, 1)
+roughness = 0.95
+
+[sub_resource type="PlaneMesh" id="Plane_ground"]
+material = SubResource("Material_ground")
+size = Vector2(32, 32)
+
+[sub_resource type="StandardMaterial3D" id="Material_ring"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.953, 0.647, 0.122, 0.92)
+emission_enabled = true
+emission = Color(0.953, 0.49, 0.055, 1)
+emission_energy_multiplier = 2.2
+
+[sub_resource type="TorusMesh" id="Torus_selection"]
+material = SubResource("Material_ring")
+inner_radius = 0.5
+outer_radius = 0.61
+rings = 32
+ring_segments = 12
+
+[sub_resource type="StyleBoxFlat" id="Style_panel"]
+bg_color = Color(0.035, 0.055, 0.066, 0.94)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.19, 0.67, 0.64, 0.8)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 12.0
+content_margin_top = 12.0
+content_margin_right = 12.0
+content_margin_bottom = 12.0
+
+[node name="AssetEditor3D" type="Node3D"]
+script = ExtResource("1_editor")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_editor")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-55, -25, 0)
+light_color = Color(1, 0.9, 0.75, 1)
+light_energy = 1.6
+shadow_enabled = true
+
+[node name="FillLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-35, 145, 0)
+light_color = Color(0.45, 0.72, 1, 1)
+light_energy = 0.7
+
+[node name="GroundMesh" type="MeshInstance3D" parent="."]
+position = Vector3(0, -0.01, 0)
+mesh = SubResource("Plane_ground")
+cast_shadow = 0
+
+[node name="RoomBase" type="Node3D" parent="."]
+
+[node name="Placements" type="Node3D" parent="."]
+
+[node name="Walls" type="Node3D" parent="."]
+
+[node name="Corners" type="Node3D" parent="."]
+
+[node name="WallJoins" type="Node3D" parent="."]
+
+[node name="Fixtures" type="Node3D" parent="."]
+
+[node name="EditorOverlay" type="Node3D" parent="."]
+metadata/editor_overlay = true
+
+[node name="Gizmo3D" parent="EditorOverlay" instance=ExtResource("2_gizmo")]
+
+[node name="Anchors" type="Node3D" parent="EditorOverlay"]
+metadata/editor_overlay = true
+
+[node name="WallHandles" type="Node3D" parent="EditorOverlay"]
+metadata/editor_overlay = true
+
+[node name="CardboardShell" type="Node3D" parent="."]
+metadata/_builder = "CardboardShellBuilder"
+
+[node name="Ghost" type="Node3D" parent="."]
+visible = false
+
+[node name="SelectionRing" type="MeshInstance3D" parent="."]
+visible = false
+position = Vector3(0, 0.025, 0)
+mesh = SubResource("Torus_selection")
+cast_shadow = 0
+
+[node name="ReferenceActor" type="Node3D" parent="."]
+
+[node name="CameraRig" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+position = Vector3(0, 14, 16)
+current = true
+fov = 50.0
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="PanelContainer" parent="UI"]
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 300.0
+offset_bottom = -16.0
+grow_vertical = 2
+theme_override_styles/panel = SubResource("Style_panel")
+
+[node name="VBox" type="VBoxContainer" parent="UI/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.91, 0.88, 0.78, 1)
+theme_override_font_sizes/font_size = 22
+text = "资产地编 Asset Editor"
+
+[node name="CatalogScroll" type="ScrollContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="CatalogList" type="VBoxContainer" parent="UI/Panel/VBox/CatalogScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="Status" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+theme_override_colors/font_color = Color(0.49, 0.86, 0.82, 1)
+autowrap_mode = 2
+text = "正在读取资产…"
+
+[node name="TopBar" type="HBoxContainer" parent="UI"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 316.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = 66.0
+grow_horizontal = 2
+theme_override_constants/separation = 8
+
+[node name="RoomShapeLabel" type="Label" parent="UI/TopBar"]
+layout_mode = 2
+text = "房间："
+vertical_alignment = 1
+
+[node name="RoomShape" type="OptionButton" parent="UI/TopBar"]
+custom_minimum_size = Vector2(128, 0)
+layout_mode = 2
+
+[node name="RotateRoom" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "旋转房间 90°"
+
+[node name="Sep1" type="VSeparator" parent="UI/TopBar"]
+layout_mode = 2
+
+[node name="ToolMove" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "移动"
+tooltip_text = "Unity Gizmo：三向移动箭头"
+
+[node name="ToolRotate" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "旋转"
+tooltip_text = "Unity Gizmo：Y 轴旋转环"
+
+[node name="ToolScale" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "大小"
+tooltip_text = "Unity Gizmo：三档大小 0.6 / 1.0 / 1.5"
+
+[node name="PlaceDoor" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "放门"
+tooltip_text = "选中实体墙后替换为门洞"
+
+[node name="ToggleActor" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "参照物：显示"
+
+[node name="Sep2" type="VSeparator" parent="UI/TopBar"]
+layout_mode = 2
+
+[node name="TemplateName" type="LineEdit" parent="UI/TopBar"]
+custom_minimum_size = Vector2(135, 0)
+layout_mode = 2
+placeholder_text = "模板名（如 kitchen_01）"
+text = "diorama_demo"
+
+[node name="OverrideRoomId" type="LineEdit" parent="UI/TopBar"]
+custom_minimum_size = Vector2(95, 0)
+layout_mode = 2
+placeholder_text = "房间 ID"
+text = "living"
+
+[node name="ExportOverride" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "导出正式数据"
+tooltip_text = "把当前房间模板复制到 res://data/editor/overrides/<房间ID>.json"
+
+[node name="TemplateSave" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "保存模板"
+
+[node name="TemplateLoad" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "加载模板"
+
+[node name="TemplateList" type="OptionButton" parent="UI/TopBar"]
+custom_minimum_size = Vector2(125, 0)
+layout_mode = 2
+
+[node name="TemplateRefresh" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "刷新"
+
+[node name="TemplateDelete" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "删除"
+
+[node name="ClearBtn" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "清空"
+
+[node name="HelpLabel" type="Label" parent="UI"]
+mouse_filter = 2
+anchors_preset = 8
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -850.0
+offset_top = -118.0
+offset_right = -18.0
+offset_bottom = -18.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.91, 0.88, 0.78, 0.9)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.75)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+horizontal_alignment = 2
+vertical_alignment = 2
+autowrap_mode = 2
+text = "左键：放置/选中/拖动   E+拖动：旋转   R：大小档(0.6/1.0/1.5)   Ctrl+D：复制\n右键拖动：环绕   中键拖动：平移   滚轮：缩放相机   F：聚焦\nCtrl+拖动：吸附细网格   Delete：删除   Ctrl+Z/Y：撤销/重做   Esc：取消\n墙工具：纸板直墙/半墙/门洞/壁架沿金色外轮廓拖动；墙高 0.72，自动纸板转角与片场道具"

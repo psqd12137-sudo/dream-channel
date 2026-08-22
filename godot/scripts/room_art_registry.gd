@@ -1,6 +1,9 @@
 extends RefCounted
 
 const PROP_ROOT := "res://assets/quaternius/ultimate_house_interior/"
+const OVERRIDE_DIR := "res://data/editor/overrides/"
+const ASSET_CATALOG_PATH := "res://data/editor/asset_catalog.json"
+const COMPOSER_SCALE := 3.4 / 1.55
 const LAYOUT_SCENE := preload("res://scenes/room_layout_lab.tscn")
 const LAYOUT_ROOM_NODES := {
 	"foyer": "Foyer",
@@ -102,6 +105,46 @@ static func decorate(parent: Node3D, room: Dictionary, revealed: bool) -> int:
 		if _spawn_prop(parent, index, spec):
 			added += 1
 	return added
+
+
+static func base_room_id(raw: String) -> String:
+	return str(raw).split("@")[0].strip_edges()
+
+
+static func load_override(room_id: String) -> Dictionary:
+	var clean_id := base_room_id(room_id)
+	var path := OVERRIDE_DIR + clean_id + ".json"
+	if not FileAccess.file_exists(path):
+		return {}
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if parsed is Dictionary:
+		var data: Dictionary = parsed
+		if int(data.get("schema_version", 0)) >= 3 and str(data.get("room_id", clean_id)) == clean_id:
+			return data
+	return {}
+
+
+static func override_world_position(model_pos: Vector3) -> Vector3:
+	return model_pos * COMPOSER_SCALE
+
+
+static func override_world_scale(model_scale: Vector3) -> Vector3:
+	return model_scale * COMPOSER_SCALE
+
+
+static func asset_path(asset_id: String) -> String:
+	var file := FileAccess.open(ASSET_CATALOG_PATH, FileAccess.READ)
+	if file == null:
+		return ""
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if not parsed is Dictionary:
+		return ""
+	var data: Dictionary = parsed
+	for raw_entry: Variant in data.get("assets", []):
+		if raw_entry is Dictionary and str((raw_entry as Dictionary).get("id", "")) == asset_id:
+			return str((raw_entry as Dictionary).get("path", ""))
+	return ""
 
 
 static func _decorate_from_layout(parent: Node3D, room_id: String) -> int:

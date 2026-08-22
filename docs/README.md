@@ -48,6 +48,18 @@
 | [表现资产包](../apps/godot/PRESENTATION_PACK.md) | 角色、动画、道具和装饰导入契约 | 技术接口 |
 | [房间占格与节奏分层](../apps/godot/ROOM_FOOTPRINT_DESIGN.md) | 1/3/5 格房间规模、当前分配与编辑规则 | 客户端事实 |
 
+### 3D 地编工具方案
+
+以下四份文档是同一条 Godot 地编工具演进链。它们描述实施方案，不改变正式游戏规则；
+实际完成度以 Godot 客户端代码和对应 smoke test 为准。
+
+| 文档 | 用途 | 状态 |
+| --- | --- | --- |
+| [地编工具 v1](./asset_editor_tool_prompt.md) | 运行时 3D 资产摆放、保存/加载和基础回归测试 | 实施计划（基线） |
+| [地编工具 v2](./asset_editor_tool_prompt_v2.md) | 房间画布、自由摆放、墙段编辑、模板库、参照物与撤销/重做 | 实施计划（v2 已交付） |
+| [地编工具 v3](./asset_editor_tool_prompt_v3.md) | 纸板片场载体替换、墙高/比例调整与美学验收线 | 实施计划（已交付，待视觉实测） |
+| [地编工具 v4](./asset_editor_tool_prompt_v4.md) | Unity Gizmo、角柱拉墙、放门剔墙、墙段端点编辑 | 实施计划（已实现，待实测） |
+
 ### 协作与环境
 
 | 文档 | 用途 |
