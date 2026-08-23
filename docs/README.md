@@ -50,7 +50,7 @@
 
 ### 3D 地编工具方案
 
-以下四份文档是同一条 Godot 地编工具演进链。它们描述实施方案，不改变正式游戏规则；
+以下文档是同一条 Godot 地编工具演进链。它们描述实施方案，不改变正式游戏规则；
 实际完成度以 Godot 客户端代码和对应 smoke test 为准。
 
 | 文档 | 用途 | 状态 |
@@ -59,6 +59,9 @@
 | [地编工具 v2](./asset_editor_tool_prompt_v2.md) | 房间画布、自由摆放、墙段编辑、模板库、参照物与撤销/重做 | 实施计划（v2 已交付） |
 | [地编工具 v3](./asset_editor_tool_prompt_v3.md) | 纸板片场载体替换、墙高/比例调整与美学验收线 | 实施计划（已交付，待视觉实测） |
 | [地编工具 v4](./asset_editor_tool_prompt_v4.md) | Unity Gizmo、角柱拉墙、放门剔墙、墙段端点编辑 | 实施计划（已实现，待实测） |
+| [模板接入正式对局](./asset_editor_tool_prompt_formal_integration.md) | override 模板接入正式对局、纸板墙渲染、坐标换算、导出正式数据 | 实施计划（已接入 v6） |
+| [特写镜头+玩家动作+房间放大](./asset_editor_tool_prompt_closeup_player_scale.md) | 特写镜头、玩家动作防穿模、房间视觉放大 | 实施计划（待视觉实测） |
+| [格子放大+地编选房+镜头时机](./asset_editor_tool_prompt_v7_scale_camera_roomselect.md) | 格子视觉放大、地编按正式房间选择、进出房间镜头时机 | 实施计划（v7） |
 
 ### 协作与环境
 
