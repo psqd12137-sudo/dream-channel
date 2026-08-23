@@ -4,6 +4,7 @@ const Rules = preload("res://scripts/asset_diorama_rules.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const RoomShellGraph = preload("res://scripts/room_shell_graph.gd")
 const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
+const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 
 const CATALOG_PATH := "res://data/editor/asset_catalog.json"
 const SCENE_PATH := "res://scenes/asset_editor_3d.tscn"
@@ -228,6 +229,7 @@ func _run_scene_structure_tests(editor: Node3D, catalog: Dictionary) -> void:
 
 
 func _run_formal_baseline_tests(editor: Node3D) -> void:
+	var stacked_detail_found := false
 	for raw_room_id: Variant in RoomFootprintCatalog.ROOM_CONFIG.keys():
 		var room_id := str(raw_room_id)
 		var config := RoomFootprintCatalog.ROOM_CONFIG[room_id] as Dictionary
@@ -236,8 +238,14 @@ func _run_formal_baseline_tests(editor: Node3D) -> void:
 		var state: Dictionary = editor._generated_formal_room_state(room_id)
 		var assets := state.get("assets", []) as Array
 		var walls := state.get("walls", []) as Array
-		var expected_min_assets := 6 if cells.size() >= 5 else (4 if cells.size() >= 3 else 2)
-		_check(assets.size() >= expected_min_assets, "every formal room must expose a non-empty editable PCG baseline: %s" % room_id)
+		# The request stays at 7-9 for a three-cell room, while collision and
+		# support checks may deliberately leave one loose duplicate in the box.
+		var expected_min_assets := 10 if cells.size() >= 5 else (6 if cells.size() >= 3 else 4)
+		var request := RoomPropCatalog.unpacking_template_request({"id": room_id, "room_type": room_id, "size": cells.size()}, 0, editor.FORMAL_BASE_LAYOUT_SEED)
+		var density_range := RoomPropCatalog.unpacking_count_range_for_size(cells.size())
+		_check(str(request.get("generation_mode", "")) == "unpacking_seed", "formal room seeds must use the Unpacking-style semantic generator: %s" % room_id)
+		_check(int(request.get("count", 0)) >= density_range.x and int(request.get("count", 0)) <= density_range.y, "Unpacking seed density must match the 1/3/5-room range: %s" % room_id)
+		_check(assets.size() >= expected_min_assets, "every formal room must expose a dense editable Unpacking baseline: %s" % room_id)
 		_check(walls.size() == Rules.room_boundary_edges(cells).size(), "formal room baseline walls must follow its complete outer footprint: %s" % room_id)
 		var doorway_count := 0
 		for raw_wall: Variant in walls:
@@ -245,8 +253,13 @@ func _run_formal_baseline_tests(editor: Node3D) -> void:
 				doorway_count += 1
 		_check(doorway_count == 1, "formal room baseline must have one doorway: %s" % room_id)
 		for raw_asset: Variant in assets:
-			var asset_id := str((raw_asset as Dictionary).get("asset_id", ""))
+			var asset := raw_asset as Dictionary
+			var asset_id := str(asset.get("asset_id", ""))
 			_check(not editor._find_asset_entry(asset_id).is_empty(), "formal room baseline must map PCG assets into the editor catalog: %s/%s" % [room_id, asset_id])
+			var position := asset.get("position", []) as Array
+			if position.size() >= 3 and float(position[1]) > 0.08:
+				stacked_detail_found = true
+	_check(stacked_detail_found, "Unpacking-style baselines must place at least one loose detail on a semantic support surface")
 
 
 func _run_free_placement_tests(editor: Node3D) -> void:

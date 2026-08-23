@@ -55,12 +55,19 @@ func _run() -> void:
 	_check(_count_named_prefix(battle_root, "TerrainAsset_H2_") > 0, "H2 cells must use current furniture assets instead of tall cubes")
 	_check(_count_named_prefix(battle_root, "WalkableAssetTop") > 0, "height assets must expose a visible logical standing surface")
 	_check(_count_named_prefix(battle_root, "PortalLabel") == 2, "portal endpoints must render A/B markers")
-	_check(_count_named_prefix(battle_root, "Blocker") == 2, "hall walls must render blocker meshes")
+	_check(_count_named_prefix(battle_root, "Blocker") >= 2 and _count_named_prefix(battle_root, "BlockerAsset_") == 2, "logical blockers must be dressed with inherited room assets instead of plain cubes")
+	var active_footprint_cells := _count_meta_value_recursive(battle_root, "room_footprint_active", true)
+	_check(active_footprint_cells > 0 and active_footprint_cells < game.combat.cols * game.combat.rows, "the hall arena floor must visibly preserve its five-cell plus footprint")
 	var shell_state: Dictionary = game.battle_room_shell_debug_state()
 	_check(game.battle_room_shell_is_consistent(), "the combat room shell must pair each full wall with one camera-facing cutaway sill")
 	_check(int(shell_state["edges"]) == (game.combat.cols + game.combat.rows) * 2, "the combat shell must cover every canonical arena boundary segment")
 	_check(int(shell_state["entrances"]) == 1, "the player spawn side must expose one explicit room entrance threshold")
 	_check(int(shell_state["logical_walls"]) == game.combat.walls.size(), "presentation shell edges must stay separate from logical combat blockers")
+	_check(str(shell_state.get("room_type", "")) == "hall" and str(shell_state.get("theme", "")) == "study", "combat presentation must inherit the big-map room identity and art theme")
+	_check(str(shell_state.get("context_source", "")) == "unpacking_seed", "rooms without an authored override must inherit their Unpacking-style room seed")
+	_check(int(shell_state.get("context_props", 0)) >= 4, "combat presentation must carry representative room props instead of an empty perimeter")
+	_check(_count_meta_recursive(battle_root, "battle_context_prop") >= 2, "battle terrain and blockers must use assets inherited from the big-map room composition")
+	_check(_count_meta_recursive(battle_root.get_node_or_null("BattleRoomShell"), "cardboard_shell") > 0, "combat walls must use the same cardboard construction language as the big-map room")
 	_check(battle_root.get_node_or_null("BattleRoomShell/BattleRoomStateLabel") is Label3D, "the interior must identify the active room as the current room")
 	var trap_cell := _first_empty_cell(game)
 	game.combat.traps[trap_cell] = {"card_id": "jab", "glyph": "刺", "damage": 2}
@@ -140,6 +147,24 @@ func _count_named_prefix(node: Node, prefix: String) -> int:
 	var count := 1 if node.name.begins_with(prefix) else 0
 	for child: Node in node.get_children():
 		count += _count_named_prefix(child, prefix)
+	return count
+
+
+func _count_meta_recursive(node: Node, meta_key: String) -> int:
+	if node == null:
+		return 0
+	var count := 1 if bool(node.get_meta(meta_key, false)) else 0
+	for child: Node in node.get_children():
+		count += _count_meta_recursive(child, meta_key)
+	return count
+
+
+func _count_meta_value_recursive(node: Node, meta_key: String, expected: Variant) -> int:
+	if node == null:
+		return 0
+	var count := 1 if node.has_meta(meta_key) and node.get_meta(meta_key) == expected else 0
+	for child: Node in node.get_children():
+		count += _count_meta_value_recursive(child, meta_key, expected)
 	return count
 
 

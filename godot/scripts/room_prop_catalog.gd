@@ -81,6 +81,27 @@ const INTERACTION_PROFILES := {
 	"kk_plant_cactus_med": {"kind": "tend", "pose": "work", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.25), "anchor": Vector3(0.0, 0.0, 0.25), "spacing": 0.0, "facing_offset": PI},
 	"kk_lamp_table": {"kind": "stand", "pose": "stand", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.25), "anchor": Vector3.ZERO, "spacing": 0.0, "facing_offset": PI},
 }
+
+# Unpacking-style seed layouts use a small amount of semantic knowledge so
+# loose props start on a believable support instead of being scattered across
+# the floor. Heights are expressed in the editor's 1.55 m room-cell space.
+const SURFACE_HEIGHTS := {
+	"kk_couch": 0.33,
+	"kk_armchair": 0.31,
+	"kk_low_table": 0.30,
+	"kk_kitchen_table": 0.49,
+	"kk_desk": 0.49,
+	"kk_greenhouse_table": 0.43,
+	"kk_basement_table": 0.43,
+	"kk_bed_double": 0.34,
+	"q_bed_single": 0.34,
+	"kk_bedside": 0.38,
+}
+const SURFACE_PROP_TARGETS := {
+	"kk_pillow": ["kk_couch", "kk_armchair", "kk_bed_double", "q_bed_single"],
+	"kk_books": ["kk_low_table", "kk_desk", "kk_bedside", "kk_kitchen_table", "kk_basement_table"],
+	"kk_table_lamp": ["kk_bedside", "kk_desk", "kk_low_table", "kk_basement_table"],
+}
 const THEME_ALIASES := {
 	"foyer": "living",
 	"porch": "greenhouse",
@@ -180,6 +201,65 @@ static func placement_request(room: Dictionary, room_index: int, generation_seed
 		"items": items,
 		"seed": layout_seed,
 	}
+
+
+## A denser, story-first starting point for the authored room editor. This does
+## not replace free placement: it only produces the first editable draft when a
+## formal room has no override yet.
+static func unpacking_template_request(room: Dictionary, room_index: int, generation_seed: int) -> Dictionary:
+	var request := placement_request(room, room_index, generation_seed)
+	var size := int(room.get("size", room.get("room_size", 1)))
+	var density_range := unpacking_count_range_for_size(size)
+	var layout_seed := int(request.get("seed", generation_seed))
+	var target_count := density_range.x + posmod(floori(float(layout_seed) / 7.0), density_range.y - density_range.x + 1)
+	# placement_request intentionally truncates the composition to the old sparse
+	# room count. Re-expand the authored composition before adding fallbacks so a
+	# small room still receives its couch/table/loose-prop relationship.
+	var items: Array = []
+	var theme := str(request.get("theme", "living"))
+	var composition_id := str(request.get("composition_id", ""))
+	for raw_composition: Variant in THEME_COMPOSITIONS.get(theme, []):
+		var composition := raw_composition as Dictionary
+		if str(composition.get("id", "")) != composition_id:
+			continue
+		for raw_item: Array in composition.get("items", []):
+			if items.size() >= target_count:
+				break
+			items.append({"slot": str(raw_item[0]), "asset_id": str(raw_item[1])})
+		break
+	var fallback_slots := [SLOT_ACCENT, SLOT_CORNER, SLOT_WALL, SLOT_ACCENT, SLOT_CORNER, SLOT_MAIN]
+	while items.size() < target_count:
+		var slot := str(fallback_slots[items.size() % fallback_slots.size()])
+		items.append({"slot": slot, "asset_id": ""})
+	request["items"] = items
+	request["count"] = target_count
+	request["generation_mode"] = "unpacking_seed"
+	request["density"] = "dense" if size >= 3 else "cozy"
+	var slots: Array[String] = []
+	for raw_item: Variant in items:
+		slots.append(str((raw_item as Dictionary).get("slot", SLOT_ACCENT)))
+	request["slots"] = slots
+	return request
+
+
+static func unpacking_count_range_for_size(size: int) -> Vector2i:
+	if size >= 5:
+		return Vector2i(10, 13)
+	if size >= 3:
+		return Vector2i(7, 9)
+	return Vector2i(4, 5)
+
+
+static func is_surface_prop(asset_id: String) -> bool:
+	return SURFACE_PROP_TARGETS.has(asset_id)
+
+
+static func surface_targets_for(asset_id: String) -> Array:
+	return (SURFACE_PROP_TARGETS.get(asset_id, []) as Array).duplicate()
+
+
+static func surface_height_for(asset_id: String) -> float:
+	return float(SURFACE_HEIGHTS.get(asset_id, 0.0))
 
 
 static func count_range_for_size(size: int) -> Vector2i:

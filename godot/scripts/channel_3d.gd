@@ -7,6 +7,8 @@ const WebContentAdapter = preload("res://scripts/web_content_adapter.gd")
 const CharacterPresenter = preload("res://scripts/character_presenter.gd")
 const CameraFollowMath = preload("res://scripts/camera_follow_math.gd")
 const RoomArtRegistry = preload("res://scripts/room_art_registry.gd")
+const BattleRoomArtContext = preload("res://scripts/battle_room_art_context.gd")
+const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const DIORAMA_ART_LAB = preload("res://scenes/diorama_art_lab.tscn")
 const PCG_DIORAMA_STITCH_LAB = preload("res://scenes/pcg_diorama_stitch_lab.tscn")
 const PCG_HAND_LAYOUT_LAB = preload("res://scenes/pcg_hand_layout_lab.tscn")
@@ -194,6 +196,8 @@ var battle_camera_return_delay := 0.0
 var battle_camera_returning := false
 var battle_camera_return_tween: Tween = null
 var battle_room_title := "房间"
+var battle_room_context: Dictionary = {}
+var previous_room_pos := Vector2i.ZERO
 var battle_shell_edge_records: Dictionary = {}
 var battle_shell_culled_count := 0
 var battle_shell_visible_count := 0
@@ -606,6 +610,7 @@ func reset_run(seed_value: int = 0) -> void:
 	for i in range(mini(2, relic_pool.size())):
 		omen_options.append(str(relic_pool[i]))
 	current_room_pos = Vector2i.ZERO
+	previous_room_pos = current_room_pos
 	pending_room_pos = Vector2i.ZERO
 	selected_frontier = Vector2i.ZERO
 	build_offers.clear()
@@ -746,6 +751,7 @@ func continue_saved_run() -> bool:
 		if str(room.get("id", "")) in remaining_ids:
 			remaining_rooms.append(room.duplicate(true))
 	current_room_pos = _array_to_pos(save.get("current_room", [0, 0]))
+	previous_room_pos = current_room_pos
 	pending_room_pos = _array_to_pos(save.get("pending_room", [0, 0]))
 	house_player_facing_yaw = float(save.get("house_player_facing_yaw", 0.0))
 	phase = str(save.get("phase", "explore"))
@@ -1560,6 +1566,7 @@ func _handle_house_world_click(screen_pos: Vector2) -> void:
 func enter_room(target: Vector2i) -> void:
 	if animation_busy or not room_rules.placed.has(target) or not _rooms_connected(current_room_pos, target):
 		return
+	previous_room_pos = current_room_pos
 	animation_busy = true
 	active_animation_kind = "room_entry"
 	house_camera_closeup = false
@@ -1843,6 +1850,8 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	run_rules["player_hp"] = player_hp
 	run_rules["base_speed"] = player_speed
 	combat.setup(room.get("arena", {}), enemy, content.get("cards", {}), run_deck, run_seed + room_rules.instance_count() * 17, run_rules, active_relics)
+	battle_room_context = BattleRoomArtContext.build(room, combat.cols, combat.rows, BATTLE_CELL, run_seed + str(room.get("instance_id", room.get("id", "room"))).hash())
+	_align_battle_terrain_to_room_context()
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
 	phase = "combat"
@@ -2290,7 +2299,9 @@ func _refit_battle_camera(preserve_zoom: bool) -> void:
 	var horizontal_radius := Vector2(half_x, half_z).length()
 	# 镜头始终偏上构图（对准点向屏幕上方平移约 size*FRAME_OFFSET），fit 需把该偏移量计入半径，
 	# 保证全棋盘在偏上对准下仍然可见
-	horizontal_radius += BATTLE_CAMERA_FRAME_OFFSET * (horizontal_radius * 2.0 + 10.0)
+	# Reserve only the actual framing offset. The previous doubled-radius plus
+	# ten-unit allowance left a themed arena occupying barely half the viewport.
+	horizontal_radius += BATTLE_CAMERA_FRAME_OFFSET * (horizontal_radius + 4.0)
 	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0)
 	camera.size = battle_camera_fit_size * battle_camera_zoom_ratio
 	_apply_battle_camera()
@@ -2936,12 +2947,16 @@ func build_battle_world() -> void:
 	if combat == null:
 		return
 	var intent: Dictionary = combat.preview_intent()
+	var room_floor_a: Color = battle_room_context.get("floor_a", COL_FLOOR_H0)
+	var room_floor_b: Color = battle_room_context.get("floor_b", room_floor_a.darkened(0.035))
+	var room_rim: Color = battle_room_context.get("rim", Color("343a3e"))
+	var room_blocker: Color = battle_room_context.get("blocker", COL_WALL_GREEN)
 	_add_box(
 		battle_root,
 		"ArenaBase",
 		Vector3(0, -0.13, 0),
 		Vector3(float(combat.cols) * BATTLE_CELL + 0.36, 0.22, float(combat.rows) * BATTLE_CELL + 0.36),
-		_material(Color("111a20"))
+		_material(room_rim.darkened(0.52))
 	)
 	for y in range(combat.rows):
 		for x in range(combat.cols):
@@ -2952,23 +2967,31 @@ func build_battle_world() -> void:
 			cell_node.position = world
 			battle_root.add_child(cell_node)
 			var height := int(combat.heights.get(pos, 0))
+			var footprint_active := _battle_cell_in_room_footprint(pos)
+			cell_node.set_meta("room_footprint_active", footprint_active)
 			var platform_height := 0.28 + float(height) * 0.64
-			var rim_color := Color("343a3e") if height == 0 else Color("2b3034") if height == 1 else Color("22272a")
+			var rim_color := room_rim if height == 0 else room_rim.darkened(0.12) if height == 1 else room_rim.darkened(0.24)
 			if pos in intent.get("hurt", []):
 				rim_color = COL_RED
 			elif pos in intent.get("path", []):
 				rim_color = COL_BLUE
-			var surface_color := COL_FLOOR_H0 if height == 0 else COL_FLOOR_H1 if height == 1 else COL_FLOOR_H2
-			if (x + y) % 2 == 1:
-				surface_color = surface_color.darkened(0.035)
+			var surface_color := room_floor_a if (x + y) % 2 == 0 else room_floor_b
+			if height == 1:
+				surface_color = surface_color.darkened(0.12)
+			elif height >= 2:
+				surface_color = surface_color.darkened(0.24)
 			if combat.walls.has(pos):
-				surface_color = COL_WALL_GREEN.darkened(0.12)
+				surface_color = room_blocker.darkened(0.12)
+			elif not footprint_active:
+				rim_color = room_rim.darkened(0.42)
+				surface_color = room_rim.darkened(0.56)
 			if height == 0:
 				_add_box(cell_node, "Frame", Vector3(0, platform_height * 0.5, 0), Vector3(BATTLE_CELL - 0.08, platform_height, BATTLE_CELL - 0.08), _material(rim_color, false, 0.04 if rim_color != COL_GRID_DARK else 0.0))
 			else:
 				_add_box(cell_node, "TerrainFoot", Vector3(0, 0.14, 0), Vector3(BATTLE_CELL - 0.08, 0.28, BATTLE_CELL - 0.08), _material(rim_color))
 				_add_battle_height_asset(cell_node, pos, height, platform_height + 0.13)
-			_add_box(cell_node, "Surface", Vector3(0, platform_height + 0.055, 0), Vector3(BATTLE_CELL - 0.34, 0.11, BATTLE_CELL - 0.34), _material(surface_color))
+			var surface_material := _material(surface_color) if height == 0 else _material(Color(surface_color, 0.30), true, 0.025)
+			_add_box(cell_node, "Surface", Vector3(0, platform_height + 0.055, 0), Vector3(BATTLE_CELL - 0.34, 0.11, BATTLE_CELL - 0.34), surface_material)
 			var top_y := platform_height + 0.13
 			var is_hurt_cell: bool = pos in (intent.get("hurt", []) as Array)
 			var path_index: int = (intent.get("path", []) as Array).find(pos)
@@ -2992,7 +3015,8 @@ func build_battle_world() -> void:
 			if combat.portals.has(pos):
 				_add_portal_marker(cell_node, pos, top_y)
 			if combat.walls.has(pos):
-				_add_box(cell_node, "Blocker", Vector3(0, platform_height + 0.82, 0), Vector3(BATTLE_CELL - 0.48, 1.45, BATTLE_CELL - 0.48), _material(COL_WALL_GREEN))
+				_add_box(cell_node, "Blocker", Vector3(0, platform_height + 0.70, 0), Vector3(BATTLE_CELL - 0.48, 1.20, BATTLE_CELL - 0.48), _material(Color(room_blocker, 0.13), true, 0.025))
+				_add_battle_blocker_asset(cell_node, pos, platform_height)
 				_add_label(cell_node, "Blocked", "×", Vector3(0, platform_height + 1.72, 0), Color("f0c9b4"), 42)
 			elif combat.traps.has(pos):
 				var trap: Dictionary = combat.traps[pos]
@@ -3026,28 +3050,222 @@ func _add_corner_marks(parent: Node3D, prefix: String, color: Color, y: float) -
 		_add_box(parent, "%s_%d" % [prefix, index], Vector3(sx * edge, y, sz * edge), Vector3(0.28, 0.055, 0.28), _material(color, false, 0.08))
 
 
-func _add_battle_height_asset(parent: Node3D, pos: Vector2i, height: int, logical_top_y: float) -> void:
-	var options: Array = BATTLE_HEIGHT_ASSETS.get(height, [])
-	if options.is_empty():
+func _align_battle_terrain_to_room_context() -> void:
+	if combat == null or combat.heights.is_empty():
 		return
-	var asset_name := str(options[posmod(pos.x * 17 + pos.y * 31, options.size())])
-	var packed := load(BATTLE_HEIGHT_ASSET_ROOT + asset_name) as PackedScene
+	var height_values: Array[int] = []
+	var original_positions: Array[Vector2i] = []
+	for raw_pos: Variant in combat.heights.keys():
+		var height := int(combat.heights[raw_pos])
+		if height <= 0:
+			continue
+		height_values.append(height)
+		original_positions.append(raw_pos as Vector2i)
+	height_values.sort()
+	height_values.reverse()
+	var props := (battle_room_context.get("props", []) as Array).duplicate(true)
+	var used_props := {}
+	var used_cells := {}
+	combat.heights.clear()
+	for index in range(height_values.size()):
+		var height := height_values[index]
+		var chosen_prop := -1
+		for prop_index in range(props.size()):
+			if used_props.has(prop_index):
+				continue
+			if bool((props[prop_index] as Dictionary).get("tall", false)) == (height >= 2):
+				chosen_prop = prop_index
+				break
+		var preferred := original_positions[index] if index < original_positions.size() else Vector2i(combat.cols / 2, combat.rows / 2)
+		if chosen_prop >= 0:
+			used_props[chosen_prop] = true
+			var normalized := (props[chosen_prop] as Dictionary).get("normalized", []) as Array
+			if normalized.size() >= 2:
+				preferred = Vector2i(
+					clampi(floori(float(normalized[0]) * float(combat.cols)), 0, combat.cols - 1),
+					clampi(floori(float(normalized[1]) * float(combat.rows)), 0, combat.rows - 1)
+				)
+		var target := _nearest_battle_layout_cell(preferred, used_cells)
+		if target.x < 0:
+			continue
+		used_cells[target] = true
+		combat.heights[target] = height
+	if combat.has_method("_refresh_vision"):
+		combat._refresh_vision(false)
+
+
+func _nearest_battle_layout_cell(preferred: Vector2i, used_cells: Dictionary) -> Vector2i:
+	var best := INVALID_CELL
+	var best_score := INF
+	for y in range(combat.rows):
+		for x in range(combat.cols):
+			var candidate := Vector2i(x, y)
+			if used_cells.has(candidate) or combat.walls.has(candidate) or combat.portals.has(candidate):
+				continue
+			if candidate == combat.player_pos or candidate == combat.enemy_pos:
+				continue
+			var footprint_penalty := 1000.0 if not _battle_cell_in_room_footprint(candidate) else 0.0
+			var score := float(abs(candidate.x - preferred.x) + abs(candidate.y - preferred.y)) + footprint_penalty
+			if score < best_score:
+				best_score = score
+				best = candidate
+	return best
+
+
+func _battle_cell_in_room_footprint(pos: Vector2i) -> bool:
+	var raw_cells := battle_room_context.get("footprint", []) as Array
+	if raw_cells.is_empty() or combat == null:
+		return true
+	var footprint_cells: Array[Vector2i] = []
+	var min_cell := Vector2i(9999, 9999)
+	var max_cell := Vector2i(-9999, -9999)
+	for raw_cell: Variant in raw_cells:
+		if not raw_cell is Array or (raw_cell as Array).size() < 2:
+			continue
+		var cell := Vector2i(int(raw_cell[0]), int(raw_cell[1]))
+		footprint_cells.append(cell)
+		min_cell = Vector2i(mini(min_cell.x, cell.x), mini(min_cell.y, cell.y))
+		max_cell = Vector2i(maxi(max_cell.x, cell.x), maxi(max_cell.y, cell.y))
+	if footprint_cells.is_empty():
+		return true
+	var width := max_cell.x - min_cell.x + 1
+	var height := max_cell.y - min_cell.y + 1
+	var mapped := Vector2i(
+		min_cell.x + mini(width - 1, floori((float(pos.x) + 0.5) / float(combat.cols) * float(width))),
+		min_cell.y + mini(height - 1, floori((float(pos.y) + 0.5) / float(combat.rows) * float(height)))
+	)
+	return mapped in footprint_cells
+
+
+func _add_battle_height_asset(parent: Node3D, pos: Vector2i, height: int, logical_top_y: float) -> void:
+	var inherited := _battle_context_prop_for_cell(pos, height)
+	var asset_path := str(inherited.get("path", ""))
+	if asset_path.is_empty():
+		var options: Array = _battle_height_asset_options(height)
+		if options.is_empty():
+			return
+		var asset_name := str(options[posmod(pos.x * 17 + pos.y * 31, options.size())])
+		asset_path = asset_name if asset_name.begins_with("res://") else BATTLE_HEIGHT_ASSET_ROOT + asset_name
+	var packed := load(asset_path) as PackedScene
 	if packed == null:
 		return
 	var prop := packed.instantiate() as Node3D
 	if prop == null:
 		return
-	prop.name = "TerrainAsset_H%d_%s" % [height, asset_name.get_basename()]
-	prop.position = Vector3(0, 0.31, 0)
-	prop.rotation.y = float(posmod(pos.x + pos.y, 4)) * PI * 0.5
-	prop.scale = Vector3.ONE * (0.43 if height == 1 else 0.46)
+	prop.name = "TerrainAsset_H%d_%s" % [height, asset_path.get_file().get_basename()]
+	if not inherited.is_empty():
+		prop.set_meta("battle_context_prop", true)
+		prop.set_meta("source_asset_id", str(inherited.get("asset_id", "")))
+	prop.position = Vector3.ZERO
+	prop.rotation.y = float(inherited.get("yaw", float(posmod(pos.x + pos.y, 4)) * PI * 0.5))
+	prop.scale = Vector3.ONE
 	parent.add_child(prop)
+	var visual_bounds := _node_visual_aabb_in_parent(parent, prop)
+	if visual_bounds.size != Vector3.ZERO:
+		var target_height := maxf(0.42, logical_top_y - 0.24)
+		var target_width := BATTLE_CELL - 0.30
+		var height_scale := target_height / maxf(visual_bounds.size.y, 0.01)
+		var width_scale := target_width / maxf(maxf(visual_bounds.size.x, visual_bounds.size.z), 0.01)
+		var fitted_scale := minf(height_scale, width_scale)
+		prop.scale = Vector3.ONE * fitted_scale
+		prop.position.y = 0.29 - visual_bounds.position.y * fitted_scale
+	else:
+		prop.position = Vector3(0, 0.31, 0)
+		prop.scale = Vector3.ONE * (0.43 if height == 1 else 0.46)
 	for child: Node in prop.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := child as MeshInstance3D
 		if mesh_instance != null:
 			mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var top_marker := _add_box(parent, "WalkableAssetTop", Vector3(0, logical_top_y - 0.075, 0), Vector3(BATTLE_CELL - 0.46, 0.055, BATTLE_CELL - 0.46), _material(Color(COL_PAPER, 0.46), true, 0.03))
 	top_marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func _add_battle_blocker_asset(parent: Node3D, pos: Vector2i, platform_height: float) -> void:
+	var inherited := _battle_context_prop_for_cell(pos, 2)
+	var asset_path := str(inherited.get("path", ""))
+	if asset_path.is_empty():
+		var options := _battle_height_asset_options(2)
+		if options.is_empty():
+			return
+		var raw_path := str(options[posmod(pos.x * 19 + pos.y * 23, options.size())])
+		asset_path = raw_path if raw_path.begins_with("res://") else BATTLE_HEIGHT_ASSET_ROOT + raw_path
+	var packed := load(asset_path) as PackedScene
+	if packed == null:
+		return
+	var prop := packed.instantiate() as Node3D
+	if prop == null:
+		return
+	prop.name = "BlockerAsset_%s" % asset_path.get_file().get_basename()
+	if not inherited.is_empty():
+		prop.set_meta("battle_context_prop", true)
+		prop.set_meta("source_asset_id", str(inherited.get("asset_id", "")))
+	prop.rotation.y = float(inherited.get("yaw", float(posmod(pos.x + pos.y, 4)) * PI * 0.5))
+	parent.add_child(prop)
+	var bounds := _node_visual_aabb_in_parent(parent, prop)
+	if bounds.size != Vector3.ZERO:
+		var fitted_scale := minf(1.58 / maxf(bounds.size.y, 0.01), (BATTLE_CELL - 0.30) / maxf(maxf(bounds.size.x, bounds.size.z), 0.01))
+		prop.scale = Vector3.ONE * fitted_scale
+		prop.position.y = platform_height + 0.08 - bounds.position.y * fitted_scale
+	else:
+		prop.scale = Vector3.ONE * 0.46
+		prop.position.y = platform_height + 0.08
+	for child: Node in prop.find_children("*", "MeshInstance3D", true, false):
+		(child as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+
+
+func _battle_context_prop_for_cell(pos: Vector2i, height: int) -> Dictionary:
+	var target := Vector2(
+		(float(pos.x) + 0.5) / maxf(1.0, float(combat.cols)),
+		(float(pos.y) + 0.5) / maxf(1.0, float(combat.rows))
+	)
+	var best: Dictionary = {}
+	var best_distance := INF
+	for raw_record: Variant in battle_room_context.get("props", []):
+		var record := raw_record as Dictionary
+		if bool(record.get("tall", false)) != (height >= 2):
+			continue
+		var normalized := record.get("normalized", []) as Array
+		if normalized.size() < 2:
+			continue
+		var distance := target.distance_squared_to(Vector2(float(normalized[0]), float(normalized[1])))
+		if distance < best_distance:
+			best_distance = distance
+			best = record
+	return best
+
+
+func _battle_height_asset_options(height: int) -> Array:
+	var inherited: Array = []
+	for raw_record: Variant in battle_room_context.get("props", []):
+		var record := raw_record as Dictionary
+		if bool(record.get("tall", false)) != (height >= 2):
+			continue
+		var inherited_path := str(record.get("path", ""))
+		if not inherited_path.is_empty() and inherited_path not in inherited:
+			inherited.append(inherited_path)
+	var themed: Dictionary = battle_room_context.get("height_assets", {})
+	var options: Array = themed.get(height, [])
+	for raw_path: Variant in options:
+		var themed_path := str(raw_path)
+		if themed_path not in inherited:
+			inherited.append(themed_path)
+	if not inherited.is_empty():
+		return inherited
+	return (BATTLE_HEIGHT_ASSETS.get(height, []) as Array).duplicate()
+
+
+func _node_visual_aabb_in_parent(parent: Node3D, model: Node3D) -> AABB:
+	var result := AABB()
+	var has_bounds := false
+	var to_parent := parent.global_transform.affine_inverse()
+	for child: Node in model.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := child as MeshInstance3D
+		if mesh_instance == null or mesh_instance.mesh == null:
+			continue
+		var box := (to_parent * mesh_instance.global_transform) * mesh_instance.get_aabb()
+		result = result.merge(box) if has_bounds else box
+		has_bounds = true
+	return result if has_bounds else AABB()
 
 
 func _add_portal_marker(parent: Node3D, pos: Vector2i, y: float) -> void:
@@ -3221,6 +3439,7 @@ func _add_battle_room_shell() -> void:
 		for index in range(segment_count):
 			var is_entrance := side == int(entrance["side"]) and index == int(entrance["index"])
 			_add_battle_shell_edge(shell, side, index, half_x, half_z, is_entrance)
+	_add_battle_shell_junctions(shell, half_x, half_z)
 	_add_battle_boundary_outline(shell, half_x, half_z)
 	var label := Label3D.new()
 	label.font = APP_FONT
@@ -3239,13 +3458,18 @@ func _add_battle_room_shell() -> void:
 
 func _battle_room_entrance_edge() -> Dictionary:
 	var player: Vector2i = combat.player_pos
+	var entered_from := previous_room_pos - current_room_pos
+	var linked_side := RoomRules.DIRS.find(entered_from)
+	if linked_side >= 0 and room_rules.placed.has(current_room_pos) and room_rules.cell_has_door(current_room_pos, linked_side):
+		var linked_index := player.x if linked_side in [0, 2] else player.y
+		return {"side": linked_side, "index": clampi(linked_index, 0, (combat.cols if linked_side in [0, 2] else combat.rows) - 1), "source": "house_entry"}
 	var distances := [player.y, combat.cols - 1 - player.x, combat.rows - 1 - player.y, player.x]
 	var side := 0
 	for candidate in range(1, 4):
 		if int(distances[candidate]) < int(distances[side]):
 			side = candidate
 	var index := player.x if side in [0, 2] else player.y
-	return {"side": side, "index": index}
+	return {"side": side, "index": index, "source": "player_spawn"}
 
 
 func _add_battle_shell_edge(shell: Node3D, side: int, index: int, half_x: float, half_z: float, is_entrance: bool) -> void:
@@ -3263,16 +3487,22 @@ func _add_battle_shell_edge(shell: Node3D, side: int, index: int, half_x: float,
 	var full_root := Node3D.new()
 	full_root.name = "FullDoorway" if is_entrance else "FullWall"
 	segment.add_child(full_root)
-	var asset_path := KAYKIT_DUNGEON_ROOT + ("wall_doorway.glb" if is_entrance else "wall.gltf.glb")
-	var packed := load(asset_path) as PackedScene
-	if packed != null:
-		var model := packed.instantiate() as Node3D
-		if model != null:
-			model.name = "ShellAsset"
-			model.scale = Vector3((BATTLE_CELL - BATTLE_SHELL_JUNCTION_WIDTH) / 4.0, BATTLE_SHELL_WALL_HEIGHT / 4.0, BATTLE_SHELL_JUNCTION_WIDTH)
-			full_root.add_child(model)
-			for child: Node in model.find_children("*", "MeshInstance3D", true, false):
-				(child as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	var shell_color := int(battle_room_context.get("shell_color", 0))
+	var wall_kind := _battle_shell_kind_for_segment(index)
+	var model := CardboardShellBuilder.build_doorway(Vector3.ZERO, 0.0, shell_color) if is_entrance else CardboardShellBuilder.build_wall(wall_kind, Vector3.ZERO, 0.0, shell_color)
+	if model != null:
+		model.name = "ShellAsset"
+		var source_height := CardboardShellBuilder.WALL_HEIGHT if is_entrance else CardboardShellBuilder.wall_height_for_kind(wall_kind)
+		model.scale = Vector3(
+			(BATTLE_CELL - BATTLE_SHELL_JUNCTION_WIDTH) / CardboardShellBuilder.WALL_SPAN,
+			BATTLE_SHELL_WALL_HEIGHT / maxf(source_height, 0.01),
+			1.0
+		)
+		if is_entrance:
+			var door_leaf := model.get_node_or_null("DoorLeaf") as Node3D
+			if door_leaf != null:
+				door_leaf.visible = false
+		full_root.add_child(model)
 	var cutaway_root := Node3D.new()
 	cutaway_root.name = "DoorThreshold" if is_entrance else "WallSill"
 	cutaway_root.visible = false
@@ -3280,6 +3510,26 @@ func _add_battle_shell_edge(shell: Node3D, side: int, index: int, half_x: float,
 	_add_battle_shell_sill(cutaway_root, is_entrance)
 	var key := "%d:%d" % [side, index]
 	battle_shell_edge_records[key] = {"side": side, "full": full_root, "cutaway": cutaway_root, "entrance": is_entrance}
+
+
+func _battle_shell_kind_for_segment(index: int) -> String:
+	var wall_kinds: Array = battle_room_context.get("wall_kinds", [])
+	if "cb_shelves" in wall_kinds and index % 3 == 1:
+		return "cb_shelves"
+	if "cb_wall_half" in wall_kinds and index % 4 == 2:
+		return "cb_wall_half"
+	return "cb_wall"
+
+
+func _add_battle_shell_junctions(shell: Node3D, half_x: float, half_z: float) -> void:
+	var shell_color := int(battle_room_context.get("shell_color", 0))
+	var horizontal_scale := BATTLE_SHELL_JUNCTION_WIDTH / CardboardShellBuilder.KAYKIT_JUNCTION_WIDTH
+	for corner: Vector3 in [Vector3(-half_x, 0.34, -half_z), Vector3(half_x, 0.34, -half_z), Vector3(half_x, 0.34, half_z), Vector3(-half_x, 0.34, half_z)]:
+		var junction := CardboardShellBuilder.build_junction(Vector3.ZERO, CardboardShellBuilder.WALL_HEIGHT, shell_color)
+		junction.name = "BattleShellJunction"
+		junction.position = corner
+		junction.scale = Vector3(horizontal_scale, BATTLE_SHELL_WALL_HEIGHT / CardboardShellBuilder.WALL_HEIGHT, horizontal_scale)
+		shell.add_child(junction)
 
 
 func _add_battle_shell_sill(parent: Node3D, is_entrance: bool) -> void:
@@ -3348,6 +3598,10 @@ func battle_room_shell_debug_state() -> Dictionary:
 		"visible": battle_shell_visible_count,
 		"entrances": entrance_count,
 		"logical_walls": combat.walls.size() if combat != null else 0,
+		"room_type": str(battle_room_context.get("room_type", "")),
+		"theme": str(battle_room_context.get("theme", "")),
+		"context_source": str(battle_room_context.get("source", "")),
+		"context_props": (battle_room_context.get("props", []) as Array).size(),
 	}
 
 

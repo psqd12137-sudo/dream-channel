@@ -1708,7 +1708,7 @@ func _load_formal_room_layout(room_id: String, record_undo := true) -> int:
 	var source := "正式 override"
 	if state.is_empty():
 		state = _generated_formal_room_state(room_id)
-		source = "正式游戏 PCG 底稿"
+		source = "Unpacking 式房间初稿"
 	var loaded := _rebuild_from_state(state)
 	if record_undo:
 		_push_undo_snapshot(before)
@@ -1752,7 +1752,7 @@ func _generated_formal_room_state(room_id: String) -> Dictionary:
 		"size": cells.size(),
 		"room_size": cells.size(),
 	}
-	var request := RoomPropCatalog.placement_request(room, 0, FORMAL_BASE_LAYOUT_SEED)
+	var request := RoomPropCatalog.unpacking_template_request(room, 0, FORMAL_BASE_LAYOUT_SEED)
 	var candidates := _formal_prop_candidates(cells, walls_snapshot)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(request.get("seed", FORMAL_BASE_LAYOUT_SEED))
@@ -1770,7 +1770,14 @@ func _generated_formal_room_state(room_id: String) -> Dictionary:
 		if editor_id.is_empty() or catalog_entry.is_empty():
 			continue
 		var position: Vector3 = candidate.get("position", Vector3.ZERO)
-		if bool(entry.get("overlay", false)):
+		var surface_placement := _formal_surface_prop_position(entry, placed_records, rng)
+		if not surface_placement.is_empty():
+			position = surface_placement.get("position", position)
+		elif RoomPropCatalog.is_surface_prop(str(entry.get("id", ""))):
+			# A lamp/book/pillow without a suitable support is worse than leaving it
+			# in the box for the designer to add later.
+			continue
+		elif bool(entry.get("overlay", false)):
 			position.y = 0.005
 		var yaw := float(candidate.get("yaw", 0.0))
 		if str(candidate.get("slot", "")) in [RoomPropCatalog.SLOT_MAIN, RoomPropCatalog.SLOT_ACCENT]:
@@ -1787,6 +1794,8 @@ func _generated_formal_room_state(room_id: String) -> Dictionary:
 			"position": position,
 			"footprint": entry.get("footprint", Vector2(0.3, 0.3)),
 			"overlay": bool(entry.get("overlay", false)),
+			"surface_height": RoomPropCatalog.surface_height_for(str(entry.get("id", ""))),
+			"surface_load": 0,
 		})
 	return {
 		"room_shape": shape_id,
@@ -1919,7 +1928,10 @@ func _take_formal_prop_placement(theme: String, requested_slot: String, preferre
 					continue
 			for candidate: Dictionary in slot_candidates:
 				if _formal_prop_candidate_clear(candidate, entry, placed):
-					(candidates[slot] as Array).erase(candidate)
+					# Loose props are moved onto their semantic support after this
+					# selection; they must not consume a floor placement slot.
+					if not bool(entry.get("overlay", false)):
+						(candidates[slot] as Array).erase(candidate)
 					return {"entry": entry, "candidate": candidate}
 	return {}
 
@@ -1939,6 +1951,30 @@ func _formal_prop_candidate_clear(candidate: Dictionary, entry: Dictionary, plac
 		if Vector2(position.x - previous_position.x, position.z - previous_position.z).length() < (radius + previous_radius) * 0.55:
 			return false
 	return true
+
+
+func _formal_surface_prop_position(entry: Dictionary, placed: Array[Dictionary], rng: RandomNumberGenerator) -> Dictionary:
+	var asset_id := str(entry.get("id", ""))
+	if not RoomPropCatalog.is_surface_prop(asset_id):
+		return {}
+	var targets := RoomPropCatalog.surface_targets_for(asset_id)
+	var supports: Array[Dictionary] = []
+	for previous: Dictionary in placed:
+		if str(previous.get("asset_id", "")) in targets and float(previous.get("surface_height", 0.0)) > 0.0:
+			supports.append(previous)
+	if supports.is_empty():
+		return {}
+	var support := supports[rng.randi_range(0, supports.size() - 1)]
+	var load_index := int(support.get("surface_load", 0))
+	support["surface_load"] = load_index + 1
+	var base: Vector3 = support.get("position", Vector3.ZERO)
+	var side := -1.0 if load_index % 2 == 0 else 1.0
+	var lane := float(load_index / 2) * 0.08
+	var offset := Vector3(side * (0.07 + lane), 0.0, (float(posmod(load_index, 3)) - 1.0) * 0.055)
+	return {
+		"position": base + offset + Vector3.UP * (float(support.get("surface_height", 0.0)) + 0.008),
+		"support_asset_id": str(support.get("asset_id", "")),
+	}
 
 
 func _formal_shuffle(values: Array, rng: RandomNumberGenerator) -> void:
