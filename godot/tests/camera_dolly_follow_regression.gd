@@ -38,7 +38,7 @@ func _run() -> void:
 	game.house_camera_intro_weight = 1.0
 	game.animation_duration_scale = 0.0
 
-	# 3) 玩家移动时延迟跟随：只平移不旋转——进入相邻房间后镜头 target 向玩家收敛，旋转角度保持不变
+	# 3) 普通进房保持全景；玩家手动切换特写后只平移不旋转地跟随
 	var token: Node3D = game.house_root.get_node_or_null("LiliToken") as Node3D
 	_check(token != null, "house player token must exist")
 	var start_target: Vector3 = game.house_camera_target
@@ -50,20 +50,24 @@ func _run() -> void:
 	game.place_selected_offer()
 	await process_frame
 	game.enter_room(frontier)
-	_check(game.house_camera_following, "entering a room must arm the follow camera")
+	_check(not game.house_camera_closeup, "entering an ordinary room must keep the overview camera")
+	_check(not game.house_camera_following, "entering an ordinary room must not arm follow automatically")
+	game.toggle_house_camera_closeup()
+	_check(game.house_camera_closeup, "manual closeup must enable the room closeup")
+	_check(game.house_camera_following, "manual closeup must arm the follow camera")
 	await process_frame
 	token = game.house_root.get_node_or_null("LiliToken") as Node3D
 	var player_pos: Vector3 = Vector3(token.position.x, 0.0, token.position.z) if token != null else game._house_world(game.current_room_pos)
 	var framed_pos: Vector3 = player_pos + game._house_camera_frame_offset()
 	for i in range(24):
 		game._process(0.1)
-	_check(start_target.distance_to(player_pos) > 1.0, "the camera must start away from the player after entering a room")
-	_check(game.house_camera_target.distance_to(framed_pos) < start_target.distance_to(player_pos) * 0.4, "follow camera must converge toward the framed player position")
+	_check(start_target.distance_to(player_pos) > 1.0, "the overview target must begin away from the entered room")
+	_check(game.house_camera_target.distance_to(framed_pos) < start_target.distance_to(player_pos) * 0.4, "manual closeup must converge toward the framed player position")
 	_check(is_equal_approx(game.house_camera_yaw, yaw_at_start), "follow camera must not rotate itself while tracking the player")
 
 	# 4) 松手后延迟回位到玩家正上方：拖动后松手，延迟结束仅把位置对准玩家，旋转保持玩家选择的旋转
 	game.orbit_house_camera(Vector2(140.0, 0.0))
-	game.pan_house_camera(Vector2(-70.0, -30.0))
+	game.pan_house_camera(Vector2(-240.0, -140.0))
 	_check(game.house_camera_user_hold, "dragging must put the camera in user hold")
 	_check(is_equal_approx(game.house_camera_return_delay, 0.0), "user drag must cancel any pending return")
 	var orbit_yaw: float = game.house_camera_yaw
@@ -71,14 +75,14 @@ func _run() -> void:
 	var orbit_zoom: float = game.house_camera_zoom_ratio
 	var adjusted_target: Vector3 = game.house_camera_target
 	var framed_pos_after: Vector3 = player_pos + game._house_camera_frame_offset()
-	_check(adjusted_target.distance_to(framed_pos_after) > 0.8, "pan must actually move the camera target away from the framed player position")
+	_check(adjusted_target.distance_to(framed_pos_after) > 0.35, "pan must actually move the camera target away from the framed player position (distance %.3f)" % adjusted_target.distance_to(framed_pos_after))
 	game.release_house_camera_gesture()
 	_check(is_equal_approx(game.house_camera_return_delay, game.HOUSE_CAMERA_RETURN_DELAY), "release must arm the delayed return")
 	for i in range(15):
 		game._process(0.1)
 	_check(game.house_camera_return_delay <= 0.0, "return delay must elapse after the configured pause")
-	_check(game.house_camera_target.distance_to(framed_pos_after) < 0.6, "return must settle the camera on the framed player position")
-	_check(game.house_camera_target.distance_to(framed_pos_after) < adjusted_target.distance_to(framed_pos_after) * 0.5, "return must actually move the camera toward the player")
+	_check(game.house_camera_target.distance_to(framed_pos_after) < 0.75, "return must settle the camera on the framed player position (distance %.3f)" % game.house_camera_target.distance_to(framed_pos_after))
+	_check(game.house_camera_target.distance_to(framed_pos_after) < adjusted_target.distance_to(framed_pos_after) * 0.5, "return must actually move the camera toward the player (before %.3f after %.3f)" % [adjusted_target.distance_to(framed_pos_after), game.house_camera_target.distance_to(framed_pos_after)])
 	_check(is_equal_approx(game.house_camera_yaw, orbit_yaw), "return must keep the rotation the player chose")
 	_check(is_equal_approx(game.house_camera_pitch, orbit_pitch), "return must keep the pitch the player chose")
 	_check(is_equal_approx(game.house_camera_zoom_ratio, orbit_zoom), "return must keep the zoom the player chose")

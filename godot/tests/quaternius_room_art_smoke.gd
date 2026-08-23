@@ -39,6 +39,9 @@ func _run() -> void:
 
 	var game: Node3D = load("res://channel_3d.tscn").instantiate()
 	game.animation_duration_scale = 0.0
+	# 正式游戏默认走 PCG composer；本测试专门验证旧房间美术注册表的独立 fallback，
+	# 因此显式关闭 composer，避免把“正式链路不调用 legacy decorator”误报成资产缺失。
+	game.kenney_build_lab_mode = false
 	root.add_child(game)
 	await process_frame
 	await process_frame

@@ -10,31 +10,38 @@ const MODEL_CELL := 1.55
 const MAX_CONTEXT_PROPS := 7
 const QUATERNIUS_ROOT := "res://assets/quaternius/ultimate_house_interior/"
 const KAYKIT_ROOT := "res://assets/third_party/kaykit_furniture_bits/gltf/"
+const KAYKIT_DUNGEON_ROOT := "res://assets/third_party/kaykit_dungeon/models/"
+const MINI_DUNGEON_ROOT := "res://assets/third_party/kenney_mini_dungeon/models/"
+const HIGH_TERRAIN_ASSETS := [
+	KAYKIT_DUNGEON_ROOT + "stairs_wood.gltf.glb",
+	MINI_DUNGEON_ROOT + "wood-structure.glb",
+	MINI_DUNGEON_ROOT + "stairs.glb",
+]
 
 const THEME_STYLES := {
 	"living": {
 		"floor_a": Color("c9b89b"), "floor_b": Color("9db9ad"), "rim": Color("6b5c52"), "blocker": Color("527868"), "accent": Color("eaa36f"), "shell_color": 0,
-		"height_assets": {1: [KAYKIT_ROOT + "table_low.gltf", QUATERNIUS_ROOT + "Couch_Medium1.fbx"], 2: [QUATERNIUS_ROOT + "Bookshelf.fbx", QUATERNIUS_ROOT + "Fireplace.fbx"]},
+		"height_assets": {1: [KAYKIT_ROOT + "table_low.gltf", QUATERNIUS_ROOT + "Couch_Medium1.fbx"], 2: HIGH_TERRAIN_ASSETS},
 	},
 	"bedroom": {
 		"floor_a": Color("c5b4ca"), "floor_b": Color("b4c6c7"), "rim": Color("65586e"), "blocker": Color("756283"), "accent": Color("e5a3b7"), "shell_color": 2,
-		"height_assets": {1: [KAYKIT_ROOT + "bed_double_A.gltf", QUATERNIUS_ROOT + "Bed_Single.fbx"], 2: [QUATERNIUS_ROOT + "Bookshelf.fbx", QUATERNIUS_ROOT + "Fireplace.fbx"]},
+		"height_assets": {1: [KAYKIT_ROOT + "bed_double_A.gltf", QUATERNIUS_ROOT + "Bed_Single.fbx"], 2: HIGH_TERRAIN_ASSETS},
 	},
 	"kitchen": {
 		"floor_a": Color("b9d2ce"), "floor_b": Color("d8c49e"), "rim": Color("536a67"), "blocker": Color("527b76"), "accent": Color("efb14f"), "shell_color": 4,
-		"height_assets": {1: [KAYKIT_ROOT + "table_medium.gltf", QUATERNIUS_ROOT + "Kitchen_Oven.fbx"], 2: [QUATERNIUS_ROOT + "Kitchen_Fridge.fbx", QUATERNIUS_ROOT + "Bookshelf.fbx"]},
+		"height_assets": {1: [KAYKIT_ROOT + "table_medium.gltf"], 2: HIGH_TERRAIN_ASSETS},
 	},
 	"study": {
 		"floor_a": Color("aebea6"), "floor_b": Color("c7b58f"), "rim": Color("5c6652"), "blocker": Color("617554"), "accent": Color("d8a95d"), "shell_color": 3,
-		"height_assets": {1: [KAYKIT_ROOT + "table_medium_long.gltf", KAYKIT_ROOT + "chair_A_wood.gltf"], 2: [QUATERNIUS_ROOT + "Bookshelf.fbx", QUATERNIUS_ROOT + "Fireplace.fbx"]},
+		"height_assets": {1: [KAYKIT_ROOT + "table_medium_long.gltf"], 2: HIGH_TERRAIN_ASSETS},
 	},
 	"greenhouse": {
 		"floor_a": Color("a8c9ac"), "floor_b": Color("c8c88d"), "rim": Color("4f6b56"), "blocker": Color("517a5d"), "accent": Color("e4c55e"), "shell_color": 1,
-		"height_assets": {1: [KAYKIT_ROOT + "table_small.gltf", QUATERNIUS_ROOT + "Houseplant_3.fbx"], 2: [QUATERNIUS_ROOT + "Bookshelf.fbx", QUATERNIUS_ROOT + "Kitchen_Fridge.fbx"]},
+		"height_assets": {1: [KAYKIT_ROOT + "table_small.gltf"], 2: HIGH_TERRAIN_ASSETS},
 	},
 	"basement": {
 		"floor_a": Color("8e9792"), "floor_b": Color("b19b82"), "rim": Color("4d5552"), "blocker": Color("4e665b"), "accent": Color("d98166"), "shell_color": 5,
-		"height_assets": {1: [KAYKIT_ROOT + "table_small.gltf", QUATERNIUS_ROOT + "Fireplace.fbx"], 2: [QUATERNIUS_ROOT + "Bookshelf.fbx", QUATERNIUS_ROOT + "Kitchen_Fridge.fbx"]},
+		"height_assets": {1: [KAYKIT_ROOT + "table_small.gltf"], 2: HIGH_TERRAIN_ASSETS},
 	},
 }
 
@@ -137,6 +144,9 @@ static func _prop_record(asset_id: String, entry: Dictionary, normalized: Vector
 		"asset_id": asset_id,
 		"path": str(entry.get("path", "")),
 		"tall": bool(entry.get("tall", false)),
+		"height_class": RoomPropCatalog.battle_height_class(asset_id),
+		"battle_blocker": RoomPropCatalog.is_battle_blocker(asset_id),
+		"finish": RoomPropCatalog.handmade_finish_for(asset_id),
 		"normalized": [normalized.x, normalized.y],
 		"yaw": yaw,
 	}

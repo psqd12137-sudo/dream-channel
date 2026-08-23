@@ -25,7 +25,7 @@ const THEME_ANOMALIES := {
 	"basement": "backstage_knocking",
 }
 const FELT_ASSETS := ["kk_couch", "kk_armchair", "kk_oval_rug", "kk_bed_double", "q_bed_single", "kk_pillow"]
-const PAINTED_WOOD_ASSETS := ["kk_low_table", "kk_bedside", "kk_kitchen_table", "kk_stool", "kk_bookshelf", "kk_desk", "kk_chair", "kk_greenhouse_table", "kk_basement_cabinet", "kk_basement_table"]
+const PAINTED_WOOD_ASSETS := ["kk_low_table", "kk_bedside", "kk_kitchen_table", "kk_kitchen_cabinet", "kk_stool", "kk_bookshelf", "kk_desk", "kk_chair", "kk_greenhouse_table", "kk_basement_cabinet", "kk_basement_table"]
 const HANDMADE_FINISH_PALETTES := {
 	"felt": [Color("e99eaa"), Color("8eb9b2"), Color("d1b7df")],
 	"painted_wood": [Color("e3bd72"), Color("88aebe"), Color("d59482")],
@@ -41,8 +41,8 @@ const THEME_COMPOSITIONS := {
 		{"id": "guest_bed", "items": [[SLOT_WALL, "q_bed_single"], [SLOT_CORNER, "kk_bedside"], [SLOT_CORNER, "kk_standing_lamp"], [SLOT_ACCENT, "kk_books"], [SLOT_CORNER, "kk_armchair"], [SLOT_ACCENT, "kk_pillow"]]},
 	],
 	"kitchen": [
-		{"id": "family_table", "items": [[SLOT_MAIN, "kk_kitchen_table"], [SLOT_WALL, "q_oven"], [SLOT_ACCENT, "kk_stool"], [SLOT_WALL, "q_fridge"], [SLOT_ACCENT, "kk_stool"], [SLOT_CORNER, "kk_chair"]]},
-		{"id": "cook_line", "items": [[SLOT_WALL, "q_oven"], [SLOT_WALL, "q_fridge"], [SLOT_MAIN, "kk_kitchen_table"], [SLOT_CORNER, "kk_chair"], [SLOT_ACCENT, "kk_stool"], [SLOT_ACCENT, "kk_stool"]]},
+		{"id": "family_table", "items": [[SLOT_MAIN, "kk_kitchen_table"], [SLOT_WALL, "q_oven"], [SLOT_ACCENT, "kk_stool"], [SLOT_WALL, "q_fridge"], [SLOT_CORNER, "kk_kitchen_cabinet"], [SLOT_CORNER, "kk_chair"]]},
+		{"id": "cook_line", "items": [[SLOT_WALL, "q_oven"], [SLOT_WALL, "q_fridge"], [SLOT_MAIN, "kk_kitchen_table"], [SLOT_CORNER, "kk_chair"], [SLOT_ACCENT, "kk_stool"], [SLOT_CORNER, "kk_kitchen_cabinet"]]},
 	],
 	"study": [
 		{"id": "writing", "items": [[SLOT_MAIN, "kk_desk"], [SLOT_ACCENT, "kk_chair"], [SLOT_WALL, "kk_bookshelf"], [SLOT_ACCENT, "kk_books"], [SLOT_CORNER, "kk_table_lamp"], [SLOT_CORNER, "kk_standing_lamp"]]},
@@ -72,6 +72,7 @@ const INTERACTION_PROFILES := {
 	"kk_basement_table": {"kind": "work", "pose": "stand", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.30), "anchor": Vector3(0.0, 0.0, 0.30), "spacing": 0.0, "facing_offset": PI},
 	"q_fireplace": {"kind": "warm", "pose": "stand", "capacity": 2, "approach": Vector3(0.0, 0.0, 0.38), "anchor": Vector3(0.0, 0.0, 0.38), "spacing": 0.20, "facing_offset": PI},
 	"q_oven": {"kind": "cook", "pose": "work", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.30), "anchor": Vector3(0.0, 0.0, 0.30), "spacing": 0.0, "facing_offset": PI},
+	"kk_kitchen_cabinet": {"kind": "store", "pose": "stand", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.28), "anchor": Vector3(0.0, 0.0, 0.28), "spacing": 0.0, "facing_offset": PI},
 	"kk_cactus_medium": {"kind": "tend", "pose": "work", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.27), "anchor": Vector3(0.0, 0.0, 0.27), "spacing": 0.0, "facing_offset": PI},
 	"q_houseplant": {"kind": "tend", "pose": "work", "capacity": 1, "approach": Vector3(0.0, 0.0, 0.27), "anchor": Vector3(0.0, 0.0, 0.27), "spacing": 0.0, "facing_offset": PI},
 	# Editor-authored override ids.  Keep these aliases here so saved templates
@@ -102,6 +103,27 @@ const SURFACE_PROP_TARGETS := {
 	"kk_books": ["kk_low_table", "kk_desk", "kk_bedside", "kk_kitchen_table", "kk_basement_table"],
 	"kk_table_lamp": ["kk_bedside", "kk_desk", "kk_low_table", "kk_basement_table"],
 }
+
+# Battle terrain is intentionally stricter than room interaction. A chair,
+# lamp or plant can be a useful room prop without becoming a believable tile
+# that actors stand on. Height class 1 is a low, broad surface. Height class 2
+# is reserved for purpose-built stairs / stacked terrain supplied by the battle
+# presentation rather than stretching a tall household prop.
+const BATTLE_TERRAIN_PROFILES := {
+	"kk_low_table": {"height_class": 1, "top_ratio": 0.72},
+	"kk_kitchen_table": {"height_class": 1, "top_ratio": 0.70},
+	"kk_desk": {"height_class": 1, "top_ratio": 0.68},
+	"kk_greenhouse_table": {"height_class": 1, "top_ratio": 0.66},
+	"kk_basement_table": {"height_class": 1, "top_ratio": 0.66},
+	"kk_table_medium": {"height_class": 1, "top_ratio": 0.70},
+	"kk_bed_double": {"height_class": 1, "top_ratio": 0.76},
+	"q_bed_single": {"height_class": 1, "top_ratio": 0.72},
+	"kk_couch": {"height_class": 1, "top_ratio": 0.70},
+}
+const BATTLE_BLOCKER_IDS := [
+	"q_fridge", "q_oven", "kk_bookshelf", "kk_kitchen_cabinet",
+	"kk_basement_cabinet", "q_fireplace",
+]
 const THEME_ALIASES := {
 	"foyer": "living",
 	"porch": "greenhouse",
@@ -143,6 +165,7 @@ const ENTRIES := [
 	{"id": "q_fridge", "path": QUATERNIUS_ROOT + "Kitchen_Fridge.fbx", "themes": ["kitchen"], "slots": [SLOT_WALL], "scale": 0.27, "footprint": Vector2(0.36, 0.34), "weight": 4, "wall_follow": true, "tall": true},
 	{"id": "q_oven", "path": QUATERNIUS_ROOT + "Kitchen_Oven.fbx", "themes": ["kitchen"], "slots": [SLOT_WALL], "scale": 0.27, "footprint": Vector2(0.36, 0.34), "weight": 5, "wall_follow": true, "tall": true},
 	{"id": "kk_kitchen_table", "path": KAYKIT_ROOT + "table_medium.gltf", "themes": ["kitchen"], "slots": [SLOT_MAIN], "scale": 0.28, "footprint": Vector2(0.56, 0.56), "weight": 5, "wall_follow": false, "tall": false},
+	{"id": "kk_kitchen_cabinet", "path": KAYKIT_ROOT + "cabinet_medium.gltf", "themes": ["kitchen"], "slots": [SLOT_WALL, SLOT_CORNER], "scale": 0.28, "footprint": Vector2(0.48, 0.30), "weight": 4, "wall_follow": true, "tall": true},
 	{"id": "kk_stool", "path": KAYKIT_ROOT + "chair_stool_wood.gltf", "themes": ["kitchen", "basement"], "slots": [SLOT_CORNER, SLOT_ACCENT], "scale": 0.28, "footprint": Vector2(0.30, 0.30), "weight": 4, "wall_follow": false, "tall": false, "repeatable": true},
 	{"id": "kk_bookshelf", "path": KAYKIT_ROOT + "shelf_B_large_decorated.gltf", "themes": ["study", "living"], "slots": [SLOT_WALL], "scale": 0.28, "footprint": Vector2(0.62, 0.28), "weight": 5, "wall_follow": true, "tall": true},
 	{"id": "kk_desk", "path": KAYKIT_ROOT + "table_medium_long.gltf", "themes": ["study"], "slots": [SLOT_MAIN, SLOT_WALL], "scale": 0.28, "footprint": Vector2(0.68, 0.42), "weight": 5, "wall_follow": false, "tall": false},
@@ -280,6 +303,26 @@ static func entries_for(theme: String, slot: String) -> Array[Dictionary]:
 
 static func interaction_profile(asset_id: String) -> Dictionary:
 	return (INTERACTION_PROFILES.get(asset_id, {}) as Dictionary).duplicate(true)
+
+
+static func battle_terrain_profile(asset_id: String) -> Dictionary:
+	return (BATTLE_TERRAIN_PROFILES.get(asset_id, {}) as Dictionary).duplicate(true)
+
+
+static func battle_height_class(asset_id: String) -> int:
+	return int((BATTLE_TERRAIN_PROFILES.get(asset_id, {}) as Dictionary).get("height_class", 0))
+
+
+static func is_battle_blocker(asset_id: String) -> bool:
+	return asset_id in BATTLE_BLOCKER_IDS
+
+
+static func max_per_room(asset_id: String) -> int:
+	for entry: Dictionary in ENTRIES:
+		if str(entry.get("id", "")) != asset_id:
+			continue
+		return 2 if bool(entry.get("repeatable", false)) else 1
+	return 1
 
 
 static func handmade_finish_for(asset_id: String) -> String:

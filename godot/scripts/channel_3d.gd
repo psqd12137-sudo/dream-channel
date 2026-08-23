@@ -7,6 +7,7 @@ const WebContentAdapter = preload("res://scripts/web_content_adapter.gd")
 const CharacterPresenter = preload("res://scripts/character_presenter.gd")
 const CameraFollowMath = preload("res://scripts/camera_follow_math.gd")
 const RoomArtRegistry = preload("res://scripts/room_art_registry.gd")
+const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 const BattleRoomArtContext = preload("res://scripts/battle_room_art_context.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const DIORAMA_ART_LAB = preload("res://scenes/diorama_art_lab.tscn")
@@ -26,9 +27,23 @@ const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interi
 const BATTLE_FLOOR_LIGHT := KAYKIT_DUNGEON_ROOT + "floor_wood_large.gltf.glb"
 const BATTLE_FLOOR_DARK := KAYKIT_DUNGEON_ROOT + "floor_wood_large_dark.gltf.glb"
 const BATTLE_HEIGHT_ASSETS := {
-	1: ["Table_RoundLarge.fbx", "Couch_Medium1.fbx", "Kitchen_Oven.fbx"],
-	2: ["Bookshelf.fbx", "Kitchen_Fridge.fbx", "Fireplace.fbx"],
+	1: [
+		"res://assets/third_party/kaykit_furniture_bits/gltf/table_low.gltf",
+		"res://assets/third_party/kaykit_furniture_bits/gltf/table_medium.gltf",
+		"res://assets/quaternius/ultimate_house_interior/Couch_Medium1.fbx",
+	],
+	2: [
+		KAYKIT_DUNGEON_ROOT + "stairs_wood.gltf.glb",
+		"res://assets/third_party/kenney_mini_dungeon/models/wood-structure.glb",
+		"res://assets/third_party/kenney_mini_dungeon/models/stairs.glb",
+	],
 }
+const BATTLE_BLOCKER_ASSETS := [
+	"res://assets/third_party/kenney_mini_dungeon/models/column.glb",
+	"res://assets/third_party/kenney_mini_dungeon/models/chest.glb",
+	"res://assets/third_party/kenney_mini_dungeon/models/barrel.glb",
+	"res://assets/quaternius/ultimate_house_interior/Bookshelf.fbx",
+]
 const HOUSE_CELL := 3.4
 const VISUAL_CELL_SCALE := 1.20
 const BATTLE_CELL := 2.35
@@ -199,6 +214,10 @@ var battle_camera_returning := false
 var battle_camera_return_tween: Tween = null
 var battle_room_title := "房间"
 var battle_room_context: Dictionary = {}
+var battle_backstage_cells: Dictionary = {}
+var battle_height_prop_assignments: Dictionary = {}
+var battle_blocker_prop_assignments: Dictionary = {}
+var battle_height_visual_indices: Dictionary = {}
 var previous_room_pos := Vector2i.ZERO
 var battle_shell_edge_records: Dictionary = {}
 var battle_shell_culled_count := 0
@@ -460,17 +479,30 @@ func _house_follow_target_position() -> Vector3:
 
 
 func _house_camera_overview_target() -> Vector3:
-	var points: Array[Vector3] = []
-	for raw_pos in room_rules.placed.keys():
-		points.append(_house_visual_world(raw_pos))
-	for frontier in room_rules.frontiers():
-		points.append(_house_visual_world(frontier))
+	var points := _house_camera_layout_points()
 	var center := Vector3.ZERO
 	for point in points:
 		center += point
 	if not points.is_empty():
 		center /= float(points.size())
 	return center
+
+
+func _house_camera_layout_points() -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	for raw_pos: Variant in room_rules.placed.keys():
+		points.append(_house_visual_world(raw_pos as Vector2i))
+	# Ordinary frontier sockets are navigation affordances, not composition
+	# content. Only the currently selected multi-cell build preview contributes
+	# to framing, so a one-room opening no longer floats in a future-map void.
+	if phase == "build" and selected_offer >= 0 and selected_offer < build_offers.size():
+		var room: Dictionary = build_offers[selected_offer]
+		var resolved: Dictionary = room_rules.resolve_placement(selected_frontier, room, offer_rotation)
+		for raw_cell: Variant in resolved.get("cells", []):
+			var preview_cell := raw_cell as Vector2i
+			if preview_cell not in room_rules.placed:
+				points.append(_house_visual_world(preview_cell))
+	return points
 
 
 func _house_camera_size_target() -> float:
@@ -1853,7 +1885,9 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	run_rules["base_speed"] = player_speed
 	combat.setup(room.get("arena", {}), enemy, content.get("cards", {}), run_deck, run_seed + room_rules.instance_count() * 17, run_rules, active_relics)
 	battle_room_context = BattleRoomArtContext.build(room, combat.cols, combat.rows, BATTLE_CELL, run_seed + str(room.get("instance_id", room.get("id", "room"))).hash())
+	_apply_battle_footprint_to_combat()
 	_align_battle_terrain_to_room_context()
+	_prepare_battle_prop_assignments()
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
 	phase = "combat"
@@ -2715,12 +2749,14 @@ func _add_frontier_mesh(pos: Vector2i, selected: bool) -> void:
 	house_root.add_child(node)
 	var color := COL_GOLD if selected else Color("c88b2f")
 	var transparent := Color(color, 0.72 if selected else 0.48)
-	var socket_size := 0.88 if selected else 0.64
+	var socket_size := 0.78 if selected else 0.58
 	node.rotation.y = PI * 0.25
-	_add_box(node, "BuildSocket", Vector3(0, 0.18, 0), Vector3(socket_size, 0.22, socket_size), _material(transparent, true))
-	_add_box(node, "SocketCore", Vector3(0, 0.30, 0), Vector3(socket_size * 0.48, 0.06, socket_size * 0.48), _material(color))
-	var label := _add_label(node, "Plus", "+", Vector3(0, 0.88, 0), color, 44)
-	label.rotation.y = -PI * 0.25
+	_add_box(node, "BuildSocket", Vector3(0, 0.12, 0), Vector3(socket_size, 0.12, socket_size), _material(transparent, true))
+	_add_box(node, "SocketCore", Vector3(0, 0.20, 0), Vector3(socket_size * 0.48, 0.045, socket_size * 0.48), _material(color))
+	# In-world television signal bars replace the editor-like floating plus.
+	for bar_index in range(3):
+		var height := 0.12 + float(bar_index) * 0.10
+		_add_box(node, "SignalBar_%d" % bar_index, Vector3(-0.18 + float(bar_index) * 0.18, 0.25 + height * 0.5, 0), Vector3(0.07, height, 0.07), _material(color, false, 0.04 if selected else 0.0))
 
 
 func _add_build_preview() -> void:
@@ -2973,6 +3009,7 @@ func build_battle_world() -> void:
 			battle_root.add_child(cell_node)
 			var height := int(combat.heights.get(pos, 0))
 			var footprint_active := _battle_cell_in_room_footprint(pos)
+			var backstage := battle_backstage_cells.has(pos)
 			cell_node.set_meta("room_footprint_active", footprint_active)
 			var platform_height := 0.28 + float(height) * 0.64
 			var rim_color := room_rim if height == 0 else room_rim.darkened(0.12) if height == 1 else room_rim.darkened(0.24)
@@ -2985,7 +3022,7 @@ func build_battle_world() -> void:
 				surface_color = surface_color.darkened(0.12)
 			elif height >= 2:
 				surface_color = surface_color.darkened(0.24)
-			if combat.walls.has(pos):
+			if combat.walls.has(pos) and not backstage:
 				surface_color = room_blocker.darkened(0.12)
 			elif not footprint_active:
 				rim_color = room_rim.darkened(0.42)
@@ -3025,10 +3062,10 @@ func build_battle_world() -> void:
 				_add_corner_marks(cell_node, "Hover", Color.WHITE, top_y + 0.055)
 			if combat.portals.has(pos):
 				_add_portal_marker(cell_node, pos, top_y)
-			if combat.walls.has(pos):
-				_add_box(cell_node, "Blocker", Vector3(0, platform_height + 0.70, 0), Vector3(BATTLE_CELL - 0.48, 1.20, BATTLE_CELL - 0.48), _material(Color(room_blocker, 0.13), true, 0.025))
+			if combat.walls.has(pos) and not backstage:
+				var blocker_volume := _add_box(cell_node, "Blocker", Vector3(0, platform_height + 0.70, 0), Vector3(BATTLE_CELL - 0.48, 1.20, BATTLE_CELL - 0.48), _material(Color(room_blocker, 0.03), true, 0.0))
+				blocker_volume.visible = false
 				_add_battle_blocker_asset(cell_node, pos, platform_height)
-				_add_label(cell_node, "Blocked", "×", Vector3(0, platform_height + 1.72, 0), Color("f0c9b4"), 42)
 			elif combat.traps.has(pos):
 				var trap: Dictionary = combat.traps[pos]
 				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
@@ -3062,20 +3099,223 @@ func _add_corner_marks(parent: Node3D, prefix: String, color: Color, y: float) -
 
 
 func _add_battle_floor_model(parent: Node3D, pos: Vector2i, footprint_active: bool) -> void:
-	var floor_path := BATTLE_FLOOR_LIGHT if footprint_active else BATTLE_FLOOR_DARK
+	if not footprint_active:
+		var mat := _add_box(parent, "BackstageCuttingMat", Vector3(0, 0.305, 0), Vector3(BATTLE_CELL - 0.055, 0.075, BATTLE_CELL - 0.055), _material(Color("315f51")))
+		mat.set_meta("battle_backstage", true)
+		mat.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		var line_color := Color("9bb59b88")
+		_add_box(parent, "MatGridX", Vector3(0, 0.347, 0), Vector3(BATTLE_CELL - 0.16, 0.012, 0.025), _material(line_color, true))
+		_add_box(parent, "MatGridZ", Vector3(0, 0.348, 0), Vector3(0.025, 0.012, BATTLE_CELL - 0.16), _material(line_color, true))
+		if posmod(pos.x * 13 + pos.y * 7, 5) == 0:
+			var tape := _add_box(parent, "BackstageTape", Vector3(0.36, 0.356, -0.36), Vector3(0.46, 0.014, 0.085), _material(Color("e6bd4ba8"), true))
+			tape.rotation.y = PI * 0.25
+		return
+	_add_battle_timber_tiles(parent, pos, BATTLE_FLOOR_LIGHT, 0.305, "RoomFloor_%d_%d" % [pos.x, pos.y], "house_floor_spec")
+
+
+func _add_battle_timber_tiles(parent: Node3D, pos: Vector2i, floor_path: String, floor_y: float, root_name: String, meta_key: String = "") -> Node3D:
 	var packed := load(floor_path) as PackedScene
 	if packed == null:
-		return
-	var floor_model := packed.instantiate() as Node3D
-	if floor_model == null:
-		return
-	floor_model.name = "RoomFloor_%d_%d" % [pos.x, pos.y]
-	floor_model.position.y = 0.305
-	floor_model.scale = Vector3.ONE * (BATTLE_CELL / 4.0)
-	floor_model.set_meta("house_floor_spec", true)
-	parent.add_child(floor_model)
-	for child: Node in floor_model.find_children("*", "MeshInstance3D", true, false):
+		return null
+	var floor_root := Node3D.new()
+	floor_root.name = root_name
+	if not meta_key.is_empty():
+		floor_root.set_meta(meta_key, true)
+	parent.add_child(floor_root)
+	var probe := packed.instantiate() as Node3D
+	if probe == null:
+		floor_root.queue_free()
+		return null
+	probe.name = "TimberTile_0_0"
+	floor_root.add_child(probe)
+	var bounds := _node_visual_aabb_in_parent(floor_root, probe)
+	if bounds.size == Vector3.ZERO:
+		probe.position.y = floor_y
+		probe.scale = Vector3.ONE * (BATTLE_CELL / 4.0)
+	else:
+		var target_span := BATTLE_CELL - 0.08
+		var uniform_scale := target_span / maxf(bounds.size.x, bounds.size.z)
+		var tile_span_x := bounds.size.x * uniform_scale
+		var tile_span_z := bounds.size.z * uniform_scale
+		var tiles_x := clampi(ceili(target_span / maxf(tile_span_x, 0.01) - 0.01), 1, 3)
+		var tiles_z := clampi(ceili(target_span / maxf(tile_span_z, 0.01) - 0.01), 1, 3)
+		for tile_z in range(tiles_z):
+			for tile_x in range(tiles_x):
+				var floor_model := probe if tile_x == 0 and tile_z == 0 else packed.instantiate() as Node3D
+				if floor_model == null:
+					continue
+				if floor_model != probe:
+					floor_root.add_child(floor_model)
+				floor_model.name = "TimberTile_%d_%d" % [tile_x, tile_z]
+				floor_model.scale = Vector3.ONE * uniform_scale
+				var tile_center_x := (float(tile_x) - float(tiles_x - 1) * 0.5) * tile_span_x
+				var tile_center_z := (float(tile_z) - float(tiles_z - 1) * 0.5) * tile_span_z
+				floor_model.position = Vector3(
+					tile_center_x - (bounds.position.x + bounds.size.x * 0.5) * uniform_scale,
+					floor_y - bounds.position.y * uniform_scale,
+					tile_center_z - (bounds.position.z + bounds.size.z * 0.5) * uniform_scale
+				)
+	for child: Node in floor_root.find_children("*", "MeshInstance3D", true, false):
 		(child as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	return floor_root
+
+
+func _apply_battle_footprint_to_combat() -> void:
+	battle_backstage_cells.clear()
+	battle_height_prop_assignments.clear()
+	battle_blocker_prop_assignments.clear()
+	battle_height_visual_indices.clear()
+	if combat == null:
+		return
+	for y in range(combat.rows):
+		for x in range(combat.cols):
+			var cell := Vector2i(x, y)
+			if _battle_cell_in_room_footprint(cell):
+				continue
+			battle_backstage_cells[cell] = true
+	# Preserve authored arena mechanics by moving anything that landed in a
+	# clipped footprint corner to the nearest active cell before sealing the
+	# backstage area.
+	var reserved_walls: Dictionary = {}
+	var original_walls: Array = combat.walls.keys().duplicate()
+	combat.walls.clear()
+	for raw_cell: Variant in original_walls:
+		var source := raw_cell as Vector2i
+		var target := source if not battle_backstage_cells.has(source) else _nearest_active_battle_cell(source, INVALID_CELL, reserved_walls)
+		if target != INVALID_CELL:
+			combat.walls[target] = true
+			reserved_walls[target] = true
+	var relocated_heights: Dictionary = {}
+	var original_height_cells: Array = combat.heights.keys().duplicate()
+	for raw_cell: Variant in original_height_cells:
+		var source := raw_cell as Vector2i
+		var height := int(combat.heights.get(source, 0))
+		var target := source
+		if battle_backstage_cells.has(source) or combat.walls.has(source) or relocated_heights.has(source):
+			var reserved := reserved_walls.duplicate()
+			for occupied: Variant in relocated_heights.keys():
+				reserved[occupied] = true
+			target = _nearest_active_battle_cell(source, INVALID_CELL, reserved)
+		if target != INVALID_CELL:
+			relocated_heights[target] = height
+	combat.heights = relocated_heights
+	var portal_pairs: Array[Array] = []
+	var seen_portals: Dictionary = {}
+	for raw_cell: Variant in combat.portals.keys():
+		var a := raw_cell as Vector2i
+		var b: Vector2i = combat.portals.get(a, INVALID_CELL)
+		var pair_key := "%s|%s" % [str(a if a.x < b.x or (a.x == b.x and a.y <= b.y) else b), str(b if a.x < b.x or (a.x == b.x and a.y <= b.y) else a)]
+		if seen_portals.has(pair_key):
+			continue
+		seen_portals[pair_key] = true
+		portal_pairs.append([a, b])
+	combat.portals.clear()
+	for pair: Array in portal_pairs:
+		var reserved := reserved_walls.duplicate()
+		var a: Vector2i = pair[0]
+		var b: Vector2i = pair[1]
+		if battle_backstage_cells.has(a) or combat.walls.has(a):
+			a = _nearest_active_battle_cell(a, INVALID_CELL, reserved)
+		reserved[a] = true
+		if battle_backstage_cells.has(b) or combat.walls.has(b) or b == a:
+			b = _nearest_active_battle_cell(b, a, reserved)
+		if a != INVALID_CELL and b != INVALID_CELL and a != b:
+			combat.portals[a] = b
+			combat.portals[b] = a
+	for raw_cell: Variant in battle_backstage_cells.keys():
+		var cell := raw_cell as Vector2i
+		combat.walls[cell] = true
+		combat.traps.erase(cell)
+	if battle_backstage_cells.has(combat.player_pos) or not combat.is_walkable(combat.player_pos):
+		combat.player_pos = _nearest_active_battle_cell(combat.player_pos)
+	if battle_backstage_cells.has(combat.enemy_pos) or not combat.is_walkable(combat.enemy_pos) or combat.enemy_pos == combat.player_pos:
+		combat.enemy_pos = _nearest_active_battle_cell(combat.enemy_pos, combat.player_pos)
+	combat._refresh_vision(false)
+
+
+func _nearest_active_battle_cell(origin: Vector2i, forbidden: Vector2i = INVALID_CELL, reserved: Dictionary = {}) -> Vector2i:
+	var best := INVALID_CELL
+	var best_score := INF
+	for y in range(combat.rows):
+		for x in range(combat.cols):
+			var candidate := Vector2i(x, y)
+			if candidate == forbidden or reserved.has(candidate) or not _battle_cell_in_room_footprint(candidate) or not combat.is_walkable(candidate):
+				continue
+			var score := float(absi(candidate.x - origin.x) + absi(candidate.y - origin.y))
+			if score < best_score:
+				best = candidate
+				best_score = score
+	return best
+
+
+func _prepare_battle_prop_assignments() -> void:
+	battle_height_prop_assignments.clear()
+	battle_blocker_prop_assignments.clear()
+	battle_height_visual_indices.clear()
+	if combat == null:
+		return
+	var props: Array = battle_room_context.get("props", [])
+	var used_height_props: Dictionary = {}
+	var height_sequence_counts: Dictionary = {}
+	var height_cells: Array = combat.heights.keys()
+	height_cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
+	for raw_cell: Variant in height_cells:
+		var cell := raw_cell as Vector2i
+		var height := int(combat.heights.get(cell, 0))
+		battle_height_visual_indices[cell] = int(height_sequence_counts.get(height, 0))
+		height_sequence_counts[height] = int(height_sequence_counts.get(height, 0)) + 1
+		var target := _battle_cell_normalized(cell)
+		var best_index := -1
+		var best_distance := INF
+		for prop_index in range(props.size()):
+			if used_height_props.has(prop_index):
+				continue
+			var record := props[prop_index] as Dictionary
+			if int(record.get("height_class", 0)) != height:
+				continue
+			var normalized := record.get("normalized", []) as Array
+			if normalized.size() < 2:
+				continue
+			var distance := target.distance_squared_to(Vector2(float(normalized[0]), float(normalized[1])))
+			if distance < best_distance:
+				best_index = prop_index
+				best_distance = distance
+		if best_index >= 0:
+			battle_height_prop_assignments[cell] = (props[best_index] as Dictionary).duplicate(true)
+			used_height_props[best_index] = true
+	var used_blocker_props: Dictionary = {}
+	var wall_cells: Array = combat.walls.keys()
+	wall_cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
+	for raw_cell: Variant in wall_cells:
+		var cell := raw_cell as Vector2i
+		if battle_backstage_cells.has(cell):
+			continue
+		var target := _battle_cell_normalized(cell)
+		var best_index := -1
+		var best_distance := INF
+		for prop_index in range(props.size()):
+			if used_blocker_props.has(prop_index):
+				continue
+			var record := props[prop_index] as Dictionary
+			if not bool(record.get("battle_blocker", false)):
+				continue
+			var normalized := record.get("normalized", []) as Array
+			if normalized.size() < 2:
+				continue
+			var distance := target.distance_squared_to(Vector2(float(normalized[0]), float(normalized[1])))
+			if distance < best_distance:
+				best_index = prop_index
+				best_distance = distance
+		if best_index >= 0:
+			battle_blocker_prop_assignments[cell] = (props[best_index] as Dictionary).duplicate(true)
+			used_blocker_props[best_index] = true
+
+
+func _battle_cell_normalized(pos: Vector2i) -> Vector2:
+	return Vector2(
+		(float(pos.x) + 0.5) / maxf(1.0, float(combat.cols)),
+		(float(pos.y) + 0.5) / maxf(1.0, float(combat.rows))
+	)
 
 
 func _align_battle_terrain_to_room_context() -> void:
@@ -3101,7 +3341,7 @@ func _align_battle_terrain_to_room_context() -> void:
 		for prop_index in range(props.size()):
 			if used_props.has(prop_index):
 				continue
-			if bool((props[prop_index] as Dictionary).get("tall", false)) == (height >= 2):
+			if int((props[prop_index] as Dictionary).get("height_class", 0)) == height:
 				chosen_prop = prop_index
 				break
 		var preferred := original_positions[index] if index < original_positions.size() else Vector2i(combat.cols / 2, combat.rows / 2)
@@ -3168,11 +3408,16 @@ func _battle_cell_in_room_footprint(pos: Vector2i) -> bool:
 func _add_battle_height_asset(parent: Node3D, pos: Vector2i, height: int, logical_top_y: float) -> void:
 	var inherited := _battle_context_prop_for_cell(pos, height)
 	var asset_path := str(inherited.get("path", ""))
+	if asset_path.is_empty() and height == 1:
+		_add_battle_raised_deck(parent, pos, logical_top_y)
+		_add_battle_walkable_top_marker(parent, logical_top_y)
+		return
 	if asset_path.is_empty():
 		var options: Array = _battle_height_asset_options(height)
 		if options.is_empty():
 			return
-		var asset_name := str(options[posmod(pos.x * 17 + pos.y * 31, options.size())])
+		var visual_index := int(battle_height_visual_indices.get(pos, pos.x * 17 + pos.y * 31))
+		var asset_name := str(options[posmod(visual_index, options.size())])
 		asset_path = asset_name if asset_name.begins_with("res://") else BATTLE_HEIGHT_ASSET_ROOT + asset_name
 	var packed := load(asset_path) as PackedScene
 	if packed == null:
@@ -3204,16 +3449,40 @@ func _add_battle_height_asset(parent: Node3D, pos: Vector2i, height: int, logica
 		var mesh_instance := child as MeshInstance3D
 		if mesh_instance != null:
 			mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_apply_battle_miniature_finish(prop, str(inherited.get("asset_id", asset_path.get_file().get_basename())))
+	_add_battle_walkable_top_marker(parent, logical_top_y)
+
+
+func _add_battle_raised_deck(parent: Node3D, pos: Vector2i, logical_top_y: float) -> void:
+	var deck_bottom := logical_top_y - 0.16
+	var deck := _add_battle_timber_tiles(parent, pos, BATTLE_FLOOR_DARK, deck_bottom, "RaisedTimberDeck", "battle_raised_deck")
+	if deck == null:
+		return
+	var support_height := maxf(0.12, deck_bottom - 0.31)
+	var support_color: Color = battle_room_context.get("rim", Color("66564d"))
+	var offset := BATTLE_CELL * 0.37
+	for index in range(4):
+		var sx := -1.0 if index % 2 == 0 else 1.0
+		var sz := -1.0 if index < 2 else 1.0
+		_add_box(parent, "DeckLeg_%d" % index, Vector3(sx * offset, 0.31 + support_height * 0.5, sz * offset), Vector3(0.13, support_height, 0.13), _material(support_color.darkened(0.18)))
+	var brace_y := 0.31 + support_height * 0.45
+	var brace_x := _add_box(parent, "DeckBraceX", Vector3(0, brace_y, 0), Vector3(BATTLE_CELL * 0.72, 0.075, 0.075), _material(support_color.darkened(0.08)))
+	brace_x.rotation.z = -0.12 if posmod(pos.x + pos.y, 2) == 0 else 0.12
+	var tape := _add_box(parent, "DeckTape", Vector3(BATTLE_CELL * 0.25, logical_top_y - 0.02, -BATTLE_CELL * 0.36), Vector3(0.44, 0.018, 0.075), _material(Color("e5d49dcc"), true))
+	tape.rotation.y = PI * 0.07
+
+
+func _add_battle_walkable_top_marker(parent: Node3D, logical_top_y: float) -> void:
 	var top_marker := _add_box(parent, "WalkableAssetTop", Vector3(0, logical_top_y - 0.075, 0), Vector3(BATTLE_CELL - 0.46, 0.055, BATTLE_CELL - 0.46), _material(Color(COL_GOLD, 0.02), true, 0.0))
 	top_marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	top_marker.visible = false
 
 
 func _add_battle_blocker_asset(parent: Node3D, pos: Vector2i, platform_height: float) -> void:
-	var inherited := _battle_context_prop_for_cell(pos, 2)
+	var inherited: Dictionary = battle_blocker_prop_assignments.get(pos, {})
 	var asset_path := str(inherited.get("path", ""))
 	if asset_path.is_empty():
-		var options := _battle_height_asset_options(2)
+		var options: Array = BATTLE_BLOCKER_ASSETS
 		if options.is_empty():
 			return
 		var raw_path := str(options[posmod(pos.x * 19 + pos.y * 23, options.size())])
@@ -3240,38 +3509,16 @@ func _add_battle_blocker_asset(parent: Node3D, pos: Vector2i, platform_height: f
 		prop.position.y = platform_height + 0.08
 	for child: Node in prop.find_children("*", "MeshInstance3D", true, false):
 		(child as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_apply_battle_miniature_finish(prop, str(inherited.get("asset_id", asset_path.get_file().get_basename())))
 
 
 func _battle_context_prop_for_cell(pos: Vector2i, height: int) -> Dictionary:
-	var target := Vector2(
-		(float(pos.x) + 0.5) / maxf(1.0, float(combat.cols)),
-		(float(pos.y) + 0.5) / maxf(1.0, float(combat.rows))
-	)
-	var best: Dictionary = {}
-	var best_distance := INF
-	for raw_record: Variant in battle_room_context.get("props", []):
-		var record := raw_record as Dictionary
-		if bool(record.get("tall", false)) != (height >= 2):
-			continue
-		var normalized := record.get("normalized", []) as Array
-		if normalized.size() < 2:
-			continue
-		var distance := target.distance_squared_to(Vector2(float(normalized[0]), float(normalized[1])))
-		if distance < best_distance:
-			best_distance = distance
-			best = record
-	return best
+	var record: Dictionary = battle_height_prop_assignments.get(pos, {})
+	return record if int(record.get("height_class", 0)) == height else {}
 
 
 func _battle_height_asset_options(height: int) -> Array:
 	var inherited: Array = []
-	for raw_record: Variant in battle_room_context.get("props", []):
-		var record := raw_record as Dictionary
-		if bool(record.get("tall", false)) != (height >= 2):
-			continue
-		var inherited_path := str(record.get("path", ""))
-		if not inherited_path.is_empty() and inherited_path not in inherited:
-			inherited.append(inherited_path)
 	var themed: Dictionary = battle_room_context.get("height_assets", {})
 	var options: Array = themed.get(height, [])
 	for raw_path: Variant in options:
@@ -3297,6 +3544,30 @@ func _node_visual_aabb_in_parent(parent: Node3D, model: Node3D) -> AABB:
 	return result if has_bounds else AABB()
 
 
+func _apply_battle_miniature_finish(model: Node3D, asset_id: String) -> void:
+	var finish := RoomPropCatalog.handmade_finish_for(asset_id)
+	var tint := RoomPropCatalog.handmade_tint_for(asset_id)
+	var tint_strength := 0.16 if finish == "painted_wood" else 0.20
+	for raw_mesh: Node in model.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := raw_mesh as MeshInstance3D
+		if mesh_instance == null or mesh_instance.mesh == null:
+			continue
+		for surface_index in range(mesh_instance.mesh.get_surface_count()):
+			var source := mesh_instance.get_surface_override_material(surface_index)
+			if source == null:
+				source = mesh_instance.mesh.surface_get_material(surface_index)
+			if not source is StandardMaterial3D:
+				continue
+			var material := (source as StandardMaterial3D).duplicate() as StandardMaterial3D
+			var target := tint
+			target.a = material.albedo_color.a
+			material.albedo_color = material.albedo_color.lerp(target, tint_strength)
+			material.roughness = maxf(material.roughness, 0.88 if finish == "painted_wood" else 0.94)
+			material.metallic = minf(material.metallic, 0.03)
+			mesh_instance.set_surface_override_material(surface_index, material)
+	model.set_meta("miniature_finish", finish)
+
+
 func _add_portal_marker(parent: Node3D, pos: Vector2i, y: float) -> void:
 	var ring := MeshInstance3D.new()
 	ring.name = "PortalRing"
@@ -3307,7 +3578,7 @@ func _add_portal_marker(parent: Node3D, pos: Vector2i, y: float) -> void:
 	ring.position = Vector3(0, y + 0.15, 0)
 	ring.material_override = _material(Color("9a70da"), false, 0.14)
 	parent.add_child(ring)
-	_add_label(parent, "PortalLabel", "门%s" % _portal_endpoint_label(pos), Vector3(0, y + 0.58, 0), Color("d9c5ff"), 28)
+	_add_label(parent, "PortalLabel", _portal_endpoint_label(pos), Vector3(0, y + 0.23, 0), Color("f4ecff"), 22)
 
 
 func _portal_endpoint_label(pos: Vector2i) -> String:
@@ -3324,7 +3595,8 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
 	node.rotation.y = battle_player_facing_yaw if is_player else battle_enemy_facing_yaw
 	battle_root.add_child(node)
 	var floor_y := 0.39 + float(combat.heights.get(pos, 0)) * 0.64
-	_add_cylinder(node, "PawnBase", Vector3(0, floor_y + 0.08, 0), 0.52, 0.16, _material(COL_TEAL if is_player else COL_RED if revealed else Color("1f2930"), false, 0.04))
+	var base_color := COL_TEAL if is_player else COL_RED if revealed else Color("1f2930")
+	_add_cylinder(node, "PawnBase", Vector3(0, floor_y + 0.026, 0), 0.46, 0.052, _material(Color(base_color, 0.58), true, 0.035))
 	var presenter := CharacterPresenter.new()
 	presenter.name = "Presenter"
 	presenter.position = Vector3(0, floor_y + 0.05, 0)
@@ -3466,12 +3738,48 @@ func _add_battle_stage_decor() -> void:
 	if presentation.is_empty() or combat == null:
 		return
 	var decor: Dictionary = presentation.get("decor", {})
-	var half_x := float(combat.cols) * BATTLE_CELL * 0.5
-	var half_z := float(combat.rows) * BATTLE_CELL * 0.5
-	_add_decor_sprite("StageDoor", str(decor.get("door", "")), Vector3(-half_x - 1.1, 1.35, -half_z + 0.8), 0.0060)
-	_add_decor_sprite("StageWindow", str(decor.get("window", "")), Vector3(half_x + 0.9, 1.45, -half_z + 0.4), 0.0052)
-	_add_decor_sprite("StageLamp", str(decor.get("pendant_lamp", "")), Vector3(0, 2.9, -half_z - 0.8), 0.0050)
-	_add_decor_sprite("StageAnchor", str(decor.get("signal_anchor", "")), Vector3(half_x + 0.65, 0.65, half_z - 0.6), 0.0050)
+	var boundary_edges := _battle_footprint_boundary_edges()
+	if boundary_edges.is_empty():
+		return
+	var entrance := _battle_room_entrance_edge(boundary_edges)
+	var viewer_direction := Vector2(sin(battle_camera_yaw), cos(battle_camera_yaw)).normalized()
+	var far_edge: Dictionary = boundary_edges[0]
+	var far_score := INF
+	var active_center := Vector3.ZERO
+	var active_count := 0
+	for y in range(combat.rows):
+		for x in range(combat.cols):
+			var cell := Vector2i(x, y)
+			if _battle_cell_in_room_footprint(cell):
+				active_center += _battle_world(cell)
+				active_count += 1
+	for edge: Dictionary in boundary_edges:
+		if str(edge.get("key", "")) == str(entrance.get("key", "")):
+			continue
+		var direction: Vector2i = edge["direction"]
+		var score := Vector2(float(direction.x), float(direction.y)).dot(viewer_direction)
+		if score < far_score:
+			far_score = score
+			far_edge = edge
+	active_center /= maxf(1.0, float(active_count))
+	var entrance_position := _battle_shell_edge_center(entrance)
+	var far_position := _battle_shell_edge_center(far_edge)
+	var entrance_direction: Vector2i = entrance["direction"]
+	var far_direction: Vector2i = far_edge["direction"]
+	entrance_position -= Vector3(float(entrance_direction.x), 0.0, float(entrance_direction.y)) * 0.08
+	far_position -= Vector3(float(far_direction.x), 0.0, float(far_direction.y)) * 0.08
+	_add_decor_sprite("StageDoor", str(decor.get("door", "")), entrance_position + Vector3.UP * 0.92, 0.0036)
+	_add_decor_sprite("StageWindow", str(decor.get("window", "")), far_position + Vector3.UP * 1.05, 0.0035)
+	var lamp_position := active_center + Vector3.UP * 2.55
+	_add_box(battle_root, "OverheadRigCable", active_center + Vector3.UP * 3.22, Vector3(0.028, 1.34, 0.028), _material(Color("39555b")))
+	_add_decor_sprite("StageLamp", str(decor.get("pendant_lamp", "")), lamp_position, 0.0044)
+	_add_decor_sprite("StageAnchor", str(decor.get("signal_anchor", "")), far_position + Vector3.UP * 0.48, 0.0035)
+
+
+func _battle_shell_edge_center(edge: Dictionary) -> Vector3:
+	var cell: Vector2i = edge.get("cell", Vector2i.ZERO)
+	var direction: Vector2i = edge.get("direction", Vector2i.UP)
+	return _battle_world(cell) + Vector3(float(direction.x) * BATTLE_CELL * 0.5, 0.0, float(direction.y) * BATTLE_CELL * 0.5)
 
 
 func _add_battle_room_shell() -> void:
@@ -3481,52 +3789,76 @@ func _add_battle_room_shell() -> void:
 	var shell := Node3D.new()
 	shell.name = "BattleRoomShell"
 	battle_root.add_child(shell)
-	var half_x := float(combat.cols) * BATTLE_CELL * 0.5
-	var half_z := float(combat.rows) * BATTLE_CELL * 0.5
-	var entrance: Dictionary = _battle_room_entrance_edge()
-	for side in range(4):
-		var segment_count: int = int(combat.cols) if side in [0, 2] else int(combat.rows)
-		for index in range(segment_count):
-			var is_entrance := side == int(entrance["side"]) and index == int(entrance["index"])
-			_add_battle_shell_edge(shell, side, index, half_x, half_z, is_entrance)
-	_add_battle_shell_junctions(shell, half_x, half_z)
-	_add_battle_boundary_outline(shell, half_x, half_z)
+	var boundary_edges := _battle_footprint_boundary_edges()
+	var entrance: Dictionary = _battle_room_entrance_edge(boundary_edges)
+	for edge_index in range(boundary_edges.size()):
+		var edge := boundary_edges[edge_index] as Dictionary
+		_add_battle_shell_edge(shell, edge, edge_index, str(edge.get("key", "")) == str(entrance.get("key", "")))
+	_add_battle_shell_junctions(shell, boundary_edges)
+	_add_battle_boundary_outline(shell, boundary_edges)
 	_apply_battle_room_cutaway()
 
 
-func _battle_room_entrance_edge() -> Dictionary:
+func _battle_footprint_boundary_edges() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for y in range(combat.rows):
+		for x in range(combat.cols):
+			var cell := Vector2i(x, y)
+			if not _battle_cell_in_room_footprint(cell):
+				continue
+			for side in range(RoomRules.DIRS.size()):
+				var direction: Vector2i = RoomRules.DIRS[side]
+				var neighbor := cell + direction
+				if neighbor.x >= 0 and neighbor.y >= 0 and neighbor.x < combat.cols and neighbor.y < combat.rows and _battle_cell_in_room_footprint(neighbor):
+					continue
+				result.append({
+					"key": "%d,%d:%d" % [cell.x, cell.y, side],
+					"cell": cell,
+					"side": side,
+					"direction": direction,
+				})
+	return result
+
+
+func _battle_room_entrance_edge(boundary_edges: Array[Dictionary]) -> Dictionary:
+	if boundary_edges.is_empty():
+		return {}
 	var player: Vector2i = combat.player_pos
 	var entered_from := previous_room_pos - current_room_pos
 	var linked_side := RoomRules.DIRS.find(entered_from)
-	if linked_side >= 0 and room_rules.placed.has(current_room_pos) and room_rules.cell_has_door(current_room_pos, linked_side):
-		var linked_index := player.x if linked_side in [0, 2] else player.y
-		return {"side": linked_side, "index": clampi(linked_index, 0, (combat.cols if linked_side in [0, 2] else combat.rows) - 1), "source": "house_entry"}
-	var distances := [player.y, combat.cols - 1 - player.x, combat.rows - 1 - player.y, player.x]
-	var side := 0
-	for candidate in range(1, 4):
-		if int(distances[candidate]) < int(distances[side]):
-			side = candidate
-	var index := player.x if side in [0, 2] else player.y
-	return {"side": side, "index": index, "source": "player_spawn"}
+	var prefer_house_side: bool = linked_side >= 0 and room_rules.placed.has(current_room_pos) and room_rules.cell_has_door(current_room_pos, linked_side)
+	var best: Dictionary = boundary_edges[0]
+	var best_score := INF
+	for edge: Dictionary in boundary_edges:
+		var cell: Vector2i = edge["cell"]
+		var side := int(edge["side"])
+		var side_penalty := 0.0 if not prefer_house_side or side == linked_side else 100.0
+		var score := side_penalty + float(absi(cell.x - player.x) + absi(cell.y - player.y))
+		if score < best_score:
+			best = edge
+			best_score = score
+	best = best.duplicate(true)
+	best["source"] = "house_entry" if prefer_house_side else "player_spawn"
+	return best
 
 
-func _add_battle_shell_edge(shell: Node3D, side: int, index: int, half_x: float, half_z: float, is_entrance: bool) -> void:
+func _add_battle_shell_edge(shell: Node3D, edge: Dictionary, edge_index: int, is_entrance: bool) -> void:
+	var side := int(edge["side"])
+	var cell: Vector2i = edge["cell"]
 	var segment := Node3D.new()
-	segment.name = "ShellEdge_%d_%d" % [side, index]
+	segment.name = "ShellEdge_%d_%d_%d" % [cell.x, cell.y, side]
 	segment.set_meta("side", side)
+	segment.set_meta("cell", cell)
 	segment.set_meta("is_entrance", is_entrance)
 	var direction: Vector2i = RoomRules.DIRS[side]
-	if side in [0, 2]:
-		segment.position = Vector3((float(index) - float(combat.cols - 1) * 0.5) * BATTLE_CELL, 0.34, -half_z if side == 0 else half_z)
-	else:
-		segment.position = Vector3(half_x if side == 1 else -half_x, 0.34, (float(index) - float(combat.rows - 1) * 0.5) * BATTLE_CELL)
+	segment.position = _battle_world(cell) + Vector3(float(direction.x) * BATTLE_CELL * 0.5, 0.34, float(direction.y) * BATTLE_CELL * 0.5)
 	segment.rotation.y = _battle_shell_direction_yaw(direction)
 	shell.add_child(segment)
 	var full_root := Node3D.new()
 	full_root.name = "FullDoorway" if is_entrance else "FullWall"
 	segment.add_child(full_root)
 	var shell_color := int(battle_room_context.get("shell_color", 0))
-	var wall_kind := _battle_shell_kind_for_segment(index)
+	var wall_kind := _battle_shell_kind_for_segment(edge_index)
 	var model := CardboardShellBuilder.build_doorway(Vector3.ZERO, 0.0, shell_color) if is_entrance else CardboardShellBuilder.build_wall(wall_kind, Vector3.ZERO, 0.0, shell_color)
 	if model != null:
 		model.name = "ShellAsset"
@@ -3540,14 +3872,16 @@ func _add_battle_shell_edge(shell: Node3D, side: int, index: int, half_x: float,
 			var door_leaf := model.get_node_or_null("DoorLeaf") as Node3D
 			if door_leaf != null:
 				door_leaf.visible = false
+		for raw_foot: Node in model.find_children("BackFoot_*", "MeshInstance3D", true, false):
+			(raw_foot as MeshInstance3D).visible = false
 		full_root.add_child(model)
 	var cutaway_root := Node3D.new()
 	cutaway_root.name = "DoorThreshold" if is_entrance else "WallSill"
 	cutaway_root.visible = false
 	segment.add_child(cutaway_root)
 	_add_battle_shell_sill(cutaway_root, is_entrance)
-	var key := "%d:%d" % [side, index]
-	battle_shell_edge_records[key] = {"side": side, "full": full_root, "cutaway": cutaway_root, "entrance": is_entrance}
+	var key := str(edge["key"])
+	battle_shell_edge_records[key] = {"side": side, "cell": cell, "full": full_root, "cutaway": cutaway_root, "entrance": is_entrance}
 
 
 func _battle_shell_kind_for_segment(index: int) -> String:
@@ -3559,10 +3893,34 @@ func _battle_shell_kind_for_segment(index: int) -> String:
 	return "cb_wall"
 
 
-func _add_battle_shell_junctions(shell: Node3D, half_x: float, half_z: float) -> void:
+func _add_battle_shell_junctions(shell: Node3D, boundary_edges: Array[Dictionary]) -> void:
 	var shell_color := int(battle_room_context.get("shell_color", 0))
 	var horizontal_scale := BATTLE_SHELL_JUNCTION_WIDTH / CardboardShellBuilder.KAYKIT_JUNCTION_WIDTH
-	for corner: Vector3 in [Vector3(-half_x, 0.34, -half_z), Vector3(half_x, 0.34, -half_z), Vector3(half_x, 0.34, half_z), Vector3(-half_x, 0.34, half_z)]:
+	var endpoint_records: Dictionary = {}
+	for edge: Dictionary in boundary_edges:
+		var cell: Vector2i = edge["cell"]
+		var direction: Vector2i = edge["direction"]
+		var center := _battle_world(cell) + Vector3(float(direction.x) * BATTLE_CELL * 0.5, 0.34, float(direction.y) * BATTLE_CELL * 0.5)
+		var tangent := Vector3.RIGHT if direction.y != 0 else Vector3.BACK
+		var tangent_axis := "x" if direction.y != 0 else "z"
+		for sign_value in [-1.0, 1.0]:
+			var endpoint := center + tangent * BATTLE_CELL * 0.5 * float(sign_value)
+			var key := "%0.3f,%0.3f" % [endpoint.x, endpoint.z]
+			var record: Dictionary = endpoint_records.get(key, {"position": endpoint, "axes": []})
+			(record["axes"] as Array).append(tangent_axis)
+			endpoint_records[key] = record
+	var keys: Array = endpoint_records.keys()
+	keys.sort()
+	for raw_key: Variant in keys:
+		var record: Dictionary = endpoint_records[raw_key]
+		var axes: Array = record["axes"]
+		# Neighbouring boundary cells share a collinear seam. A post at every one
+		# of those seams reads as a picket fence and scatters support feet across
+		# the playable floor, so only actual contour turns/endpoints receive a
+		# cardboard junction.
+		if axes.size() == 2 and axes[0] == axes[1]:
+			continue
+		var corner: Vector3 = record["position"]
 		var junction := CardboardShellBuilder.build_junction(Vector3.ZERO, CardboardShellBuilder.WALL_HEIGHT, shell_color)
 		junction.name = "BattleShellJunction"
 		junction.position = corner
@@ -3593,12 +3951,14 @@ func _battle_shell_direction_yaw(direction: Vector2i) -> float:
 	return 0.0
 
 
-func _add_battle_boundary_outline(shell: Node3D, half_x: float, half_z: float) -> void:
-	var y := 0.39
-	_add_box(shell, "BattleBoundaryTop", Vector3(0, y, -half_z + 0.08), Vector3(half_x * 2.0 - 0.16, 0.045, 0.08), _material(COL_GOLD, false, 0.04))
-	_add_box(shell, "BattleBoundaryBottom", Vector3(0, y, half_z - 0.08), Vector3(half_x * 2.0 - 0.16, 0.045, 0.08), _material(COL_GOLD, false, 0.04))
-	_add_box(shell, "BattleBoundaryRight", Vector3(half_x - 0.08, y, 0), Vector3(0.08, 0.045, half_z * 2.0 - 0.16), _material(COL_GOLD, false, 0.04))
-	_add_box(shell, "BattleBoundaryLeft", Vector3(-half_x + 0.08, y, 0), Vector3(0.08, 0.045, half_z * 2.0 - 0.16), _material(COL_GOLD, false, 0.04))
+func _add_battle_boundary_outline(shell: Node3D, boundary_edges: Array[Dictionary]) -> void:
+	for edge_index in range(boundary_edges.size()):
+		var edge := boundary_edges[edge_index] as Dictionary
+		var cell: Vector2i = edge["cell"]
+		var direction: Vector2i = edge["direction"]
+		var position := _battle_world(cell) + Vector3(float(direction.x) * (BATTLE_CELL * 0.5 - 0.08), 0.39, float(direction.y) * (BATTLE_CELL * 0.5 - 0.08))
+		var size := Vector3(BATTLE_CELL - 0.16, 0.045, 0.08) if direction.y != 0 else Vector3(0.08, 0.045, BATTLE_CELL - 0.16)
+		_add_box(shell, "BattleBoundary_%03d" % edge_index, position, size, _material(COL_GOLD, false, 0.04))
 
 
 func _apply_battle_room_cutaway() -> void:
@@ -3644,7 +4004,7 @@ func battle_room_shell_debug_state() -> Dictionary:
 
 
 func battle_room_shell_is_consistent() -> bool:
-	if combat == null or battle_shell_edge_records.size() != (combat.cols + combat.rows) * 2:
+	if combat == null or battle_shell_edge_records.size() != _battle_footprint_boundary_edges().size():
 		return false
 	var entrance_count := 0
 	for raw_record: Variant in battle_shell_edge_records.values():
@@ -3698,11 +4058,7 @@ func _set_house_camera() -> void:
 	if camera == null:
 		return
 	_set_battle_neutral_lighting(false)
-	var points: Array[Vector3] = []
-	for raw_pos in room_rules.placed.keys():
-		points.append(_house_visual_world(raw_pos))
-	for frontier in room_rules.frontiers():
-		points.append(_house_visual_world(frontier))
+	var points := _house_camera_layout_points()
 	var center := Vector3.ZERO
 	for point in points:
 		center += point
@@ -3711,8 +4067,8 @@ func _set_house_camera() -> void:
 	var horizontal_radius := 0.0
 	for point in points:
 		horizontal_radius = maxf(horizontal_radius, Vector2(point.x - center.x, point.z - center.z).length())
-	horizontal_radius += HOUSE_CELL * VISUAL_CELL_SCALE * 1.15
-	house_camera_fit_size = minf(28.0 * VISUAL_CELL_SCALE, _rotation_invariant_fit_size(horizontal_radius, HOUSE_CELL * VISUAL_CELL_SCALE * 1.65, house_camera_pitch, 0.8 * VISUAL_CELL_SCALE, 12.0 * VISUAL_CELL_SCALE))
+	horizontal_radius += HOUSE_CELL * VISUAL_CELL_SCALE * 0.85
+	house_camera_fit_size = minf(28.0 * VISUAL_CELL_SCALE, _rotation_invariant_fit_size(horizontal_radius, HOUSE_CELL * VISUAL_CELL_SCALE * 1.65, house_camera_pitch, 0.8 * VISUAL_CELL_SCALE, 7.6 * VISUAL_CELL_SCALE))
 	house_camera_size_target = _house_camera_size_target()
 	if house_camera_size_current <= 0.0:
 		house_camera_size_current = house_camera_size_target

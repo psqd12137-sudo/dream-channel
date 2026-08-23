@@ -996,6 +996,7 @@ func _apply_room_override(room_index: int, room_type: String, room_root: Node3D)
 		model.set_meta("override_asset_id", asset_id)
 		model.set_meta("override_scale_factor", OVERRIDE_SCALE_FACTOR)
 		furniture_root.add_child(model)
+		_apply_handmade_prop_finish(model, asset_id, RoomPropCatalog.handmade_finish_for(asset_id))
 		for raw_mesh: Node in model.find_children("*", "MeshInstance3D", true, false):
 			var mesh := raw_mesh as MeshInstance3D
 			if mesh != null:
@@ -1254,12 +1255,13 @@ func _room_prop_slot_candidates(room_index: int, center: Vector2) -> Dictionary:
 func _choose_prop_placement(theme: String, slot: String, candidates: Dictionary, placed: Array[Dictionary], room_rng: RandomNumberGenerator, preferred_asset_id: String = "") -> Dictionary:
 	var entries := RoomPropCatalog.entries_for(theme, slot)
 	for index in range(entries.size() - 1, -1, -1):
-		if bool(entries[index].get("repeatable", false)):
-			continue
+		var entry_id := str(entries[index].get("id", ""))
+		var placed_count := 0
 		for previous: Dictionary in placed:
-			if str(previous.get("asset_id", "")) == str(entries[index].get("id", "")):
-				entries.remove_at(index)
-				break
+			if str(previous.get("asset_id", "")) == entry_id:
+				placed_count += 1
+		if placed_count >= RoomPropCatalog.max_per_room(entry_id):
+			entries.remove_at(index)
 	var slot_candidates: Array = candidates.get(slot, []).duplicate()
 	_shuffle_array(slot_candidates, room_rng)
 	if not preferred_asset_id.is_empty():
@@ -1268,18 +1270,66 @@ func _choose_prop_placement(theme: String, slot: String, candidates: Dictionary,
 			if str(preferred_entry.get("id", "")) != preferred_asset_id:
 				continue
 			entries.remove_at(preferred_index)
-			for candidate: Dictionary in slot_candidates:
-				if _prop_candidate_is_clear(candidate, preferred_entry, placed):
-					(candidates[slot] as Array).erase(candidate)
-					return {"entry": preferred_entry, "candidate": candidate}
+			var preferred_candidate := _best_prop_candidate(slot_candidates, preferred_entry, placed, room_rng)
+			if not preferred_candidate.is_empty():
+				(candidates[slot] as Array).erase(preferred_candidate)
+				return {"entry": preferred_entry, "candidate": preferred_candidate}
 			break
 	while not entries.is_empty():
 		var entry := _take_weighted_entry(entries, room_rng)
-		for candidate: Dictionary in slot_candidates:
-			if _prop_candidate_is_clear(candidate, entry, placed):
-				(candidates[slot] as Array).erase(candidate)
-				return {"entry": entry, "candidate": candidate}
+		var candidate := _best_prop_candidate(slot_candidates, entry, placed, room_rng)
+		if not candidate.is_empty():
+			(candidates[slot] as Array).erase(candidate)
+			return {"entry": entry, "candidate": candidate}
 	return {}
+
+
+func _best_prop_candidate(slot_candidates: Array, entry: Dictionary, placed: Array[Dictionary], room_rng: RandomNumberGenerator) -> Dictionary:
+	var best: Dictionary = {}
+	var best_score := INF
+	for candidate: Dictionary in slot_candidates:
+		if not _prop_candidate_is_clear(candidate, entry, placed):
+			continue
+		var score := _prop_composition_score(candidate, entry, placed)
+		# Stable seed noise only resolves visually equivalent candidates; it must
+		# never outweigh the semantic composition score.
+		score += room_rng.randf_range(0.0, 0.025)
+		if score < best_score:
+			best = candidate
+			best_score = score
+	return best
+
+
+func _prop_composition_score(candidate: Dictionary, entry: Dictionary, placed: Array[Dictionary]) -> float:
+	if placed.is_empty():
+		return 0.0
+	var position: Vector3 = candidate["position"]
+	var slot := str(candidate.get("slot", ""))
+	var nearest := INF
+	var aligned_penalty := 0.0
+	var same_cell_count := 0
+	var companion_distance := INF
+	var asset_id := str(entry.get("id", ""))
+	for previous: Dictionary in placed:
+		var previous_position: Vector3 = previous["position"]
+		var distance := Vector2(position.x - previous_position.x, position.z - previous_position.z).length()
+		nearest = minf(nearest, distance)
+		if previous.has("cell") and candidate.has("cell") and previous.get("cell") == candidate.get("cell"):
+			same_cell_count += 1
+		if distance > CELL * 0.45 and (absf(position.x - previous_position.x) < 0.035 or absf(position.z - previous_position.z) < 0.035):
+			aligned_penalty += 0.48
+		var previous_slot := str(previous.get("slot", ""))
+		if previous_slot == RoomPropCatalog.SLOT_MAIN or str(previous.get("asset_id", "")) == asset_id:
+			companion_distance = minf(companion_distance, distance)
+	var desired := CELL * (0.40 if slot == RoomPropCatalog.SLOT_ACCENT else 0.58 if slot == RoomPropCatalog.SLOT_CORNER else 0.72)
+	var score := absf(nearest - desired) / CELL
+	if companion_distance < INF:
+		score += absf(companion_distance - desired) / CELL * 0.45
+	if nearest > CELL * 1.35:
+		score += (nearest / CELL - 1.35) * 1.8
+	score += aligned_penalty
+	score += float(maxi(0, same_cell_count - 1)) * 0.70
+	return score
 
 
 func _choose_prop_fallback(theme: String, candidates: Dictionary, placed: Array[Dictionary], room_rng: RandomNumberGenerator) -> Dictionary:
@@ -1706,7 +1756,12 @@ func _build_room_state_overlays(center: Vector2) -> void:
 		if not visited:
 			for cell: Vector2i in cells:
 				var elevation := float(room.get("elevation", 0.0))
-				_add_box("UnvisitedCover_%d_%d" % [cell.x, cell.y], _cell_world(cell, center) + Vector3(0, elevation + 0.14, 0), Vector3(CELL * 0.88, 0.08, CELL * 0.88), Color("17242a"), room_index)
+				var paper_palette := [Color("d8c9a8"), Color("c7d2b1"), Color("d4b8bd")]
+				var paper_color: Color = paper_palette[posmod(room_index + cell.x * 3 + cell.y * 5, paper_palette.size())]
+				var cover_position := _cell_world(cell, center) + Vector3(0, elevation + 0.16, 0)
+				_add_box("UnvisitedCover_%d_%d" % [cell.x, cell.y], cover_position, Vector3(CELL * 0.90, 0.10, CELL * 0.90), paper_color, room_index)
+				_add_box("UnvisitedTapeA_%d_%d" % [cell.x, cell.y], cover_position + Vector3(0, 0.058, 0), Vector3(CELL * 0.58, 0.014, 0.065), Color("e9c64c"), room_index)
+				_add_box("UnvisitedTapeB_%d_%d" % [cell.x, cell.y], cover_position + Vector3(0, 0.059, 0), Vector3(0.065, 0.014, CELL * 0.58), Color("62bfb6"), room_index)
 		var outline_color := Color.TRANSPARENT
 		if is_current:
 			outline_color = Color("f3b52b")
