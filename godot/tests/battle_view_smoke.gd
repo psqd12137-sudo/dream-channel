@@ -50,10 +50,11 @@ func _run() -> void:
 	var world_viewport: SubViewport = game.get_node("WorldLayer/WorldContainer/WorldViewport")
 	_check(_count_named_prefix(battle_root, "Cell_") == 36, "hall must render all 36 cells")
 	_check(_all_cells_have_layers(battle_root), "each cell must have a base layer and logical walkable surface")
-	_check(_count_named_prefix(battle_root, "Height") > 0, "height cells must render H markers")
+	_check(_count_named_prefix(battle_root, "Height") == 0, "height must be communicated by furniture silhouettes rather than debug H labels")
 	_check(_count_named_prefix(battle_root, "TerrainAsset_H1_") > 0, "H1 cells must use current furniture assets instead of tall cubes")
 	_check(_count_named_prefix(battle_root, "TerrainAsset_H2_") > 0, "H2 cells must use current furniture assets instead of tall cubes")
-	_check(_count_named_prefix(battle_root, "WalkableAssetTop") > 0, "height assets must expose a visible logical standing surface")
+	_check(_count_named_prefix(battle_root, "WalkableAssetTop") > 0, "height assets must retain logical standing-surface markers")
+	_check(_all_named_prefix_hidden(battle_root, "WalkableAssetTop"), "logical standing surfaces must stay hidden until interaction needs them")
 	_check(_count_named_prefix(battle_root, "PortalLabel") == 2, "portal endpoints must render A/B markers")
 	_check(_count_named_prefix(battle_root, "Blocker") >= 2 and _count_named_prefix(battle_root, "BlockerAsset_") == 2, "logical blockers must be dressed with inherited room assets instead of plain cubes")
 	var active_footprint_cells := _count_meta_value_recursive(battle_root, "room_footprint_active", true)
@@ -67,8 +68,9 @@ func _run() -> void:
 	_check(str(shell_state.get("context_source", "")) == "unpacking_seed", "rooms without an authored override must inherit their Unpacking-style room seed")
 	_check(int(shell_state.get("context_props", 0)) >= 4, "combat presentation must carry representative room props instead of an empty perimeter")
 	_check(_count_meta_recursive(battle_root, "battle_context_prop") >= 2, "battle terrain and blockers must use assets inherited from the big-map room composition")
+	_check(_count_meta_recursive(battle_root, "house_floor_spec") == game.combat.cols * game.combat.rows, "every combat cell must reuse the formal big-map timber floor specification")
 	_check(_count_meta_recursive(battle_root.get_node_or_null("BattleRoomShell"), "cardboard_shell") > 0, "combat walls must use the same cardboard construction language as the big-map room")
-	_check(battle_root.get_node_or_null("BattleRoomShell/BattleRoomStateLabel") is Label3D, "the interior must identify the active room as the current room")
+	_check(battle_root.get_node_or_null("BattleRoomShell/BattleRoomStateLabel") == null, "the room shell must not carry a floating debug title")
 	var trap_cell := _first_empty_cell(game)
 	game.combat.traps[trap_cell] = {"card_id": "jab", "glyph": "刺", "damage": 2}
 	game.build_battle_world()
@@ -111,6 +113,10 @@ func _run() -> void:
 	await process_frame
 	var hovered_node: Node = battle_root.get_node_or_null("Cell_%d_%d/Hover_0" % [target_cell.x, target_cell.y])
 	_check(hovered_node is MeshInstance3D, "hovered cells must render corner markers")
+	var valid_hover_cell := _first_valid_battle_target(game)
+	var valid_projected: Vector2 = camera.unproject_position(game._battle_world(valid_hover_cell))
+	game.set_battle_hover(valid_projected)
+	await process_frame
 	_check(_count_named_prefix(battle_root, "Valid_") > 0, "reachable cells must render green markers")
 
 	game.queue_free()
@@ -123,6 +129,13 @@ func _find_room(rooms: Array[Dictionary], id: String) -> Dictionary:
 		if str(room.get("id", "")) == id:
 			return room
 	return {}
+
+
+func _all_named_prefix_hidden(root: Node, prefix: String) -> bool:
+	for child: Node in root.find_children("%s*" % prefix, "", true, false):
+		if child is Node3D and (child as Node3D).visible:
+			return false
+	return true
 
 
 func _all_cells_have_layers(root_node: Node) -> bool:
@@ -141,6 +154,15 @@ func _first_empty_cell(game: Node3D) -> Vector2i:
 			if game.combat.is_walkable(cell) and cell != game.combat.player_pos and cell != game.combat.enemy_pos:
 				return cell
 	return Vector2i.ZERO
+
+
+func _first_valid_battle_target(game: Node3D) -> Vector2i:
+	for y in range(game.combat.rows):
+		for x in range(game.combat.cols):
+			var cell := Vector2i(x, y)
+			if game._is_valid_battle_target(cell):
+				return cell
+	return game.combat.player_pos
 
 
 func _count_named_prefix(node: Node, prefix: String) -> int:

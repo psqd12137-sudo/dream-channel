@@ -23,6 +23,8 @@ const RUN_SAVE_PATH := "user://channel_run_v1.json"
 const DISPLAY_SETTINGS_PATH := "user://channel_display.cfg"
 const DISPLAY_RESOLUTIONS := [Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(2560, 1440)]
 const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interior/"
+const BATTLE_FLOOR_LIGHT := KAYKIT_DUNGEON_ROOT + "floor_wood_large.gltf.glb"
+const BATTLE_FLOOR_DARK := KAYKIT_DUNGEON_ROOT + "floor_wood_large_dark.gltf.glb"
 const BATTLE_HEIGHT_ASSETS := {
 	1: ["Table_RoundLarge.fbx", "Couch_Medium1.fbx", "Kitchen_Oven.fbx"],
 	2: ["Bookshelf.fbx", "Kitchen_Fridge.fbx", "Fireplace.fbx"],
@@ -2302,7 +2304,10 @@ func _refit_battle_camera(preserve_zoom: bool) -> void:
 	# Reserve only the actual framing offset. The previous doubled-radius plus
 	# ten-unit allowance left a themed arena occupying barely half the viewport.
 	horizontal_radius += BATTLE_CAMERA_FRAME_OFFSET * (horizontal_radius + 4.0)
-	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0)
+	# The invariant fit already encloses every rotated cell. Keep only a compact
+	# presentation margin so the miniature, rather than empty backdrop, is the
+	# visual subject of combat.
+	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0) * 0.90
 	camera.size = battle_camera_fit_size * battle_camera_zoom_ratio
 	_apply_battle_camera()
 
@@ -2990,28 +2995,34 @@ func build_battle_world() -> void:
 			else:
 				_add_box(cell_node, "TerrainFoot", Vector3(0, 0.14, 0), Vector3(BATTLE_CELL - 0.08, 0.28, BATTLE_CELL - 0.08), _material(rim_color))
 				_add_battle_height_asset(cell_node, pos, height, platform_height + 0.13)
-			var surface_material := _material(surface_color) if height == 0 else _material(Color(surface_color, 0.30), true, 0.025)
+			_add_battle_floor_model(cell_node, pos, footprint_active)
+			# Surface remains only as a picking/standing plane. The visible finish is
+			# the same KayKit timber module used by the formal big-map composer.
+			var surface_alpha := 0.025 if height == 0 else 0.018
+			var surface_material := _material(Color(surface_color, surface_alpha), true, 0.018)
 			_add_box(cell_node, "Surface", Vector3(0, platform_height + 0.055, 0), Vector3(BATTLE_CELL - 0.34, 0.11, BATTLE_CELL - 0.34), surface_material)
 			var top_y := platform_height + 0.13
 			var is_hurt_cell: bool = pos in (intent.get("hurt", []) as Array)
 			var path_index: int = (intent.get("path", []) as Array).find(pos)
 			if is_hurt_cell:
-				_add_box(cell_node, "IntentAttackOverlay", Vector3(0, top_y + 0.035, 0), Vector3(BATTLE_CELL - 0.43, 0.065, BATTLE_CELL - 0.43), _material(Color(COL_RED, 0.78), true, 0.08))
-				var attack_kind := str(intent.get("attack_kind", "attack"))
-				var glyphs := {"lunge": "突", "faceShock": "惊", "guardBreak": "破", "slam": "砸", "beam": "激"}
-				var attack_glyph := "蓄" if bool(intent.get("pending", false)) else str(glyphs.get(attack_kind, "攻"))
+				# Keep danger readable without painting a large debug-like label across
+				# the inherited timber floor. A compact token plus red corners reads as
+				# a tabletop warning marker.
+				_add_cylinder(cell_node, "IntentAttackOverlay", Vector3(0, top_y + 0.035, 0), 0.34, 0.055, _material(Color(COL_RED, 0.86), true, 0.10))
+				_add_corner_marks(cell_node, "IntentAttackCorner", COL_RED, top_y + 0.015)
+				var attack_glyph := "!"
 				if int(intent.get("hits", 1)) > 1:
-					attack_glyph = "%s×%d" % [attack_glyph, int(intent.get("hits", 1))]
-				_add_label(cell_node, "IntentAttackGlyph", attack_glyph, Vector3(0.0, top_y + 0.48, 0.0), Color.WHITE, 30)
+					attack_glyph = "×%d" % int(intent.get("hits", 1))
+				_add_label(cell_node, "IntentAttackGlyph", attack_glyph, Vector3(0.0, top_y + 0.30, 0.0), Color.WHITE, 25)
 			elif path_index >= 0:
-				_add_box(cell_node, "IntentMoveOverlay", Vector3(0, top_y + 0.035, 0), Vector3(BATTLE_CELL - 0.43, 0.065, BATTLE_CELL - 0.43), _material(Color(COL_BLUE, 0.66), true, 0.06))
-				_add_label(cell_node, "IntentMoveGlyph", "走%d" % (path_index + 1), Vector3(0.0, top_y + 0.45, 0.0), Color.WHITE, 29)
-			if _is_valid_battle_target(pos):
+				_add_cylinder(cell_node, "IntentMoveOverlay", Vector3(0, top_y + 0.025, 0), 0.25, 0.045, _material(Color(COL_BLUE, 0.82), true, 0.08))
+				_add_label(cell_node, "IntentMoveGlyph", str(path_index + 1), Vector3(0.0, top_y + 0.25, 0.0), Color.WHITE, 22)
+			# Placement cards need a visible target field. Ordinary movement uses a
+			# hover-only marker so idle combat frames stay visually clean.
+			if _is_valid_battle_target(pos) and (selected_card >= 0 or pos == hovered_battle_cell):
 				_add_corner_marks(cell_node, "Valid", COL_GOLD if selected_card >= 0 else COL_GREEN, top_y)
 			if pos == hovered_battle_cell:
 				_add_corner_marks(cell_node, "Hover", Color.WHITE, top_y + 0.055)
-			if height > 0:
-				_add_label(cell_node, "Height", "H%d" % height, Vector3(-0.65, top_y + 0.32, -0.65), COL_GRID_DARK, 24)
 			if combat.portals.has(pos):
 				_add_portal_marker(cell_node, pos, top_y)
 			if combat.walls.has(pos):
@@ -3048,6 +3059,23 @@ func _add_corner_marks(parent: Node3D, prefix: String, color: Color, y: float) -
 		var sx := -1.0 if index % 2 == 0 else 1.0
 		var sz := -1.0 if index < 2 else 1.0
 		_add_box(parent, "%s_%d" % [prefix, index], Vector3(sx * edge, y, sz * edge), Vector3(0.28, 0.055, 0.28), _material(color, false, 0.08))
+
+
+func _add_battle_floor_model(parent: Node3D, pos: Vector2i, footprint_active: bool) -> void:
+	var floor_path := BATTLE_FLOOR_LIGHT if footprint_active else BATTLE_FLOOR_DARK
+	var packed := load(floor_path) as PackedScene
+	if packed == null:
+		return
+	var floor_model := packed.instantiate() as Node3D
+	if floor_model == null:
+		return
+	floor_model.name = "RoomFloor_%d_%d" % [pos.x, pos.y]
+	floor_model.position.y = 0.305
+	floor_model.scale = Vector3.ONE * (BATTLE_CELL / 4.0)
+	floor_model.set_meta("house_floor_spec", true)
+	parent.add_child(floor_model)
+	for child: Node in floor_model.find_children("*", "MeshInstance3D", true, false):
+		(child as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 
 
 func _align_battle_terrain_to_room_context() -> void:
@@ -3176,8 +3204,9 @@ func _add_battle_height_asset(parent: Node3D, pos: Vector2i, height: int, logica
 		var mesh_instance := child as MeshInstance3D
 		if mesh_instance != null:
 			mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	var top_marker := _add_box(parent, "WalkableAssetTop", Vector3(0, logical_top_y - 0.075, 0), Vector3(BATTLE_CELL - 0.46, 0.055, BATTLE_CELL - 0.46), _material(Color(COL_PAPER, 0.46), true, 0.03))
+	var top_marker := _add_box(parent, "WalkableAssetTop", Vector3(0, logical_top_y - 0.075, 0), Vector3(BATTLE_CELL - 0.46, 0.055, BATTLE_CELL - 0.46), _material(Color(COL_GOLD, 0.02), true, 0.0))
 	top_marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	top_marker.visible = false
 
 
 func _add_battle_blocker_asset(parent: Node3D, pos: Vector2i, platform_height: float) -> void:
@@ -3307,22 +3336,33 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
 	if not is_player:
 		presenter.set_obscured(not revealed)
 	if not is_player:
-		_add_label(node, "PawnLabel", "怪" if revealed else "?", Vector3(0, floor_y + 2.05, 0), Color.WHITE if revealed else COL_GOLD, 31)
 		if revealed and combat != null and str(combat.outcome) == "":
 			var intent: Dictionary = combat.preview_intent()
+			var intent_color := _battle_intent_color(str(intent.get("type", "stall")))
+			var intent_badge := MeshInstance3D.new()
+			intent_badge.name = "EnemyIntentBadge"
+			var intent_quad := QuadMesh.new()
+			intent_quad.size = Vector2(0.72, 0.72)
+			intent_badge.mesh = intent_quad
+			intent_badge.position = Vector3(0, floor_y + 2.44, 0)
+			var badge_material := _material(Color(intent_color, 0.88), true, 0.08)
+			badge_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+			badge_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			intent_badge.material_override = badge_material
+			node.add_child(intent_badge)
 			var intent_label := Label3D.new()
 			intent_label.font = APP_FONT
 			intent_label.name = "EnemyIntent"
-			intent_label.position = Vector3(0, floor_y + 2.62, 0)
+			intent_label.position = Vector3(0, floor_y + 2.44, 0.02)
 			intent_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 			intent_label.no_depth_test = true
-			intent_label.font_size = 42
-			intent_label.outline_size = 10
+			intent_label.font_size = 38
+			intent_label.pixel_size = 0.010
+			intent_label.outline_size = 7
 			intent_label.outline_modulate = Color("10151c")
-			intent_label.modulate = _battle_intent_color(str(intent.get("type", "stall")))
+			intent_label.modulate = Color.WHITE
 			intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			var intent_text := str(intent.get("label", ""))
-			intent_label.text = intent_text if not intent_text.is_empty() else "观望"
+			intent_label.text = _battle_intent_glyph(str(intent.get("type", "stall")))
 			node.add_child(intent_label)
 
 
@@ -3334,6 +3374,16 @@ func _battle_intent_color(intent_type: String) -> Color:
 		"patrol": return Color("5fd6c6")
 		"ambush": return Color("e06bb4")
 	return Color("c8d4d8")
+
+
+func _battle_intent_glyph(intent_type: String) -> String:
+	match intent_type:
+		"attack": return "攻"
+		"chase": return "追"
+		"search": return "搜"
+		"patrol": return "巡"
+		"ambush": return "伏"
+	return "待"
 
 
 func _battle_actor_presentation(actor_key: String) -> Dictionary:
@@ -3441,18 +3491,6 @@ func _add_battle_room_shell() -> void:
 			_add_battle_shell_edge(shell, side, index, half_x, half_z, is_entrance)
 	_add_battle_shell_junctions(shell, half_x, half_z)
 	_add_battle_boundary_outline(shell, half_x, half_z)
-	var label := Label3D.new()
-	label.font = APP_FONT
-	label.name = "BattleRoomStateLabel"
-	label.text = "%s · 当前房间" % battle_room_title
-	label.position = Vector3(0, BATTLE_SHELL_WALL_HEIGHT + 0.75, -half_z - 0.10)
-	label.modulate = COL_GOLD
-	label.font_size = 44
-	label.outline_size = 10
-	label.pixel_size = 0.009
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	shell.add_child(label)
 	_apply_battle_room_cutaway()
 
 

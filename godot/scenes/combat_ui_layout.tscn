@@ -30,10 +30,10 @@ stretch_mode = 6
 
 [node name="ActionArea" type="ColorRect" parent="." unique_id=1285653696]
 layout_mode = 0
-offset_left = 1000.0
-offset_top = 570.0
-offset_right = 1256.0
-offset_bottom = 686.0
+offset_left = 512.0
+offset_top = 92.0
+offset_right = 768.0
+offset_bottom = 200.0
 mouse_filter = 2
 color = Color(0.95, 0.61, 0.11, 0.28)
 
