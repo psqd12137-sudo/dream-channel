@@ -26,6 +26,7 @@ const BATTLE_HEIGHT_ASSETS := {
 	2: ["Bookshelf.fbx", "Kitchen_Fridge.fbx", "Fireplace.fbx"],
 }
 const HOUSE_CELL := 3.4
+const VISUAL_CELL_SCALE := 1.20
 const BATTLE_CELL := 2.35
 const BATTLE_SHELL_WALL_HEIGHT := 1.65
 const BATTLE_SHELL_JUNCTION_WIDTH := 0.22
@@ -59,7 +60,7 @@ const HOUSE_CAMERA_FOLLOW_RATE := 3.4
 const HOUSE_CAMERA_FRAME_OFFSET := 0.15
 const HOUSE_CAMERA_RETURN_DELAY := 1.5
 const HOUSE_CAMERA_RETURN_DURATION := 1.05
-const HOUSE_CAMERA_CLOSEUP_SIZE := HOUSE_CELL * 2.6
+const HOUSE_CAMERA_CLOSEUP_SIZE := HOUSE_CELL * VISUAL_CELL_SCALE * 2.6
 const HOUSE_CAMERA_SIZE_SMOOTH_RATE := 5.5
 const BATTLE_CAMERA_FOLLOW_RATE := 4.5
 const BATTLE_CAMERA_FRAME_OFFSET := 0.12
@@ -418,16 +419,17 @@ func _house_follow_target_position() -> Vector3:
 		return _house_camera_overview_target()
 	var token := house_root.get_node_or_null("LiliToken") as Node3D
 	if token != null:
-		return Vector3(token.position.x, 0.0, token.position.z)
-	return _house_world(current_room_pos)
+		var token_world := house_root.to_global(token.position)
+		return Vector3(token_world.x, 0.0, token_world.z)
+	return _house_visual_world(current_room_pos)
 
 
 func _house_camera_overview_target() -> Vector3:
 	var points: Array[Vector3] = []
 	for raw_pos in room_rules.placed.keys():
-		points.append(_house_world(raw_pos))
+		points.append(_house_visual_world(raw_pos))
 	for frontier in room_rules.frontiers():
-		points.append(_house_world(frontier))
+		points.append(_house_visual_world(frontier))
 	var center := Vector3.ZERO
 	for point in points:
 		center += point
@@ -720,7 +722,7 @@ func continue_saved_run() -> bool:
 	phase = str(save.get("phase", "explore"))
 	if phase not in ["omen", "explore", "room_ready", "reward"]:
 		phase = "room_ready" if not bool(current_room().get("completed", false)) else "explore"
-	house_camera_closeup = phase == "room_ready"
+	house_camera_closeup = phase == "reward" and reward_origin in ["combat", "event"]
 	house_camera_following = house_camera_closeup
 	world_container.visible = true
 	house_root.visible = true
@@ -1518,7 +1520,7 @@ func _handle_house_world_click(screen_pos: Vector2) -> void:
 	var hit: Variant = _screen_to_plane(screen_pos, 0.0)
 	if hit == null:
 		return
-	var world: Vector3 = hit
+	var world := _house_logical_world_from_visual(hit as Vector3)
 	var target := Vector2i(roundi(world.x / HOUSE_CELL), roundi(world.z / HOUSE_CELL))
 	if target in room_rules.frontiers():
 		begin_build(target)
@@ -1532,7 +1534,7 @@ func enter_room(target: Vector2i) -> void:
 	animation_busy = true
 	active_animation_kind = "room_entry"
 	house_camera_closeup = false
-	house_camera_following = true
+	house_camera_following = false
 	house_camera_user_hold = false
 	_cancel_house_camera_return()
 	status_message = "莉莉正走进未知房间……"
@@ -1617,8 +1619,8 @@ func _set_house_token_path_motion(weight: float, token: Node3D, start_position: 
 
 func _finish_enter_room(target: Vector2i) -> void:
 	current_room_pos = target
-	house_camera_closeup = true
-	house_camera_following = true
+	house_camera_closeup = false
+	house_camera_following = false
 	var room: Dictionary = room_rules.placed[target]
 	var first_visit := not bool(room.get("visited", false))
 	room_rules.set_instance_flag(target, "revealed", true)
@@ -1739,9 +1741,12 @@ func skip_reward() -> void:
 
 
 func _finish_reward() -> void:
+	var origin := reward_origin
 	phase = "explore"
 	reward_options.clear()
 	reward_origin = ""
+	house_camera_closeup = origin in ["combat", "event"]
+	house_camera_following = house_camera_closeup
 	build_house_world()
 	_save_run()
 	_refresh_hud()
@@ -1772,10 +1777,14 @@ func finish_event_trial(success: bool) -> void:
 	_complete_current_room()
 	lab_root.visible = false
 	house_root.visible = true
+	house_camera_closeup = true
+	house_camera_following = true
 	if success:
 		if context == "chase":
 			player_speed += 1
 		_start_quiet_reward()
+		reward_origin = "event"
+		_save_run()
 		status_message = "考验成功；奖励已经翻开。"
 	else:
 		if context == "chase" and run_deck.size() > 1:
@@ -2339,8 +2348,8 @@ func return_from_combat() -> void:
 	if animation_busy or phase != "combat" or combat == null or combat.outcome == "":
 		return
 	if combat.outcome == "victory":
-		house_camera_closeup = false
-		house_camera_following = false
+		house_camera_closeup = true
+		house_camera_following = true
 		_collect_combat_deck()
 		_complete_current_room()
 		_start_card_reward("combat")
@@ -2439,6 +2448,10 @@ func build_house_world() -> void:
 		build_preview_tween.kill()
 	build_preview_tween = null
 	_clear_children(house_root)
+	# Scale the complete house presentation as one unit. Logical room positions,
+	# HOUSE_CELL and battle coordinates remain unchanged; composer furniture,
+	# interaction slots, tokens, bridges and frontiers stay aligned together.
+	house_root.scale = Vector3.ONE * VISUAL_CELL_SCALE
 	for raw_pos in room_rules.placed.keys():
 		var pos: Vector2i = raw_pos
 		_add_room_mesh(pos, room_rules.placed[pos])
@@ -2471,6 +2484,7 @@ func _add_kenney_formal_composer() -> void:
 	composer.explicit_connection_edges = _formal_connection_edge_keys()
 	composer.explicit_open_edges = _formal_outer_open_edge_keys()
 	composer.scale = Vector3.ONE * (HOUSE_CELL / 1.55)
+	composer.set_meta("visual_cell_scale", VISUAL_CELL_SCALE)
 	var layout := composer.get_node("Layout") as Node3D
 	for existing: Node in layout.get_children():
 		layout.remove_child(existing)
@@ -3363,9 +3377,9 @@ func _set_house_camera() -> void:
 	_set_battle_neutral_lighting(false)
 	var points: Array[Vector3] = []
 	for raw_pos in room_rules.placed.keys():
-		points.append(_house_world(raw_pos))
+		points.append(_house_visual_world(raw_pos))
 	for frontier in room_rules.frontiers():
-		points.append(_house_world(frontier))
+		points.append(_house_visual_world(frontier))
 	var center := Vector3.ZERO
 	for point in points:
 		center += point
@@ -3374,8 +3388,8 @@ func _set_house_camera() -> void:
 	var horizontal_radius := 0.0
 	for point in points:
 		horizontal_radius = maxf(horizontal_radius, Vector2(point.x - center.x, point.z - center.z).length())
-	horizontal_radius += HOUSE_CELL * 1.15
-	house_camera_fit_size = minf(28.0, _rotation_invariant_fit_size(horizontal_radius, HOUSE_CELL * 1.65, house_camera_pitch, 0.8, 12.0))
+	horizontal_radius += HOUSE_CELL * VISUAL_CELL_SCALE * 1.15
+	house_camera_fit_size = minf(28.0 * VISUAL_CELL_SCALE, _rotation_invariant_fit_size(horizontal_radius, HOUSE_CELL * VISUAL_CELL_SCALE * 1.65, house_camera_pitch, 0.8 * VISUAL_CELL_SCALE, 12.0 * VISUAL_CELL_SCALE))
 	house_camera_size_target = _house_camera_size_target()
 	if house_camera_size_current <= 0.0:
 		house_camera_size_current = house_camera_size_target
@@ -3532,7 +3546,7 @@ func _start_house_camera_return() -> void:
 
 
 func _clamp_house_camera_target() -> void:
-	var limit := maxf(HOUSE_CELL * 6.0, house_camera_fit_size * 1.5)
+	var limit := maxf(HOUSE_CELL * VISUAL_CELL_SCALE * 6.0, house_camera_fit_size * 1.5)
 	house_camera_target.x = clampf(house_camera_target.x, -limit, limit)
 	house_camera_target.z = clampf(house_camera_target.z, -limit, limit)
 
@@ -3569,6 +3583,14 @@ func _set_battle_neutral_lighting(enabled: bool) -> void:
 
 func _house_world(pos: Vector2i) -> Vector3:
 	return Vector3(float(pos.x) * HOUSE_CELL, 0.0, float(pos.y) * HOUSE_CELL)
+
+
+func _house_visual_world(pos: Vector2i) -> Vector3:
+	return _house_world(pos) * VISUAL_CELL_SCALE
+
+
+func _house_logical_world_from_visual(world: Vector3) -> Vector3:
+	return world / VISUAL_CELL_SCALE
 
 
 func _battle_world(pos: Vector2i) -> Vector3:

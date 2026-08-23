@@ -11,7 +11,9 @@ const KENNEY_ROOT := "res://assets/third_party/kenney_mini_dungeon/models/"
 const KAYKIT_ROOT := "res://assets/third_party/kaykit_dungeon/models/"
 const RUINS_ROOT := "res://assets/third_party/quaternius_ultimate_modular_ruins/models/"
 const CELL := 1.55
-const OVERRIDE_SCALE_FACTOR := 1.25
+## Override assets inherit the formal composer's visual scale from Channel3D's
+## HouseRoot. Keeping this at 1.0 prevents a second, hidden enlargement.
+const OVERRIDE_SCALE_FACTOR := 1.0
 const ELEVATION_STEP := 0.58
 const KAYKIT_WALL_HEIGHT := 1.08
 const KAYKIT_JUNCTION_WIDTH := 0.28

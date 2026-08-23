@@ -92,6 +92,8 @@ var w_held := false
 var room_shape_id := "single"
 var room_rotation_quarters := 0
 var room_cells: Array[Vector2i] = []
+var formal_room_id := "living"
+var suppress_formal_room_ui := false
 var suppress_room_ui := false
 
 var cam_yaw_target := PI * 0.5
@@ -129,6 +131,7 @@ var template_items: Array[Dictionary] = []
 @onready var camera: Camera3D = $CameraRig/Camera3D
 @onready var catalog_list: VBoxContainer = $UI/Panel/VBox/CatalogScroll/CatalogList
 @onready var status_label: Label = $UI/Panel/VBox/Status
+@onready var formal_room: OptionButton = $UI/TopBar/FormalRoom
 @onready var room_shape: OptionButton = $UI/TopBar/RoomShape
 @onready var rotate_room_button: Button = $UI/TopBar/RotateRoom
 @onready var tool_move_button: Button = $UI/TopBar/ToolMove
@@ -153,12 +156,14 @@ func _ready() -> void:
 	_validate_catalog_paths()
 	_build_catalog_panel()
 	_prepare_selection_ring()
+	_populate_formal_rooms()
 	_populate_room_shapes()
 	_prepare_ground()
 	_make_ground_grid()
 	room_cells = Rules.rotated_cells(room_shape_id, room_rotation_quarters)
 	_rebuild_room(true)
 	_build_reference_actor()
+	formal_room.item_selected.connect(_on_formal_room_selected)
 	room_shape.item_selected.connect(_on_room_shape_selected)
 	rotate_room_button.pressed.connect(_rotate_room)
 	tool_move_button.pressed.connect(func(): _toggle_tool_mode("move"))
@@ -415,6 +420,31 @@ func _populate_room_shapes() -> void:
 		room_shape.set_item_metadata(room_shape.item_count - 1, shape_id)
 	_sync_room_shape_ui()
 	suppress_room_ui = false
+
+
+func _populate_formal_rooms() -> void:
+	suppress_formal_room_ui = true
+	formal_room.clear()
+	var room_ids: Array[String] = []
+	for raw_id: Variant in RoomFootprintCatalog.ROOM_CONFIG.keys():
+		room_ids.append(str(raw_id))
+	room_ids.sort()
+	for room_id in room_ids:
+		var config: Dictionary = RoomFootprintCatalog.ROOM_CONFIG.get(room_id, {})
+		var shape_id := str(config.get("shape", "single"))
+		var cell_count := (RoomFootprintCatalog.SHAPES.get(shape_id, RoomFootprintCatalog.SHAPES["single"]) as Array).size()
+		formal_room.add_item("%s · %d格 · %s" % [room_id, cell_count, ROOM_SHAPE_NAMES.get(shape_id, shape_id)])
+		formal_room.set_item_metadata(formal_room.item_count - 1, room_id)
+	_sync_formal_room_ui()
+	suppress_formal_room_ui = false
+
+
+func _sync_formal_room_ui() -> void:
+	formal_room.select(-1)
+	for index in formal_room.item_count:
+		if str(formal_room.get_item_metadata(index)) == formal_room_id:
+			formal_room.select(index)
+			return
 
 
 func _sync_room_shape_ui() -> void:
@@ -1501,6 +1531,7 @@ func _snapshot_state() -> Dictionary:
 	return {
 		"room_shape": room_shape_id,
 		"room_rotation_quarters": room_rotation_quarters,
+		"formal_room_id": formal_room_id,
 		"assets": _snapshot_placements(),
 		"walls": _snapshot_walls(),
 		"fixtures": _snapshot_fixtures(),
@@ -1510,7 +1541,11 @@ func _snapshot_state() -> Dictionary:
 func _rebuild_from_state(state: Dictionary) -> int:
 	room_shape_id = str(state.get("room_shape", room_shape_id))
 	room_rotation_quarters = posmod(int(state.get("room_rotation_quarters", room_rotation_quarters)), 4)
+	formal_room_id = str(state.get("formal_room_id", formal_room_id))
+	if not RoomFootprintCatalog.ROOM_CONFIG.has(formal_room_id):
+		formal_room_id = ""
 	room_cells = Rules.rotated_cells(room_shape_id, room_rotation_quarters)
+	_sync_formal_room_ui()
 	suppress_room_ui = true
 	_sync_room_shape_ui()
 	suppress_room_ui = false
@@ -1617,6 +1652,21 @@ func _on_room_shape_selected(index: int) -> void:
 	if suppress_room_ui:
 		return
 	_change_room(str(room_shape.get_item_metadata(index)), 0, true)
+	formal_room_id = ""
+	_sync_formal_room_ui()
+
+
+func _on_formal_room_selected(index: int) -> void:
+	if suppress_formal_room_ui:
+		return
+	var selected_id := str(formal_room.get_item_metadata(index))
+	var config: Dictionary = RoomFootprintCatalog.ROOM_CONFIG.get(selected_id, {})
+	var shape_id := str(config.get("shape", "single"))
+	_change_room(shape_id, 0, true)
+	formal_room_id = selected_id
+	override_room_id.text = selected_id
+	_sync_formal_room_ui()
+	_update_status("已选择正式房间：%s · %d格" % [selected_id, room_cells.size()])
 
 
 func _rotate_room() -> void:
@@ -1856,7 +1906,10 @@ func _save_template(name) -> String:
 
 
 func _export_override(room_id: String) -> String:
-	var clean_id := _clean_template_name(str(room_id)).split("@")[0]
+	var requested_id := str(room_id).strip_edges()
+	if requested_id.is_empty() or requested_id == "template":
+		requested_id = formal_room_id
+	var clean_id := _clean_template_name(requested_id).split("@")[0]
 	if clean_id.is_empty() or clean_id == "template":
 		_update_status("导出失败：请输入正式房间 ID，例如 living")
 		return ""
@@ -1900,6 +1953,7 @@ func _load_template(name) -> int:
 	var state := {
 		"room_shape": str(data.get("room_shape", "single")),
 		"room_rotation_quarters": int(data.get("room_rotation_quarters", 0)),
+		"formal_room_id": str(data.get("room_id", formal_room_id)),
 		"assets": (data.get("assets", []) as Array).duplicate(true),
 		"walls": (data.get("walls", []) as Array).duplicate(true),
 		"fixtures": (data.get("fixtures", []) as Array).duplicate(true),
@@ -2271,6 +2325,8 @@ func _update_status(message := "") -> void:
 		status_label.text = str(message)
 		return
 	var room_name := str(ROOM_SHAPE_NAMES.get(room_shape_id, room_shape_id))
+	if not formal_room_id.is_empty():
+		room_name = "%s · %s" % [formal_room_id, room_name]
 	if not failed_paths.is_empty():
 		status_label.text = "资产缺失：%s" % ", ".join(failed_paths)
 	elif wall_mode:

@@ -15,6 +15,9 @@ func _run() -> void:
 	await process_frame
 	game.phase = "explore"
 	game._set_house_camera()
+	assert(is_equal_approx(game.house_root.scale.x, game.VISUAL_CELL_SCALE), "house visual root must apply visual cell scale")
+	var composer := game.house_root.get_node_or_null("KenneyFormalComposer") as Node3D
+	assert(composer != null and is_equal_approx(float(composer.get_meta("visual_cell_scale", 0.0)), game.VISUAL_CELL_SCALE), "composer must expose visual cell scale")
 	var overview_size: float = float(game.house_camera_size_target)
 	var enabled := bool(game.toggle_house_camera_closeup())
 	assert(enabled and game.house_camera_closeup, "C-toggle must enable house closeup")

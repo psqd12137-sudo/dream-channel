@@ -3,6 +3,7 @@ extends SceneTree
 const Rules = preload("res://scripts/asset_diorama_rules.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const RoomShellGraph = preload("res://scripts/room_shell_graph.gd")
+const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
 
 const CATALOG_PATH := "res://data/editor/asset_catalog.json"
 const SCENE_PATH := "res://scenes/asset_editor_3d.tscn"
@@ -179,6 +180,19 @@ func _run_scene_structure_tests(editor: Node3D, catalog: Dictionary) -> void:
 	var expected_children := (catalog.get("categories", []) as Array).size() + (catalog.get("assets", []) as Array).size() + 4
 	_check(catalog_list.get_child_count() == expected_children, "catalog panel must include four categories, paper wall tools and all assets")
 	_check((editor.get_node("UI/TopBar/RoomShape") as OptionButton).item_count == 8, "room selector must contain eight footprints")
+	var formal_room_selector := editor.get_node("UI/TopBar/FormalRoom") as OptionButton
+	_check(formal_room_selector.item_count == RoomFootprintCatalog.ROOM_CONFIG.size(), "formal room selector must expose every ROOM_CONFIG id")
+	var living_index := -1
+	for index in formal_room_selector.item_count:
+		if str(formal_room_selector.get_item_metadata(index)) == "living":
+			living_index = index
+			break
+	_check(living_index >= 0, "formal room selector must include living")
+	if living_index >= 0:
+		editor._on_formal_room_selected(living_index)
+		_check(editor.formal_room_id == "living" and editor.room_shape_id == str(RoomFootprintCatalog.ROOM_CONFIG["living"].get("shape", "single")), "formal room selection must sync shape and override id")
+		editor.formal_room_id = ""
+		editor._sync_formal_room_ui()
 	_check(editor.has_node("Walls") and editor.has_node("Corners") and editor.has_node("WallJoins") and editor.has_node("Fixtures") and editor.has_node("CardboardShell") and editor.has_node("ReferenceActor") and editor.has_node("EditorOverlay/Gizmo3D") and editor.has_node("EditorOverlay/Anchors") and editor.has_node("EditorOverlay/WallHandles"), "scene must expose semantic wall/corner/join/fixture/reference/gizmo containers")
 	_check(editor.get_node("ReferenceActor").get_child_count() >= 2, "reference actor must contain model/fallback and label")
 	_check(editor._room_cell_box_count() == 1 and editor.has_node("RoomBase/ShadowQuad") and editor.has_node("RoomBase/RoomLabel"), "room base must include cell, shadow and label")
