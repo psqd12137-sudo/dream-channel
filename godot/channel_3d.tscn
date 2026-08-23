@@ -1,8 +1,20 @@
-[gd_scene format=3 uid="uid://b25lpm8rkq0rs"]
+[gd_scene load_steps=5 format=3 uid="uid://b25lpm8rkq0rs"]
 
 [ext_resource type="Script" uid="uid://cfyerewcojram" path="res://scripts/channel_3d.gd" id="1_l8mse"]
 [ext_resource type="Script" uid="uid://83jksqd5227f" path="res://scripts/channel_3d_hud.gd" id="2_6ggqb"]
 [ext_resource type="Theme" path="res://assets/fonts/app_theme.tres" id="3_app_theme"]
+[ext_resource type="Shader" path="res://shaders/tilt_shift_miniature.gdshader" id="4_tilt_shift"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tilt_shift"]
+shader = ExtResource("4_tilt_shift")
+shader_parameter/effect_enabled = true
+shader_parameter/focus_y = 0.56
+shader_parameter/focus_half_width = 0.18
+shader_parameter/focus_falloff = 0.22
+shader_parameter/max_blur_pixels = 5.5
+shader_parameter/color_saturation = 1.08
+shader_parameter/vignette_strength = 0.14
+shader_parameter/grain_strength = 0.012
 
 [node name="Channel3D" type="Node3D" unique_id=1873107915]
 script = ExtResource("1_l8mse")
@@ -20,6 +32,7 @@ expand = true
 volume_db = -80.0
 
 [node name="WorldContainer" type="SubViewportContainer" parent="WorldLayer"]
+material = SubResource("ShaderMaterial_tilt_shift")
 offset_left = 20.0
 offset_top = 96.0
 offset_right = 972.0

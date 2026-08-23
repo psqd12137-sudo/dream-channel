@@ -15,21 +15,24 @@ const ACTION_PANEL_TEXTURE = preload("res://assets/ui/channel_concept/UI_HUD_Pan
 const BTN_START_TEXTURE = preload("res://assets/ui/unity_buttons/SP_StartGame.png")
 const BTN_END_TEXTURE = preload("res://assets/ui/unity_buttons/SP_EndGame.png")
 const BTN_MENU_TEXTURE = preload("res://assets/ui/unity_buttons/SP_Menu.png")
+const HOME_TITLE_80S = preload("res://assets/ui/retro_broadcast/home_title_layer.png")
+const TV_MASCOT = preload("res://assets/ui/retro_broadcast/teli-14.png")
 const APP_FONT: Font = preload("res://assets/fonts/NotoSansCJKsc-Regular.otf")
+const DISPLAY_FONT: Font = preload("res://assets/fonts/SmileySans-Oblique.otf")
 
-const INK := Color("171c25")
-const DARK := Color("101820")
-const DARK_2 := Color("1e2834")
-const PAPER := Color("f8e9c7")
-const PAPER_2 := Color("e7cfa4")
-const TEXT := Color("fff5df")
-const MUTED := Color("aac4bf")
-const TEAL := Color("22aa9b")
-const GOLD := Color("f3a51f")
-const MAGENTA := Color("d63b72")
-const GREEN := Color("66b76d")
-const RED := Color("d9574f")
-const BLUE := Color("4c92bd")
+const INK := Color("17151c")
+const DARK := Color("251b35")
+const DARK_2 := Color("303e4c")
+const PAPER := Color("fff3df")
+const PAPER_2 := Color("ffd4bd")
+const TEXT := Color("fffaf2")
+const MUTED := Color("c8e8eb")
+const TEAL := Color("12b4aa")
+const GOLD := Color("ffe233")
+const MAGENTA := Color("ee3e91")
+const GREEN := Color("8ccd42")
+const RED := Color("ef493f")
+const BLUE := Color("269dca")
 
 const DESIGN_SIZE := Vector2(1280, 800)
 const HOUSE_VIEW_RECT := Rect2(20, 88, 968, 586)
@@ -51,12 +54,12 @@ const RETURN_RECT := Rect2(1015, 736, 230, 48)
 const CARD_CANCEL_RECT := Rect2(1015, 700, 230, 28)
 const PORTAL_USE_RECT := Rect2(960, 262, 120, 44)
 const PORTAL_STAY_RECT := Rect2(1100, 262, 120, 44)
-const HOME_START_RECT := Rect2(80, 350, 320, 56)
-const HOME_TUTORIAL_RECT := Rect2(80, 418, 154, 44)
-const HOME_CONTINUE_RECT := Rect2(246, 418, 154, 44)
-const HOME_SEED_INPUT_RECT := Rect2(92, 516, 296, 38)
-const HOME_SEED_START_RECT := Rect2(92, 564, 142, 38)
-const HOME_SEED_COPY_RECT := Rect2(246, 564, 142, 38)
+const HOME_START_RECT := Rect2(76, 610, 300, 58)
+const HOME_TUTORIAL_RECT := Rect2(390, 610, 148, 48)
+const HOME_CONTINUE_RECT := Rect2(550, 610, 174, 48)
+const HOME_SEED_INPUT_RECT := Rect2(762, 616, 292, 38)
+const HOME_SEED_START_RECT := Rect2(762, 666, 138, 38)
+const HOME_SEED_COPY_RECT := Rect2(916, 666, 138, 38)
 const HOME_TESTS_RECT := Rect2(1060, 20, 172, 34)
 const HOME_TEST_COMBAT_RECT := Rect2(780, 120, 205, 42)
 const HOME_TEST_SIDE_RECT := Rect2(997, 120, 205, 42)
@@ -65,9 +68,10 @@ const HOME_TEST_SEARCH_RECT := Rect2(997, 174, 205, 42)
 const HOME_TEST_CHASE_RECT := Rect2(780, 228, 205, 42)
 const HOME_TEST_DIORAMA_RECT := Rect2(997, 228, 205, 42)
 const HOME_TEST_CHARACTER_ANIMATION_RECT := Rect2(780, 282, 422, 42)
-const HOME_RESOLUTION_RECT := Rect2(780, 670, 190, 38)
-const HOME_WINDOW_MODE_RECT := Rect2(982, 670, 105, 38)
-const HOME_QUIT_RECT := Rect2(1099, 670, 105, 38)
+const HOME_RESOLUTION_RECT := Rect2(76, 714, 180, 36)
+const HOME_WINDOW_MODE_RECT := Rect2(270, 714, 102, 36)
+const HOME_TILT_SHIFT_RECT := Rect2(386, 714, 112, 36)
+const HOME_QUIT_RECT := Rect2(1110, 714, 102, 36)
 const CHARACTER_IDLE_RECT := Rect2(32, 222, 130, 38)
 const CHARACTER_STEP_RECT := Rect2(166, 222, 130, 38)
 const CHARACTER_ATTACK_RECT := Rect2(32, 270, 130, 38)
@@ -122,11 +126,11 @@ func _ready() -> void:
 	seed_input.max_length = 10
 	seed_input.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	seed_input.add_theme_color_override("font_color", TEXT)
-	seed_input.add_theme_color_override("font_placeholder_color", Color("b9a9c3"))
+	seed_input.add_theme_color_override("font_placeholder_color", Color("9ddbd6"))
 	seed_input.add_theme_font_override("font", APP_FONT)
 	var seed_style := StyleBoxFlat.new()
-	seed_style.bg_color = Color("17101fd9")
-	seed_style.border_color = Color("8f6aa2")
+	seed_style.bg_color = Color("17151cf2")
+	seed_style.border_color = TEAL
 	seed_style.set_border_width_all(2)
 	seed_style.corner_radius_top_left = 3
 	seed_style.corner_radius_top_right = 3
@@ -134,7 +138,7 @@ func _ready() -> void:
 	seed_style.corner_radius_bottom_right = 3
 	seed_input.add_theme_stylebox_override("normal", seed_style)
 	var seed_focus := seed_style.duplicate() as StyleBoxFlat
-	seed_focus.border_color = MAGENTA
+	seed_focus.border_color = GOLD
 	seed_input.add_theme_stylebox_override("focus", seed_focus)
 	seed_input.text_submitted.connect(_submit_seed_input)
 	add_child(seed_input)
@@ -412,10 +416,17 @@ func _draw() -> void:
 
 
 func _draw_top_bar() -> void:
-	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 72), Color("101820f4"), true)
-	draw_rect(Rect2(0, 69, DESIGN_SIZE.x, 3), TEAL, true)
-	_label("织梦频道", Vector2(24, 29), 21, TEXT)
-	_label("第 %02d 集 · 种子 %010d" % [game.run_progress, game.run_seed], Vector2(24, 52), 11, Color("70cdbf"))
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 72), Color("17151cf6"), true)
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 5), MAGENTA, true)
+	draw_rect(Rect2(0, 67, DESIGN_SIZE.x, 5), BLUE, true)
+	var title_burst := PackedVector2Array([
+		Vector2(14, 13), Vector2(42, 8), Vector2(54, 15), Vector2(82, 8),
+		Vector2(98, 15), Vector2(136, 9), Vector2(153, 18), Vector2(212, 11),
+		Vector2(225, 33), Vector2(213, 58), Vector2(24, 59),
+	])
+	draw_colored_polygon(title_burst, BLUE)
+	_display_label("织梦频道", Vector2(24, 42), 28, TEXT)
+	_label("第 %02d 集 · CH-%010d" % [game.run_progress, game.run_seed], Vector2(244, 41), 11, Color("7de0d5"))
 	if game.phase == "combat":
 		_draw_chip(Rect2(800, 18, 112, 32), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 11)
 		_draw_chip(Rect2(920, 18, 112, 32), _phase_label(), MAGENTA, TEXT, 11)
@@ -423,36 +434,35 @@ func _draw_top_bar() -> void:
 		_draw_chip(Rect2(560, 18, 112, 32), "速度 %d" % int(game.player_speed), TEAL, TEXT, 11)
 		_draw_chip(Rect2(680, 18, 112, 32), "生命 %d/%d" % [game.player_hp, game.player_max_hp], RED, TEXT, 11)
 		_draw_chip(Rect2(800, 18, 112, 32), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 11)
-		_draw_chip(Rect2(920, 18, 112, 32), _phase_label(), Color("344751"), TEXT, 11)
+		_draw_chip(Rect2(920, 18, 112, 32), _phase_label(), BLUE, TEXT, 11)
 	if game.phase == "combat" or game.phase in ["explore", "build", "room_ready"]:
 		_draw_button(CAMERA_RESET_RECT, "镜头复位" if game.phase == "combat" else "地图复位", TEAL, TEXT)
 	if not game.phase.begins_with("lab_"):
-		_draw_button(RESET_RECT, "回到标题", Color("394852"), TEXT)
+		_draw_button(RESET_RECT, "回到标题", MAGENTA, TEXT)
 
 
 func _draw_home() -> void:
-	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, DESIGN_SIZE.y), Color(0.04, 0.015, 0.055, 0.48), true)
-	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 68), Color("0d0512e8"), true)
-	draw_rect(Rect2(0, 66, DESIGN_SIZE.x, 3), Color("6c3a7e"), true)
-	_label("CHANNEL DREAM · CH-198X", Vector2(34, 41), 13, Color("b997c8"))
-	_label("今晚播出 · 纸盒片场正在失控", Vector2(84, 132), 13, Color("d7a7e7"))
-	_label("织梦频道", Vector2(78, 204), 62, Color("fff7ff"))
-	_label("一档会记住你的荒诞儿童玩具秀", Vector2(84, 246), 20, Color("f3c96b"))
-	_draw_wrapped("拧开旧电视，走进会咬人的纸盒布景。把道具摆进场地，用走位把怪家伙引进一场场节目事故。", Vector2(84, 286), 470, 15, Color("dfd1e7"))
-	_draw_texture_button(HOME_START_RECT, "打开电视机", BTN_START_TEXTURE, Color.WHITE, 15)
-	_draw_texture_button(HOME_TUTORIAL_RECT, "新手教学", BTN_END_TEXTURE, Color.WHITE, 14)
+	# HomeVideo remains the full-screen homepage. Only the original text title is
+	# replaced by the author's transparent 80s programme mark.
+	_draw_texture_contained(HOME_TITLE_80S, Rect2(36, 48, 560, 486))
+	# Keep controls below the video/title composition so the PV remains visible.
+	draw_rect(Rect2(0, 574, DESIGN_SIZE.x, 226), Color("17151cf2"), true)
+	draw_rect(Rect2(0, 574, DESIGN_SIZE.x, 6), MAGENTA, true)
+	draw_rect(Rect2(0, 580, DESIGN_SIZE.x, 3), GOLD, true)
+	_display_label("今晚播出", Vector2(76, 600), 20, GOLD)
+	_label("纸盒布景正在失控 · 旋开电视，开始这一集", Vector2(202, 598), 12, MUTED)
+	_draw_button(HOME_START_RECT, "打开电视机", MAGENTA, TEXT)
+	_draw_button(HOME_TUTORIAL_RECT, "新手教学", BLUE, TEXT)
 	if game.has_saved_run():
-		_draw_texture_button(HOME_CONTINUE_RECT, "接着看上集", BTN_END_TEXTURE, Color.WHITE, 13)
-	draw_rect(Rect2(72, 482, 336, 132), Color("100b17d9"), true)
-	draw_rect(Rect2(72, 482, 336, 132), Color("725184"), false, 2.0)
-	_label("自定义播出", Vector2(92, 505), 11, Color("cbb6d4"))
-	_draw_button(HOME_SEED_START_RECT, "按种子开局", Color("355e5d"), TEXT)
-	_draw_button(HOME_SEED_COPY_RECT, "复制种子", Color("394852"), TEXT)
-	_draw_button(HOME_TESTS_RECT, "关闭后台" if game.home_tests_open else "后台测试", Color("34263d"), TEXT)
+		_draw_button(HOME_CONTINUE_RECT, "接着看上集", TEAL, TEXT)
+	_draw_ticket_panel(Rect2(744, 590, 330, 128), Color("fff3dff2"), TEAL)
+	_label("自定义播出", Vector2(762, 612), 11, INK)
+	_draw_button(HOME_SEED_START_RECT, "按种子开局", TEAL, TEXT)
+	_draw_button(HOME_SEED_COPY_RECT, "复制种子", BLUE, TEXT)
+	_draw_button(HOME_TESTS_RECT, "关闭后台" if game.home_tests_open else "后台测试", Color("734b87"), TEXT)
 	if game.home_tests_open:
-		draw_rect(Rect2(764, 96, 454, 242), Color("100b17ed"), true)
-		draw_rect(Rect2(764, 96, 454, 242), Color("8f6aa2"), false, 2.0)
-		_label("节目后台 · 仅供开发检查", Vector2(780, 112), 10, Color("cbb6d4"))
+		_draw_ticket_panel(Rect2(764, 96, 454, 242), Color("17151cf2"), MAGENTA)
+		_label("节目后台 · 仅供开发检查", Vector2(780, 120), 10, MUTED)
 		_draw_button(HOME_TEST_COMBAT_RECT, "战斗意图实验", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_SIDE_RECT, "WASD 横版手感", TEAL, TEXT)
 		_draw_button(HOME_TEST_PUZZLE_RECT, "八数码拼图", GOLD, INK)
@@ -460,13 +470,13 @@ func _draw_home() -> void:
 		_draw_button(HOME_TEST_CHASE_RECT, "警察抓小偷", RED, TEXT)
 		_draw_button(HOME_TEST_DIORAMA_RECT, "桌模扩建 PCG", Color("5967a8"), TEXT)
 		_draw_button(HOME_TEST_CHARACTER_ANIMATION_RECT, "角色动画检查", Color("3e8b78"), TEXT)
-	draw_rect(Rect2(764, 626, 454, 96), Color("100b17d9"), true)
-	draw_rect(Rect2(764, 626, 454, 96), Color("725184"), false, 2.0)
-	_label("显示设置", Vector2(780, 650), 11, Color("cbb6d4"))
-	_draw_button(HOME_RESOLUTION_RECT, game.display_resolution_label(), Color("355e5d"), TEXT)
-	_draw_button(HOME_WINDOW_MODE_RECT, game.display_mode_label(), Color("394852"), TEXT)
+	_label("画面", Vector2(76, 706), 10, MUTED)
+	_draw_button(HOME_RESOLUTION_RECT, game.display_resolution_label(), TEAL, TEXT)
+	_draw_button(HOME_WINDOW_MODE_RECT, game.display_mode_label(), BLUE, TEXT)
+	_draw_button(HOME_TILT_SHIFT_RECT, game.tilt_shift_label(), GOLD, INK)
 	_draw_button(HOME_QUIT_RECT, "退出", RED, TEXT)
-	_label("纸盒布景 · 黏土演员 · 每次开播都是不同的一集", Vector2(84, 734), 13, Color("c9afd5"))
+	draw_texture_rect(TV_MASCOT, Rect2(1068, 594, 92, 92), false)
+	_label("纸盒布景 · 黏土演员 · 每次开播都是不同的一集", Vector2(530, 742), 11, MUTED)
 
 
 func _draw_lab_hud() -> void:
@@ -501,16 +511,16 @@ func _draw_lab_hud() -> void:
 
 
 func _draw_puzzle() -> void:
-	draw_rect(Rect2(235, 120, 810, 620), Color("f8e9c7"), true)
-	draw_rect(Rect2(235, 120, 810, 620), INK, false, 3.0)
-	_label("雪花拼图", Vector2(285, 174), 30, INK)
+	_draw_ticket_panel(Rect2(235, 120, 810, 620), PAPER, MAGENTA)
+	_display_label("雪花拼图", Vector2(285, 174), 32, BLUE)
 	_label("把 1–8 滑回顺序，空格在右下。", Vector2(285, 210), 14, Color("665746"))
 	var origin := Vector2(385, 245)
 	var tile_size := 118.0
 	for i in range(game.puzzle_board.size()):
 		var value: int = game.puzzle_board[i]
 		var rect := Rect2(origin + Vector2(i % 3, i / 3) * (tile_size + 8.0), Vector2(tile_size, tile_size))
-		draw_rect(rect, Color("355e5d") if value > 0 else Color("d7c7a7"), true)
+		draw_rect(Rect2(rect.position + Vector2(4, 5), rect.size), INK, true)
+		draw_rect(rect, TEAL if value > 0 else PAPER_2, true)
 		draw_rect(rect, INK, false, 2.0)
 		if value > 0:
 			_draw_centered(str(value), rect, 34, TEXT)
@@ -520,9 +530,8 @@ func _draw_puzzle() -> void:
 
 
 func _draw_chase() -> void:
-	draw_rect(Rect2(160, 130, 960, 540), PAPER, true)
-	draw_rect(Rect2(160, 130, 960, 540), INK, false, 3.0)
-	_label("警察抓小偷 · 打字追逐", Vector2(210, 185), 28, INK)
+	_draw_ticket_panel(Rect2(160, 130, 960, 540), PAPER, BLUE)
+	_display_label("警察抓小偷 · 打字追逐", Vector2(210, 185), 30, MAGENTA)
 	_label("你是小偷：打完整句往门口跑。警察匀速追；打错只闪一下、不清空进度。", Vector2(210, 220), 14, Color("665746"))
 	var track := Rect2(220, 285, 840, 64)
 	draw_rect(track, Color("d7c7a7"), true)
@@ -557,18 +566,15 @@ func _draw_chase() -> void:
 
 
 func _draw_reward_modal() -> void:
-	draw_rect(Rect2(0, 72, DESIGN_SIZE.x, DESIGN_SIZE.y - 72), Color("071116fb"), true)
-	_label("本集道具台", Vector2(536, 138), 30, TEXT)
+	draw_rect(Rect2(0, 72, DESIGN_SIZE.x, DESIGN_SIZE.y - 72), Color("17151cfb"), true)
+	_display_label("本集道具台", Vector2(536, 138), 34, GOLD)
 	_label("节目组只准带走一件；它会继续跟着演员参与本集。", Vector2(430, 174), 14, MUTED)
 	for i in range(mini(REWARD_CARD_RECTS.size(), game.reward_options.size())):
 		var reward: Dictionary = game.reward_options[i]
 		var rect: Rect2 = REWARD_CARD_RECTS[i]
 		var kind := str(reward.get("kind", "stat"))
 		var accent: Color = TEAL if kind == "card" else MAGENTA if kind == "relic" else GOLD
-		draw_rect(Rect2(rect.position + Vector2(0, 6), rect.size), Color("03070a"), true)
-		draw_rect(rect, PAPER, true)
-		draw_rect(Rect2(rect.position, Vector2(rect.size.x, 12)), accent, true)
-		draw_rect(rect, INK, false, 2.0)
+		_draw_ticket_panel(rect, PAPER, accent)
 		_draw_chip(Rect2(rect.position + Vector2(18, 26), Vector2(86, 24)), _reward_kind_label(kind), accent, TEXT if kind != "stat" else INK, 10)
 		var art_rect := Rect2(rect.position + Vector2(54, 58), Vector2(152, 104))
 		var reward_icon: Texture2D = _reward_icon(reward)
@@ -593,9 +599,8 @@ func _draw_house_hud() -> void:
 		_draw_chip(Rect2(290, 138, 500, 28), game.pcg_room_state_debug_text(), Color("46545b"), TEXT, 10)
 		_draw_chip(Rect2(802, 138, 168, 28), "小型 + = 扩建口", Color("c88b2f"), INK, 10)
 	var side := Rect2(1004, 88, 260, 680)
-	draw_rect(side, Color("f8e9c7f5"), true)
-	draw_rect(side, INK, false, 3.0)
-	draw_rect(Rect2(1004, 88, 8, 680), TEAL, true)
+	_draw_ticket_panel(side, Color("fff3dff5"), TEAL)
+	draw_texture_rect(TV_MASCOT, Rect2(1194, 102, 48, 48), false)
 	_label("正在播出", Vector2(1024, 120), 11, Color("806448"))
 	_label(str(room.get("name", "玄关")) if revealed else "未知布景", Vector2(1024, 154), 23, INK)
 	_draw_chip(Rect2(1024, 170, 116, 30), _room_kind_label(room) if revealed else "信号未解码", _room_kind_color(room) if revealed else Color("4f5960"), TEXT, 11)
@@ -634,9 +639,7 @@ func _draw_house_hud() -> void:
 
 
 func _draw_build_dock() -> void:
-	draw_rect(Rect2(20, 478, 968, 290), Color("111b23f5"), true)
-	draw_rect(Rect2(20, 478, 968, 290), Color("6bbeb1"), false, 3.0)
-	draw_rect(Rect2(20, 478, 968, 8), TEAL, true)
+	_draw_ticket_panel(Rect2(20, 478, 968, 290), Color("17151cf5"), TEAL)
 	_label("下一块布景", Vector2(44, 511), 17, TEXT)
 	_label("选票根、对门位、摆上节目台；内容要等演员走进去才揭晓。", Vector2(194, 511), 11, MUTED)
 	for i in range(mini(3, game.build_offers.size())):
@@ -661,8 +664,8 @@ func _draw_build_dock() -> void:
 
 
 func _draw_omen_modal() -> void:
-	draw_rect(Rect2(0, 72, DESIGN_SIZE.x, DESIGN_SIZE.y - 72), Color("071116f7"), true)
-	_label("开播前的两张提词卡", Vector2(438, 148), 30, TEXT)
+	draw_rect(Rect2(0, 72, DESIGN_SIZE.x, DESIGN_SIZE.y - 72), Color("17151cf7"), true)
+	_display_label("开播前的两张提词卡", Vector2(438, 148), 34, GOLD)
 	_label("频道会兑现其中一条；另一条会被剪掉。", Vector2(492, 184), 14, MUTED)
 	for i in range(mini(2, game.omen_options.size())):
 		var relic_id: String = game.omen_options[i]
@@ -670,10 +673,7 @@ func _draw_omen_modal() -> void:
 		var x := 270.0 + i * 420.0
 		var rect := Rect2(x, 260, 320, 275)
 		var accent := TEAL if i == 0 else MAGENTA
-		draw_rect(Rect2(rect.position + Vector2(0, 6), rect.size), Color("03070a"), true)
-		draw_rect(rect, Color("fff4d8"), true)
-		draw_rect(Rect2(rect.position, Vector2(rect.size.x, 12)), accent, true)
-		draw_rect(rect, accent, false, 2.0)
+		_draw_ticket_panel(rect, PAPER, accent)
 		draw_circle(Vector2(x + 52, 310), 28.0, Color(accent, 0.18))
 		draw_texture_rect(OMEN_ICON, Rect2(x + 26, 284, 52, 52), false, Color(1, 1, 1, 0.92))
 		_label("A" if i == 0 else "B", Vector2(x + 278, 302), 18, accent)
@@ -693,8 +693,7 @@ func _draw_combat_hud() -> void:
 	_draw_actor_strip(Rect2(24, 92, 300, 108), PLAYER_PROFILE, "莉莉", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_block, 4, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
 	_draw_actor_strip(Rect2(948, 92, 300, 108), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, combat.enemy_hp if combat.enemy_revealed else -1, combat.enemy_max_hp, "韧性", combat.enemy_toughness if combat.enemy_revealed else 0, combat.enemy_max_toughness, "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
 
-	draw_rect(action_rect, Color("101820f4"), true)
-	draw_rect(action_rect, GOLD, false, 3.0)
+	_draw_ticket_panel(action_rect, Color("17151cf4"), GOLD)
 	_draw_action_ticket(Rect2(action_rect.position + Vector2(10, 8), Vector2(action_rect.size.x - 20, action_rect.size.y - 16)))
 	_draw_card_frame_contained(CARD_BACK_BLUE, deck_rect, Color(1, 1, 1, 0.92))
 	_draw_card_frame_contained(CARD_BACK_RED, discard_rect, Color(1, 1, 1, 0.92))
@@ -1280,6 +1279,8 @@ func _gui_input(event: InputEvent) -> void:
 			game.cycle_display_resolution()
 		elif HOME_WINDOW_MODE_RECT.has_point(point):
 			game.toggle_display_mode()
+		elif HOME_TILT_SHIFT_RECT.has_point(point):
+			game.toggle_tilt_shift()
 		elif HOME_QUIT_RECT.has_point(point):
 			game.quit_game()
 		return
@@ -1403,38 +1404,45 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _draw_ticket_panel(rect: Rect2, fill: Color, accent: Color) -> void:
-	draw_rect(Rect2(rect.position + Vector2(0, 6), rect.size), Color("080b0f99"), true)
+	draw_rect(Rect2(rect.position + Vector2(5, 6), rect.size), Color("08070b99"), true)
 	draw_rect(rect, fill, true)
 	draw_rect(rect, INK, false, 3.0)
-	draw_line(rect.position + Vector2(14, 10), rect.position + Vector2(rect.size.x - 14, 10), accent, 4.0)
+	draw_rect(Rect2(rect.position, Vector2(9, rect.size.y)), accent, true)
+	draw_line(rect.position + Vector2(18, 11), rect.position + Vector2(rect.size.x - 18, 11), accent, 5.0)
+	draw_circle(rect.position + Vector2(rect.size.x - 18, 18), 6.0, MAGENTA)
 
 
 func _draw_coach(rect: Rect2, kicker: String, body: String) -> void:
-	draw_rect(rect, Color("101820eb"), true)
-	draw_rect(Rect2(rect.position, Vector2(7, rect.size.y)), GOLD, true)
-	_label(kicker, rect.position + Vector2(20, 23), 10, GOLD)
-	_label(_shorten(body, 92), rect.position + Vector2(20, 49), 13, TEXT)
+	draw_rect(Rect2(rect.position + Vector2(5, 6), rect.size), Color("08070b99"), true)
+	draw_rect(rect, Color("251b35f2"), true)
+	draw_rect(rect, INK, false, 3.0)
+	draw_rect(Rect2(rect.position, Vector2(9, rect.size.y)), MAGENTA, true)
+	draw_rect(Rect2(rect.position + Vector2(9, 0), Vector2(96, 8)), GOLD, true)
+	_display_label(kicker, rect.position + Vector2(22, 25), 15, GOLD)
+	_label(_shorten(body, 92), rect.position + Vector2(22, 52), 13, TEXT)
 
 
 func _draw_button(rect: Rect2, caption: String, fill: Color, text_color: Color) -> void:
-	draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), INK, true)
+	draw_rect(Rect2(rect.position + Vector2(5, 5), rect.size), INK, true)
+	draw_rect(rect.grow(2.0), TEXT, true)
 	draw_rect(rect, fill, true)
 	draw_rect(rect, INK, false, 2.0)
-	_draw_centered(caption, rect, 14, text_color)
+	draw_line(rect.position + Vector2(8, 5), Vector2(rect.end.x - 8, rect.position.y + 5), Color(1, 1, 1, 0.42), 2.0)
+	_draw_display_centered(caption, rect, 15, text_color)
 
 
 func _draw_texture_button(rect: Rect2, caption: String, texture: Texture2D, text_color: Color, font_size: int = 14, modulate: Color = Color.WHITE) -> void:
 	if texture != null:
 		draw_texture_rect(texture, rect, false, modulate)
-	_draw_centered(caption, rect, font_size, text_color)
+	_draw_display_centered(caption, rect, font_size, text_color)
 
 
 func _draw_chip(rect: Rect2, caption: String, fill: Color, text_color: Color, font_size: int) -> void:
-	var radius := rect.size.y * 0.5
-	draw_rect(Rect2(rect.position + Vector2(radius, 0), Vector2(maxf(0.0, rect.size.x - radius * 2.0), rect.size.y)), fill, true)
-	draw_circle(rect.position + Vector2(radius, radius), radius, fill)
-	draw_circle(Vector2(rect.end.x - radius, rect.position.y + radius), radius, fill)
-	_draw_centered(caption, rect, font_size, text_color)
+	draw_rect(Rect2(rect.position + Vector2(3, 4), rect.size), INK, true)
+	draw_rect(rect, fill, true)
+	draw_rect(rect, TEXT, false, 1.5)
+	draw_rect(Rect2(rect.position, Vector2(5, rect.size.y)), INK, true)
+	_draw_display_centered(caption, rect, font_size + 1, text_color)
 
 
 func _draw_bar(rect: Rect2, value: int, maximum: int, fill: Color, empty: Color) -> void:
@@ -1448,10 +1456,21 @@ func _label(value: String, pos: Vector2, font_size: int, color: Color) -> void:
 	draw_string(APP_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 
+func _display_label(value: String, pos: Vector2, font_size: int, color: Color) -> void:
+	draw_string(DISPLAY_FONT, pos + Vector2(2, 2), value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, INK)
+	draw_string(DISPLAY_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+
+
 func _draw_centered(value: String, rect: Rect2, font_size: int, color: Color) -> void:
 	var bounds := APP_FONT.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	var pos := rect.position + Vector2((rect.size.x - bounds.x) * 0.5, (rect.size.y + bounds.y) * 0.5 - 2.0)
 	_label(value, pos, font_size, color)
+
+
+func _draw_display_centered(value: String, rect: Rect2, font_size: int, color: Color) -> void:
+	var bounds := DISPLAY_FONT.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	var pos := rect.position + Vector2((rect.size.x - bounds.x) * 0.5, (rect.size.y + bounds.y) * 0.5 - 2.0)
+	_display_label(value, pos, font_size, color)
 
 
 func _draw_wrapped(value: String, pos: Vector2, width: float, font_size: int, color: Color) -> void:

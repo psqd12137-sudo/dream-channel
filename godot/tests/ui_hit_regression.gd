@@ -23,6 +23,13 @@ func _run() -> void:
 	var resolution_before: int = game.display_resolution_index
 	_click(hud, _to_screen(hud, _design_center(hud.HOME_RESOLUTION_RECT)))
 	_check(game.display_resolution_index != resolution_before, "resolution button must cycle the display resolution")
+	var tilt_shift_before: bool = game.tilt_shift_enabled
+	_click(hud, _to_screen(hud, _design_center(hud.HOME_TILT_SHIFT_RECT)))
+	_check(game.tilt_shift_enabled != tilt_shift_before, "tilt-shift button must toggle the game-world effect")
+	var world_material := game.world_container.material as ShaderMaterial
+	_check(world_material != null, "formal game world must own a tilt-shift shader material")
+	if world_material != null:
+		_check(bool(world_material.get_shader_parameter("effect_enabled")) == game.tilt_shift_enabled, "tilt-shift shader parameter must follow the setting")
 
 	_click(hud, _to_screen(hud, _design_center(hud.HOME_START_RECT)))
 	await process_frame
@@ -69,6 +76,8 @@ func _run() -> void:
 	var resolution_after: int = game.display_resolution_index
 	_click(hud, _to_screen(hud, _design_center(hud.HOME_RESOLUTION_RECT)))
 	_check(game.display_resolution_index != resolution_after, "resolution button must remain clickable after display switches")
+	if game.tilt_shift_enabled != tilt_shift_before:
+		game.toggle_tilt_shift()
 
 	game.queue_free()
 	await process_frame
@@ -110,7 +119,7 @@ func _check(condition: bool, message: String) -> void:
 
 func _finish() -> void:
 	if failures.is_empty():
-		print("CHANNEL_UI_HIT: PASS buttons hit display switch world isolation")
+		print("CHANNEL_UI_HIT: PASS buttons hit display switch tilt-shift world isolation")
 		quit(0)
 	else:
 		for failure: String in failures:

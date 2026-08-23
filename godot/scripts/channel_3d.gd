@@ -245,6 +245,7 @@ var lab_camera_distance := 14.0
 var pcg_diorama_seed := 20260816
 var display_resolution_index := 2
 var display_fullscreen := false
+var tilt_shift_enabled := true
 var display_change_generation := 0
 
 
@@ -252,6 +253,7 @@ func _ready() -> void:
 	_load_display_settings()
 	_configure_environment()
 	_configure_home_video()
+	_apply_tilt_shift_state()
 	presentation = _load_json_dictionary(PRESENTATION_MANIFEST)
 	lab_root = Node3D.new()
 	lab_root.name = "LabRoot"
@@ -271,6 +273,10 @@ func display_mode_label() -> String:
 	return "全屏" if display_fullscreen else "窗口"
 
 
+func tilt_shift_label() -> String:
+	return "移轴 开" if tilt_shift_enabled else "移轴 关"
+
+
 func cycle_display_resolution() -> void:
 	display_resolution_index = (display_resolution_index + 1) % DISPLAY_RESOLUTIONS.size()
 	_apply_display_settings(true)
@@ -283,6 +289,13 @@ func toggle_display_mode() -> void:
 	_refresh_hud()
 
 
+func toggle_tilt_shift() -> void:
+	tilt_shift_enabled = not tilt_shift_enabled
+	_apply_tilt_shift_state()
+	_save_display_settings()
+	_refresh_hud()
+
+
 func quit_game() -> void:
 	get_tree().quit()
 
@@ -292,6 +305,7 @@ func _load_display_settings() -> void:
 	if settings.load(DISPLAY_SETTINGS_PATH) == OK:
 		display_resolution_index = clampi(int(settings.get_value("display", "resolution_index", 2)), 0, DISPLAY_RESOLUTIONS.size() - 1)
 		display_fullscreen = bool(settings.get_value("display", "fullscreen", false))
+		tilt_shift_enabled = bool(settings.get_value("visual", "tilt_shift", true))
 	_apply_display_settings(false)
 
 
@@ -319,11 +333,26 @@ func _apply_display_settings(save_settings: bool) -> void:
 	if hud != null:
 		hud.sync_layout()
 	if save_settings:
-		var settings := ConfigFile.new()
-		settings.set_value("display", "resolution_index", display_resolution_index)
-		settings.set_value("display", "fullscreen", display_fullscreen)
-		settings.save(DISPLAY_SETTINGS_PATH)
+		_save_display_settings()
 	_refresh_hud()
+
+
+func _save_display_settings() -> void:
+	var settings := ConfigFile.new()
+	settings.load(DISPLAY_SETTINGS_PATH)
+	settings.set_value("display", "resolution_index", display_resolution_index)
+	settings.set_value("display", "fullscreen", display_fullscreen)
+	settings.set_value("visual", "tilt_shift", tilt_shift_enabled)
+	settings.save(DISPLAY_SETTINGS_PATH)
+
+
+func _apply_tilt_shift_state() -> void:
+	if world_container == null:
+		return
+	var shader_material := world_container.material as ShaderMaterial
+	if shader_material == null:
+		return
+	shader_material.set_shader_parameter("effect_enabled", tilt_shift_enabled)
 
 
 func _fit_windowed_resolution(requested: Vector2i, usable_size: Vector2i) -> Vector2i:
@@ -2475,7 +2504,9 @@ func _add_kenney_formal_composer() -> void:
 	composer.name = "KenneyFormalComposer"
 	composer.generation_seed = run_seed
 	composer.animate_room_build = false
-	composer.show_room_ids = true
+	# Room identity and state live in the HUD. Floating labels break the
+	# miniature-photography read and obscure props when rooms overlap on screen.
+	composer.show_room_ids = false
 	composer.kenney_only = true
 	composer.use_kaykit_room_shell = true
 	composer.unify_room_floor_finish = large_room_mix_test_mode
