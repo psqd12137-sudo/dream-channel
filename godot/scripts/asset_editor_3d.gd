@@ -2,6 +2,7 @@ extends Node3D
 
 const Rules = preload("res://scripts/asset_diorama_rules.gd")
 const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
+const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const RoomShellGraph = preload("res://scripts/room_shell_graph.gd")
 
@@ -15,6 +16,7 @@ const FORMAL_OVERRIDE_DIR := "res://data/editor/overrides/"
 const INVALID_POINT := Vector3(INF, INF, INF)
 const INVALID_CELL := Vector2i(999999, 999999)
 const UNDO_LIMIT := 50
+const FORMAL_BASE_LAYOUT_SEED := 20260816
 const GHOST_CHECK_INTERVAL_MS := 50
 const GHOST_CHECK_DISTANCE := 0.05
 const GOLD := Color("#f3a51f")
@@ -46,6 +48,7 @@ const ROOM_SHAPE_NAMES := {
 	"stair5": "5格 阶梯房",
 	"u5": "5格 U 形房",
 }
+const FORMAL_DIRS: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 
 var catalog: Dictionary = {}
 var failed_paths: Array[String] = []
@@ -163,6 +166,7 @@ func _ready() -> void:
 	room_cells = Rules.rotated_cells(room_shape_id, room_rotation_quarters)
 	_rebuild_room(true)
 	_build_reference_actor()
+	_load_formal_room_layout(formal_room_id, false)
 	formal_room.item_selected.connect(_on_formal_room_selected)
 	room_shape.item_selected.connect(_on_room_shape_selected)
 	rotate_room_button.pressed.connect(_rotate_room)
@@ -1660,13 +1664,275 @@ func _on_formal_room_selected(index: int) -> void:
 	if suppress_formal_room_ui:
 		return
 	var selected_id := str(formal_room.get_item_metadata(index))
-	var config: Dictionary = RoomFootprintCatalog.ROOM_CONFIG.get(selected_id, {})
-	var shape_id := str(config.get("shape", "single"))
-	_change_room(shape_id, 0, true)
-	formal_room_id = selected_id
-	override_room_id.text = selected_id
+	_load_formal_room_layout(selected_id, true)
+
+
+func _load_formal_room_layout(room_id: String, record_undo := true) -> int:
+	if not RoomFootprintCatalog.ROOM_CONFIG.has(room_id):
+		_update_status("正式房间不存在：%s" % room_id)
+		return -1
+	var before := _snapshot_state()
+	var state := _formal_override_state(room_id)
+	var source := "正式 override"
+	if state.is_empty():
+		state = _generated_formal_room_state(room_id)
+		source = "正式游戏 PCG 底稿"
+	var loaded := _rebuild_from_state(state)
+	if record_undo:
+		_push_undo_snapshot(before)
+	override_room_id.text = room_id
+	template_name.text = "override_%s" % room_id
 	_sync_formal_room_ui()
-	_update_status("已选择正式房间：%s · %d格" % [selected_id, room_cells.size()])
+	_update_status("已载入 %s：%s · %d格 · %d件家具 · %d段墙（可直接修改）" % [source, room_id, room_cells.size(), placements.get_child_count(), walls.get_child_count()])
+	return loaded
+
+
+func _formal_override_state(room_id: String) -> Dictionary:
+	var path := FORMAL_OVERRIDE_DIR + room_id + ".json"
+	if not FileAccess.file_exists(path):
+		return {}
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not parsed is Dictionary:
+		push_warning("Asset editor ignored invalid formal override: %s" % path)
+		return {}
+	var data := parsed as Dictionary
+	if int(data.get("schema_version", 0)) < 3 or str(data.get("room_id", room_id)) != room_id:
+		push_warning("Asset editor ignored incompatible formal override: %s" % path)
+		return {}
+	return {
+		"room_shape": str(data.get("room_shape", (RoomFootprintCatalog.ROOM_CONFIG[room_id] as Dictionary).get("shape", "single"))),
+		"room_rotation_quarters": int(data.get("room_rotation_quarters", 0)),
+		"formal_room_id": room_id,
+		"assets": (data.get("assets", []) as Array).duplicate(true),
+		"walls": (data.get("walls", []) as Array).duplicate(true),
+		"fixtures": (data.get("fixtures", []) as Array).duplicate(true),
+	}
+
+
+func _generated_formal_room_state(room_id: String) -> Dictionary:
+	var config: Dictionary = RoomFootprintCatalog.ROOM_CONFIG.get(room_id, {})
+	var shape_id := str(config.get("shape", "single"))
+	var cells := Rules.rotated_cells(shape_id, 0)
+	var walls_snapshot := _formal_perimeter_walls(cells)
+	var room := {
+		"id": room_id,
+		"room_type": room_id,
+		"size": cells.size(),
+		"room_size": cells.size(),
+	}
+	var request := RoomPropCatalog.placement_request(room, 0, FORMAL_BASE_LAYOUT_SEED)
+	var candidates := _formal_prop_candidates(cells, walls_snapshot)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(request.get("seed", FORMAL_BASE_LAYOUT_SEED))
+	var placed_records: Array[Dictionary] = []
+	var assets_snapshot: Array[Dictionary] = []
+	for raw_item: Variant in request.get("items", []):
+		var item := raw_item as Dictionary
+		var placement := _take_formal_prop_placement(str(request.get("theme", "living")), str(item.get("slot", RoomPropCatalog.SLOT_ACCENT)), str(item.get("asset_id", "")), candidates, placed_records, rng)
+		if placement.is_empty():
+			continue
+		var entry := placement.get("entry", {}) as Dictionary
+		var candidate := placement.get("candidate", {}) as Dictionary
+		var editor_id := _catalog_id_for_path(str(entry.get("path", "")))
+		var catalog_entry := _find_asset_entry(editor_id)
+		if editor_id.is_empty() or catalog_entry.is_empty():
+			continue
+		var position: Vector3 = candidate.get("position", Vector3.ZERO)
+		if bool(entry.get("overlay", false)):
+			position.y = 0.005
+		var yaw := float(candidate.get("yaw", 0.0))
+		if str(candidate.get("slot", "")) in [RoomPropCatalog.SLOT_MAIN, RoomPropCatalog.SLOT_ACCENT]:
+			yaw += float(rng.randi_range(0, 3)) * PI * 0.5
+		var actual_scale := _base_scale(catalog_entry)
+		assets_snapshot.append({
+			"asset_id": editor_id,
+			"position": [position.x, position.y, position.z],
+			"yaw": yaw,
+			"scale": [actual_scale.x, actual_scale.y, actual_scale.z],
+		})
+		placed_records.append({
+			"asset_id": str(entry.get("id", "")),
+			"position": position,
+			"footprint": entry.get("footprint", Vector2(0.3, 0.3)),
+			"overlay": bool(entry.get("overlay", false)),
+		})
+	return {
+		"room_shape": shape_id,
+		"room_rotation_quarters": 0,
+		"formal_room_id": room_id,
+		"assets": assets_snapshot,
+		"walls": walls_snapshot,
+		"fixtures": [],
+	}
+
+
+func _formal_perimeter_walls(cells: Array[Vector2i]) -> Array[Dictionary]:
+	var boundary_edges := Rules.room_boundary_edges(cells)
+	var doorway_index := _formal_doorway_edge_index(boundary_edges)
+	var result: Array[Dictionary] = []
+	for index in range(boundary_edges.size()):
+		var edge := boundary_edges[index] as Dictionary
+		var start: Vector3 = edge.get("start", Vector3.ZERO)
+		var finish: Vector3 = edge.get("end", Vector3.ZERO)
+		var axis: Vector3i = edge.get("axis", Vector3i.ZERO)
+		var cell: Vector2i = edge.get("cell", Vector2i.ZERO)
+		var position := (start + finish) * 0.5
+		var is_door := index == doorway_index
+		result.append({
+			"wall_kind": "cb_doorway" if is_door else "cb_wall",
+			"position": [position.x, Rules.WALL_Y_OFFSET, position.z],
+			"yaw": _wall_yaw(axis),
+			"wall_axis": [axis.x, axis.y, axis.z],
+			"wall_cell": [cell.x, cell.y],
+			"wall_start": [start.x, start.y, start.z],
+			"wall_end": [finish.x, finish.y, finish.z],
+			"is_door": is_door,
+			"door_restore_kind": "cb_wall" if is_door else "",
+			"door_restore_start": [start.x, start.y, start.z] if is_door else [0.0, 0.0, 0.0],
+			"door_restore_end": [finish.x, finish.y, finish.z] if is_door else [0.0, 0.0, 0.0],
+		})
+	return result
+
+
+func _formal_doorway_edge_index(edges: Array[Dictionary]) -> int:
+	var best_index := 0
+	var best_score := -INF
+	for index in range(edges.size()):
+		var edge := edges[index] as Dictionary
+		var start: Vector3 = edge.get("start", Vector3.ZERO)
+		var finish: Vector3 = edge.get("end", Vector3.ZERO)
+		var midpoint := (start + finish) * 0.5
+		var axis: Vector3i = edge.get("axis", Vector3i.ZERO)
+		# Prefer the camera-facing +X side, then the widest +Z edge. This leaves the
+		# generated baseline readable before the user starts moving walls.
+		var score := midpoint.x * 100.0 + midpoint.z + (10.0 if axis.z != 0 else 0.0)
+		if score > best_score:
+			best_score = score
+			best_index = index
+	return best_index
+
+
+func _formal_prop_candidates(cells: Array[Vector2i], walls_snapshot: Array[Dictionary]) -> Dictionary:
+	var result := {
+		RoomPropCatalog.SLOT_MAIN: [],
+		RoomPropCatalog.SLOT_WALL: [],
+		RoomPropCatalog.SLOT_CORNER: [],
+		RoomPropCatalog.SLOT_ACCENT: [],
+	}
+	var lookup := {}
+	for cell in cells:
+		lookup[cell] = true
+	var doorway_positions: Array[Vector3] = []
+	for wall: Dictionary in walls_snapshot:
+		if bool(wall.get("is_door", false)):
+			doorway_positions.append(_array_vec3(wall.get("position", [])))
+	for cell in cells:
+		var base := Vector3((float(cell.x) + 0.5) * CELL, 0.0, (float(cell.y) + 0.5) * CELL)
+		(result[RoomPropCatalog.SLOT_MAIN] as Array).append({"slot": RoomPropCatalog.SLOT_MAIN, "cell": cell, "position": base, "yaw": 0.0})
+		for offset in [Vector2(-0.25, -0.20), Vector2(0.25, 0.20)]:
+			(result[RoomPropCatalog.SLOT_ACCENT] as Array).append({"slot": RoomPropCatalog.SLOT_ACCENT, "cell": cell, "position": base + Vector3(offset.x * CELL, 0.0, offset.y * CELL), "yaw": 0.0})
+		var wall_sides: Array[int] = []
+		for side in range(FORMAL_DIRS.size()):
+			var direction: Vector2i = FORMAL_DIRS[side]
+			if lookup.has(cell + direction):
+				continue
+			wall_sides.append(side)
+			var position := base + Vector3(float(direction.x) * CELL * 0.31, 0.0, float(direction.y) * CELL * 0.31)
+			var by_door := false
+			for doorway_position in doorway_positions:
+				if Vector2(position.x - doorway_position.x, position.z - doorway_position.z).length() < CELL * 0.35:
+					by_door = true
+					break
+			if not by_door:
+				(result[RoomPropCatalog.SLOT_WALL] as Array).append({"slot": RoomPropCatalog.SLOT_WALL, "cell": cell, "position": position, "yaw": _formal_direction_yaw(-direction)})
+		for side in wall_sides:
+			var next_side := (side + 1) % FORMAL_DIRS.size()
+			if next_side not in wall_sides:
+				continue
+			var direction_a: Vector2i = FORMAL_DIRS[side]
+			var direction_b: Vector2i = FORMAL_DIRS[next_side]
+			(result[RoomPropCatalog.SLOT_CORNER] as Array).append({
+				"slot": RoomPropCatalog.SLOT_CORNER,
+				"cell": cell,
+				"position": base + Vector3(float(direction_a.x + direction_b.x) * CELL * 0.27, 0.0, float(direction_a.y + direction_b.y) * CELL * 0.27),
+				"yaw": _formal_direction_yaw(-direction_a),
+			})
+	return result
+
+
+func _take_formal_prop_placement(theme: String, requested_slot: String, preferred_id: String, candidates: Dictionary, placed: Array[Dictionary], rng: RandomNumberGenerator) -> Dictionary:
+	var slot_order: Array[String] = [requested_slot]
+	for fallback_slot in [RoomPropCatalog.SLOT_ACCENT, RoomPropCatalog.SLOT_CORNER, RoomPropCatalog.SLOT_WALL, RoomPropCatalog.SLOT_MAIN]:
+		if fallback_slot not in slot_order:
+			slot_order.append(fallback_slot)
+	for slot in slot_order:
+		var entries := RoomPropCatalog.entries_for(theme, slot)
+		_formal_shuffle(entries, rng)
+		if slot == requested_slot and not preferred_id.is_empty():
+			for preferred_index in range(entries.size()):
+				if str(entries[preferred_index].get("id", "")) == preferred_id:
+					var preferred: Dictionary = entries.pop_at(preferred_index)
+					entries.push_front(preferred)
+					break
+		var slot_candidates: Array = (candidates.get(slot, []) as Array).duplicate()
+		_formal_shuffle(slot_candidates, rng)
+		for entry: Dictionary in entries:
+			if not bool(entry.get("repeatable", false)):
+				var already_used := false
+				for previous: Dictionary in placed:
+					if str(previous.get("asset_id", "")) == str(entry.get("id", "")):
+						already_used = true
+						break
+				if already_used:
+					continue
+			for candidate: Dictionary in slot_candidates:
+				if _formal_prop_candidate_clear(candidate, entry, placed):
+					(candidates[slot] as Array).erase(candidate)
+					return {"entry": entry, "candidate": candidate}
+	return {}
+
+
+func _formal_prop_candidate_clear(candidate: Dictionary, entry: Dictionary, placed: Array[Dictionary]) -> bool:
+	if bool(entry.get("overlay", false)):
+		return true
+	var position: Vector3 = candidate.get("position", Vector3.ZERO)
+	var footprint: Vector2 = entry.get("footprint", Vector2(0.3, 0.3))
+	var radius := maxf(footprint.x, footprint.y) * 0.5
+	for previous: Dictionary in placed:
+		if bool(previous.get("overlay", false)):
+			continue
+		var previous_position: Vector3 = previous.get("position", Vector3.ZERO)
+		var previous_footprint: Vector2 = previous.get("footprint", Vector2(0.3, 0.3))
+		var previous_radius := maxf(previous_footprint.x, previous_footprint.y) * 0.5
+		if Vector2(position.x - previous_position.x, position.z - previous_position.z).length() < (radius + previous_radius) * 0.55:
+			return false
+	return true
+
+
+func _formal_shuffle(values: Array, rng: RandomNumberGenerator) -> void:
+	for index in range(values.size() - 1, 0, -1):
+		var swap_index := rng.randi_range(0, index)
+		var temporary: Variant = values[index]
+		values[index] = values[swap_index]
+		values[swap_index] = temporary
+
+
+func _catalog_id_for_path(path: String) -> String:
+	for raw_entry: Variant in catalog.get("assets", []):
+		var entry := raw_entry as Dictionary
+		if str(entry.get("path", "")) == path:
+			return str(entry.get("id", ""))
+	return ""
+
+
+func _formal_direction_yaw(direction: Vector2i) -> float:
+	if direction == Vector2i.RIGHT:
+		return -PI * 0.5
+	if direction == Vector2i.LEFT:
+		return PI * 0.5
+	if direction == Vector2i.DOWN:
+		return PI
+	return 0.0
 
 
 func _rotate_room() -> void:
@@ -1752,7 +2018,7 @@ func _rebuild_room(snap_camera := false) -> void:
 		room_base.add_child(outline)
 	var label := Label3D.new()
 	label.name = "RoomLabel"
-	label.text = str(ROOM_SHAPE_NAMES.get(room_shape_id, room_shape_id))
+	label.text = ("%s · %s" % [formal_room_id, ROOM_SHAPE_NAMES.get(room_shape_id, room_shape_id)]) if not formal_room_id.is_empty() else str(ROOM_SHAPE_NAMES.get(room_shape_id, room_shape_id))
 	label.position = Vector3(center.x, 0.12, center.z)
 	label.font_size = 36
 	label.pixel_size = 0.004

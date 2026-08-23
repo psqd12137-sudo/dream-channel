@@ -176,6 +176,7 @@ func _run_preset_file_tests() -> void:
 
 func _run_scene_structure_tests(editor: Node3D, catalog: Dictionary) -> void:
 	_check(editor.failed_paths.is_empty(), "all catalog resource paths must load: %s" % str(editor.failed_paths))
+	_run_formal_baseline_tests(editor)
 	var catalog_list := editor.get_node("UI/Panel/VBox/CatalogScroll/CatalogList") as VBoxContainer
 	var expected_children := (catalog.get("categories", []) as Array).size() + (catalog.get("assets", []) as Array).size() + 4
 	_check(catalog_list.get_child_count() == expected_children, "catalog panel must include four categories, paper wall tools and all assets")
@@ -191,6 +192,25 @@ func _run_scene_structure_tests(editor: Node3D, catalog: Dictionary) -> void:
 	if living_index >= 0:
 		editor._on_formal_room_selected(living_index)
 		_check(editor.formal_room_id == "living" and editor.room_shape_id == str(RoomFootprintCatalog.ROOM_CONFIG["living"].get("shape", "single")), "formal room selection must sync shape and override id")
+		_check(editor.get_node("Placements").get_child_count() == 5 and editor.get_node("Walls").get_child_count() == 4, "formal room selection must load the authored living override instead of an empty footprint")
+	var hall_index := -1
+	for index in formal_room_selector.item_count:
+		if str(formal_room_selector.get_item_metadata(index)) == "hall":
+			hall_index = index
+			break
+	_check(hall_index >= 0, "formal room selector must include hall")
+	if hall_index >= 0:
+		editor._on_formal_room_selected(hall_index)
+		_check(editor.formal_room_id == "hall" and editor.room_shape_id == "plus5" and editor.room_cells.size() == 5, "formal room baseline must retain the formal 5-cell footprint")
+		_check(editor.get_node("Placements").get_child_count() >= 6, "formal room without an override must load the current PCG furniture composition")
+		_check(editor.get_node("Walls").get_child_count() == Rules.room_boundary_edges(editor.room_cells).size(), "generated formal baseline must wrap the complete outer footprint")
+		var doorway_count := 0
+		for wall in editor.get_node("Walls").get_children():
+			if bool(wall.get_meta("is_door", false)):
+				doorway_count += 1
+		_check(doorway_count == 1, "generated formal baseline must expose one editable doorway")
+	if living_index >= 0:
+		editor._on_formal_room_selected(living_index)
 		editor.formal_room_id = ""
 		editor._sync_formal_room_ui()
 	_check(editor.has_node("Walls") and editor.has_node("Corners") and editor.has_node("WallJoins") and editor.has_node("Fixtures") and editor.has_node("CardboardShell") and editor.has_node("ReferenceActor") and editor.has_node("EditorOverlay/Gizmo3D") and editor.has_node("EditorOverlay/Anchors") and editor.has_node("EditorOverlay/WallHandles"), "scene must expose semantic wall/corner/join/fixture/reference/gizmo containers")
@@ -203,6 +223,28 @@ func _run_scene_structure_tests(editor: Node3D, catalog: Dictionary) -> void:
 	_check(editor._refresh_templates() >= 3, "template list must discover the three built-in presets")
 	_check(editor.tool_mode == "select", "editor must start in select tool mode")
 	_check(editor.get_node("EditorOverlay/Gizmo3D").get_meta("editor_gizmo", false), "gizmo root must be tagged as editor-only")
+
+
+func _run_formal_baseline_tests(editor: Node3D) -> void:
+	for raw_room_id: Variant in RoomFootprintCatalog.ROOM_CONFIG.keys():
+		var room_id := str(raw_room_id)
+		var config := RoomFootprintCatalog.ROOM_CONFIG[room_id] as Dictionary
+		var shape_id := str(config.get("shape", "single"))
+		var cells := Rules.rotated_cells(shape_id, 0)
+		var state: Dictionary = editor._generated_formal_room_state(room_id)
+		var assets := state.get("assets", []) as Array
+		var walls := state.get("walls", []) as Array
+		var expected_min_assets := 6 if cells.size() >= 5 else (4 if cells.size() >= 3 else 2)
+		_check(assets.size() >= expected_min_assets, "every formal room must expose a non-empty editable PCG baseline: %s" % room_id)
+		_check(walls.size() == Rules.room_boundary_edges(cells).size(), "formal room baseline walls must follow its complete outer footprint: %s" % room_id)
+		var doorway_count := 0
+		for raw_wall: Variant in walls:
+			if bool((raw_wall as Dictionary).get("is_door", false)):
+				doorway_count += 1
+		_check(doorway_count == 1, "formal room baseline must have one doorway: %s" % room_id)
+		for raw_asset: Variant in assets:
+			var asset_id := str((raw_asset as Dictionary).get("asset_id", ""))
+			_check(not editor._find_asset_entry(asset_id).is_empty(), "formal room baseline must map PCG assets into the editor catalog: %s/%s" % [room_id, asset_id])
 
 
 func _run_free_placement_tests(editor: Node3D) -> void:
