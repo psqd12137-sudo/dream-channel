@@ -25,7 +25,10 @@ const INVALID_RED := Color("#d63b72")
 ## paper-board diorama (wall height 0.72m, cell 1.55m) instead of a full-size
 ## person. The game-facing model_scale (1.68) would tower over the room.
 const REFERENCE_ACTOR_HEIGHT := 0.55
-const GROUND_COLOR := Color("#2a2e36")
+const GROUND_COLOR := Color("#356c58")
+const MAT_FINE_GRID := Color("#d8ead626")
+const MAT_MAJOR_GRID := Color("#f0df9d70")
+const MAT_AXIS_GRID := Color("#f5c95cbb")
 const WALL_TOOL_IDS: Array[String] = [
 	"cb_wall", "cb_wall_half", "cb_doorway", "cb_shelves",
 ]
@@ -67,10 +70,11 @@ var wall_drag_start := Vector3.ZERO
 var wall_drag_end := Vector3.ZERO
 var wall_preview_valid := false
 var wall_graph: Dictionary = {}
-var tool_mode := "select"
+var tool_mode := "move"
 var gizmo_dragging := false
 var gizmo_handle := ""
 var gizmo_drag_start_mouse := Vector2.ZERO
+var gizmo_drag_start_world := INVALID_POINT
 var gizmo_drag_start_position := Vector3.ZERO
 var gizmo_drag_start_yaw := 0.0
 var gizmo_drag_start_scale := Vector3.ONE
@@ -89,9 +93,6 @@ var drag_from := Vector3.ZERO
 var drag_yaw_from := 0.0
 var drag_valid := true
 var drag_snapshot: Dictionary = {}
-var e_held := false
-var w_held := false
-
 var room_shape_id := "single"
 var room_rotation_quarters := 0
 var room_cells: Array[Vector2i] = []
@@ -137,20 +138,21 @@ var template_items: Array[Dictionary] = []
 @onready var formal_room: OptionButton = $UI/TopBar/FormalRoom
 @onready var room_shape: OptionButton = $UI/TopBar/RoomShape
 @onready var rotate_room_button: Button = $UI/TopBar/RotateRoom
-@onready var tool_move_button: Button = $UI/TopBar/ToolMove
-@onready var tool_rotate_button: Button = $UI/TopBar/ToolRotate
-@onready var tool_scale_button: Button = $UI/TopBar/ToolScale
+@onready var tool_pan_button: Button = $UI/ToolDock/ToolRow/ToolPan
+@onready var tool_move_button: Button = $UI/ToolDock/ToolRow/ToolMove
+@onready var tool_rotate_button: Button = $UI/ToolDock/ToolRow/ToolRotate
+@onready var tool_scale_button: Button = $UI/ToolDock/ToolRow/ToolScale
 @onready var place_door_button: Button = $UI/TopBar/PlaceDoor
 @onready var toggle_actor_button: Button = $UI/TopBar/ToggleActor
-@onready var template_name: LineEdit = $UI/TopBar/TemplateName
-@onready var override_room_id: LineEdit = $UI/TopBar/OverrideRoomId
-@onready var export_override_button: Button = $UI/TopBar/ExportOverride
-@onready var template_save: Button = $UI/TopBar/TemplateSave
-@onready var template_load: Button = $UI/TopBar/TemplateLoad
-@onready var template_list: OptionButton = $UI/TopBar/TemplateList
-@onready var template_refresh: Button = $UI/TopBar/TemplateRefresh
-@onready var template_delete: Button = $UI/TopBar/TemplateDelete
-@onready var clear_button: Button = $UI/TopBar/ClearBtn
+@onready var template_name: LineEdit = $UI/TemplateBar/TemplateName
+@onready var override_room_id: LineEdit = $UI/TemplateBar/OverrideRoomId
+@onready var export_override_button: Button = $UI/TemplateBar/ExportOverride
+@onready var template_save: Button = $UI/TemplateBar/TemplateSave
+@onready var template_load: Button = $UI/TemplateBar/TemplateLoad
+@onready var template_list: OptionButton = $UI/TemplateBar/TemplateList
+@onready var template_refresh: Button = $UI/TemplateBar/TemplateRefresh
+@onready var template_delete: Button = $UI/TemplateBar/TemplateDelete
+@onready var clear_button: Button = $UI/TemplateBar/ClearBtn
 @onready var help_label: Label = $UI/HelpLabel
 
 
@@ -170,9 +172,10 @@ func _ready() -> void:
 	formal_room.item_selected.connect(_on_formal_room_selected)
 	room_shape.item_selected.connect(_on_room_shape_selected)
 	rotate_room_button.pressed.connect(_rotate_room)
-	tool_move_button.pressed.connect(func(): _toggle_tool_mode("move"))
-	tool_rotate_button.pressed.connect(func(): _toggle_tool_mode("rotate"))
-	tool_scale_button.pressed.connect(func(): _toggle_tool_mode("scale"))
+	tool_pan_button.pressed.connect(func(): _set_tool_mode("pan"))
+	tool_move_button.pressed.connect(func(): _set_tool_mode("move"))
+	tool_rotate_button.pressed.connect(func(): _set_tool_mode("rotate"))
+	tool_scale_button.pressed.connect(func(): _set_tool_mode("scale"))
 	place_door_button.pressed.connect(_replace_selected_wall_with_door)
 	toggle_actor_button.pressed.connect(_toggle_actor)
 	template_save.pressed.connect(func(): _save_template(template_name.text))
@@ -186,7 +189,7 @@ func _ready() -> void:
 	selection_ring.visible = false
 	ghost.visible = false
 	_rebuild_corner_anchors()
-	_set_tool_mode("select")
+	_set_tool_mode("move")
 	_update_camera_transform()
 	_update_status()
 	_update_help()
@@ -201,12 +204,15 @@ func _process(delta: float) -> void:
 	_update_camera_transform()
 	if selection != null and is_instance_valid(selection) and gizmo.visible:
 		gizmo.global_position = selection.global_position + Vector3(0.0, 0.35, 0.0)
+		# Unity keeps handles readable at different camera distances.
+		gizmo.scale = Vector3.ONE * clampf(cam_distance_current / 8.5, 0.72, 2.1)
 	_update_wall_handles()
 
 
 func _toggle_tool_mode(requested: String) -> void:
-	var next_mode := "select" if tool_mode == requested else requested
-	_set_tool_mode(next_mode)
+	# Kept as a compatibility entry point for tests and older UI scenes. Unity's
+	# tool hotkeys select a persistent tool; pressing W/E/R twice does not cancel it.
+	_set_tool_mode(requested)
 
 
 func _set_tool_mode(next_mode: String) -> void:
@@ -226,7 +232,7 @@ func _set_tool_mode(next_mode: String) -> void:
 
 
 func _update_tool_buttons() -> void:
-	for pair in [[tool_move_button, "move"], [tool_rotate_button, "rotate"], [tool_scale_button, "scale"]]:
+	for pair in [[tool_pan_button, "pan"], [tool_move_button, "move"], [tool_rotate_button, "rotate"], [tool_scale_button, "scale"]]:
 		var button := pair[0] as Button
 		if button == null:
 			continue
@@ -250,6 +256,7 @@ func _begin_gizmo_drag(mouse: Vector2, hit: Dictionary) -> bool:
 	gizmo_handle = str(hit.get("handle", ""))
 	gizmo_drag_start_mouse = mouse
 	gizmo_drag_start_position = selection.position
+	gizmo_drag_start_world = _gizmo_drag_world_point(mouse, gizmo_handle)
 	gizmo_drag_start_yaw = selection.rotation.y
 	gizmo_drag_start_scale = selection.scale
 	gizmo_drag_start_tier = int(selection.get_meta("size_tier", 1))
@@ -263,24 +270,24 @@ func _update_gizmo_drag(mouse: Vector2) -> void:
 		return
 	var delta := mouse - gizmo_drag_start_mouse
 	if gizmo_handle.begins_with("move_"):
-		var point := _mouse_ground_point(mouse)
-		var start_point := _mouse_ground_point(gizmo_drag_start_mouse)
-		if _point_is_valid(point) and _point_is_valid(start_point):
+		if gizmo_handle == "move_y":
+			selection.position.y = gizmo_drag_start_position.y - delta.y * cam_distance_current * 0.0015
+		else:
+			var point := _gizmo_drag_world_point(mouse, gizmo_handle)
+			var start_point := gizmo_drag_start_world
+			if not _point_is_valid(point) or not _point_is_valid(start_point):
+				return
 			var offset := point - start_point
 			match gizmo_handle:
 				"move_x":
 					selection.position = gizmo_drag_start_position + Vector3(offset.x, 0.0, 0.0)
 				"move_z":
 					selection.position = gizmo_drag_start_position + Vector3(0.0, 0.0, offset.z)
-				"move_y":
-					selection.position.y = gizmo_drag_start_position.y - delta.y * 0.01
 				# Plane handles: lock the drag to one axis-pair plane.
 				"move_xy":
-					selection.position = gizmo_drag_start_position + Vector3(offset.x, 0.0, 0.0)
-					selection.position.y = gizmo_drag_start_position.y - delta.y * 0.01
+					selection.position = gizmo_drag_start_position + Vector3(offset.x, offset.y, 0.0)
 				"move_yz":
-					selection.position = gizmo_drag_start_position + Vector3(0.0, 0.0, offset.z)
-					selection.position.y = gizmo_drag_start_position.y - delta.y * 0.01
+					selection.position = gizmo_drag_start_position + Vector3(0.0, offset.y, offset.z)
 				"move_xz":
 					selection.position = gizmo_drag_start_position + Vector3(offset.x, 0.0, offset.z)
 			# Apply fine-snap/CTRL on the ground-plane components only (keep Y free).
@@ -288,7 +295,9 @@ func _update_gizmo_drag(mouse: Vector2) -> void:
 			selection.position.x = snapped.x
 			selection.position.z = snapped.z
 	elif gizmo_handle == "rotate_y":
-		selection.rotation.y = gizmo_drag_start_yaw - delta.x * 0.01
+		# Godot's positive Y rotation matches a rightward screen drag from the
+		# default editor camera. The old minus sign made left/right feel mirrored.
+		selection.rotation.y = gizmo_drag_start_yaw + delta.x * 0.01
 	elif gizmo_handle.begins_with("scale_"):
 		# Continuous scale. Uniform handle scales XYZ together; per-axis handles
 		# stretch a single axis. Factor derived from horizontal mouse delta.
@@ -318,9 +327,34 @@ func _finish_gizmo_drag() -> void:
 		_push_undo_snapshot(gizmo_drag_snapshot)
 	gizmo_dragging = false
 	gizmo_handle = ""
+	gizmo_drag_start_world = INVALID_POINT
 	gizmo_drag_snapshot.clear()
 	_set_selection_invalid(false)
 	_update_status()
+
+
+func _gizmo_drag_world_point(mouse: Vector2, handle: String) -> Vector3:
+	if selection == null or not is_instance_valid(selection):
+		return INVALID_POINT
+	var plane_point := gizmo_drag_start_position
+	match handle:
+		"move_xy":
+			return _mouse_plane_point(mouse, Vector3.FORWARD, plane_point)
+		"move_yz":
+			return _mouse_plane_point(mouse, Vector3.RIGHT, plane_point)
+		"move_x", "move_z", "move_xz":
+			return _mouse_plane_point(mouse, Vector3.UP, plane_point)
+	return INVALID_POINT
+
+
+func _mouse_plane_point(mouse: Vector2, plane_normal: Vector3, plane_point: Vector3) -> Vector3:
+	var origin := camera.project_ray_origin(mouse)
+	var direction := camera.project_ray_normal(mouse)
+	var denominator := plane_normal.dot(direction)
+	if absf(denominator) < 0.00001:
+		return INVALID_POINT
+	var distance := plane_normal.dot(plane_point - origin) / denominator
+	return origin + direction * distance if distance >= 0.0 else INVALID_POINT
 
 
 func _rebuild_corner_anchors() -> void:
@@ -520,21 +554,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if not key.pressed or key.echo or _keyboard_captured_by_ui():
 			return
-		# Unity-style tool hotkeys: Q=pan(view) W=move E=rotate R=scale.
-		# Each key toggles the matching editor tool mode; pressing it again
-		# returns to "select".
+		# Unity tool overlay: Q=view/pan, W=move, E=rotate, R=scale.
 		match key.keycode:
 			KEY_Q:
-				_set_tool_mode("select") if tool_mode == "pan" else _set_tool_mode("pan")
+				_set_tool_mode("pan")
 				return
 			KEY_W:
-				_toggle_tool_mode("move")
+				_set_tool_mode("move")
 				return
 			KEY_E:
-				_toggle_tool_mode("rotate")
+				_set_tool_mode("rotate")
 				return
 			KEY_R:
-				_toggle_tool_mode("scale")
+				_set_tool_mode("scale")
 				return
 		if key.keycode == KEY_F:
 			_focus_active()
@@ -584,7 +616,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_wall_preview(motion.position)
 			return
 		if rotating_ghost and (motion.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
-			ghost_yaw -= motion.relative.x * 0.01
+			ghost_yaw += motion.relative.x * 0.01
 			ghost.rotation.y = ghost_yaw
 			_update_ghost_validity(true)
 			_update_status()
@@ -623,28 +655,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				var picked_existing := _pick_placement(click.position)
 				if picked_existing != null:
 					_select(picked_existing)
-					drag_from = picked_existing.position
-					drag_yaw_from = picked_existing.rotation.y
-					drag_snapshot = _snapshot_state()
-					dragging = true
-					rotating_selection = e_held and not bool(picked_existing.get_meta("is_wall", false))
-					drag_valid = true
+					_begin_wall_slide_if_needed(picked_existing)
 				else:
 					_update_ghost_position(click.position)
-					if e_held:
-						rotating_ghost = true
-					else:
-						_place_ghost()
+					_place_ghost()
 			else:
 				var picked := _pick_placement(click.position)
 				if picked != null:
 					_select(picked)
-					drag_from = picked.position
-					drag_yaw_from = picked.rotation.y
-					drag_snapshot = _snapshot_state()
-					dragging = true
-					rotating_selection = e_held and not bool(picked.get_meta("is_wall", false))
-					drag_valid = true
+					_begin_wall_slide_if_needed(picked)
 				else:
 					_deselect()
 			return
@@ -660,6 +679,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif dragging:
 				_finish_transform()
 			return
+
+
+func _begin_wall_slide_if_needed(node: Node3D) -> void:
+	# Furniture follows Unity selection semantics and only moves through Gizmos.
+	# Structural walls have no transform gizmo; retain their boundary-only slide.
+	if not bool(node.get_meta("is_wall", false)):
+		return
+	drag_from = node.position
+	drag_yaw_from = node.rotation.y
+	drag_snapshot = _snapshot_state()
+	dragging = true
+	rotating_selection = false
+	drag_valid = true
 
 
 func _keyboard_captured_by_ui() -> bool:
@@ -864,7 +896,7 @@ func _deselect() -> void:
 	selection_ring.visible = false
 	if gizmo != null and is_instance_valid(gizmo):
 		gizmo.clear_target()
-	_set_tool_mode("select")
+	_update_tool_buttons()
 	_update_wall_handles()
 	_set_selection_invalid(false)
 	_update_status()
@@ -906,7 +938,7 @@ func _move_selected_to(point: Vector3) -> void:
 func _rotate_selected_by_motion(relative_x: float) -> void:
 	if selection == null or bool(selection.get_meta("is_wall", false)):
 		return
-	selection.rotation.y -= relative_x * 0.01
+	selection.rotation.y += relative_x * 0.01
 	drag_valid = bool(_placement_valid(selection, selection).get("ok", false))
 	_set_selection_invalid(not drag_valid)
 
@@ -2390,8 +2422,9 @@ func _make_ground_grid() -> void:
 	if previous != null:
 		previous.free()
 	var immediate := ImmediateMesh.new()
-	_add_grid_surface(immediate, FINE_SNAP, Color("#ffffff08"), 0.011)
-	_add_grid_surface(immediate, CELL, Color("#ffffff10"), 0.012)
+	_add_grid_surface(immediate, FINE_SNAP, MAT_FINE_GRID, 0.011)
+	_add_grid_surface(immediate, CELL, MAT_MAJOR_GRID, 0.012)
+	_add_cutting_mat_guides(immediate, 0.014)
 	var grid_lines := MeshInstance3D.new()
 	grid_lines.name = "GridLines"
 	grid_lines.mesh = immediate
@@ -2414,6 +2447,43 @@ func _add_grid_surface(immediate: ImmediateMesh, spacing: float, color: Color, h
 		immediate.surface_add_vertex(Vector3(-16.0, height, line))
 		immediate.surface_add_vertex(Vector3(16.0, height, line))
 		line += spacing
+	immediate.surface_end()
+
+
+func _add_cutting_mat_guides(immediate: ImmediateMesh, height: float) -> void:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.vertex_color_use_as_albedo = true
+	material.albedo_color = Color.WHITE
+	immediate.surface_begin(Mesh.PRIMITIVE_LINES, material)
+	var extent := 15.75
+	var tick := 0.16
+	# Warm center axes and stitched outer border make the surface read as a
+	# physical cutting/craft mat rather than an infinite engine grid.
+	for pair in [
+		[Vector3(-extent, height, 0.0), Vector3(extent, height, 0.0)],
+		[Vector3(0.0, height, -extent), Vector3(0.0, height, extent)],
+		[Vector3(-extent, height, -extent), Vector3(extent, height, -extent)],
+		[Vector3(extent, height, -extent), Vector3(extent, height, extent)],
+		[Vector3(extent, height, extent), Vector3(-extent, height, extent)],
+		[Vector3(-extent, height, extent), Vector3(-extent, height, -extent)],
+	]:
+		immediate.surface_set_color(MAT_AXIS_GRID)
+		immediate.surface_add_vertex(pair[0])
+		immediate.surface_add_vertex(pair[1])
+	var marker := -15.5
+	while marker <= 15.5001:
+		immediate.surface_set_color(MAT_MAJOR_GRID)
+		immediate.surface_add_vertex(Vector3(marker, height, -extent))
+		immediate.surface_add_vertex(Vector3(marker, height, -extent + tick))
+		immediate.surface_add_vertex(Vector3(marker, height, extent))
+		immediate.surface_add_vertex(Vector3(marker, height, extent - tick))
+		immediate.surface_add_vertex(Vector3(-extent, height, marker))
+		immediate.surface_add_vertex(Vector3(-extent + tick, height, marker))
+		immediate.surface_add_vertex(Vector3(extent, height, marker))
+		immediate.surface_add_vertex(Vector3(extent - tick, height, marker))
+		marker += CELL
 	immediate.surface_end()
 
 
@@ -2535,8 +2605,8 @@ func _cancel_active_mode() -> void:
 		_clear_ghost()
 	else:
 		_deselect()
-	if not gizmo_dragging:
-		_set_tool_mode("select")
+	if gizmo != null and is_instance_valid(gizmo) and selection != null and is_instance_valid(selection):
+		gizmo.set_target(selection, tool_mode)
 	_update_status()
 
 
@@ -2604,10 +2674,10 @@ func _update_status(message := "") -> void:
 	elif selection != null and is_instance_valid(selection):
 		status_label.text = "%s · 已选中：%s · %s" % [room_name, selection.name, "门洞（G 放门不可用 / Delete 恢复实体墙）" if bool(selection.get_meta("is_door", false)) else ("墙段（端点拖动 / G 放门 / Delete 删除）" if bool(selection.get_meta("is_wall", false)) else "工具 %s · 拖 Gizmo" % tool_mode)]
 	elif tool_mode == "pan":
-		status_label.text = "%s · 平移视角（Q 退出）· 左键拖动平移" % room_name
+		status_label.text = "%s · Q 视图工具 · 左键拖动平移 · W/E/R 切换变换工具" % room_name
 	else:
 		status_label.text = "%s · 家具 %d · 墙段 %d · 墙带 %d · 自由摆放（Ctrl 细吸附）" % [room_name, placements.get_child_count(), walls.get_child_count(), (wall_graph.get("runs", []) as Array).size()]
 
 
 func _update_help() -> void:
-	help_label.text = "Q=平移视角  W=移动  E=旋转  R=缩放（点按切换工具，拖 Gizmo）\n移动 Gizmo：拖 X/Y/Z 箭头单轴 · 拖 XY/YZ/XZ 方块锁平面  R 拖手柄连续缩放（可单轴）\n右键拖动：环绕   中键拖动：平移   滚轮：缩放相机   F：聚焦   Ctrl+D：复制\nCtrl+拖动：吸附细网格   Delete：删除（门洞恢复实体墙）   Ctrl+Z/Y：撤销/重做   Esc：取消\n墙工具：从金色角柱锚点拖到外轮廓形成连续墙带；选中墙段可拖两端端点，自动重算转角\n资产可相互堆叠：把资产拖到另一资产顶面自动落上去"
+	help_label.text = "Unity 操作：Q=视图  W=移动  E=旋转  R=缩放；工具保持激活，点击物体只负责选中\n移动 Gizmo：X/Y/Z 箭头锁单轴 · XY/YZ/XZ 方片锁正交平面；绿色圆环绕 Y 轴旋转\n右键拖动：环绕   中键拖动：平移   滚轮：缩放相机   F：聚焦   Ctrl+D：复制\nCtrl+拖动：吸附细网格   Delete：删除（门洞恢复实体墙）   Ctrl+Z/Y：撤销/重做   Esc：取消\n墙工具：从金色角柱锚点拖到外轮廓形成连续墙带；选中墙段可拖两端端点，自动重算转角\n资产可相互堆叠：用移动 Gizmo 把资产落到另一资产顶面"

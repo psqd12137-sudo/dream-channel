@@ -217,11 +217,13 @@ func _run_scene_structure_tests(editor: Node3D, catalog: Dictionary) -> void:
 	_check(editor.get_node("ReferenceActor").get_child_count() >= 2, "reference actor must contain model/fallback and label")
 	_check(editor._room_cell_box_count() == 1 and editor.has_node("RoomBase/ShadowQuad") and editor.has_node("RoomBase/RoomLabel"), "room base must include cell, shadow and label")
 	var ground_material := (editor.get_node("GroundMesh") as MeshInstance3D).material_override as StandardMaterial3D
-	_check(ground_material != null and ground_material.albedo_color.is_equal_approx(Color("#2a2e36")), "ground must use the dark focus color")
+	_check(ground_material != null and ground_material.albedo_color.is_equal_approx(Color("#356c58")), "ground must use the green handmade cutting-mat color")
 	var grid := editor.get_node("GroundMesh/GridLines") as MeshInstance3D
-	_check(grid != null and grid.mesh.get_surface_count() == 2, "ground must contain fine and major white grids")
+	_check(grid != null and grid.mesh.get_surface_count() == 3, "ground must contain fine grid, major grid and cutting-mat ruler guides")
 	_check(editor._refresh_templates() >= 3, "template list must discover the three built-in presets")
-	_check(editor.tool_mode == "select", "editor must start in select tool mode")
+	_check(editor.tool_mode == "move", "editor must start with Unity's W move tool active")
+	_check(editor.has_node("UI/ToolDock/ToolRow/ToolPan") and editor.has_node("UI/ToolDock/ToolRow/ToolMove") and editor.has_node("UI/ToolDock/ToolRow/ToolRotate") and editor.has_node("UI/ToolDock/ToolRow/ToolScale"), "Unity Q/W/E/R tools must live in a dedicated overlay")
+	_check(editor.has_node("UI/TemplateBar/TemplateName") and editor.has_node("UI/TemplateBar/ExportOverride"), "room controls and template controls must be separated into readable rows")
 	_check(editor.get_node("EditorOverlay/Gizmo3D").get_meta("editor_gizmo", false), "gizmo root must be tagged as editor-only")
 
 
@@ -303,10 +305,8 @@ func _run_wall_tests(editor: Node3D) -> void:
 	_check(editor._draw_wall(Vector3(0.0, 0.0, 0.0), Vector3(CELL, 0.0, 0.0), "cb_wall", false) == 1, "line3 setup wall must draw")
 	var wall := editor.get_node("Walls").get_child(0) as Node3D
 	editor._select(wall)
-	editor.drag_from = wall.position
-	editor.drag_yaw_from = wall.rotation.y
-	editor.drag_snapshot = editor._snapshot_state()
-	editor.dragging = true
+	editor._begin_wall_slide_if_needed(wall)
+	_check(editor.dragging, "structural walls must retain their boundary-only direct slide")
 	editor._move_selected_to(Vector3(2.2, 0.0, 0.0))
 	editor.drag_valid = editor._selected_transform_valid()
 	editor._finish_transform()
@@ -340,10 +340,13 @@ func _run_size_rotation_copy_tests(editor: Node3D) -> void:
 	editor._change_room("line3", 0, false)
 	var asset: Node3D = editor._place_at_free(Vector3(0.55, 0.0, 0.55), "kk_book_single", 0.0, Vector3.ONE * 0.28, false)
 	editor._select(asset)
+	editor.dragging = false
+	editor._begin_wall_slide_if_needed(asset)
+	_check(not editor.dragging, "clicking furniture must only select it; transforms must start from a Gizmo handle")
 	# Continuous rotation via gizmo motion (E tool).
 	var old_yaw: float = asset.rotation.y
 	editor._rotate_selected_by_motion(20.0)
-	_check(is_equal_approx(asset.rotation.y, old_yaw - 0.2), "E-drag horizontal motion must produce continuous yaw")
+	_check(is_equal_approx(asset.rotation.y, old_yaw + 0.2), "rightward rotation drag must rotate right instead of mirroring the Y axis")
 	editor.drag_valid = true
 	var duplicate: Node3D = editor._duplicate_selected()
 	_check(duplicate != null and editor.get_node("Placements").get_child_count() == 2, "Ctrl+D must duplicate a valid selected asset")
@@ -355,6 +358,15 @@ func _run_size_rotation_copy_tests(editor: Node3D) -> void:
 	var gizmo := editor.get_node("EditorOverlay/Gizmo3D")
 	_check(gizmo.get_node_or_null("MoveArrows/Arrow_X") != null and gizmo.get_node_or_null("MoveArrows/Arrow_Y") != null and gizmo.get_node_or_null("MoveArrows/Arrow_Z") != null, "move gizmo must expose X/Y/Z arrows")
 	_check(gizmo.get_node_or_null("MoveArrows/Plane_XY") != null and gizmo.get_node_or_null("MoveArrows/Plane_YZ") != null and gizmo.get_node_or_null("MoveArrows/Plane_XZ") != null, "move gizmo must expose XY/YZ/XZ plane handles")
+	var xy_box: AABB = gizmo._node_world_aabb(gizmo.get_node("MoveArrows/Plane_XY"))
+	var yz_box: AABB = gizmo._node_world_aabb(gizmo.get_node("MoveArrows/Plane_YZ"))
+	var xz_box: AABB = gizmo._node_world_aabb(gizmo.get_node("MoveArrows/Plane_XZ"))
+	_check(xy_box.size.z < xy_box.size.x and xy_box.size.z < xy_box.size.y, "XY handle must be a vertical XY plane")
+	_check(yz_box.size.x < yz_box.size.y and yz_box.size.x < yz_box.size.z, "YZ handle must be a vertical YZ plane")
+	_check(xz_box.size.y < xz_box.size.x and xz_box.size.y < xz_box.size.z, "XZ handle must be a horizontal XZ plane")
+	editor._deselect()
+	_check(editor.tool_mode == "move", "clicking empty space/deselecting must keep the active Unity tool")
+	editor._select(asset)
 	editor._set_tool_mode("rotate")
 	_check(editor.tool_mode == "rotate" and editor.get_node("EditorOverlay/Gizmo3D/RotateRing").visible, "rotate tool must show the yaw ring")
 	editor._set_tool_mode("scale")

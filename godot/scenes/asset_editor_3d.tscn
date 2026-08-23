@@ -1,18 +1,18 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/asset_editor_3d.gd" id="1_editor"]
 [ext_resource type="PackedScene" path="res://scripts/gizmo_3d.tscn" id="2_gizmo"]
 
 [sub_resource type="Environment" id="Environment_editor"]
 background_mode = 1
-background_color = Color(0.055, 0.07, 0.08, 1)
+background_color = Color(0.045, 0.105, 0.085, 1)
 ambient_light_source = 3
-ambient_light_color = Color(0.54, 0.61, 0.64, 1)
+ambient_light_color = Color(0.62, 0.68, 0.59, 1)
 ambient_light_energy = 0.78
 tonemap_mode = 2
 
 [sub_resource type="StandardMaterial3D" id="Material_ground"]
-albedo_color = Color(0.164706, 0.180392, 0.211765, 1)
+albedo_color = Color(0.207843, 0.423529, 0.345098, 1)
 roughness = 0.95
 
 [sub_resource type="PlaneMesh" id="Plane_ground"]
@@ -35,12 +35,12 @@ rings = 32
 ring_segments = 12
 
 [sub_resource type="StyleBoxFlat" id="Style_panel"]
-bg_color = Color(0.035, 0.055, 0.066, 0.94)
+bg_color = Color(0.035, 0.075, 0.064, 0.95)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
-border_color = Color(0.19, 0.67, 0.64, 0.8)
+border_color = Color(0.75, 0.66, 0.36, 0.85)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -49,6 +49,22 @@ content_margin_left = 12.0
 content_margin_top = 12.0
 content_margin_right = 12.0
 content_margin_bottom = 12.0
+
+[sub_resource type="StyleBoxFlat" id="Style_toolbar"]
+bg_color = Color(0.055, 0.075, 0.071, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.38, 0.46, 0.42, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+content_margin_left = 5.0
+content_margin_top = 5.0
+content_margin_right = 5.0
+content_margin_bottom = 5.0
 
 [node name="AssetEditor3D" type="Node3D"]
 script = ExtResource("1_editor")
@@ -155,13 +171,48 @@ theme_override_colors/font_color = Color(0.49, 0.86, 0.82, 1)
 autowrap_mode = 2
 text = "正在读取资产…"
 
+[node name="ToolDock" type="PanelContainer" parent="UI"]
+offset_left = 316.0
+offset_top = 16.0
+offset_right = 780.0
+offset_bottom = 62.0
+theme_override_styles/panel = SubResource("Style_toolbar")
+
+[node name="ToolRow" type="HBoxContainer" parent="UI/ToolDock"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ToolPan" type="Button" parent="UI/ToolDock/ToolRow"]
+custom_minimum_size = Vector2(105, 34)
+layout_mode = 2
+text = "Q  视图"
+tooltip_text = "Q：视图工具；左键拖动平移"
+
+[node name="ToolMove" type="Button" parent="UI/ToolDock/ToolRow"]
+custom_minimum_size = Vector2(105, 34)
+layout_mode = 2
+text = "W  移动"
+tooltip_text = "W：移动工具；拖动轴箭头或正交平面方片"
+
+[node name="ToolRotate" type="Button" parent="UI/ToolDock/ToolRow"]
+custom_minimum_size = Vector2(105, 34)
+layout_mode = 2
+text = "E  旋转"
+tooltip_text = "E：旋转工具；拖动绿色 Y 轴旋转环"
+
+[node name="ToolScale" type="Button" parent="UI/ToolDock/ToolRow"]
+custom_minimum_size = Vector2(105, 34)
+layout_mode = 2
+text = "R  缩放"
+tooltip_text = "R：缩放工具；拖动中心或单轴方块"
+
 [node name="TopBar" type="HBoxContainer" parent="UI"]
 anchors_preset = 10
 anchor_right = 1.0
 offset_left = 316.0
-offset_top = 16.0
+offset_top = 70.0
 offset_right = -16.0
-offset_bottom = 66.0
+offset_bottom = 112.0
 grow_horizontal = 2
 theme_override_constants/separation = 8
 
@@ -191,21 +242,6 @@ text = "旋转房间 90°"
 [node name="Sep1" type="VSeparator" parent="UI/TopBar"]
 layout_mode = 2
 
-[node name="ToolMove" type="Button" parent="UI/TopBar"]
-layout_mode = 2
-text = "移动"
-tooltip_text = "Unity Gizmo：三向移动箭头"
-
-[node name="ToolRotate" type="Button" parent="UI/TopBar"]
-layout_mode = 2
-text = "旋转"
-tooltip_text = "Unity Gizmo：Y 轴旋转环"
-
-[node name="ToolScale" type="Button" parent="UI/TopBar"]
-layout_mode = 2
-text = "大小"
-tooltip_text = "Unity Gizmo：三档大小 0.6 / 1.0 / 1.5"
-
 [node name="PlaceDoor" type="Button" parent="UI/TopBar"]
 layout_mode = 2
 text = "放门"
@@ -218,44 +254,54 @@ text = "参照物：显示"
 [node name="Sep2" type="VSeparator" parent="UI/TopBar"]
 layout_mode = 2
 
-[node name="TemplateName" type="LineEdit" parent="UI/TopBar"]
+[node name="TemplateBar" type="HBoxContainer" parent="UI"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 316.0
+offset_top = 120.0
+offset_right = -16.0
+offset_bottom = 160.0
+grow_horizontal = 2
+theme_override_constants/separation = 8
+
+[node name="TemplateName" type="LineEdit" parent="UI/TemplateBar"]
 custom_minimum_size = Vector2(135, 0)
 layout_mode = 2
 placeholder_text = "模板名（如 kitchen_01）"
 text = "diorama_demo"
 
-[node name="OverrideRoomId" type="LineEdit" parent="UI/TopBar"]
+[node name="OverrideRoomId" type="LineEdit" parent="UI/TemplateBar"]
 custom_minimum_size = Vector2(95, 0)
 layout_mode = 2
 placeholder_text = "房间 ID"
 text = "living"
 
-[node name="ExportOverride" type="Button" parent="UI/TopBar"]
+[node name="ExportOverride" type="Button" parent="UI/TemplateBar"]
 layout_mode = 2
 text = "导出正式数据"
 tooltip_text = "把当前房间模板复制到 res://data/editor/overrides/<房间ID>.json"
 
-[node name="TemplateSave" type="Button" parent="UI/TopBar"]
+[node name="TemplateSave" type="Button" parent="UI/TemplateBar"]
 layout_mode = 2
 text = "保存模板"
 
-[node name="TemplateLoad" type="Button" parent="UI/TopBar"]
+[node name="TemplateLoad" type="Button" parent="UI/TemplateBar"]
 layout_mode = 2
 text = "加载模板"
 
-[node name="TemplateList" type="OptionButton" parent="UI/TopBar"]
+[node name="TemplateList" type="OptionButton" parent="UI/TemplateBar"]
 custom_minimum_size = Vector2(125, 0)
 layout_mode = 2
 
-[node name="TemplateRefresh" type="Button" parent="UI/TopBar"]
+[node name="TemplateRefresh" type="Button" parent="UI/TemplateBar"]
 layout_mode = 2
 text = "刷新"
 
-[node name="TemplateDelete" type="Button" parent="UI/TopBar"]
+[node name="TemplateDelete" type="Button" parent="UI/TemplateBar"]
 layout_mode = 2
 text = "删除"
 
-[node name="ClearBtn" type="Button" parent="UI/TopBar"]
+[node name="ClearBtn" type="Button" parent="UI/TemplateBar"]
 layout_mode = 2
 text = "清空"
 
@@ -279,4 +325,4 @@ theme_override_constants/shadow_offset_y = 2
 horizontal_alignment = 2
 vertical_alignment = 2
 autowrap_mode = 2
-text = "左键：放置/选中/拖动   E+拖动：旋转   R：大小档(0.6/1.0/1.5)   Ctrl+D：复制\n右键拖动：环绕   中键拖动：平移   滚轮：缩放相机   F：聚焦\nCtrl+拖动：吸附细网格   Delete：删除   Ctrl+Z/Y：撤销/重做   Esc：取消\n墙工具：纸板直墙/半墙/门洞/壁架沿金色外轮廓拖动；墙高 0.72，自动纸板转角与片场道具"
+text = "Q 视图 · W 移动 · E 旋转 · R 缩放；点击物体只选中，拖 Gizmo 才变换\n右键拖动：环绕   中键拖动：平移   滚轮：缩放相机   F：聚焦\nCtrl+拖动：吸附细网格   Delete：删除   Ctrl+Z/Y：撤销/重做   Esc：取消\n墙工具：纸板直墙/半墙/门洞/壁架沿金色外轮廓拖动；墙高 0.72，自动纸板转角与片场道具"

@@ -6,20 +6,20 @@ class_name Gizmo3D
 ## ray/AABB hit testing. It is deliberately kept outside Placements/Walls so
 ## it can never enter templates, overlap checks, or shadows.
 ##
-## v5 additions:
-##  - Three plane handles (XY / YZ / XZ) for plane-locked dragging.
-##  - Scale is a continuous, per-axis (single-axis) handle set instead of the
-##    old three-tier cube: a center uniform cube plus X/Y/Z edge handles.
-##  - Hotkey note: Q/W/E/R switch tool mode; this node only reacts to `mode`.
+## Unity-style transform overlay used by the runtime room authoring scene.
+## Q/W/E/R selects view/move/rotate/scale in the owning editor. This node owns
+## only the visible handles and precise picking geometry.
 
 const RED := Color("#e45b5b")
 const GREEN := Color("#55c98a")
 const BLUE := Color("#5b8fe4")
 const GOLD := Color("#f3a51f")
 
-## Plane handles are small translucent squares at the base of each axis pair.
-const PLANE_ALPHA := 0.55
-const PLANE_SIZE := 0.26
+## Plane handles are thin boxes rather than PlaneMesh quads. Their dimensions
+## make the three coordinate planes unambiguous and give ray picking thickness.
+const PLANE_ALPHA := 0.48
+const PLANE_SIZE := 0.30
+const PLANE_THICKNESS := 0.025
 
 var mode := "select"
 var target: Node3D = null
@@ -52,7 +52,7 @@ func _build_visuals() -> void:
 		move_root.add_child(plane_root)
 		_handles["move_%s" % plane] = plane_root
 
-	# --- Rotate (Y yaw ring) ---
+	# --- Rotate (Y yaw ring, Unity's green Y axis) ---
 	var rotate_root := Node3D.new()
 	rotate_root.name = "RotateRing"
 	rotate_root.set_meta("editor_gizmo", true)
@@ -64,33 +64,25 @@ func _build_visuals() -> void:
 	torus.outer_radius = 0.9
 	torus.rings = 32
 	torus.ring_segments = 12
-	ring.material_override = _material(GOLD)
+	ring.material_override = _material(GREEN)
 	ring.mesh = torus
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	ring.set_meta("editor_gizmo", true)
 	rotate_root.add_child(ring)
 	_handles["rotate_y"] = ring
 
-	# --- Scale (continuous: center uniform cube + X/Y/Z edge handles) ---
+	# --- Scale (center uniform cube + X/Y/Z stems and cube heads) ---
 	var scale_root := Node3D.new()
 	scale_root.name = "ScaleHandle"
 	scale_root.set_meta("editor_gizmo", true)
 	add_child(scale_root)
-	var uniform := _make_scale_handle("scale_uniform", GOLD, Vector3(0.0, 0.55, 0.0))
+	var uniform := _make_scale_handle("scale_uniform", GOLD, Vector3.ZERO)
 	scale_root.add_child(uniform)
 	_handles["scale_uniform"] = uniform
 	for axis in ["x", "y", "z"]:
-		var handle := _make_scale_handle("scale_%s" % axis, {"x": RED, "y": GREEN, "z": BLUE}[axis], _scale_handle_pos(axis))
+		var handle := _make_scale_axis(axis, {"x": RED, "y": GREEN, "z": BLUE}[axis])
 		scale_root.add_child(handle)
 		_handles["scale_%s" % axis] = handle
-
-
-func _scale_handle_pos(axis: String) -> Vector3:
-	match axis:
-		"x": return Vector3(0.9, 0.0, 0.0)
-		"y": return Vector3(0.0, 0.9, 0.0)
-		"z": return Vector3(0.0, 0.0, 0.9)
-	return Vector3.ZERO
 
 
 func _make_scale_handle(handle: String, color: Color, position: Vector3) -> MeshInstance3D:
@@ -106,15 +98,43 @@ func _make_scale_handle(handle: String, color: Color, position: Vector3) -> Mesh
 	return mesh_instance
 
 
+func _make_scale_axis(axis: String, color: Color) -> Node3D:
+	var root := Node3D.new()
+	root.name = axis.to_upper()
+	root.set_meta("editor_gizmo", true)
+	root.set_meta("gizmo_handle", "scale_%s" % axis)
+	var shaft := MeshInstance3D.new()
+	shaft.name = "Shaft"
+	var cylinder := CylinderMesh.new()
+	cylinder.top_radius = 0.035
+	cylinder.bottom_radius = 0.035
+	cylinder.height = 0.72
+	shaft.mesh = cylinder
+	shaft.material_override = _material(color)
+	shaft.position = Vector3(0.0, 0.40, 0.0)
+	shaft.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var head := _make_scale_handle("scale_%s" % axis, color, Vector3(0.0, 0.82, 0.0))
+	head.name = "Head"
+	root.add_child(shaft)
+	root.add_child(head)
+	match axis:
+		"x": root.rotation.z = -PI * 0.5
+		"z": root.rotation.x = PI * 0.5
+	return root
+
+
 func _make_plane_handle(plane: String) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Plane_%s" % plane.to_upper()
 	root.set_meta("editor_gizmo", true)
 	root.set_meta("gizmo_handle", "move_%s" % plane)
 	var mesh_instance := MeshInstance3D.new()
-	var quad := PlaneMesh.new()
-	quad.size = Vector2(PLANE_SIZE, PLANE_SIZE)
-	mesh_instance.mesh = quad
+	var box := BoxMesh.new()
+	match plane:
+		"xy": box.size = Vector3(PLANE_SIZE, PLANE_SIZE, PLANE_THICKNESS)
+		"yz": box.size = Vector3(PLANE_THICKNESS, PLANE_SIZE, PLANE_SIZE)
+		"xz": box.size = Vector3(PLANE_SIZE, PLANE_THICKNESS, PLANE_SIZE)
+	mesh_instance.mesh = box
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -126,10 +146,6 @@ func _make_plane_handle(plane: String) -> Node3D:
 	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mesh_instance.set_meta("editor_gizmo", true)
 	root.add_child(mesh_instance)
-	match plane:
-		"xy": pass  # faces up (plane normal +Y), lies in XZ at y=0.13
-		"yz": root.rotation.y = PI * 0.5  # faces +X
-		"xz": root.rotation.x = -PI * 0.5  # faces +Z
 	root.position = _plane_offset(plane)
 	return root
 
@@ -144,9 +160,10 @@ func _plane_offset(plane: String) -> Vector3:
 
 func _plane_color(plane: String, alpha: float) -> Color:
 	match plane:
-		"xy": return Color(RED.r, RED.g, RED.b, alpha)
-		"yz": return Color(GREEN.r, GREEN.g, GREEN.b, alpha)
-		"xz": return Color(BLUE.r, BLUE.g, BLUE.b, alpha)
+		# Unity colors a plane by the locked/normal axis.
+		"xy": return Color(BLUE.r, BLUE.g, BLUE.b, alpha)
+		"yz": return Color(RED.r, RED.g, RED.b, alpha)
+		"xz": return Color(GREEN.r, GREEN.g, GREEN.b, alpha)
 	return Color(GOLD.r, GOLD.g, GOLD.b, alpha)
 
 
@@ -238,12 +255,22 @@ func hit_test(origin: Vector3, direction: Vector3) -> Dictionary:
 		var node := _handles.get(handle_name) as Node3D
 		if node == null:
 			continue
-		var box := _node_world_aabb(node)
-		var distance := _ray_aabb_distance(origin, direction, box)
+		var distance := _yaw_ring_hit_distance(origin, direction) if handle_name == "rotate_y" else _ray_aabb_distance(origin, direction, _node_world_aabb(node))
 		if distance >= 0.0 and distance < best_distance:
 			best_distance = distance
 			best = {"handle": handle_name, "distance": distance}
 	return best
+
+
+func _yaw_ring_hit_distance(origin: Vector3, direction: Vector3) -> float:
+	if absf(direction.y) < 0.000001:
+		return -1.0
+	var distance := (global_position.y - origin.y) / direction.y
+	if distance < 0.0:
+		return -1.0
+	var hit := origin + direction * distance
+	var radial := Vector2(hit.x - global_position.x, hit.z - global_position.z).length()
+	return distance if radial >= 0.72 and radial <= 1.0 else -1.0
 
 
 func _visible_handle_names() -> Array[String]:
