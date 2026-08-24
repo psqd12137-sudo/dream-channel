@@ -39,6 +39,8 @@ func _run() -> void:
 	await process_frame
 
 	_run_scene_structure_tests(editor, catalog)
+	_check(editor.get_node_or_null("UI/ReturnHome") is Button, "asset editor must provide a return-to-title button")
+	_check(editor.has_method("return_to_title"), "asset editor return button must have a scene transition handler")
 	_run_free_placement_tests(editor)
 	_run_boundary_and_overlap_tests(editor)
 	_run_wall_tests(editor)

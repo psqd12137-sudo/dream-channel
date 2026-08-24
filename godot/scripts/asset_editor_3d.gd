@@ -13,6 +13,7 @@ const PRESENTATION_MANIFEST_PATH := "res://data/presentation_manifest.json"
 const TEMPLATE_DIR := "user://diorama_templates/"
 const PRESET_TEMPLATE_DIR := "res://data/editor/preset_templates/"
 const FORMAL_OVERRIDE_DIR := "res://data/editor/overrides/"
+const MAIN_SCENE_PATH := "res://channel_3d.tscn"
 const INVALID_POINT := Vector3(INF, INF, INF)
 const INVALID_CELL := Vector2i(999999, 999999)
 const UNDO_LIMIT := 50
@@ -153,6 +154,7 @@ var template_items: Array[Dictionary] = []
 @onready var template_refresh: Button = $UI/TemplateBar/TemplateRefresh
 @onready var template_delete: Button = $UI/TemplateBar/TemplateDelete
 @onready var clear_button: Button = $UI/TemplateBar/ClearBtn
+@onready var return_home_button: Button = $UI/ReturnHome
 @onready var help_label: Label = $UI/HelpLabel
 
 
@@ -185,6 +187,7 @@ func _ready() -> void:
 	template_delete.pressed.connect(func(): _delete_template(_selected_template_name()))
 	template_list.item_selected.connect(_on_template_selected)
 	clear_button.pressed.connect(func(): _clear_all(true))
+	return_home_button.pressed.connect(return_to_title)
 	_refresh_templates()
 	selection_ring.visible = false
 	ghost.visible = false
@@ -193,6 +196,15 @@ func _ready() -> void:
 	_update_camera_transform()
 	_update_status()
 	_update_help()
+
+
+func return_to_title() -> bool:
+	var packed := load(MAIN_SCENE_PATH) as PackedScene
+	if packed == null:
+		status_label.text = "无法返回标题：主场景没有找到。"
+		return false
+	get_tree().change_scene_to_packed(packed)
+	return true
 
 
 func _process(delta: float) -> void:

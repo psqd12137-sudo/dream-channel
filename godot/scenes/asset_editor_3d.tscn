@@ -305,6 +305,18 @@ text = "删除"
 layout_mode = 2
 text = "清空"
 
+[node name="ReturnHome" type="Button" parent="UI"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -136.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = 52.0
+grow_horizontal = 0
+text = "返回标题"
+tooltip_text = "返回《织梦频道》标题页；未保存的当前编辑不会自动写入模板"
+
 [node name="HelpLabel" type="Label" parent="UI"]
 mouse_filter = 2
 anchors_preset = 8

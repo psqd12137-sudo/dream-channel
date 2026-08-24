@@ -67,7 +67,8 @@ const HOME_TEST_PUZZLE_RECT := Rect2(780, 174, 205, 42)
 const HOME_TEST_SEARCH_RECT := Rect2(997, 174, 205, 42)
 const HOME_TEST_CHASE_RECT := Rect2(780, 228, 205, 42)
 const HOME_TEST_DIORAMA_RECT := Rect2(997, 228, 205, 42)
-const HOME_TEST_CHARACTER_ANIMATION_RECT := Rect2(780, 282, 422, 42)
+const HOME_TEST_CHARACTER_ANIMATION_RECT := Rect2(780, 282, 205, 42)
+const HOME_TEST_ASSET_EDITOR_RECT := Rect2(997, 282, 205, 42)
 const HOME_RESOLUTION_RECT := Rect2(76, 714, 180, 36)
 const HOME_WINDOW_MODE_RECT := Rect2(270, 714, 102, 36)
 const HOME_TILT_SHIFT_RECT := Rect2(386, 714, 112, 36)
@@ -470,6 +471,7 @@ func _draw_home() -> void:
 		_draw_button(HOME_TEST_CHASE_RECT, "警察抓小偷", RED, TEXT)
 		_draw_button(HOME_TEST_DIORAMA_RECT, "桌模扩建 PCG", Color("5967a8"), TEXT)
 		_draw_button(HOME_TEST_CHARACTER_ANIMATION_RECT, "角色动画检查", Color("3e8b78"), TEXT)
+		_draw_button(HOME_TEST_ASSET_EDITOR_RECT, "房间资产地编", Color("c98a37"), TEXT)
 	_label("画面", Vector2(76, 706), 10, MUTED)
 	_draw_button(HOME_RESOLUTION_RECT, game.display_resolution_label(), TEAL, TEXT)
 	_draw_button(HOME_WINDOW_MODE_RECT, game.display_mode_label(), BLUE, TEXT)
@@ -1275,6 +1277,8 @@ func _gui_input(event: InputEvent) -> void:
 			game.start_kenney_build_lab()
 		elif game.home_tests_open and HOME_TEST_CHARACTER_ANIMATION_RECT.has_point(point):
 			game.start_character_animation_lab()
+		elif game.home_tests_open and HOME_TEST_ASSET_EDITOR_RECT.has_point(point):
+			game.open_asset_editor()
 		elif HOME_RESOLUTION_RECT.has_point(point):
 			game.cycle_display_resolution()
 		elif HOME_WINDOW_MODE_RECT.has_point(point):

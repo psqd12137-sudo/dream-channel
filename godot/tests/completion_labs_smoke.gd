@@ -18,6 +18,13 @@ func _run() -> void:
 
 	game.toggle_home_tests()
 	_check(game.home_tests_open, "program test desk must expand")
+	_check(ResourceLoader.exists(game.ASSET_EDITOR_SCENE_PATH), "home test desk must expose the asset editor scene")
+	var editor_packed := load(game.ASSET_EDITOR_SCENE_PATH) as PackedScene
+	var editor := editor_packed.instantiate() as Node3D if editor_packed != null else null
+	_check(editor != null and editor.get_node_or_null("UI/ReturnHome") is Button, "asset editor must provide a visible return-to-title button")
+	_check(editor != null and editor.has_method("return_to_title"), "asset editor must expose the return-to-title scene transition")
+	if editor != null:
+		editor.free()
 	game.start_sideview_lab()
 	_check(game.phase == "lab_sideview" and game.lab_player != null, "sideview lab must create a controllable player")
 	_check(game.lab_collectibles.size() == 3, "sideview lab must contain three pickup goals")
@@ -46,7 +53,7 @@ func _run() -> void:
 	game.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("CHANNEL_COMPLETION_LABS: PASS home sideview puzzle search combat-lab")
+		print("CHANNEL_COMPLETION_LABS: PASS home asset-editor sideview puzzle search combat-lab")
 		quit(0)
 	else:
 		for failure: String in failures:

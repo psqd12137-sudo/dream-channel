@@ -14,6 +14,7 @@ const DIORAMA_ART_LAB = preload("res://scenes/diorama_art_lab.tscn")
 const PCG_DIORAMA_STITCH_LAB = preload("res://scenes/pcg_diorama_stitch_lab.tscn")
 const PCG_HAND_LAYOUT_LAB = preload("res://scenes/pcg_hand_layout_lab.tscn")
 const PCG_HAND_ROOM_SCRIPT = preload("res://scripts/pcg_hand_room.gd")
+const ASSET_EDITOR_SCENE_PATH := "res://scenes/asset_editor_3d.tscn"
 const KAYKIT_DUNGEON_ROOT := "res://assets/third_party/kaykit_dungeon/models/"
 const APP_FONT: Font = preload("res://assets/fonts/NotoSansCJKsc-Regular.otf")
 
@@ -343,7 +344,7 @@ func _apply_display_settings(save_settings: bool) -> void:
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	await get_tree().process_frame
-	if generation != display_change_generation:
+	if not is_inside_tree() or generation != display_change_generation:
 		return
 	if not requested_fullscreen:
 		var usable := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
@@ -351,7 +352,7 @@ func _apply_display_settings(save_settings: bool) -> void:
 		DisplayServer.window_set_size(resolution)
 		DisplayServer.window_set_position(usable.position + (usable.size - resolution) / 2)
 	await get_tree().process_frame
-	if generation != display_change_generation:
+	if not is_inside_tree() or generation != display_change_generation:
 		return
 	var actual_mode := DisplayServer.window_get_mode()
 	display_fullscreen = actual_mode in [DisplayServer.WINDOW_MODE_FULLSCREEN, DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN]
@@ -808,6 +809,19 @@ func toggle_home_tests() -> void:
 		return
 	home_tests_open = not home_tests_open
 	_refresh_hud()
+
+
+func open_asset_editor() -> bool:
+	if phase != "home":
+		return false
+	var packed := load(ASSET_EDITOR_SCENE_PATH) as PackedScene
+	if packed == null:
+		status_message = "资产地编场景没有找到。"
+		_refresh_hud()
+		return false
+	_set_home_video(false)
+	get_tree().change_scene_to_packed(packed)
+	return true
 
 
 func start_combat_lab(room_id: String = "hall") -> void:
