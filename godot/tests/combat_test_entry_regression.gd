@@ -30,6 +30,7 @@ func _run() -> void:
 	_check(game.start_test_combat("manual"), "selected scenario must start a manual test combat")
 	await process_frame
 	_check(game.phase == "combat" and game.test_combat_active, "test combat must use the formal battle phase with an isolated session")
+	_check(game.world_container.visible, "test combat must restore the 3D world viewport after the test menu hid it")
 	_check(game.combat.enemy_order.size() == 3, "squad roles test combat must create three enemies")
 	_check(game.combat.player_hp == 60, "test combat must use the scenario player HP")
 	game.return_to_combat_test_menu()

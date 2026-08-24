@@ -2105,6 +2105,7 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
 	phase = "combat"
+	world_container.visible = true
 	house_root.visible = false
 	battle_root.visible = true
 	battle_root.position = Vector3.ZERO
