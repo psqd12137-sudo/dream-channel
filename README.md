@@ -152,11 +152,60 @@ dream-channel/
 - 现阶段仍未实现集火、保护、撤退、动态编队、诱导玩家走位和跨回合战术记忆；这些属于下一阶段。正式快照目前仍以单敌人为主，多敌人房间使用 `room.enemies[]` 配置。多敌人基础计划见 [.omc/plans/multi-enemy-refactor-plan.md](./.omc/plans/multi-enemy-refactor-plan.md)。
 - 主菜单现有“后台测试 → 战斗与 AI 测试”已升级为隔离测试台：提供固定 Seed 的房间预设、手动战斗、AI 单步/连续观察、敌人角色与攻击位调试信息；测试不会结算正式奖励、推进集数或改写正式存档。详细执行计划见 [.omc/plans/combat-ai-test-mode-plan.md](./.omc/plans/combat-ai-test-mode-plan.md)。
 
+## Godot 战斗测试与操作说明
+
+战斗测试入口位于主菜单的“后台测试 → 战斗与 AI 测试”。这是隔离的开发测试场景，不会推进正式集数、结算正式奖励，也不会改写正式存档。测试台用于确认房间内战斗、敌人意图、敌方回合节奏、多敌人轮流行动和动画表现。
+
+### 当前操作方式
+
+- 玩家在棋盘上直接点击可到达的格子，系统会自动计算路径并连续移动；不再要求“选择节点 → 再确认移动”。
+- 战斗中的方向按钮和 WASD/方向键仍然保留，适合快速验证单格移动；普通验收优先使用点击目标格的完整寻路流程。
+- 点击“回合结束”后，敌人按行动顺序逐个执行移动、攻击或等待；敌方回合期间玩家输入会锁定，动画完成后才重新进入玩家回合。
+- 战斗 HUD 会显示敌我行动顺序、当前行动者、敌人意图和可移动目标。多敌人场景中每个敌人拥有稳定的 `enemy_id`，不会因为节点重建改变身份。
+
+### 战斗表现层结构
+
+战斗场景将逻辑状态、棋盘表现和角色表现分开管理：
+
+```text
+CombatRules（权威战斗状态）
+        ├── BattleBoard（格子、地形、意图、房间装饰）
+        └── BattleActors（玩家、敌人、诱饵及角色动画）
+```
+
+- `build_battle_world()`：完整同步棋盘和角色，适用于进入战斗、玩家行动结算和动画全部结束后的最终状态同步。
+- `refresh_battle_board()`：只刷新棋盘、地形和意图标记，保留角色节点实例；敌方回合动画期间只能使用这一类刷新。
+- 敌方规则可以先计算出整回合事件，但角色表现按事件顺序播放。一个敌人一回合可以产生多条移动事件，动画初始化只使用第一条移动事件的 `from` 起点，不能被后续步骤覆盖。
+- 敌人移动完成后才由完整同步把角色放到权威终点，避免出现“终点闪现一帧 → 回到起点 → 开始行走”的视觉跳变。
+
+### 字体与跨平台显示
+
+项目不依赖 Windows 或 macOS 的系统字体。中文界面当前使用项目内置的思源黑体：
+
+- `godot/assets/fonts/SourceHanSansCN-Regular.otf`：普通界面、说明文字和默认主题字体。
+- `godot/assets/fonts/SourceHanSansCN-Medium.otf`：按钮和强调文字字体。
+- `godot/assets/fonts/app_theme.tres` 已指向项目内置 Regular 字体；HUD 代码直接引用项目内置 Regular/Medium 字体。
+
+黄色背景按钮不绘制黑色文字偏移阴影，也不绘制额外的黑色底板；深色、青色和洋红色按钮仍可保留文字阴影以维持层次。字体文件、按钮绘制规则和项目引用必须一起提交，避免跨平台互传后出现字体丢失或界面重影。
+
+### 定向回归测试
+
+在安装 Godot 4.7.x 的机器上，可以从仓库根目录执行以下定向测试：
+
+```powershell
+<godot> --headless --path godot --script res://tests/enemy_turn_animation_regression.gd
+<godot> --headless --path godot --script res://tests/combat_input_regression.gd
+<godot> --headless --path godot --script res://tests/multi_enemy_pathing_regression.gd
+<godot> --headless --path godot --script res://tests/combat_test_observer_regression.gd
+```
+
+其中 `enemy_turn_animation_regression.gd` 包含连续多格移动的首帧起点检查；视觉相关问题仍需要在 Godot 实机运行测试台，通过实际画面确认字体、阴影、角色移动和镜头表现。
+
 ## 任务看板
 
 > 工作流约定：**每次推送前确认并同步更新本看板**。已完成项归入对应文档（`godot/README.md`、`docs/status-*.md`），进行中/待办保持最新。
 
-### 已完成（2026-08-21）
+### 已完成（2026-08-24）
 
 - [x] 莉莉黏土角色 FBX 接入（41 骨骼、完整动作集、坐/工作互动映射）
 - [x] 镜头系统：开局由远至进入场运镜、玩家移动延迟跟随（只平移不旋转）、画幅偏下构图、拖动松手延迟回位
@@ -164,10 +213,15 @@ dream-channel/
 - [x] 战斗 UI 杀戮尖塔式：棋盘全幅无框无蒙层、手牌底部露出悬停升起、敌人意图 3D 头顶 Label3D
 - [x] 修复 UI 点击对应错误（phase 切换 world rect 不同步根因）+ 大地图镜头跳变（跟随期间被重置）
 - [x] 相机共享逻辑拆分 `camera_follow_math.gd`；新增 `camera_dolly_follow_regression`、`ui_hit_regression`，全套 headless 回归通过
+- [x] 战斗棋盘与角色演员层拆分：敌方回合只刷新 `BattleBoard`，移动动画复用 `BattleActors` 中的现有节点
+- [x] 修复敌人连续多格移动的首帧跳变：同一敌人只从第一段移动事件的起点开始播放
+- [x] 玩家点击目标格自动寻路并连续移动；保留方向按钮和 WASD/方向键作为快速测试输入
+- [x] 战斗 HUD 增加敌我行动顺序显示，敌方回合动画期间锁定玩家输入
+- [x] 项目内置思源黑体 Regular/Medium，黄色按钮取消黑色文字重影，避免 Win/macOS 字体和显示差异
 
 ### 进行中
 
-- [ ] 战斗 UI 视觉打磨（提示词 `docs/battle_ui_polish_prompt.md` 交 Codex 执行，不改行为）
+- [ ] 战斗 UI 视觉打磨：继续处理字体字号、按钮状态、敌人意图和回合节奏的实机截图验收（提示词 `docs/battle_ui_polish_prompt.md` 交 Codex 执行，不改战斗规则）
 
 ### 待办
 
