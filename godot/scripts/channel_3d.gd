@@ -3,6 +3,8 @@ extends Node3D
 const RoomRules = preload("res://scripts/room_rules.gd")
 const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
 const CombatRules = preload("res://scripts/combat_rules.gd")
+const CombatTestCatalog = preload("res://scripts/combat_test_catalog.gd")
+const CombatTestSession = preload("res://scripts/combat_test_session.gd")
 const WebContentAdapter = preload("res://scripts/web_content_adapter.gd")
 const CharacterPresenter = preload("res://scripts/character_presenter.gd")
 const CameraFollowMath = preload("res://scripts/camera_follow_math.gd")
@@ -153,6 +155,8 @@ var content: Dictionary = {}
 var presentation: Dictionary = {}
 var room_rules = RoomRules.new()
 var combat = null
+var test_catalog = CombatTestCatalog.new()
+var test_session = CombatTestSession.new()
 var rng := RandomNumberGenerator.new()
 
 var run_seed := 2522061406
@@ -232,6 +236,13 @@ var active_motion_tween: Tween = null
 var build_preview_tween: Tween = null
 var lab_root: Node3D = null
 var home_tests_open := false
+var test_combat_active := false
+var test_mode_selected_id := ""
+var test_saved_state: Dictionary = {}
+var test_auto_accumulator := 0.0
+var test_last_events: Array[Dictionary] = []
+var test_focused_enemy_id := ""
+var test_enemy_phase_pending := false
 var show_house_diagnostics := false
 var large_room_mix_test_mode := false
 var character_animation_demo_mode := false
@@ -282,6 +293,8 @@ func _ready() -> void:
 	_configure_home_video()
 	_apply_tilt_shift_state()
 	presentation = _load_json_dictionary(PRESENTATION_MANIFEST)
+	if not test_catalog.load_from_path():
+		push_error("Combat test catalog failed: %s" % str(test_catalog.errors))
 	lab_root = Node3D.new()
 	lab_root.name = "LabRoot"
 	world_root.add_child(lab_root)
@@ -412,7 +425,9 @@ func _set_home_video(active: bool) -> void:
 
 
 func _process(delta: float) -> void:
-	if phase == "lab_sideview":
+	if phase == "combat" and test_combat_active:
+		_update_test_observer(delta)
+	elif phase == "lab_sideview":
 		var keyboard_axis := 0.0
 		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 			keyboard_axis -= 1.0
@@ -734,6 +749,16 @@ func copy_current_seed() -> void:
 
 
 func go_home() -> void:
+	if test_combat_active:
+		_restore_test_state()
+	test_combat_active = false
+	test_session.clear()
+	test_saved_state.clear()
+	test_mode_selected_id = ""
+	test_auto_accumulator = 0.0
+	test_last_events.clear()
+	test_focused_enemy_id = ""
+	test_enemy_phase_pending = false
 	_cancel_dynamic_effect()
 	character_animation_demo_mode = false
 	camera.environment = null
@@ -817,6 +842,167 @@ func toggle_home_tests() -> void:
 	if phase != "home":
 		return
 	home_tests_open = not home_tests_open
+	_refresh_hud()
+
+
+func open_combat_test_mode() -> bool:
+	if phase != "home":
+		return false
+	if test_catalog.scenarios.is_empty() and not test_catalog.load_from_path():
+		status_message = "战斗测试目录加载失败：%s" % "; ".join(test_catalog.errors)
+		_refresh_hud()
+		return false
+	_set_home_video(false)
+	home_tests_open = false
+	test_combat_active = false
+	test_session.clear()
+	test_mode_selected_id = test_catalog.first_id()
+	test_focused_enemy_id = ""
+	world_container.visible = false
+	house_root.visible = false
+	battle_root.visible = false
+	phase = "test_combat_menu"
+	status_message = "选择一个固定场景，观察房间战斗和敌人 AI。"
+	_refresh_hud()
+	return true
+
+
+func select_combat_test_scenario(scenario_id: String) -> void:
+	if phase != "test_combat_menu":
+		return
+	if not test_catalog.get_scenario(scenario_id).is_empty():
+		test_mode_selected_id = scenario_id
+		status_message = "已选择测试场景：%s。" % str(test_catalog.get_scenario(scenario_id).get("name", scenario_id))
+		_refresh_hud()
+
+
+func start_test_combat(mode: String = "manual") -> bool:
+	var scenario := test_catalog.get_scenario(test_mode_selected_id)
+	if scenario.is_empty():
+		return false
+	test_saved_state = {
+		"run_seed": run_seed,
+		"player_hp": player_hp,
+		"player_max_hp": player_max_hp,
+		"player_speed": player_speed,
+		"run_deck": run_deck.duplicate(),
+	}
+	var run_rules: Dictionary = scenario.get("run_rules", {})
+	player_hp = int(run_rules.get("player_hp", 30))
+	player_max_hp = player_hp
+	player_speed = int(run_rules.get("base_speed", 3))
+	run_seed = int(scenario.get("seed", run_seed))
+	run_deck.assign(scenario.get("deck", ["jab", "guard", "brace", "fling"]))
+	test_session.begin(scenario, mode)
+	var test_enemies: Array = (scenario.get("room", {}) as Dictionary).get("enemies", [])
+	test_focused_enemy_id = str(test_enemies[0].get("id", "")) if not test_enemies.is_empty() else ""
+	test_combat_active = true
+	start_combat((scenario.get("room", {}) as Dictionary).duplicate(true))
+	status_message = "测试场景：%s。" % str(scenario.get("description", scenario.get("name", "")))
+	_refresh_hud()
+	return true
+
+
+func restart_test_combat() -> bool:
+	if not test_combat_active and phase != "combat":
+		return false
+	var mode: String = test_session.mode if test_session.active else "manual"
+	if phase == "combat":
+		return_to_combat_test_menu()
+	return start_test_combat(mode)
+
+
+func return_to_combat_test_menu() -> void:
+	if not test_combat_active:
+		return
+	_cancel_dynamic_effect()
+	if active_motion_tween != null and active_motion_tween.is_valid():
+		active_motion_tween.kill()
+	active_motion_tween = null
+	animation_busy = false
+	active_animation_kind = ""
+	enemy_nodes.clear()
+	combat = null
+	_restore_test_state()
+	test_combat_active = false
+	test_last_events.clear()
+	test_focused_enemy_id = ""
+	test_enemy_phase_pending = false
+	test_session.paused = true
+	world_container.visible = false
+	house_root.visible = false
+	battle_root.visible = false
+	phase = "test_combat_menu"
+	status_message = "测试战斗已结束；可以重开同一场景或选择其他预设。"
+	_refresh_hud()
+
+
+func _restore_test_state() -> void:
+	if test_saved_state.is_empty():
+		return
+	run_seed = int(test_saved_state.get("run_seed", run_seed))
+	player_hp = int(test_saved_state.get("player_hp", player_hp))
+	player_max_hp = int(test_saved_state.get("player_max_hp", player_max_hp))
+	player_speed = int(test_saved_state.get("player_speed", player_speed))
+	run_deck.assign(test_saved_state.get("run_deck", []))
+
+
+func _update_test_observer(_delta: float) -> void:
+	if not test_session.active or test_session.mode != "observer_auto" or not test_session.can_advance():
+		return
+	if animation_busy or combat == null or combat.outcome != "":
+		return
+	if combat.pending_player_turn:
+		return
+	_advance_test_player_script()
+	end_combat_turn()
+
+
+func _advance_test_player_script() -> void:
+	if combat == null or combat.energy <= 0:
+		return
+	var observer: Dictionary = test_session.scenario.get("observer", {})
+	var script_id := str(observer.get("player_script", "stationary"))
+	if script_id == "stationary":
+		return
+	var directions: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
+	var ordered: Array[Vector2i] = []
+	var offset: int = test_session.round_count % directions.size()
+	for index in range(directions.size()):
+		ordered.append(directions[(index + offset) % directions.size()])
+	for direction in ordered:
+		var target: Vector2i = combat.player_pos + direction
+		if not combat.can_move_player(target):
+			continue
+		if script_id == "safe_random_walk" and combat.enemy_at(target, false) != null:
+			continue
+		combat.move_player(target)
+		return
+
+
+func advance_test_observer() -> void:
+	if not test_combat_active or not test_session.active or test_session.mode != "observer_step":
+		return
+	if animation_busy or combat == null or combat.outcome != "" or combat.pending_player_turn:
+		return
+	test_session.paused = false
+	_advance_test_player_script()
+	end_combat_turn()
+	test_session.paused = true
+
+
+func toggle_test_observer() -> void:
+	if not test_combat_active or not test_session.active or test_session.mode != "observer_auto":
+		return
+	test_session.paused = not test_session.paused
+	status_message = "AI 连续观察已%s。" % ("暂停" if test_session.paused else "继续")
+	_refresh_hud()
+
+
+func focus_test_enemy(enemy_id: String) -> void:
+	if not test_combat_active or combat == null or combat.enemy_by_id(enemy_id) == null:
+		return
+	test_focused_enemy_id = enemy_id
 	_refresh_hud()
 
 
@@ -1906,7 +2092,10 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	if not enemy_specs is Array or (enemy_specs as Array).is_empty():
 		enemy_specs = room.get("enemy", {})
 	var run_rules: Dictionary = content.get("run_rules", {}).duplicate(true)
+	if test_combat_active and test_session.active:
+		run_rules.merge(test_session.scenario.get("run_rules", {}), true)
 	run_rules["player_hp"] = player_hp
+	run_rules["base_speed"] = player_speed
 	run_rules["base_speed"] = player_speed
 	combat.setup(room.get("arena", {}), enemy_specs, content.get("cards", {}), run_deck, run_seed + room_rules.instance_count() * 17, run_rules, active_relics)
 	battle_room_context = BattleRoomArtContext.build(room, combat.cols, combat.rows, BATTLE_CELL, run_seed + str(room.get("instance_id", room.get("id", "room"))).hash())
@@ -2076,6 +2265,9 @@ func end_combat_turn() -> void:
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
 	var turn_events: Array[Dictionary] = combat.enemy_turn()
+	if test_combat_active:
+		test_last_events = turn_events.duplicate(true)
+		test_enemy_phase_pending = true
 	animation_busy = true
 	active_animation_kind = "enemy_turn"
 	status_message = _enemy_turn_summary(turn_events)
@@ -2494,6 +2686,10 @@ func _rotation_invariant_fit_size(horizontal_radius: float, vertical_span: float
 
 func _after_combat_action() -> void:
 	player_hp = combat.player_hp
+	if test_combat_active and test_session.active and test_enemy_phase_pending:
+		test_session.record_enemy_phase(test_last_events, combat)
+		test_last_events.clear()
+		test_enemy_phase_pending = false
 	# 杀戮尖塔式回合：敌方动画播完后才给玩家发新牌
 	if combat != null and combat.pending_player_turn and combat.outcome == "":
 		combat.start_player_turn()

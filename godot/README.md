@@ -35,7 +35,7 @@
 
 ## 当前正式玩法（核对日期：2026-08-15）
 
-1. 正式主页以“织梦频道”为唯一产品名，提供“打开电视机”“新手教学”“接着看上集”、自定义种子播出和右上角可展开的后台测试入口；后台中的“房间资产地编”可直接进入完整 3D 地编工具，并由右上角“返回标题”回到主页。
+1. 正式主页以“织梦频道”为唯一产品名，提供“打开电视机”“新手教学”“接着看上集”、自定义种子播出和右上角可展开的后台测试入口；后台中的“战斗与 AI 测试”进入固定 Seed 的隔离测试台，其他“房间资产地编”可直接进入完整 3D 地编工具，并由右上角“返回标题”回到主页。
 2. 开局先从两张“行前预兆”中选择一张；玄关计入行程，初始进度为 `1/12`。
 3. 在等距 3D 屋面点击黄色扩建格；每次抽三张隐藏类型的房间票根，旋转并严格匹配双边门。
 4. 角色走进房间才揭示内容，完成事件或战斗后才增加行程。
@@ -44,7 +44,8 @@
 7. 战斗规则已支持任意数量 `N` 个敌人：每个敌人用稳定 `enemy_id` 管理独立状态，按出生/内容顺序依次行动；单体卡牌必须在多敌人场景中明确选择目标，群体、范围和随机目标牌会按实际受击敌人反馈。
 
 当前 AI 边界：敌人使用确定性的优先级规则状态机，并新增回合级战术黑板和基础闭环；敌人可按配置或特性分为 `hunter`、`flanker`、`controller`，每个敌方阶段重新感知、预订互不重叠的攻击位、由既有移动/攻击执行器完成行动，下一阶段再重新规划；HUD 意图预览与实际行动共用计划。视线、埋伏、最后目击点、巡逻、寻路、传送门、陷阱、高差、诱饵和特性攻击仍保持兼容。集火、保护、撤退、动态编队、诱导玩家走位和跨回合战术记忆尚未实现。正式内容快照仍主要使用旧的单敌人字段，多敌人内容通过房间的 `enemies[]` 数组接入。多敌人基础重构记录在仓库根 `.omc/plans/multi-enemy-refactor-plan.md`。
-7. 节目测试台现含最大地图战斗意图、横版跳跃收集、八数码拼图、3D 微缩搜物，以及直接复用正式黄色扩建格、票根选择、旋转与摆放规则的 Kenney 桌模 PCG 测试。
+7. 战斗与 AI 测试台现含单敌人、三角色、视野搜索、埋伏释放、四敌人窄口、传送门/陷阱/高差和八敌人压力预设，支持手动战斗、AI 单步/连续观察、固定 Seed 重开和 AI 调试面板；测试不会结算正式奖励或写入正式存档。
+8. 节目后台仍保留横版跳跃收集、八数码拼图、3D 微缩搜物，以及直接复用正式黄色扩建格、票根选择、旋转与摆放规则的 Kenney 桌模 PCG 测试。
 
 详细的已完成/待补齐矩阵见 `WEB_GODOT_PARITY.md`。
 后续战斗节奏、固定微缩模型与主循环接入计划见 `NEXT_PHASE_PLAN.md`。
@@ -221,6 +222,9 @@ $tests = @(
   "multi_enemy_state_regression", "multi_enemy_turn_regression",
   "multi_enemy_pathing_regression", "multi_enemy_targeting_regression",
   "multi_enemy_presentation_regression",
+  "combat_test_catalog_regression", "combat_test_entry_regression",
+  "combat_test_isolation_regression", "combat_test_observer_regression",
+  "combat_test_ai_overlay_regression",
   "completion_labs_smoke", "diorama_art_lab_smoke", "pcg_diorama_stitch_smoke",
   "pcg_hand_layout_lab_smoke", "portal_height_build_preview_regression",
   "presentation_animation_regression", "home_video_regression",
@@ -238,7 +242,7 @@ foreach ($t in $tests) {
 - `ui_hit_regression.gd` 覆盖按钮命中、phase 切换重排 world rect、全屏/分辨率切换后的布局与命中。
 - 个别依赖 `user://` 写入的测试（如 `run_progression_save_regression`、`formal_build_promoted_regression`）在无用户目录写入权限的受限环境会失败，属环境限制；正常开发机可直接运行。
 
-截图脚本会把视觉校验图写入本机 `artifacts/`；该目录与 `.godot/` 一样属于可再生成产物，不提交到仓库。`capture_completion_pass.gd` 同时覆盖关闭/展开后台测试的主页，`capture_progression_ui.gd` 覆盖预兆双卡和奖励三卡，`capture_combat_selection.gd` 覆盖战斗选牌状态，`capture_large_room_mix_lab.gd` 覆盖大房间票根、落位和进入后的统一地板效果。
+截图脚本会把视觉校验图写入本机 `artifacts/`；该目录与 `.godot/` 一样属于可再生成产物，不提交到仓库。`capture_completion_pass.gd` 同时覆盖关闭/展开后台测试的主页，`capture_combat_test_mode.gd` 覆盖测试台和三角色手动战斗，`capture_combat_ai_observer.gd` 覆盖 AI 单步观察，`capture_progression_ui.gd` 覆盖预兆双卡和奖励三卡，`capture_combat_selection.gd` 覆盖战斗选牌状态，`capture_large_room_mix_lab.gd` 覆盖大房间票根、落位和进入后的统一地板效果。
 
 ## 近期改动（2026-08-21）
 

@@ -1,0 +1,215 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "baseline_single",
+      "name": "单敌人基线",
+      "category": "combat",
+      "description": "验证旧单敌人房间、基础视线与近战行动。",
+      "seed": 2026082401,
+      "room": {
+        "id": "test_baseline_single",
+        "name": "测试房 · 单敌人基线",
+        "room_type": "hall",
+        "theme": "paper",
+        "arena": {
+          "cols": 7,
+          "rows": 5,
+          "player": [3, 2],
+          "walls": [],
+          "heights": {},
+          "portals": [],
+          "traps": []
+        },
+        "enemies": [
+          {"id": "hunter", "name": "基线猎手", "spawn": [0, 2], "traits": []}
+        ]
+      },
+      "run_rules": {"player_hp": 30, "base_energy": 5},
+      "deck": ["jab", "guard", "brace", "fling"],
+      "observer": {"max_rounds": 10, "player_script": "stationary"}
+    },
+    {
+      "id": "squad_roles",
+      "name": "三角色围攻",
+      "category": "ai",
+      "description": "验证 hunter、flanker、controller 的角色分工与独立攻击位。",
+      "seed": 2026082402,
+      "room": {
+        "id": "test_squad_roles",
+        "name": "测试房 · 三角色围攻",
+        "room_type": "hall",
+        "theme": "paper",
+        "arena": {
+          "cols": 8,
+          "rows": 6,
+          "player": [3, 3],
+          "walls": [],
+          "heights": {"0,0": 1},
+          "portals": [],
+          "traps": []
+        },
+        "enemies": [
+          {"id": "hunter", "name": "正面猎手", "spawn": [0, 3], "traits": []},
+          {"id": "flanker", "name": "侧翼猎手", "spawn": [7, 3], "traits": ["lunge"]},
+          {"id": "controller", "name": "控场猎手", "spawn": [3, 0], "behavior_role": "controller", "traits": ["beam"]}
+        ]
+      },
+      "run_rules": {"player_hp": 60, "base_energy": 5},
+      "deck": ["jab", "guard", "brace", "fling"],
+      "observer": {"max_rounds": 10, "player_script": "alternate_cells"}
+    },
+    {
+      "id": "vision_search",
+      "name": "视野搜索",
+      "category": "ai",
+      "description": "验证墙体遮挡、最后目击点和搜索转巡逻。",
+      "seed": 2026082403,
+      "room": {
+        "id": "test_vision_search",
+        "name": "测试房 · 视野搜索",
+        "room_type": "cellar",
+        "theme": "paper",
+        "arena": {
+          "cols": 8,
+          "rows": 6,
+          "player": [6, 4],
+          "walls": ["4,1", "4,2", "4,3", "4,4"],
+          "heights": {},
+          "portals": [],
+          "traps": []
+        },
+        "enemies": [
+          {"id": "searcher", "name": "失焦搜索者", "spawn": [1, 2], "traits": []}
+        ]
+      },
+      "run_rules": {"player_hp": 50, "base_energy": 5},
+      "deck": ["jab", "guard", "brace", "fling"],
+      "observer": {"max_rounds": 10, "player_script": "alternate_cells"}
+    },
+    {
+      "id": "ambush_release",
+      "name": "埋伏释放",
+      "category": "ai",
+      "description": "验证埋伏停留一拍后进入巡逻与追击闭环。",
+      "seed": 2026082404,
+      "room": {
+        "id": "test_ambush_release",
+        "name": "测试房 · 埋伏释放",
+        "room_type": "bedroom",
+        "theme": "paper",
+        "arena": {
+          "cols": 7,
+          "rows": 5,
+          "player": [5, 2],
+          "walls": ["3,1", "3,2", "3,3"],
+          "heights": {},
+          "portals": [],
+          "traps": [],
+          "ambush": true
+        },
+        "enemies": [
+          {"id": "ambusher", "name": "埋伏者", "spawn": [1, 2], "ambush": true, "traits": []}
+        ]
+      },
+      "run_rules": {"player_hp": 50, "base_energy": 5},
+      "deck": ["jab", "guard", "brace", "fling"],
+      "observer": {"max_rounds": 10, "player_script": "stationary"}
+    },
+    {
+      "id": "choke_four",
+      "name": "四敌人窄口",
+      "category": "multi_enemy",
+      "description": "验证动态阻挡、窄通道等待、稳定顺序与不重叠。",
+      "seed": 2026082405,
+      "room": {
+        "id": "test_choke_four",
+        "name": "测试房 · 四敌人窄口",
+        "room_type": "hall",
+        "theme": "paper",
+        "arena": {
+          "cols": 9,
+          "rows": 5,
+          "player": [7, 2],
+          "walls": ["0,0", "1,0", "2,0", "3,0", "4,0", "5,0", "6,0", "7,0", "8,0", "0,4", "1,4", "2,4", "3,4", "4,4", "5,4", "6,4", "7,4", "8,4", "3,1", "3,3", "5,1", "5,3"],
+          "heights": {},
+          "portals": [],
+          "traps": []
+        },
+        "enemies": [
+          {"id": "choke_a", "name": "窄口猎手 A", "spawn": [0, 2], "traits": []},
+          {"id": "choke_b", "name": "窄口猎手 B", "spawn": [1, 2], "traits": ["lunge"]},
+          {"id": "choke_c", "name": "窄口猎手 C", "spawn": [2, 2], "behavior_role": "controller", "traits": ["beam"]},
+          {"id": "choke_d", "name": "窄口猎手 D", "spawn": [0, 1], "traits": []}
+        ]
+      },
+      "run_rules": {"player_hp": 80, "base_energy": 5},
+      "deck": ["jab", "guard", "brace", "fling"],
+      "observer": {"max_rounds": 10, "player_script": "stationary"}
+    },
+    {
+      "id": "portal_trap_height",
+      "name": "门、陷阱与高差",
+      "category": "ai",
+      "description": "验证传送门占用、高差选位和陷阱相关战斗表现。",
+      "seed": 2026082406,
+      "room": {
+        "id": "test_portal_trap_height",
+        "name": "测试房 · 门、陷阱与高差",
+        "room_type": "kitchen",
+        "theme": "paper",
+        "arena": {
+          "cols": 8,
+          "rows": 5,
+          "player": [3, 2],
+          "walls": ["3,1"],
+          "heights": {"5,2": 1, "5,3": 1},
+          "portals": [[[1, 1], [6, 3]]],
+          "traps": [[4, 2]]
+        },
+        "enemies": [
+          {"id": "portal_controller", "name": "门边控场者", "spawn": [7, 2], "behavior_role": "controller", "traits": ["beam", "trapAware"]},
+          {"id": "portal_flanker", "name": "门边侧翼者", "spawn": [0, 2], "traits": ["lunge"]}
+        ]
+      },
+      "run_rules": {"player_hp": 70, "base_energy": 5},
+      "deck": ["jab", "guard", "brace", "fling"],
+      "observer": {"max_rounds": 10, "player_script": "alternate_cells"}
+    },
+    {
+      "id": "hud_eight",
+      "name": "八敌人压力",
+      "category": "presentation",
+      "description": "验证八敌人战场、关注切换、事件归属与 HUD 可读性。",
+      "seed": 2026082407,
+      "room": {
+        "id": "test_hud_eight",
+        "name": "测试房 · 八敌人压力",
+        "room_type": "large",
+        "theme": "paper",
+        "arena": {
+          "cols": 10,
+          "rows": 7,
+          "player": [5, 3],
+          "walls": [],
+          "heights": {},
+          "portals": [],
+          "traps": []
+        },
+        "enemies": [
+          {"id": "eight_00", "name": "压力单位 00", "spawn": [0, 1], "traits": []},
+          {"id": "eight_01", "name": "压力单位 01", "spawn": [1, 2], "traits": ["lunge"]},
+          {"id": "eight_02", "name": "压力单位 02", "spawn": [2, 1], "traits": ["beam"]},
+          {"id": "eight_03", "name": "压力单位 03", "spawn": [7, 1], "traits": []},
+          {"id": "eight_04", "name": "压力单位 04", "spawn": [8, 2], "traits": ["lunge"]},
+          {"id": "eight_05", "name": "压力单位 05", "spawn": [9, 1], "traits": ["beam"]},
+          {"id": "eight_06", "name": "压力单位 06", "spawn": [1, 5], "traits": []},
+          {"id": "eight_07", "name": "压力单位 07", "spawn": [8, 5], "traits": []}
+        ]
+      },
+      "run_rules": {"player_hp": 120, "base_energy": 5},
+      "deck": ["jab", "guard", "brace", "fling"],
+      "observer": {"max_rounds": 10, "player_script": "stationary"}
+    }
+  ]
+}

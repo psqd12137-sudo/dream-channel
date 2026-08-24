@@ -687,6 +687,12 @@ func preview_tactical_plan(enemy_id: String) -> Dictionary:
 	return blackboard.plan_for(enemy_id)
 
 
+func preview_all_tactical_plans() -> Dictionary:
+	var blackboard := EnemyAISquadBlackboard.new()
+	blackboard.begin_turn(self)
+	return blackboard.assignments.duplicate(true)
+
+
 func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 	var turn_events: Array[Dictionary] = []
 	if outcome != "":
