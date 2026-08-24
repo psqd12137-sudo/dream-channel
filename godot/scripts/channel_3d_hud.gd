@@ -52,8 +52,8 @@ const ENTER_PENDING_RECT := Rect2(1020, 620, 220, 46)
 const END_TURN_RECT := Rect2(976, 690, 164, 48)
 const RETURN_RECT := Rect2(976, 690, 164, 48)
 const CARD_CANCEL_RECT := Rect2(976, 654, 164, 28)
-const PORTAL_USE_RECT := Rect2(960, 262, 120, 44)
-const PORTAL_STAY_RECT := Rect2(1100, 262, 120, 44)
+const PORTAL_USE_RECT := Rect2(960, 366, 120, 44)
+const PORTAL_STAY_RECT := Rect2(1100, 366, 120, 44)
 const HOME_START_RECT := Rect2(76, 610, 300, 58)
 const HOME_TUTORIAL_RECT := Rect2(390, 610, 148, 48)
 const HOME_CONTINUE_RECT := Rect2(550, 610, 174, 48)
@@ -694,6 +694,8 @@ func _draw_combat_hud() -> void:
 	var discard_rect := _combat_layout_rect("DiscardArea", Rect2(1152, 640, 104, 150))
 	_draw_actor_strip(Rect2(24, 92, 300, 108), PLAYER_PROFILE, "莉莉", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_block, 4, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
 	_draw_actor_strip(Rect2(948, 92, 300, 108), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, combat.enemy_hp if combat.enemy_revealed else -1, combat.enemy_max_hp, "韧性", combat.enemy_toughness if combat.enemy_revealed else 0, combat.enemy_max_toughness, "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
+	if combat.enemy_order.size() > 1:
+		_draw_enemy_roster(Rect2(948, 214, 300, 136))
 
 	_draw_ticket_panel(action_rect, Color("17151cf4"), GOLD)
 	_draw_action_ticket(Rect2(action_rect.position + Vector2(10, 8), Vector2(action_rect.size.x - 20, action_rect.size.y - 16)))
@@ -762,15 +764,46 @@ func _draw_combat_hud() -> void:
 			_draw_button(CHARACTER_ATTACK_RECT, "攻击", MAGENTA, TEXT)
 			_draw_button(CHARACTER_HURT_RECT, "受击", RED, TEXT)
 		if combat.player_on_portal():
-			draw_rect(Rect2(948, 216, 300, 130), Color("2c2441ee"), true)
-			draw_rect(Rect2(948, 216, 300, 130), Color("9a70da"), false, 3.0)
-			_label("已站上传送门", Vector2(962, 244), 14, Color("e6d7ff"))
+			draw_rect(Rect2(948, 356, 300, 130), Color("2c2441ee"), true)
+			draw_rect(Rect2(948, 356, 300, 130), Color("9a70da"), false, 3.0)
+			_label("已站上传送门", Vector2(962, 384), 14, Color("e6d7ff"))
 			_draw_button(PORTAL_USE_RECT, "穿门（%d）" % combat.move_cost, Color("7863a5") if combat.can_use_player_portal() else Color("5b515f"), TEXT)
 		elif game.selected_card >= 0:
 			_draw_button(CARD_CANCEL_RECT, "取消选牌", Color("4f5960"), TEXT)
 		_draw_button(END_TURN_RECT, "回合结束", GOLD, INK)
 	else:
 		_draw_button(RETURN_RECT, "返回节目布景" if combat.outcome == "victory" else "重开本集", GREEN if combat.outcome == "victory" else RED, TEXT)
+
+
+func _draw_enemy_roster(rect: Rect2) -> void:
+	var combat = game.combat
+	draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), Color("03070a"), true)
+	draw_rect(rect, Color("17151cf4"), true)
+	draw_rect(rect, MAGENTA, false, 2.0)
+	_label("敌方编组 · %d 名" % combat.enemy_order.size(), rect.position + Vector2(12, 22), 12, Color("ffd1e6"))
+	var columns := 4
+	var cell_width := (rect.size.x - 20.0) / float(columns)
+	var cell_height := 45.0
+	for index in range(combat.enemy_order.size()):
+		var enemy_id := str(combat.enemy_order[index])
+		var state = combat.enemy_by_id(enemy_id)
+		if state == null:
+			continue
+		var row := index / columns
+		var column := index % columns
+		var cell := Rect2(rect.position + Vector2(10.0 + float(column) * cell_width, 32.0 + float(row) * cell_height), Vector2(cell_width - 4.0, cell_height - 5.0))
+		var alive: bool = state.hp > 0
+		var revealed: bool = state.revealed
+		var accent := MAGENTA if alive and revealed else Color("68757a") if alive else Color("4a4448")
+		draw_rect(cell, Color("fff3df1c") if alive else Color("11151a88"), true)
+		draw_rect(cell, accent, false, 1.0)
+		var title := str(state.name) if revealed else "未知敌人"
+		_label(_shorten(title, 8), cell.position + Vector2(6, 14), 9, TEXT if alive else Color("9b8d93"))
+		if revealed:
+			var hp_text := "%d/%d" % [state.hp, state.max_hp]
+			_label(hp_text, cell.position + Vector2(6, 29), 8, Color("ffb3b0") if alive else Color("9b8d93"))
+		else:
+			_label("未现身", cell.position + Vector2(6, 29), 8, Color("a9b8bb"))
 
 
 func _draw_card_target_arrow(start: Vector2, target: Vector2) -> void:

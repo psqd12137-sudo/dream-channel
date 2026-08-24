@@ -55,6 +55,7 @@ var cards: Dictionary = {}
 var deck: Array[String] = []
 var discard: Array[String] = []
 var hand: Array[String] = []
+var last_card_events: Array[Dictionary] = []
 var rng := RandomNumberGenerator.new()
 var round_number := 1
 var outcome := ""
@@ -112,14 +113,6 @@ func _focus_enemy_state() -> CombatEnemyState:
 		if state.alive():
 			return state
 	return _primary_enemy_state()
-
-
-func _adjacent_enemy_state() -> CombatEnemyState:
-	for enemy_id in enemy_order:
-		var state: CombatEnemyState = enemies[enemy_id]
-		if state.alive() and manhattan(state.pos, player_pos) == 1:
-			return state
-	return null
 
 
 func _iter_enemy_states() -> Array:
@@ -413,7 +406,7 @@ func can_target_place_card(hand_index: int, target: Vector2i) -> bool:
 	return true
 
 
-func play_card(hand_index: int, target: Vector2i) -> bool:
+func play_card(hand_index: int, target: Vector2i, enemy_id: String = "") -> bool:
 	if outcome != "" or hand_index < 0 or hand_index >= hand.size():
 		return false
 	var card_id := hand[hand_index]
@@ -424,23 +417,34 @@ func play_card(hand_index: int, target: Vector2i) -> bool:
 	if energy < cost:
 		return false
 	var card_type := str(card.get("type", ""))
+	var target_state := _resolve_single_enemy(card, enemy_id)
+	if card_target_type(card) == "single_enemy" and target_state == null:
+		# 多敌人时单体牌必须显式选中合法敌人，否则不消耗。
+		return false
+	last_card_events.clear()
 	var accepted := false
 	if card_type == "place":
 		accepted = _play_place(card, target)
+	elif card.has("allEnemies"):
+		accepted = _play_all_enemies(card_id, card)
+	elif card.has("area"):
+		accepted = _play_area(card_id, card, target)
+	elif card.has("randomEnemy"):
+		accepted = _play_random_enemy(card_id, card)
 	elif bool(card.get("shove", false)):
-		accepted = _play_shove(bool(card.get("preferPortal", false)), int(card.get("drawOnPortal", 0)))
+		accepted = _play_shove(bool(card.get("preferPortal", false)), int(card.get("drawOnPortal", 0)), target_state)
 	elif bool(card.get("climbToHigher", false)):
 		accepted = _play_climb()
 	elif bool(card.get("topple", false)):
-		accepted = _play_topple()
+		accepted = _play_topple(target_state)
 	elif card.has("puppetBang"):
-		accepted = _play_puppet_bang(card.get("puppetBang", {}))
+		accepted = _play_puppet_bang(card.get("puppetBang", {}), target_state)
 	elif card.has("saltLash"):
-		accepted = _play_salt_lash(card.get("saltLash", {}))
+		accepted = _play_salt_lash(card.get("saltLash", {}), target_state)
 	elif card.has("ifBlinded") or card.has("elseBlind"):
-		accepted = _play_blind_followup(card)
+		accepted = _play_blind_followup(card, target_state)
 	elif card.has("drainTough"):
-		accepted = _play_rupture(card)
+		accepted = _play_rupture(card, target_state)
 	elif card.has("gain_block"):
 		player_block += int(card.get("gain_block", 0))
 		accepted = true
@@ -492,6 +496,81 @@ func card_cost(card: Dictionary) -> int:
 	if str(card.get("type", "")) == "place":
 		result = maxi(0, result - placement_discount)
 	return result
+
+
+# 卡牌目标类型（multi-enemy refactor plan 3.3）：
+# self / cell / single_enemy / all_enemies / area / random_enemy。
+func card_target_type(card: Dictionary) -> String:
+	var declared := str(card.get("target", ""))
+	if declared != "":
+		return declared
+	if card.has("allEnemies"):
+		return "all_enemies"
+	if card.has("area"):
+		return "area"
+	if card.has("randomEnemy"):
+		return "random_enemy"
+	if str(card.get("type", "")) == "place":
+		return "cell"
+	if bool(card.get("shove", false)) or bool(card.get("topple", false)) or card.has("puppetBang") or card.has("saltLash") or card.has("ifBlinded") or card.has("elseBlind") or card.has("drainTough"):
+		return "single_enemy"
+	return "self"
+
+
+# 单体牌目标解析：显式 ID 优先；恰有一个存活敌人时自动指向它；
+# 存在多个合法目标时必须由调用方选择，返回 null 表示不可打出。
+func resolve_single_enemy(card: Dictionary, enemy_id: String) -> CombatEnemyState:
+	return _resolve_single_enemy(card, enemy_id)
+
+
+func _resolve_single_enemy(card: Dictionary, enemy_id: String) -> CombatEnemyState:
+	if card_target_type(card) != "single_enemy":
+		return null
+	if enemy_id != "":
+		var state := enemy_by_id(enemy_id)
+		return state if state != null and state.alive() else null
+	var living := living_enemy_ids()
+	if living.size() == 1:
+		return enemies[living[0]]
+	return null
+
+
+func _play_all_enemies(card_id: String, card: Dictionary) -> bool:
+	var effect: Dictionary = card.get("allEnemies", {})
+	var source := "card:%s" % card_id
+	for enemy_id in living_enemy_ids().duplicate():
+		var state: CombatEnemyState = enemies[enemy_id]
+		var dealt := _apply_enemy_damage(state, int(effect.get("damage", 0)), int(effect.get("tough", 0)), source)
+		if bool(effect.get("blind", false)):
+			_apply_blind(state, {"blind": true, "blind_turns": int(effect.get("blindTurns", 1))})
+		last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": enemy_id, "damage": dealt, "source": source})
+	return true
+
+
+func _play_area(card_id: String, card: Dictionary, center: Vector2i) -> bool:
+	var effect: Dictionary = card.get("area", {})
+	var radius := int(effect.get("radius", 1))
+	var source := "card:%s" % card_id
+	for enemy_id in living_enemy_ids().duplicate():
+		var state: CombatEnemyState = enemies[enemy_id]
+		if absi(state.pos.x - center.x) <= radius and absi(state.pos.y - center.y) <= radius:
+			var dealt := _apply_enemy_damage(state, int(effect.get("damage", 0)), int(effect.get("tough", 0)), source)
+			if bool(effect.get("blind", false)):
+				_apply_blind(state, {"blind": true, "blind_turns": int(effect.get("blindTurns", 1))})
+			last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": enemy_id, "damage": dealt, "source": source})
+	return true
+
+
+func _play_random_enemy(card_id: String, card: Dictionary) -> bool:
+	var effect: Dictionary = card.get("randomEnemy", {})
+	var living := living_enemy_ids()
+	if living.is_empty():
+		return false
+	var picked: String = living[rng.randi_range(0, living.size() - 1)]
+	var source := "card:%s" % card_id
+	var dealt := _apply_enemy_damage(enemies[picked], int(effect.get("damage", 0)), int(effect.get("tough", 0)), source)
+	last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": picked, "damage": dealt, "source": source})
+	return true
 
 
 func preview_intent(enemy_id := "") -> Dictionary:
@@ -1039,7 +1118,8 @@ func _play_place(card: Dictionary, target: Vector2i) -> bool:
 			damage += first_smash_bonus
 			first_smash_used = true
 		var smash_tough := int(place_data.get("smashTough", 1 if damage > 0 else 0))
-		_apply_enemy_damage(smash_state, damage, smash_tough, "smash")
+		var dealt := _apply_enemy_damage(smash_state, damage, smash_tough, "smash")
+		last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": smash_state.id, "damage": dealt, "source": "smash"})
 		_apply_blind(smash_state, effect)
 	else:
 		traps[target] = effect
@@ -1059,11 +1139,10 @@ func _roll_smash_damage(spec: Dictionary, card_id: String) -> int:
 	return total
 
 
-func _play_shove(prefer_portal := false, draw_on_portal := 0) -> bool:
-	var target := _adjacent_enemy_state()
-	if target == null:
+func _play_shove(prefer_portal := false, draw_on_portal := 0, state: CombatEnemyState = null) -> bool:
+	if state == null or not state.alive() or manhattan(state.pos, player_pos) != 1:
 		return false
-	var ported := _shove_enemy(target, prefer_portal)
+	var ported := _shove_enemy(state, prefer_portal)
 	if ported:
 		_draw_cards(draw_on_portal)
 	return true
@@ -1116,9 +1195,9 @@ func _trigger_trap(state: CombatEnemyState, pos: Vector2i, chasing_decoy: bool =
 		traps.erase(pos)
 
 
-func _apply_enemy_damage(state: CombatEnemyState, damage: int, toughness_damage: int, source: String) -> void:
+func _apply_enemy_damage(state: CombatEnemyState, damage: int, toughness_damage: int, source: String) -> int:
 	if state == null:
-		return
+		return 0
 	var execute_before := state.execute_bonus_pending
 	var crush_before := state.crush_bonus_pending
 	_drain_toughness(state, toughness_damage, source)
@@ -1136,10 +1215,11 @@ func _apply_enemy_damage(state: CombatEnemyState, damage: int, toughness_damage:
 		dealt += mini(dealt, 4)
 		state.crush_bonus_pending = false
 	state.hp -= dealt
-	event_log.append("EnemyDamaged source=%s damage=%d hp=%d tough=%d" % [source, dealt, state.hp, state.toughness])
+	event_log.append("EnemyDamaged source=%s damage=%d hp=%d tough=%d enemy=%s" % [source, dealt, state.hp, state.toughness, state.id])
 	if state.hp <= 0 and all_enemies_defeated():
 		outcome = "victory"
 		event_log.append("CombatEnded outcome=victory")
+	return dealt
 
 
 func _drain_toughness(state: CombatEnemyState, amount: int, source: String) -> bool:
@@ -1205,14 +1285,16 @@ func _trigger_ready(state: CombatEnemyState) -> void:
 	var ready_damage := int(ready_effect.get("damage", 0))
 	var ready_tough := int(ready_effect.get("tough", 0))
 	if ready_damage > 0 or ready_tough > 0:
-		_apply_enemy_damage(state, ready_damage, ready_tough, "ready")
+		var dealt := _apply_enemy_damage(state, ready_damage, ready_tough, "ready")
+		last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": state.id, "damage": dealt, "source": "ready"})
 	_draw_cards(int(ready_effect.get("draw", 0)))
 	if bool(ready_effect.get("shove", false)) and outcome == "":
 		var hp_before := state.hp
 		var tough_before := state.toughness
 		var ported := _shove_enemy(state, bool(ready_effect.get("preferPortal", false)))
 		if hp_before == state.hp and tough_before == state.toughness:
-			_apply_enemy_damage(state, 1, 1, "ready")
+			var wall_dealt := _apply_enemy_damage(state, 1, 1, "ready")
+			last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": state.id, "damage": wall_dealt, "source": "ready"})
 		if ported:
 			_draw_cards(int(ready_effect.get("drawOnPortal", 0)))
 	event_log.append("ReadyTriggered id=%s" % str(ready_effect.get("card_id", "ready")))
@@ -1246,50 +1328,49 @@ func _play_climb() -> bool:
 	return true
 
 
-func _play_topple() -> bool:
-	var state := _focus_enemy_state()
+func _play_topple(state: CombatEnemyState) -> bool:
 	if state == null or _tile_height(player_pos) <= _tile_height(state.pos):
 		return false
-	_apply_enemy_damage(state, 2, 1, "skill:topple")
+	var dealt := _apply_enemy_damage(state, 2, 1, "skill:topple")
+	last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": state.id, "damage": dealt, "source": "skill:topple"})
 	return true
 
 
-func _play_puppet_bang(effect_value: Variant) -> bool:
-	if not has_decoy():
+func _play_puppet_bang(effect_value: Variant, state: CombatEnemyState) -> bool:
+	if not has_decoy() or state == null:
 		return false
 	var effect: Dictionary = effect_value if effect_value is Dictionary else {}
-	_apply_enemy_damage(_focus_enemy_state(), int(effect.get("damage", 3)), 0, "skill:puppet")
+	var dealt := _apply_enemy_damage(state, int(effect.get("damage", 3)), 0, "skill:puppet")
+	last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": state.id, "damage": dealt, "source": "skill:puppet"})
 	decoy_pos = Vector2i(-1, -1)
 	return true
 
 
-func _play_salt_lash(effect_value: Variant) -> bool:
-	for enemy_id in enemy_order:
-		var state: CombatEnemyState = enemies[enemy_id]
-		if not state.alive():
-			continue
-		if traps.has(state.pos) and int((traps[state.pos] as Dictionary).get("slow", 0)) > 0:
-			var effect: Dictionary = effect_value if effect_value is Dictionary else {}
-			_apply_enemy_damage(state, int(effect.get("damage", 2)), int(effect.get("tough", 1)), "skill:salt_lash")
-			return true
-	return false
+func _play_salt_lash(effect_value: Variant, state: CombatEnemyState) -> bool:
+	if state == null or not state.alive():
+		return false
+	if not traps.has(state.pos) or int((traps[state.pos] as Dictionary).get("slow", 0)) <= 0:
+		return false
+	var effect: Dictionary = effect_value if effect_value is Dictionary else {}
+	var dealt := _apply_enemy_damage(state, int(effect.get("damage", 2)), int(effect.get("tough", 1)), "skill:salt_lash")
+	last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": state.id, "damage": dealt, "source": "skill:salt_lash"})
+	return true
 
 
-func _play_blind_followup(card: Dictionary) -> bool:
-	var state := _focus_enemy_state()
+func _play_blind_followup(card: Dictionary, state: CombatEnemyState) -> bool:
 	if state == null:
 		return false
 	if state.blind_turns > 0 and card.has("ifBlinded"):
 		var effect: Dictionary = card.get("ifBlinded", {})
-		_apply_enemy_damage(state, int(effect.get("damage", 0)), int(effect.get("tough", 0)), "skill:blind_followup")
+		var dealt := _apply_enemy_damage(state, int(effect.get("damage", 0)), int(effect.get("tough", 0)), "skill:blind_followup")
+		last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": state.id, "damage": dealt, "source": "skill:blind_followup"})
 	else:
 		state.blind_turns = maxi(state.blind_turns, int(card.get("elseBlind", 1)))
 		event_log.append("EnemyBlinded turns=%d" % state.blind_turns)
 	return true
 
 
-func _play_rupture(card: Dictionary) -> bool:
-	var state := _focus_enemy_state()
+func _play_rupture(card: Dictionary, state: CombatEnemyState) -> bool:
 	if state == null:
 		return false
 	var was_broken := state.broken

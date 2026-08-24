@@ -41,6 +41,9 @@
 4. 角色走进房间才揭示内容，完成事件或战斗后才增加行程。
 5. 惊吓时间使用独立 3D 战斗网格；每回合固定获得 `5` 点行动力，不再投掷 `0/1/2` 速度骰，并包含手牌、图形化生命/韧性/敌人意图、伏击/视线、追击与格内陷阱。
 6. 无视野怪物会搜索最后目击点 5 回合，之后持续巡视；蓝色编号显示逐格路线，敌方回合播放实际移动/攻击动画。
+7. 战斗规则已支持任意数量 `N` 个敌人：每个敌人用稳定 `enemy_id` 管理独立状态，按出生/内容顺序依次行动；单体卡牌必须在多敌人场景中明确选择目标，群体、范围和随机目标牌会按实际受击敌人反馈。
+
+当前 AI 边界：敌人使用确定性的优先级规则状态机，包含视线、埋伏、最后目击点、巡逻、寻路、传送门、陷阱、高差、诱饵和特性攻击；它目前还不是具备协同、分工、集火、包抄或撤退决策的高层战术 AI。正式内容快照仍主要使用旧的单敌人字段，多敌人内容通过房间的 `enemies[]` 数组接入。多敌人基础重构记录在仓库根 `.omc/plans/multi-enemy-refactor-plan.md`。
 7. 节目测试台现含最大地图战斗意图、横版跳跃收集、八数码拼图、3D 微缩搜物，以及直接复用正式黄色扩建格、票根选择、旋转与摆放规则的 Kenney 桌模 PCG 测试。
 
 详细的已完成/待补齐矩阵见 `WEB_GODOT_PARITY.md`。
@@ -214,6 +217,10 @@ $tests = @(
   "enemy_patrol_intent_regression", "enemy_vision_state_regression",
   "enemy_turn_animation_regression", "enemy_traits_regression", "shared_cell_regression",
   "enemy_archetype_presentation_regression", "turn_timing_regression",
+  "multi_enemy_roster_regression", "multi_enemy_legacy_compat_regression",
+  "multi_enemy_state_regression", "multi_enemy_turn_regression",
+  "multi_enemy_pathing_regression", "multi_enemy_targeting_regression",
+  "multi_enemy_presentation_regression",
   "completion_labs_smoke", "diorama_art_lab_smoke", "pcg_diorama_stitch_smoke",
   "pcg_hand_layout_lab_smoke", "portal_height_build_preview_regression",
   "presentation_animation_regression", "home_video_regression",

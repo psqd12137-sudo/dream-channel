@@ -215,6 +215,7 @@ var battle_camera_returning := false
 var battle_camera_return_tween: Tween = null
 var battle_room_title := "房间"
 var battle_room_context: Dictionary = {}
+var enemy_nodes: Dictionary = {}
 var battle_backstage_cells: Dictionary = {}
 var battle_height_prop_assignments: Dictionary = {}
 var battle_blocker_prop_assignments: Dictionary = {}
@@ -524,9 +525,17 @@ func _battle_camera_frame_offset() -> Vector3:
 func _battle_follow_target_position() -> Vector3:
 	if combat == null:
 		return Vector3.ZERO
-	var player_world := _battle_pawn_world(combat.player_pos, true)
-	var enemy_world := _battle_world(combat.enemy_pos)
-	return (player_world + enemy_world) * 0.5
+	var points: Array[Vector3] = [_battle_pawn_world(combat.player_pos, true)]
+	for enemy_id in combat.living_enemy_ids():
+		var state = combat.enemy_by_id(enemy_id)
+		if state != null:
+			points.append(_battle_pawn_world(state.pos, false, enemy_id))
+	if points.is_empty():
+		return Vector3.ZERO
+	var center := Vector3.ZERO
+	for point in points:
+		center += point
+	return center / float(points.size())
 
 
 func release_battle_camera_gesture() -> void:
@@ -1893,11 +1902,13 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	battle_room_title = str(room.get("name", "房间"))
 	battle_player_facing_yaw = house_player_facing_yaw
 	battle_enemy_facing_yaw = PI
-	var enemy: Dictionary = room.get("enemy", {})
+	var enemy_specs: Variant = room.get("enemies", [])
+	if not enemy_specs is Array or (enemy_specs as Array).is_empty():
+		enemy_specs = room.get("enemy", {})
 	var run_rules: Dictionary = content.get("run_rules", {}).duplicate(true)
 	run_rules["player_hp"] = player_hp
 	run_rules["base_speed"] = player_speed
-	combat.setup(room.get("arena", {}), enemy, content.get("cards", {}), run_deck, run_seed + room_rules.instance_count() * 17, run_rules, active_relics)
+	combat.setup(room.get("arena", {}), enemy_specs, content.get("cards", {}), run_deck, run_seed + room_rules.instance_count() * 17, run_rules, active_relics)
 	battle_room_context = BattleRoomArtContext.build(room, combat.cols, combat.rows, BATTLE_CELL, run_seed + str(room.get("instance_id", room.get("id", "room"))).hash())
 	_apply_battle_footprint_to_combat()
 	_align_battle_terrain_to_room_context()
@@ -1927,11 +1938,12 @@ func _prepare_combat_entry_pose() -> void:
 	battle_root.position = Vector3(0.0, 0.72, 0.0)
 	battle_root.scale = Vector3(0.92, 0.04, 0.92)
 	var player := battle_root.get_node_or_null("Player") as Node3D
-	var enemy := battle_root.get_node_or_null("Enemy") as Node3D
 	if player != null:
 		player.visible = false
-	if enemy != null:
-		enemy.visible = false
+	for enemy_id in enemy_nodes.keys():
+		var enemy := enemy_nodes[enemy_id] as Node3D
+		if enemy != null:
+			enemy.visible = false
 
 
 func _animate_combat_entry(final_message: String) -> void:
@@ -1947,43 +1959,51 @@ func _animate_combat_entry(final_message: String) -> void:
 	battle_root.position = Vector3.ZERO
 	battle_root.scale = Vector3.ONE
 	var player := battle_root.get_node_or_null("Player") as Node3D
-	var enemy := battle_root.get_node_or_null("Enemy") as Node3D
-	if player == null or enemy == null:
+	var enemies_in_scene: Array[Node3D] = []
+	for enemy_id in enemy_nodes.keys():
+		var enemy := enemy_nodes[enemy_id] as Node3D
+		if enemy != null:
+			enemies_in_scene.append(enemy)
+	if player == null or enemies_in_scene.is_empty():
 		status_message = final_message
 		_complete_dynamic_effect()
 		_refresh_hud()
 		return
 	var player_target := player.position
-	var enemy_target := enemy.position
 	player.position = player_target + Vector3(-BATTLE_CELL * 0.70, 1.25, BATTLE_CELL * 0.55)
-	enemy.position = enemy_target + Vector3(BATTLE_CELL * 0.70, 1.25, -BATTLE_CELL * 0.55)
 	player.scale = Vector3.ONE * 0.68
-	enemy.scale = Vector3.ONE * 0.68
 	player.visible = true
-	enemy.visible = true
+	for enemy in enemies_in_scene:
+		enemy.position = enemy.position + Vector3(BATTLE_CELL * 0.70, 1.25, -BATTLE_CELL * 0.55)
+		enemy.scale = Vector3.ONE * 0.68
+		enemy.visible = true
 	var actor_duration := BATTLE_ACTOR_ENTRY_DURATION * animation_duration_scale
 	var actor_tween := create_tween()
 	active_motion_tween = actor_tween
 	actor_tween.set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	actor_tween.tween_property(player, "position", player_target, actor_duration)
 	actor_tween.tween_property(player, "scale", Vector3.ONE, actor_duration)
-	actor_tween.tween_property(enemy, "position", enemy_target, actor_duration)
-	actor_tween.tween_property(enemy, "scale", Vector3.ONE, actor_duration)
+	for enemy in enemies_in_scene:
+		var enemy_target := _battle_world(_enemy_state_for_node(enemy).pos) if _enemy_state_for_node(enemy) != null else enemy.position
+		actor_tween.tween_property(enemy, "position", enemy_target, actor_duration)
+		actor_tween.tween_property(enemy, "scale", Vector3.ONE, actor_duration)
 	await actor_tween.finished
 	if active_motion_tween != actor_tween:
 		return
-	if not is_instance_valid(player) or not is_instance_valid(enemy):
+	if not is_instance_valid(player):
 		build_battle_world()
 		status_message = final_message
 		_complete_dynamic_effect()
 		_refresh_hud()
 		return
 	player.position = player_target
-	enemy.position = enemy_target
 	player.scale = Vector3.ONE
-	enemy.scale = Vector3.ONE
+	for enemy in enemies_in_scene:
+		if is_instance_valid(enemy):
+			enemy.scale = Vector3.ONE
 	_play_actor_state("Player", "ready", "入场")
-	_play_actor_state("Enemy", "ready", "现身")
+	for enemy_id in enemy_nodes.keys():
+		_play_enemy_state(str(enemy_id), "ready", "现身")
 	status_message = final_message
 	_complete_dynamic_effect()
 	_refresh_hud()
@@ -2003,16 +2023,39 @@ func select_or_play_card(index: int) -> void:
 		_play_actor_state("Player", "ready", "准备·%s" % str(card.get("name", combat.hand[index])))
 	else:
 		var enemy_hp_before: int = combat.enemy_hp
+		if str(combat.card_target_type(card)) == "single_enemy" and combat.living_enemy_ids().size() > 1:
+			# 多敌人时单体牌必须先点选目标敌人，不能默认打第一个。
+			if selected_card == index:
+				cancel_selected_card("已取消%s；绿色角标恢复为移动目标。" % str(card.get("name", combat.hand[index])))
+				return
+			selected_card = index
+			status_message = "已选%s：点击目标敌人格生效。再次点牌、右键或 Esc 可取消。" % str(card.get("name", combat.hand[index]))
+			build_battle_world()
+			_play_actor_state("Player", "ready", "瞄准·%s" % str(card.get("name", combat.hand[index])))
+			_refresh_hud()
+			return
 		var played: bool = combat.play_card(index, combat.enemy_pos)
 		selected_card = -1
 		if played:
 			status_message = "已打出%s。" % str(card.get("name", "卡牌"))
 			_after_combat_action()
 			_play_actor_state("Player", "ready" if str(card.get("type", "")) == "ready" else "attack", str(card.get("name", "出手")))
-			if combat.enemy_hp < enemy_hp_before:
+			var damage_feedback_shown := false
+			for raw_event in combat.last_card_events:
+				var damage_event: Dictionary = raw_event
+				if str(damage_event.get("kind", "")) != "enemy_damaged" or int(damage_event.get("damage", 0)) <= 0:
+					continue
+				var damage_enemy_id := str(damage_event.get("target_enemy_id", ""))
+				if damage_enemy_id.is_empty():
+					continue
+				_play_enemy_state(damage_enemy_id, "hurt", "-%d" % int(damage_event["damage"]))
+				_show_enemy_damage_feedback(damage_enemy_id, int(damage_event["damage"]))
+				damage_feedback_shown = true
+			if not damage_feedback_shown and combat.enemy_hp < enemy_hp_before:
 				var damage_dealt: int = enemy_hp_before - combat.enemy_hp
-				_play_actor_state("Enemy", "hurt", "-%d" % damage_dealt)
-				_show_actor_damage_feedback("Enemy", damage_dealt)
+				if not combat.enemy_order.is_empty():
+					_play_enemy_state(combat.enemy_order[0], "hurt", "-%d" % damage_dealt)
+					_show_enemy_damage_feedback(combat.enemy_order[0], damage_dealt)
 		else:
 			status_message = "%s当前条件不满足，卡牌没有消耗。" % str(card.get("name", "这张牌"))
 	_refresh_hud()
@@ -2051,38 +2094,43 @@ func _enemy_turn_summary(turn_events: Array[Dictionary]) -> String:
 
 
 func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
-	var enemy_node := battle_root.get_node_or_null("Enemy") as Node3D
-	if turn_events.is_empty() or animation_duration_scale <= 0.0 or enemy_node == null:
+	if turn_events.is_empty() or animation_duration_scale <= 0.0:
 		_complete_dynamic_effect()
 		_after_combat_action()
 		return
-	var first_move: Dictionary = {}
 	for event: Dictionary in turn_events:
-		if str(event.get("kind", "")) == "move":
-			first_move = event
-			break
-	if not first_move.is_empty():
-		enemy_node.position = _battle_world(first_move.get("from", combat.enemy_pos))
+		if str(event.get("kind", "")) != "move":
+			continue
+		var move_node := _enemy_node_for_id(str(event.get("actor_id", "")))
+		if move_node != null:
+			var move_actor_id := str(event.get("actor_id", ""))
+			move_node.position = _battle_pawn_world(event.get("from", combat.enemy_pos), false, move_actor_id)
 	var tween := create_tween()
 	active_motion_tween = tween
 	for event: Dictionary in turn_events:
 		var kind := str(event.get("kind", ""))
+		var actor_id := str(event.get("actor_id", ""))
+		var enemy_node := _enemy_node_for_id(actor_id)
 		if kind == "move":
+			if enemy_node == null:
+				continue
 			var source: Vector2i = event.get("from", combat.enemy_pos)
 			var target: Vector2i = event.get("to", combat.enemy_pos)
-			tween.tween_callback(_play_actor_state.bind("Enemy", "move", "穿门" if bool(event.get("via_portal", false)) else ""))
+			tween.tween_callback(_play_enemy_state.bind(actor_id, "move", "穿门" if bool(event.get("via_portal", false)) else ""))
 			if bool(event.get("via_portal", false)):
 				tween.tween_property(enemy_node, "scale", Vector3(0.08, 1.35, 0.08), ENEMY_STEP_DURATION * 0.42 * animation_duration_scale)
-				tween.tween_callback(func() -> void: enemy_node.position = _battle_world(target))
+				tween.tween_callback(func() -> void: enemy_node.position = _battle_pawn_world(target, false, actor_id))
 				tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_STEP_DURATION * 0.58 * animation_duration_scale)
 			else:
 				tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-				tween.tween_method(_set_enemy_step_motion.bind(enemy_node, _battle_world(source), _battle_world(target)), 0.0, 1.0, ENEMY_STEP_DURATION * animation_duration_scale)
+				tween.tween_method(_set_enemy_step_motion.bind(enemy_node, _battle_pawn_world(source, false, actor_id), _battle_pawn_world(target, false, actor_id)), 0.0, 1.0, ENEMY_STEP_DURATION * animation_duration_scale)
 			tween.tween_interval(0.035 * animation_duration_scale)
 		elif kind == "attack":
+			if enemy_node == null:
+				continue
 			var attack_kind := str(event.get("attack_kind", "attack"))
 			var attack_callouts := {"lunge": "突进!", "faceShock": "突脸!", "guardBreak": "破防!", "slam": "砸地!", "beam": "激光!"}
-			tween.tween_callback(_play_actor_state.bind("Enemy", "attack", str(attack_callouts.get(attack_kind, "袭击!"))))
+			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", str(attack_callouts.get(attack_kind, "袭击!"))))
 			if event.get("target", INVALID_CELL) == combat.player_pos and int(event.get("damage", 0)) > 0:
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "受击!"))
 			tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -2090,18 +2138,24 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
 		elif kind == "face_shock":
-			tween.tween_callback(_play_actor_state.bind("Enemy", "attack", "突脸!"))
+			if enemy_node == null:
+				continue
+			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", "突脸!"))
 			if int(event.get("damage", 0)) > 0:
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "惊吓!"))
 			tween.tween_property(enemy_node, "scale", Vector3(1.18, 1.18, 1.18), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
 		elif kind == "beam_charge":
-			tween.tween_callback(_play_actor_state.bind("Enemy", "ready", "蓄力!"))
+			if enemy_node == null:
+				continue
+			tween.tween_callback(_play_enemy_state.bind(actor_id, "ready", "蓄力!"))
 			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			tween.tween_property(enemy_node, "scale", Vector3(0.86, 1.28, 0.86), 0.24 * animation_duration_scale)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, 0.18 * animation_duration_scale)
 		elif kind == "beam_fire":
-			tween.tween_callback(_play_actor_state.bind("Enemy", "attack", "激光!"))
+			if enemy_node == null:
+				continue
+			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", "激光!"))
 			if int(event.get("damage", 0)) > 0:
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "命中!"))
 			tween.tween_property(enemy_node, "scale", Vector3(1.30, 0.76, 1.30), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
@@ -2156,15 +2210,27 @@ func handle_battle_cell(target: Vector2i) -> void:
 		if selected_card < combat.hand.size():
 			card_name = str(combat.cards.get(combat.hand[selected_card], {}).get("name", combat.hand[selected_card]))
 		var enemy_hp_before: int = combat.enemy_hp
-		if combat.play_card(selected_card, target):
+		var clicked_enemy: Variant = combat.enemy_at(target)
+		var clicked_enemy_id: String = ""
+		if clicked_enemy != null:
+			clicked_enemy_id = str(clicked_enemy.get("id"))
+		if combat.play_card(selected_card, target, clicked_enemy_id):
 			selected_card = -1
 			status_message = "%s已生效。继续移动、出牌，或结束回合让敌人行动。" % card_name
 			_after_combat_action()
 			_play_actor_state("Player", "attack", card_name)
-			if combat.enemy_hp < enemy_hp_before:
+			for raw_event in combat.last_card_events:
+				var damage_event: Dictionary = raw_event
+				if int(damage_event.get("damage", 0)) > 0 and str(damage_event.get("kind", "")) == "enemy_damaged":
+					var damage_enemy_id := str(damage_event.get("target_enemy_id", ""))
+					if not damage_enemy_id.is_empty():
+						_play_enemy_state(damage_enemy_id, "hurt", "-%d" % int(damage_event["damage"]))
+						_show_enemy_damage_feedback(damage_enemy_id, int(damage_event["damage"]))
+			if combat.enemy_hp < enemy_hp_before and combat.last_card_events.is_empty():
 				var damage_dealt: int = enemy_hp_before - combat.enemy_hp
-				_play_actor_state("Enemy", "hurt", "-%d" % damage_dealt)
-				_show_actor_damage_feedback("Enemy", damage_dealt)
+				if not combat.enemy_order.is_empty():
+					_play_enemy_state(combat.enemy_order[0], "hurt", "-%d" % damage_dealt)
+					_show_enemy_damage_feedback(combat.enemy_order[0], damage_dealt)
 			return
 		else:
 			selected_card = -1
@@ -2998,10 +3064,19 @@ func frontier_markers_are_compact() -> bool:
 	return marker_count == room_rules.frontiers().size()
 
 func build_battle_world() -> void:
+	enemy_nodes.clear()
 	_clear_children(battle_root)
 	if combat == null:
 		return
 	var intent: Dictionary = combat.preview_intent()
+	var intent_cells: Dictionary = {}
+	for enemy_id in combat.living_enemy_ids():
+		var enemy_intent: Dictionary = combat.preview_intent(enemy_id)
+		for raw_cell in enemy_intent.get("hurt", []):
+			intent_cells[raw_cell] = {"kind": "hurt", "enemy_id": enemy_id, "intent": enemy_intent}
+		for raw_cell in enemy_intent.get("path", []):
+			if not intent_cells.has(raw_cell):
+				intent_cells[raw_cell] = {"kind": "path", "enemy_id": enemy_id, "intent": enemy_intent}
 	var room_floor_a: Color = battle_room_context.get("floor_a", COL_FLOOR_H0)
 	var room_floor_b: Color = battle_room_context.get("floor_b", room_floor_a.darkened(0.035))
 	var room_rim: Color = battle_room_context.get("rim", Color("343a3e"))
@@ -3027,9 +3102,11 @@ func build_battle_world() -> void:
 			cell_node.set_meta("room_footprint_active", footprint_active)
 			var platform_height := 0.28 + float(height) * 0.64
 			var rim_color := room_rim if height == 0 else room_rim.darkened(0.12) if height == 1 else room_rim.darkened(0.24)
-			if pos in intent.get("hurt", []):
+			var cell_intent: Dictionary = intent_cells.get(pos, {})
+			var cell_intent_data: Dictionary = cell_intent.get("intent", intent)
+			if cell_intent.get("kind", "") == "hurt" or pos in intent.get("hurt", []):
 				rim_color = COL_RED
-			elif pos in intent.get("path", []):
+			elif cell_intent.get("kind", "") == "path" or pos in intent.get("path", []):
 				rim_color = COL_BLUE
 			var surface_color := room_floor_a if (x + y) % 2 == 0 else room_floor_b
 			if height == 1:
@@ -3053,8 +3130,9 @@ func build_battle_world() -> void:
 			var surface_material := _material(Color(surface_color, surface_alpha), true, 0.018)
 			_add_box(cell_node, "Surface", Vector3(0, platform_height + 0.055, 0), Vector3(BATTLE_CELL - 0.34, 0.11, BATTLE_CELL - 0.34), surface_material)
 			var top_y := platform_height + 0.13
-			var is_hurt_cell: bool = pos in (intent.get("hurt", []) as Array)
-			var path_index: int = (intent.get("path", []) as Array).find(pos)
+			var is_hurt_cell: bool = cell_intent.get("kind", "") == "hurt" or pos in (intent.get("hurt", []) as Array)
+			var path_cells: Array = cell_intent_data.get("path", intent.get("path", []))
+			var path_index: int = path_cells.find(pos)
 			if is_hurt_cell:
 				# Keep danger readable without painting a large debug-like label across
 				# the inherited timber floor. A compact token plus red corners reads as
@@ -3087,7 +3165,10 @@ func build_battle_world() -> void:
 				_add_trap_item_sprite(cell_node, card_id, top_y)
 				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
 	_add_battle_pawn(combat.player_pos, true, true)
-	_add_battle_pawn(combat.enemy_pos, false, combat.enemy_revealed)
+	for enemy_id in combat.living_enemy_ids():
+		var state = combat.enemy_by_id(enemy_id)
+		if state != null:
+			_add_battle_pawn(state.pos, false, state.revealed, enemy_id)
 	if combat.has_decoy():
 		_add_decoy_pawn(combat.decoy_pos)
 	_add_battle_room_shell()
@@ -3242,8 +3323,15 @@ func _apply_battle_footprint_to_combat() -> void:
 		combat.traps.erase(cell)
 	if battle_backstage_cells.has(combat.player_pos) or not combat.is_walkable(combat.player_pos):
 		combat.player_pos = _nearest_active_battle_cell(combat.player_pos)
-	if battle_backstage_cells.has(combat.enemy_pos) or not combat.is_walkable(combat.enemy_pos) or combat.enemy_pos == combat.player_pos:
-		combat.enemy_pos = _nearest_active_battle_cell(combat.enemy_pos, combat.player_pos)
+	var reserved_enemy_cells: Dictionary = {}
+	for enemy_id in combat.enemy_order:
+		var enemy_state = combat.enemy_by_id(enemy_id)
+		if enemy_state == null:
+			continue
+		if battle_backstage_cells.has(enemy_state.pos) or not combat.is_walkable(enemy_state.pos) or enemy_state.pos == combat.player_pos or reserved_enemy_cells.has(enemy_state.pos):
+			enemy_state.pos = _nearest_active_battle_cell(enemy_state.pos, combat.player_pos, reserved_enemy_cells)
+		if enemy_state.pos != INVALID_CELL:
+			reserved_enemy_cells[enemy_state.pos] = enemy_id
 	combat._refresh_vision(false)
 
 
@@ -3602,12 +3690,17 @@ func _portal_endpoint_label(pos: Vector2i) -> String:
 	return "A" if pos.x < other.x or (pos.x == other.x and pos.y < other.y) else "B"
 
 
-func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
+func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool, enemy_id: String = "") -> void:
 	var node := Node3D.new()
-	node.name = "Player" if is_player else "Enemy"
-	node.position = _battle_pawn_world(pos, is_player)
+	var node_name := "Player"
+	if not is_player:
+		node_name = _enemy_node_name(enemy_id)
+	node.name = node_name
+	node.position = _battle_pawn_world(pos, is_player, enemy_id)
 	node.rotation.y = battle_player_facing_yaw if is_player else battle_enemy_facing_yaw
 	battle_root.add_child(node)
+	if not is_player:
+		enemy_nodes[enemy_id] = node
 	var floor_y := 0.39 + float(combat.heights.get(pos, 0)) * 0.64
 	var base_color := COL_TEAL if is_player else COL_RED if revealed else Color("1f2930")
 	_add_cylinder(node, "PawnBase", Vector3(0, floor_y + 0.026, 0), 0.46, 0.052, _material(Color(base_color, 0.58), true, 0.035))
@@ -3616,14 +3709,15 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool) -> void:
 	presenter.position = Vector3(0, floor_y + 0.05, 0)
 	node.add_child(presenter)
 	var actor_key := "player" if is_player else "enemy"
-	var presenter_id := actor_key if is_player else "%s:%s" % [actor_key, combat.enemy_archetype]
-	presenter.configure(presenter_id, _battle_actor_presentation(actor_key))
+	var enemy_state = combat.enemy_by_id(enemy_id) if not is_player else null
+	var presenter_id := actor_key if is_player else "%s:%s" % [actor_key, str(enemy_state.archetype if enemy_state != null else combat.enemy_archetype)]
+	presenter.configure(presenter_id, _battle_actor_presentation(actor_key, enemy_id))
 	presenter.state_changed.connect(_on_presenter_state_changed)
 	if not is_player:
 		presenter.set_obscured(not revealed)
 	if not is_player:
 		if revealed and combat != null and str(combat.outcome) == "":
-			var intent: Dictionary = combat.preview_intent()
+			var intent: Dictionary = combat.preview_intent(enemy_id)
 			var intent_color := _battle_intent_color(str(intent.get("type", "stall")))
 			var intent_badge := MeshInstance3D.new()
 			intent_badge.name = "EnemyIntentBadge"
@@ -3672,22 +3766,61 @@ func _battle_intent_glyph(intent_type: String) -> String:
 	return "待"
 
 
-func _battle_actor_presentation(actor_key: String) -> Dictionary:
+func _battle_actor_presentation(actor_key: String, enemy_id: String = "") -> Dictionary:
 	var actors: Dictionary = presentation.get("actors", {})
 	var config: Dictionary = (actors.get(actor_key, {}) as Dictionary).duplicate(true)
 	if actor_key != "enemy" or combat == null:
 		return config
 	var archetypes: Dictionary = presentation.get("enemy_archetypes", {})
-	var variant: Dictionary = archetypes.get(combat.enemy_archetype, {})
+	var state = combat.enemy_by_id(enemy_id) if enemy_id != "" else null
+	var archetype: String = str(state.archetype) if state != null else combat.enemy_archetype
+	var variant: Dictionary = archetypes.get(archetype, {})
 	config.merge(variant, true)
 	return config
 
 
-func _battle_pawn_world(pos: Vector2i, is_player: bool) -> Vector3:
+func _battle_pawn_world(pos: Vector2i, is_player: bool, enemy_id: String = "") -> Vector3:
 	var world := _battle_world(pos)
-	if combat != null and combat.player_pos == combat.enemy_pos and pos == combat.player_pos:
-		world += Vector3(-0.30, 0.0, 0.20) if is_player else Vector3(0.30, 0.0, -0.20)
+	if combat != null and pos == combat.player_pos and combat.enemy_at(pos) != null:
+		if is_player:
+			world += Vector3(-0.30, 0.0, 0.20)
+		else:
+			world += Vector3(0.30, 0.0, -0.20)
 	return world
+
+
+func _enemy_node_name(enemy_id: String) -> String:
+	if combat != null and not combat.enemy_order.is_empty() and enemy_id == combat.enemy_order[0]:
+		return "Enemy"
+	var safe_id := enemy_id.replace("/", "_").replace(":", "_").replace(" ", "_")
+	return "Enemy_%s" % safe_id
+
+
+func _enemy_node_for_id(enemy_id: String) -> Node3D:
+	var node := enemy_nodes.get(enemy_id) as Node3D
+	if node != null and is_instance_valid(node):
+		return node
+	return null
+
+
+func _enemy_state_for_node(node: Node3D):
+	for enemy_id in enemy_nodes.keys():
+		if enemy_nodes[enemy_id] == node and combat != null:
+			return combat.enemy_by_id(str(enemy_id))
+	return null
+
+
+func _play_enemy_state(enemy_id: String, state: String, callout: String = "") -> void:
+	var node := _enemy_node_for_id(enemy_id)
+	if node == null:
+		return
+	var presenter := node.get_node_or_null("Presenter")
+	if presenter != null and presenter.has_method("play_state"):
+		presenter.play_state(state, callout)
+
+
+func _show_enemy_damage_feedback(enemy_id: String, damage: int) -> void:
+	_show_actor_damage_feedback(_enemy_node_name(enemy_id), damage)
 
 
 func _add_decoy_pawn(pos: Vector2i) -> void:
