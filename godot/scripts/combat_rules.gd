@@ -579,7 +579,16 @@ func preview_intent(enemy_id := "") -> Dictionary:
 	var state: CombatEnemyState = enemy_by_id(str(enemy_id)) if str(enemy_id) != "" else _focus_enemy_state()
 	if state == null:
 		return {"path": [], "hurt": [], "label": "观望", "detail": "", "type": "stall", "enemy_revealed": false, "sees_player": false, "attack_kind": "", "hits": 0, "pending": false, "enemy_id": ""}
-	return _preview_intent_for(state)
+	# 意图预览与真正的敌方回合共享同一轮战术计划，避免 HUD 显示
+	# “追击”而实际回合却按另一攻击位行动。预览只重建计划，不执行动作。
+	var blackboard := EnemyAISquadBlackboard.new()
+	blackboard.begin_turn(self)
+	var result := _preview_intent_for(state)
+	result["ai_role"] = state.ai_role
+	result["ai_state"] = state.ai_state
+	result["ai_reason"] = state.ai_reason
+	result["tactical_goal"] = state.tactical_goal
+	return result
 
 
 func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
