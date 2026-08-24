@@ -98,6 +98,7 @@ static func build_state(spec: Dictionary, spawn_order: int) -> RefCounted:
 	state.archetype = str(spec.get("archetype", "execute"))
 	state.archetype_label = str(spec.get("archetype_label", state.archetype))
 	state.archetype_desc = str(spec.get("archetype_desc", ""))
+	state.behavior_role = str(spec.get("behavior_role", "auto"))
 	var traits: Array[String] = []
 	for raw_trait in spec.get("traits", []):
 		traits.append(str(raw_trait))
@@ -134,6 +135,8 @@ static func _fill_defaults(spec: Dictionary, arena: Dictionary) -> void:
 		spec["archetype_label"] = spec["archetype"]
 	if not spec.has("archetype_desc"):
 		spec["archetype_desc"] = ""
+	if not spec.has("behavior_role"):
+		spec["behavior_role"] = "auto"
 	if not spec.has("traits"):
 		spec["traits"] = []
 	if not spec.has("trait_labels"):

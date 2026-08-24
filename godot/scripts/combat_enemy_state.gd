@@ -21,6 +21,13 @@ var tier := 1
 var archetype := "execute"
 var archetype_label := "处决匣"
 var archetype_desc := ""
+var behavior_role := "auto"
+var ai_role := "hunter"
+var ai_state := "patrol"
+var ai_reason := ""
+var tactical_goal := INVALID_CELL
+var tactical_reserved_cell := INVALID_CELL
+var tactical_plan_round := 0
 var traits: Array[String] = []
 var trait_labels: Dictionary = {}
 var revealed := true
@@ -73,6 +80,13 @@ func debug_snapshot() -> Dictionary:
 		"archetype": archetype,
 		"archetype_label": archetype_label,
 		"archetype_desc": archetype_desc,
+		"behavior_role": behavior_role,
+		"ai_role": ai_role,
+		"ai_state": ai_state,
+		"ai_reason": ai_reason,
+		"tactical_goal": tactical_goal,
+		"tactical_reserved_cell": tactical_reserved_cell,
+		"tactical_plan_round": tactical_plan_round,
 		"traits": trait_dump,
 		"trait_labels": trait_labels.duplicate(true),
 		"revealed": revealed,

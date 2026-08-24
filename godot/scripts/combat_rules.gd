@@ -2,6 +2,7 @@ extends RefCounted
 
 const CombatEnemyRoster = preload("res://scripts/combat_enemy_roster.gd")
 const EnemyTurnScheduler = preload("res://scripts/enemy_turn_scheduler.gd")
+const EnemyAISquadBlackboard = preload("res://scripts/enemy_ai_blackboard.gd")
 
 const DIRS := [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 const INVALID_CELL := Vector2i(-999, -999)
@@ -49,6 +50,7 @@ var enemies: Dictionary = {}
 var enemy_order: Array[String] = []
 var setup_errors: Array[String] = []
 var _acting_enemy: CombatEnemyState = null
+var _ai_blackboard: EnemyAISquadBlackboard = null
 var _fallback_enemy := CombatEnemyState.new()
 
 var cards: Dictionary = {}
@@ -663,7 +665,17 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 
 
 func enemy_turn() -> Array[Dictionary]:
-	return EnemyTurnScheduler.new(self).run_turn()
+	_ai_blackboard = EnemyAISquadBlackboard.new()
+	_ai_blackboard.begin_turn(self)
+	var events: Array[Dictionary] = EnemyTurnScheduler.new(self).run_turn()
+	_ai_blackboard = null
+	return events
+
+
+func preview_tactical_plan(enemy_id: String) -> Dictionary:
+	var blackboard := EnemyAISquadBlackboard.new()
+	blackboard.begin_turn(self)
+	return blackboard.plan_for(enemy_id)
 
 
 func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
@@ -671,6 +683,8 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 	if outcome != "":
 		return turn_events
 	_refresh_enemy_vision(state, false)
+	if _ai_blackboard != null:
+		_ai_blackboard.plan_enemy(state.id)
 	if not state.beam_pending_cells.is_empty():
 		var firing_cells := state.beam_pending_cells.duplicate()
 		var firing_damage := state.beam_pending_damage
@@ -694,6 +708,9 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 			return turn_events
 		state.ambush_active = false
 		state.patrol_goal = INVALID_CELL
+		state.tactical_goal = INVALID_CELL
+		state.tactical_reserved_cell = INVALID_CELL
+		state.tactical_plan_round = 0
 		event_log.append("AmbushReleasedToPatrol")
 		turn_events.append({"kind": "alert", "actor_id": state.id, "label": "离开埋伏点，开始巡逻"})
 	var remaining := _enemy_turn_budget(state)
@@ -1418,6 +1435,8 @@ func _draw_cards(count: int) -> void:
 
 
 func _enemy_goal(state: CombatEnemyState) -> Vector2i:
+	if state.tactical_plan_round == round_number and state.tactical_goal != INVALID_CELL:
+		return state.tactical_goal
 	if has_decoy():
 		return decoy_pos
 	if state.sees_player:
