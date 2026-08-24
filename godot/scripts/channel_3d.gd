@@ -2300,7 +2300,10 @@ func end_combat_turn() -> void:
 	animation_busy = true
 	active_animation_kind = "enemy_turn"
 	status_message = _enemy_turn_summary(turn_events)
-	build_battle_world()
+	# 不要在敌方规则推进后重建战场：enemy_turn() 已经把逻辑位置推进到终点，
+	# 此时重建会制造一个“终点节点”进入渲染帧的机会。保留现有节点，
+	# _animate_enemy_turn() 会把它们从当前可见位置直接播放到事件终点；
+	# 动画结束后由 _after_combat_action() 统一重建最终状态。
 	_refresh_hud()
 	_animate_enemy_turn(turn_events)
 

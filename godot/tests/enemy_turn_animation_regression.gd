@@ -24,10 +24,12 @@ func _run() -> void:
 	game.combat.patrol_goal = game.combat.INVALID_CELL
 	game.build_battle_world()
 	var start: Vector2i = game.combat.enemy_pos
+	var enemy_node_before := game.battle_root.get_node_or_null("Enemy") as Node3D
 	game.end_combat_turn()
 	_check(game.animation_busy, "enemy patrol must lock player input while its motion tween is running")
 	var enemy_node := game.battle_root.get_node_or_null("Enemy") as Node3D
 	_check(enemy_node != null, "enemy pawn must remain available for patrol animation")
+	_check(enemy_node == enemy_node_before, "enemy patrol must animate the existing pawn without rebuilding it first")
 	if enemy_node != null:
 		_check(enemy_node.position.distance_to(game._battle_world(start)) < 0.01, "enemy patrol must render from its event source on the first frame")
 	var visibly_departed := false
