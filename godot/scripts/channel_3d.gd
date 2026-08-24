@@ -2319,13 +2319,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 		_complete_dynamic_effect()
 		_after_combat_action()
 		return
-	for event: Dictionary in turn_events:
-		if str(event.get("kind", "")) != "move":
-			continue
-		var move_node := _enemy_node_for_id(str(event.get("actor_id", "")))
-		if move_node != null:
-			var move_actor_id := str(event.get("actor_id", ""))
-			move_node.position = _battle_pawn_world(event.get("from", combat.enemy_pos), false, move_actor_id)
+	_position_enemy_turn_starts(turn_events)
 	var tween := create_tween()
 	active_motion_tween = tween
 	for event: Dictionary in turn_events:
@@ -2396,6 +2390,21 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 		return
 	_complete_dynamic_effect()
 	_after_combat_action()
+
+
+func _position_enemy_turn_starts(turn_events: Array[Dictionary]) -> void:
+	var positioned_actor_ids: Dictionary = {}
+	for event: Dictionary in turn_events:
+		if str(event.get("kind", "")) != "move":
+			continue
+		var actor_id := str(event.get("actor_id", ""))
+		if actor_id.is_empty() or positioned_actor_ids.has(actor_id):
+			continue
+		positioned_actor_ids[actor_id] = true
+		var move_node := _enemy_node_for_id(actor_id)
+		if move_node != null:
+			# 同一敌人一回合可能走多格；首帧只能采用第一段移动的起点。
+			move_node.position = _battle_pawn_world(event.get("from", combat.enemy_pos), false, actor_id)
 
 
 func _set_enemy_step_motion(weight: float, enemy_node: Node3D, start_position: Vector3, target_position: Vector3) -> void:

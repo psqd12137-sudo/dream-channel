@@ -25,6 +25,14 @@ func _run() -> void:
 	game.build_battle_world()
 	var start: Vector2i = game.combat.enemy_pos
 	var enemy_node_before := game.battle_actor_root.get_node_or_null("Enemy") as Node3D
+	var enemy_id := str(game.combat.enemy_order[0])
+	var later_step_source := Vector2i((start.x + 2) % game.combat.cols, start.y)
+	var synthetic_multi_step_events: Array[Dictionary] = [
+		{"kind": "move", "actor_id": enemy_id, "from": start, "to": start + Vector2i.RIGHT},
+		{"kind": "move", "actor_id": enemy_id, "from": later_step_source, "to": later_step_source + Vector2i.RIGHT},
+	]
+	game._position_enemy_turn_starts(synthetic_multi_step_events)
+	_check(enemy_node_before != null and enemy_node_before.position.distance_to(game._battle_world(start)) < 0.01, "multi-step enemy setup must keep the first move source instead of the final move source")
 	game.end_combat_turn()
 	_check(game.animation_busy, "enemy patrol must lock player input while its motion tween is running")
 	var enemy_node := game.battle_actor_root.get_node_or_null("Enemy") as Node3D
