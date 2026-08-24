@@ -28,6 +28,8 @@ func _run() -> void:
 	_check(game.animation_busy, "enemy patrol must lock player input while its motion tween is running")
 	var enemy_node := game.battle_root.get_node_or_null("Enemy") as Node3D
 	_check(enemy_node != null, "enemy pawn must remain available for patrol animation")
+	if enemy_node != null:
+		_check(enemy_node.position.distance_to(game._battle_world(start)) < 0.01, "enemy patrol must render from its event source on the first frame")
 	var visibly_departed := false
 	var saw_walk_animation := false
 	if enemy_node != null:

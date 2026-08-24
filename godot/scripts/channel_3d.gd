@@ -223,6 +223,7 @@ var battle_camera_return_tween: Tween = null
 var battle_room_title := "房间"
 var battle_room_context: Dictionary = {}
 var enemy_nodes: Dictionary = {}
+var battle_enemy_render_positions: Dictionary = {}
 var battle_backstage_cells: Dictionary = {}
 var battle_height_prop_assignments: Dictionary = {}
 var battle_blocker_prop_assignments: Dictionary = {}
@@ -765,6 +766,7 @@ func go_home() -> void:
 	test_focused_enemy_id = ""
 	test_enemy_phase_pending = false
 	_cancel_dynamic_effect()
+	battle_enemy_render_positions.clear()
 	character_animation_demo_mode = false
 	camera.environment = null
 	house_camera_following = false
@@ -927,6 +929,7 @@ func return_to_combat_test_menu() -> void:
 	animation_busy = false
 	active_animation_kind = ""
 	enemy_nodes.clear()
+	battle_enemy_render_positions.clear()
 	combat = null
 	_restore_test_state()
 	test_combat_active = false
@@ -2090,6 +2093,7 @@ func finish_event_trial(success: bool) -> void:
 
 func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	combat = CombatRules.new()
+	battle_enemy_render_positions.clear()
 	battle_room_title = str(room.get("name", "房间"))
 	battle_player_facing_yaw = house_player_facing_yaw
 	battle_enemy_facing_yaw = PI
@@ -2274,6 +2278,16 @@ func end_combat_turn() -> void:
 	hovered_battle_cell = INVALID_CELL
 	var turn_events: Array[Dictionary] = combat.enemy_turn()
 	battle_turn_events = turn_events.duplicate(true)
+	battle_enemy_render_positions.clear()
+	for event: Dictionary in turn_events:
+		if str(event.get("kind", "")) != "move":
+			continue
+		var actor_id := str(event.get("actor_id", ""))
+		var source: Vector2i = event.get("from", INVALID_CELL)
+		if actor_id.is_empty() or source == INVALID_CELL or battle_enemy_render_positions.has(actor_id):
+			continue
+		# enemy_turn() 已经把规则状态推进到终点；重建节点时必须先使用事件起点。
+		battle_enemy_render_positions[actor_id] = source
 	battle_turn_actor_id = "enemy_phase"
 	for event: Dictionary in turn_events:
 		var actor_id := str(event.get("actor_id", ""))
@@ -2782,6 +2796,7 @@ func _rotation_invariant_fit_size(horizontal_radius: float, vertical_span: float
 
 
 func _after_combat_action() -> void:
+	battle_enemy_render_positions.clear()
 	player_hp = combat.player_hp
 	if test_combat_active and test_session.active and test_enemy_phase_pending:
 		test_session.record_enemy_phase(test_last_events, combat)
@@ -3463,7 +3478,8 @@ func build_battle_world() -> void:
 	for enemy_id in combat.living_enemy_ids():
 		var state = combat.enemy_by_id(enemy_id)
 		if state != null:
-			_add_battle_pawn(state.pos, false, state.revealed, enemy_id)
+			var render_pos: Vector2i = battle_enemy_render_positions.get(enemy_id, state.pos)
+			_add_battle_pawn(render_pos, false, state.revealed, enemy_id)
 	if combat.has_decoy():
 		_add_decoy_pawn(combat.decoy_pos)
 	_add_battle_room_shell()
