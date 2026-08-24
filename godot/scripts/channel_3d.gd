@@ -243,6 +243,8 @@ var test_auto_accumulator := 0.0
 var test_last_events: Array[Dictionary] = []
 var test_focused_enemy_id := ""
 var test_enemy_phase_pending := false
+var battle_turn_actor_id := "player"
+var battle_turn_events: Array[Dictionary] = []
 var show_house_diagnostics := false
 var large_room_mix_test_mode := false
 var character_animation_demo_mode := false
@@ -2108,6 +2110,8 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	world_container.visible = true
 	house_root.visible = false
 	battle_root.visible = true
+	battle_turn_actor_id = "player"
+	battle_turn_events.clear()
 	battle_root.position = Vector3.ZERO
 	battle_root.scale = Vector3.ONE
 	build_battle_world()
@@ -2266,6 +2270,13 @@ func end_combat_turn() -> void:
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
 	var turn_events: Array[Dictionary] = combat.enemy_turn()
+	battle_turn_events = turn_events.duplicate(true)
+	battle_turn_actor_id = "enemy_phase"
+	for event: Dictionary in turn_events:
+		var actor_id := str(event.get("actor_id", ""))
+		if not actor_id.is_empty():
+			battle_turn_actor_id = actor_id
+			break
 	if test_combat_active:
 		test_last_events = turn_events.duplicate(true)
 		test_enemy_phase_pending = true
@@ -2694,6 +2705,8 @@ func _after_combat_action() -> void:
 	# 杀戮尖塔式回合：敌方动画播完后才给玩家发新牌
 	if combat != null and combat.pending_player_turn and combat.outcome == "":
 		combat.start_player_turn()
+		battle_turn_actor_id = "player"
+		battle_turn_events.clear()
 	build_battle_world()
 	if combat.outcome != "":
 		status_message = "战斗胜利。" if combat.outcome == "victory" else "本集信号中断。"
@@ -4008,6 +4021,9 @@ func _enemy_state_for_node(node: Node3D):
 
 
 func _play_enemy_state(enemy_id: String, state: String, callout: String = "") -> void:
+	battle_turn_actor_id = enemy_id
+	if hud != null:
+		hud.queue_redraw()
 	var node := _enemy_node_for_id(enemy_id)
 	if node == null:
 		return

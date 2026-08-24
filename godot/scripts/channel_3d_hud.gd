@@ -38,6 +38,7 @@ const DESIGN_SIZE := Vector2(1280, 800)
 const HOUSE_VIEW_RECT := Rect2(20, 88, 968, 586)
 const BUILD_VIEW_RECT := Rect2(20, 88, 968, 376)
 const COMBAT_VIEW_RECT := Rect2(20, 88, 1244, 540)
+const TURN_ORDER_RECT := Rect2(404, 8, 386, 56)
 
 const RESET_RECT := Rect2(1142, 17, 110, 38)
 const CAMERA_RESET_RECT := Rect2(1040, 19, 94, 34)
@@ -446,6 +447,7 @@ func _draw_top_bar() -> void:
 	if game.phase == "combat":
 		_draw_chip(Rect2(800, 18, 112, 32), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 11)
 		_draw_chip(Rect2(920, 18, 112, 32), _phase_label(), MAGENTA, TEXT, 11)
+		_draw_combat_turn_order()
 	else:
 		_draw_chip(Rect2(560, 18, 112, 32), "速度 %d" % int(game.player_speed), TEAL, TEXT, 11)
 		_draw_chip(Rect2(680, 18, 112, 32), "生命 %d/%d" % [game.player_hp, game.player_max_hp], RED, TEXT, 11)
@@ -455,6 +457,48 @@ func _draw_top_bar() -> void:
 		_draw_button(CAMERA_RESET_RECT, "镜头复位" if game.phase == "combat" else "地图复位", TEAL, TEXT)
 	if not game.phase.begins_with("lab_"):
 		_draw_button(RESET_RECT, "返回测试台" if game.test_combat_active else "回到标题", MAGENTA if not game.test_combat_active else TEAL, TEXT)
+
+
+func _draw_combat_turn_order() -> void:
+	var combat = game.combat
+	if combat == null:
+		return
+	draw_rect(Rect2(TURN_ORDER_RECT.position + Vector2(4, 5), TURN_ORDER_RECT.size), Color("050a0e99"), true)
+	draw_rect(TURN_ORDER_RECT, Color("0e1b22f4"), true)
+	draw_rect(TURN_ORDER_RECT, TEAL, false, 1.5)
+	var current_id := str(game.battle_turn_actor_id)
+	var current_label := "我方" if current_id == "player" else "敌方"
+	if current_id != "player" and current_id != "enemy_phase":
+		var current_state = combat.enemy_by_id(current_id)
+		if current_state != null:
+			current_label = _turn_order_enemy_label(current_state, -1)
+	_label("行动顺序 · 当前 %s" % current_label, TURN_ORDER_RECT.position + Vector2(9, 16), 9, GOLD if current_id == "player" else MAGENTA)
+	var order: Array[String] = ["player"]
+	order.append_array(combat.enemy_order)
+	var chip_width := 39.0
+	var chip_gap := 3.0
+	var chip_x := TURN_ORDER_RECT.position.x + 9.0
+	var chip_y := TURN_ORDER_RECT.position.y + 27.0
+	for index in range(order.size()):
+		var actor_id := order[index]
+		var is_player := actor_id == "player"
+		var is_active := actor_id == current_id
+		var fill := GOLD if is_active else TEAL if is_player else MAGENTA
+		var text_color := INK if is_active else TEXT
+		var caption := "%d %s" % [index + 1, "我方" if is_player else _turn_order_enemy_label(combat.enemy_by_id(actor_id), index)]
+		_draw_chip(Rect2(chip_x, chip_y, chip_width, 23), caption, fill.darkened(0.12) if not is_active else fill, text_color, 7)
+		chip_x += chip_width + chip_gap
+
+
+func _turn_order_enemy_label(state, index: int) -> String:
+	if state == null:
+		return "敌方"
+	var role_labels := {"hunter": "猎手", "flanker": "侧翼", "controller": "控场"}
+	var role := str(state.ai_role)
+	var label := str(role_labels.get(role, state.name))
+	if index >= 0 and state.ai_role == "auto":
+		label = "敌%d" % (index + 1)
+	return _shorten(label, 3)
 
 
 func _draw_home() -> void:

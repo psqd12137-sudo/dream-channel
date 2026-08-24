@@ -20,6 +20,8 @@ func _run() -> void:
 	_check(game.phase == "home", "game must boot to title")
 	game.toggle_home_tests()
 	var hud = game.get_node("HUD/HUDRoot") as Control
+	_check(hud.has_method("_draw_combat_turn_order"), "combat HUD must expose the turn-order renderer")
+	_check(hud.TURN_ORDER_RECT.size.x > 0.0, "combat HUD must reserve a turn-order strip")
 	_click(hud, hud.HOME_TEST_COMBAT_RECT)
 	_check(game.phase == "test_combat_menu", "existing combat test entry must open the test desk")
 	_check(game.phase == "test_combat_menu", "combat test entry must use an isolated test menu phase")
@@ -31,6 +33,7 @@ func _run() -> void:
 	await process_frame
 	_check(game.phase == "combat" and game.test_combat_active, "test combat must use the formal battle phase with an isolated session")
 	_check(game.world_container.visible, "test combat must restore the 3D world viewport after the test menu hid it")
+	_check(game.battle_turn_actor_id == "player", "combat must begin with the player highlighted in turn order")
 	_check(game.combat.enemy_order.size() == 3, "squad roles test combat must create three enemies")
 	_check(game.combat.player_hp == 60, "test combat must use the scenario player HP")
 	game.return_to_combat_test_menu()
