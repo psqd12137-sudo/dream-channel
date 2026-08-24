@@ -1,6 +1,7 @@
 extends RefCounted
 
 const CombatEnemyRoster = preload("res://scripts/combat_enemy_roster.gd")
+const EnemyTurnScheduler = preload("res://scripts/enemy_turn_scheduler.gd")
 
 const DIRS := [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 const INVALID_CELL := Vector2i(-999, -999)
@@ -583,23 +584,7 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 
 
 func enemy_turn() -> Array[Dictionary]:
-	var turn_events: Array[Dictionary] = []
-	if outcome != "":
-		return turn_events
-	_discard_unretained_hand()
-	# 阶段 C：按 enemy_order 顺序逐个存活敌人行动；占格阻挡与调度器
-	# 抽取属于阶段 D，此处先保证多敌人依次行动且玩家死亡立即中止。
-	for enemy_id in enemy_order.duplicate():
-		var state: CombatEnemyState = enemies.get(enemy_id)
-		if state == null or not state.alive():
-			continue
-		_acting_enemy = state
-		turn_events.append_array(_single_enemy_turn(state))
-		if outcome != "":
-			break
-	_acting_enemy = null
-	_finish_enemy_turn()
-	return turn_events
+	return EnemyTurnScheduler.new(self).run_turn()
 
 
 func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
@@ -731,7 +716,7 @@ func _enemy_attack_plan(state: CombatEnemyState, origin: Vector2i, remaining: in
 			return {"kind": "guardBreak", "cost": attack_cost + 1, "cells": [player_pos]}
 		return {"kind": "melee", "cost": attack_cost, "cells": [player_pos]}
 	if state.has_trait("lunge") and distance == 2:
-		var landing := _lunge_landing(origin)
+		var landing := _lunge_landing(state, origin)
 		if landing != INVALID_CELL and remaining >= attack_cost + 1:
 			return {"kind": "lunge", "cost": attack_cost + 1, "cells": [landing, player_pos], "landing": landing}
 	return {}
@@ -903,11 +888,12 @@ func _beam_cells(origin: Vector2i, target: Vector2i) -> Array[Vector2i]:
 	return cells
 
 
-func _lunge_landing(origin: Vector2i) -> Vector2i:
+func _lunge_landing(state: CombatEnemyState, origin: Vector2i) -> Vector2i:
+	var blocked := occupied_enemy_cells(state.id)
 	var candidates: Array[Vector2i] = []
 	for direction in DIRS:
 		var cell: Vector2i = origin + direction
-		if is_walkable(cell) and cell != player_pos and cell != decoy_pos and manhattan(cell, player_pos) == 1:
+		if is_walkable(cell) and cell != player_pos and cell != decoy_pos and not blocked.has(cell) and manhattan(cell, player_pos) == 1:
 			candidates.append(cell)
 	if candidates.is_empty():
 		return INVALID_CELL
@@ -922,12 +908,14 @@ func _lunge_landing(origin: Vector2i) -> Vector2i:
 func _choose_enemy_step(state: CombatEnemyState, origin: Vector2i, goal: Vector2i) -> Vector2i:
 	if goal == INVALID_CELL:
 		return INVALID_CELL
+	# 动态阻挡：其他存活敌人所在格不可作为落点，也不可穿越。
+	var blocked := occupied_enemy_cells(state.id)
 	var candidates: Array[Dictionary] = []
 	for direction in DIRS:
 		var cell: Vector2i = origin + direction
-		if not is_walkable(cell) or cell == player_pos or cell == decoy_pos:
+		if not is_walkable(cell) or cell == player_pos or cell == decoy_pos or blocked.has(cell):
 			continue
-		var path := _find_path(cell, goal)
+		var path := _find_path(cell, goal, blocked)
 		if path.size() < 2 and cell != goal:
 			continue
 		var trap: Dictionary = traps.get(cell, {})
@@ -935,8 +923,8 @@ func _choose_enemy_step(state: CombatEnemyState, origin: Vector2i, goal: Vector2
 		candidates.append({"cell": cell, "distance": path.size(), "hazard": hazard, "height": _tile_height(cell)})
 	if portals.has(origin):
 		var portal_cell: Vector2i = portals[origin]
-		if is_walkable(portal_cell) and portal_cell != player_pos and portal_cell != decoy_pos:
-			var portal_path := _find_path(portal_cell, goal)
+		if is_walkable(portal_cell) and portal_cell != player_pos and portal_cell != decoy_pos and not blocked.has(portal_cell):
+			var portal_path := _find_path(portal_cell, goal, blocked)
 			candidates.append({"cell": portal_cell, "distance": portal_path.size(), "hazard": 0, "height": _tile_height(portal_cell)})
 	if candidates.is_empty():
 		return INVALID_CELL
@@ -1085,10 +1073,11 @@ func _shove_enemy(state: CombatEnemyState, prefer_portal: bool) -> bool:
 	var direct := state.pos + (state.pos - player_pos)
 	var best := Vector2i(-999, -999)
 	var best_score := -9999
+	var blocked := occupied_enemy_cells(state.id)
 	for raw_dir in DIRS:
 		var dir: Vector2i = raw_dir
 		var target: Vector2i = state.pos + dir
-		if not is_walkable(target) or target == player_pos:
+		if not is_walkable(target) or target == player_pos or blocked.has(target):
 			continue
 		var score := manhattan(target, player_pos)
 		if target == direct:
@@ -1103,7 +1092,7 @@ func _shove_enemy(state: CombatEnemyState, prefer_portal: bool) -> bool:
 	if best.x < -100:
 		_drain_toughness(state, 1, "shove_wall")
 		return false
-	var landing := _follow_portal(best, "enemy")
+	var landing := _follow_portal(best, "enemy", blocked)
 	state.just_portaled = landing != best
 	state.pos = landing
 	_trigger_trap(state, state.pos)
@@ -1399,15 +1388,16 @@ func _refresh_enemy_vision(state: CombatEnemyState, emit_events: bool = true) ->
 
 
 func _ensure_patrol_goal(state: CombatEnemyState) -> Vector2i:
-	if state.patrol_goal != INVALID_CELL and state.patrol_goal != state.pos and is_walkable(state.patrol_goal) and _find_path(state.pos, state.patrol_goal).size() >= 2:
+	var blocked := occupied_enemy_cells(state.id)
+	if state.patrol_goal != INVALID_CELL and state.patrol_goal != state.pos and is_walkable(state.patrol_goal) and not blocked.has(state.patrol_goal) and _find_path(state.pos, state.patrol_goal, blocked).size() >= 2:
 		return state.patrol_goal
 	var candidates: Array[Vector2i] = []
 	for y in range(rows):
 		for x in range(cols):
 			var cell := Vector2i(x, y)
-			if cell == state.pos or not is_walkable(cell):
+			if cell == state.pos or not is_walkable(cell) or blocked.has(cell):
 				continue
-			if _find_path(state.pos, cell).size() >= 2:
+			if _find_path(state.pos, cell, blocked).size() >= 2:
 				candidates.append(cell)
 	if candidates.is_empty():
 		state.patrol_goal = INVALID_CELL
@@ -1434,7 +1424,7 @@ func _tile_height(pos: Vector2i) -> int:
 	return int(heights.get(pos, 0))
 
 
-func _find_path(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
+func _find_path(start: Vector2i, goal: Vector2i, blocked_cells: Dictionary = {}) -> Array[Vector2i]:
 	var queue: Array[Vector2i] = [start]
 	var came_from: Dictionary = {start: start}
 	while not queue.is_empty():
@@ -1443,13 +1433,13 @@ func _find_path(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 			break
 		for dir in DIRS:
 			var next: Vector2i = current + dir
-			if not is_walkable(next) or came_from.has(next):
+			if not is_walkable(next) or came_from.has(next) or blocked_cells.has(next):
 				continue
 			came_from[next] = current
 			queue.append(next)
 		if portals.has(current):
 			var portal_next: Vector2i = portals[current]
-			if is_walkable(portal_next) and not came_from.has(portal_next):
+			if is_walkable(portal_next) and not came_from.has(portal_next) and not blocked_cells.has(portal_next):
 				came_from[portal_next] = current
 				queue.append(portal_next)
 	if not came_from.has(goal):
@@ -1484,11 +1474,11 @@ func _has_line_of_sight(a: Vector2i, b: Vector2i) -> bool:
 	return true
 
 
-func _follow_portal(pos: Vector2i, _who: String = "enemy") -> Vector2i:
+func _follow_portal(pos: Vector2i, _who: String = "enemy", blocked_cells: Dictionary = {}) -> Vector2i:
 	if not portals.has(pos):
 		return pos
 	var destination: Vector2i = portals[pos]
-	if not is_walkable(destination):
+	if not is_walkable(destination) or blocked_cells.has(destination):
 		return pos
 	return destination
 
