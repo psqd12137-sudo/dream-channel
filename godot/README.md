@@ -68,6 +68,11 @@
 - UI 入口：`scripts/channel_3d_hud.gd`
 - 战斗规则：`scripts/combat_rules.gd`
 - 最新 Web 数据适配：`scripts/web_content_adapter.gd`
+- 存档边界：`scripts/run_save_repository.gd`
+- 表现设置：`scripts/presentation_settings.gd`
+- 大地图布景：`scripts/channel_house_world_renderer.gd`
+- 战斗地图与棋盘：`scripts/channel_battle_world_renderer.gd`
+- 测试战斗与实验场：`scripts/channel_lab_controller.gd`
 
 大地图与战斗地图镜头操作（2026-08-21 镜头系统）：
 

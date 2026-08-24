@@ -449,14 +449,12 @@ func _draw_top_bar() -> void:
 	_display_label("织梦频道", Vector2(24, 42), 28, TEXT)
 	_label("第 %02d 集 · CH-%010d" % [game.run_progress, game.run_seed], Vector2(244, 41), 11, Color("7de0d5"))
 	if game.phase == "combat":
-		_draw_chip(Rect2(800, 18, 112, 32), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 11)
-		_draw_chip(Rect2(920, 18, 112, 32), _phase_label(), MAGENTA, TEXT, 11)
+		_draw_chip(Rect2(800, 18, 112, 32), _phase_label(), MAGENTA, TEXT, 11)
 		_draw_combat_turn_order()
 	else:
 		_draw_chip(Rect2(560, 18, 112, 32), "速度 %d" % int(game.player_speed), TEAL, TEXT, 11)
 		_draw_chip(Rect2(680, 18, 112, 32), "生命 %d/%d" % [game.player_hp, game.player_max_hp], RED, TEXT, 11)
-		_draw_chip(Rect2(800, 18, 112, 32), "集数 %d/%d" % [game.run_progress, int(game.content.get("run_length", 12))], GOLD, INK, 11)
-		_draw_chip(Rect2(920, 18, 112, 32), _phase_label(), BLUE, TEXT, 11)
+		_draw_chip(Rect2(800, 18, 112, 32), _phase_label(), BLUE, TEXT, 11)
 	if game.phase == "combat" or game.phase in ["explore", "build", "room_ready"]:
 		_draw_button(CAMERA_RESET_RECT, "镜头复位" if game.phase == "combat" else "地图复位", TEAL, TEXT)
 	if not game.phase.begins_with("lab_"):
