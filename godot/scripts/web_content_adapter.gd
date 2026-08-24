@@ -1,6 +1,7 @@
 extends RefCounted
 
 const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
+const CombatEnemyRoster = preload("res://scripts/combat_enemy_roster.gd")
 
 const SNAPSHOT_ROOT := "res://data/exe_snapshot/"
 const SOURCE_ID := "CabinSlice_织梦频道.exe@EEC4C574CC22"
@@ -56,6 +57,12 @@ func build_content(run_seed: int) -> Dictionary:
 			enemy["toughness"] = int(enemy.get("toughness", 3))
 			enemy["action_points"] = int(enemy.get("action_points", 3))
 			enemy["attack_cost"] = int(enemy.get("attack_cost", 2))
+		var declared_enemies: Array = []
+		for raw_spec in source.get("enemies", []):
+			if raw_spec is Dictionary:
+				var flipped: Dictionary = (raw_spec as Dictionary).duplicate(true)
+				flipped["spawn"] = _flip_pair(flipped.get("spawn", [1, 0]))
+				declared_enemies.append(flipped)
 		var room := {
 			"id": id,
 			"name": str(source.get("name", id)),
@@ -66,7 +73,13 @@ func build_content(run_seed: int) -> Dictionary:
 			"door_pattern": str(pattern.get("id", "?")),
 			"arena": arena,
 			"enemy": enemy,
+			"enemies": declared_enemies,
 		}
+		var roster := CombatEnemyRoster.normalize(room, arena)
+		if not roster["ok"]:
+			for roster_error in roster["errors"]:
+				push_error("CombatEnemyRoster room=%s: %s" % [id, roster_error])
+		room["enemies"] = roster["enemies"]
 		RoomFootprintCatalog.apply_to_room(room, id)
 		room_catalog.append(room)
 		index += 1
