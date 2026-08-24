@@ -1900,7 +1900,6 @@ func move_player_to(target: Vector2i) -> bool:
 		for index in range(1, path.size()):
 			if not combat.move_player(path[index]):
 				return false
-		build_battle_world()
 		_after_combat_action()
 		return true
 	animation_busy = true
@@ -1920,7 +1919,8 @@ func _animate_player_path(path: Array[Vector2i], index: int) -> void:
 		_complete_dynamic_effect()
 		_refresh_hud()
 		return
-	refresh_battle_board()
+	# 移动过程中只移动演员节点；棋盘、家具和房间外壳保持复用。
+	# 路径结束后由 _after_combat_action() 统一刷新一次敌人意图和状态。
 	var player_node := battle_actor_root.get_node_or_null("Player") as Node3D
 	var duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
 	if player_node == null or duration <= 0.0:
