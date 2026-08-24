@@ -359,6 +359,25 @@ func can_move_player(target: Vector2i) -> bool:
 	return outcome == "" and energy >= player_move_cost(target) and is_walkable(target) and target != decoy_pos and manhattan(player_pos, target) == 1
 
 
+func player_path_to(target: Vector2i) -> Array[Vector2i]:
+	if outcome != "" or target == player_pos or not is_walkable(target) or target == decoy_pos:
+		return [player_pos] if target == player_pos else []
+	var blocked := occupied_enemy_cells()
+	# 允许把目标本身作为终点，避免“点敌人格”永远被自己的阻挡集合拒绝。
+	blocked.erase(target)
+	var path := _find_path(player_pos, target, blocked, false)
+	if path.size() < 2 or path.back() != target:
+		return []
+	return path
+
+
+func player_path_cost(path: Array[Vector2i]) -> int:
+	var total := 0
+	for index in range(1, path.size()):
+		total += player_move_cost(path[index])
+	return total
+
+
 func player_move_cost(target: Vector2i) -> int:
 	return move_cost + (hostile_pass_cost if enemy_at(target) != null else 0)
 
@@ -1539,7 +1558,7 @@ func _tile_height(pos: Vector2i) -> int:
 	return int(heights.get(pos, 0))
 
 
-func _find_path(start: Vector2i, goal: Vector2i, blocked_cells: Dictionary = {}) -> Array[Vector2i]:
+func _find_path(start: Vector2i, goal: Vector2i, blocked_cells: Dictionary = {}, allow_portals: bool = true) -> Array[Vector2i]:
 	var queue: Array[Vector2i] = [start]
 	var came_from: Dictionary = {start: start}
 	while not queue.is_empty():
@@ -1552,7 +1571,7 @@ func _find_path(start: Vector2i, goal: Vector2i, blocked_cells: Dictionary = {})
 				continue
 			came_from[next] = current
 			queue.append(next)
-		if portals.has(current):
+		if allow_portals and portals.has(current):
 			var portal_next: Vector2i = portals[current]
 			if is_walkable(portal_next) and not came_from.has(portal_next) and not blocked_cells.has(portal_next):
 				came_from[portal_next] = current

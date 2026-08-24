@@ -93,10 +93,13 @@ const UNITY_ROOM_DROP_DURATION := 0.25
 const UNITY_ROOM_DROP_HEIGHT_CELLS := 0.65
 const UNITY_ROOM_START_SCALE := 0.94
 const UNITY_ACTOR_STEP_DURATION := 0.25
+const UNITY_ACTOR_TURN_DURATION := 0.16
 const UNITY_ACTOR_SETTLE_DURATION := 0.12
 const UNITY_CARD_HALF_FLIP_DURATION := 0.10
-const ENEMY_STEP_DURATION := 0.18
-const ENEMY_ATTACK_DURATION := 0.22
+const ENEMY_STEP_DURATION := 0.48
+const ENEMY_TURN_DURATION := 0.22
+const ENEMY_ATTACK_DURATION := 0.62
+const ENEMY_EVENT_PAUSE_DURATION := 0.16
 const BATTLE_STAGE_BUILD_DURATION := 0.34
 const BATTLE_ACTOR_ENTRY_DURATION := 0.30
 const CHASE_TRACK_LENGTH := 14.0
@@ -2298,7 +2301,17 @@ func _enemy_turn_summary(turn_events: Array[Dictionary]) -> String:
 
 
 func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
-	if turn_events.is_empty() or animation_duration_scale <= 0.0:
+	if animation_duration_scale <= 0.0:
+		_complete_dynamic_effect()
+		_after_combat_action()
+		return
+	if turn_events.is_empty():
+		var wait_tween := create_tween()
+		active_motion_tween = wait_tween
+		wait_tween.tween_interval(0.34 * animation_duration_scale)
+		await wait_tween.finished
+		if active_motion_tween != wait_tween:
+			return
 		_complete_dynamic_effect()
 		_after_combat_action()
 		return
@@ -2320,7 +2333,11 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 				continue
 			var source: Vector2i = event.get("from", combat.enemy_pos)
 			var target: Vector2i = event.get("to", combat.enemy_pos)
+			var facing_yaw := _battle_move_facing_yaw(source, target)
+			battle_enemy_facing_yaw = facing_yaw
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "move", "穿门" if bool(event.get("via_portal", false)) else ""))
+			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			tween.tween_property(enemy_node, "rotation:y", facing_yaw, ENEMY_TURN_DURATION * animation_duration_scale)
 			if bool(event.get("via_portal", false)):
 				tween.tween_property(enemy_node, "scale", Vector3(0.08, 1.35, 0.08), ENEMY_STEP_DURATION * 0.42 * animation_duration_scale)
 				tween.tween_callback(func() -> void: enemy_node.position = _battle_pawn_world(target, false, actor_id))
@@ -2328,7 +2345,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			else:
 				tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 				tween.tween_method(_set_enemy_step_motion.bind(enemy_node, _battle_pawn_world(source, false, actor_id), _battle_pawn_world(target, false, actor_id)), 0.0, 1.0, ENEMY_STEP_DURATION * animation_duration_scale)
-			tween.tween_interval(0.035 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 		elif kind == "attack":
 			if enemy_node == null:
 				continue
@@ -2341,6 +2358,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			tween.tween_property(enemy_node, "scale", Vector3(1.22, 0.82, 1.22), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 		elif kind == "face_shock":
 			if enemy_node == null:
 				continue
@@ -2349,6 +2367,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "惊吓!"))
 			tween.tween_property(enemy_node, "scale", Vector3(1.18, 1.18, 1.18), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 		elif kind == "beam_charge":
 			if enemy_node == null:
 				continue
@@ -2356,6 +2375,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			tween.tween_property(enemy_node, "scale", Vector3(0.86, 1.28, 0.86), 0.24 * animation_duration_scale)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, 0.18 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 		elif kind == "beam_fire":
 			if enemy_node == null:
 				continue
@@ -2364,8 +2384,9 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "命中!"))
 			tween.tween_property(enemy_node, "scale", Vector3(1.30, 0.76, 1.30), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 		else:
-			tween.tween_interval(0.18 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 	await tween.finished
 	if active_motion_tween != tween:
 		return
@@ -2383,15 +2404,10 @@ func _set_battle_actor_step_motion(weight: float, actor_node: Node3D, start_posi
 	var smooth_weight := weight * weight * (3.0 - 2.0 * weight)
 	# The board owns all world translation; the FBX clip supplies limb motion only.
 	actor_node.position = start_position.lerp(target_position, smooth_weight)
-	var direction := target_position - start_position
-	direction.y = 0.0
-	if direction.length_squared() > 0.001:
-		var facing_yaw := atan2(direction.x, direction.z)
-		actor_node.rotation.y = facing_yaw
-		if actor_node.name == &"Player":
-			battle_player_facing_yaw = facing_yaw
-		elif actor_node.name == &"Enemy":
-			battle_enemy_facing_yaw = facing_yaw
+
+
+func _battle_move_facing_yaw(source: Vector2i, target: Vector2i) -> float:
+	return atan2(float(target.x - source.x), float(target.y - source.y))
 
 
 func _handle_battle_world_click(screen_pos: Vector2) -> void:
@@ -2401,6 +2417,15 @@ func _handle_battle_world_click(screen_pos: Vector2) -> void:
 	if target == INVALID_CELL:
 		return
 	handle_battle_cell(target)
+
+
+func move_player_direction(direction: Vector2i) -> bool:
+	if animation_busy or phase != "combat" or combat == null or combat.outcome != "" or selected_card >= 0:
+		return false
+	if direction.x != 0 and direction.y != 0:
+		return false
+	var target: Vector2i = combat.player_pos + direction
+	return move_player_to(target)
 
 
 func handle_battle_cell(target: Vector2i) -> void:
@@ -2440,19 +2465,75 @@ func handle_battle_cell(target: Vector2i) -> void:
 			selected_card = -1
 			status_message = "%s不能放在这里，已自动取消选牌；现在可点击绿色格移动。" % card_name
 	else:
-		var source: Vector2i = combat.player_pos
-		var movement_cost: int = combat.player_move_cost(target)
-		if combat.move_player(target):
-			if target == combat.enemy_pos:
-				status_message = "你挤进敌人所在格，消耗 %d 行动力；仍可从另一侧离开。" % movement_cost
-			else:
-				status_message = "你站在传送门上：可花 %d 行动力穿门，也可继续行动。" % combat.move_cost if combat.player_on_portal() else "移动完成。选择手牌布置陷阱，或直接砸向有视野的敌人格。"
-			_after_combat_action()
-			_animate_player_battle_step(source, target)
+		if move_player_to(target):
 			return
-		else:
-			status_message = "不能移动到该格：只能走相邻绿色格，且需要足够行动力。"
-	_after_combat_action()
+		status_message = "这个格子无法到达，或当前行动力不足。"
+		_refresh_hud()
+
+
+func move_player_to(target: Vector2i) -> bool:
+	if animation_busy or phase != "combat" or combat == null or combat.outcome != "" or selected_card >= 0:
+		return false
+	var path: Array = combat.player_path_to(target)
+	if path.size() < 2:
+		return false
+	var path_cost: int = combat.player_path_cost(path)
+	if path_cost > combat.energy:
+		status_message = "到达那里需要 %d AP，但本回合只剩 %d AP。" % [path_cost, combat.energy]
+		_refresh_hud()
+		return false
+	status_message = "莉莉沿路径移动 %d 格。" % (path.size() - 1)
+	battle_camera_following = true
+	if animation_duration_scale <= 0.0:
+		for index in range(1, path.size()):
+			if not combat.move_player(path[index]):
+				return false
+		build_battle_world()
+		_after_combat_action()
+		return true
+	animation_busy = true
+	active_animation_kind = "player_path"
+	_animate_player_path(path, 1)
+	return true
+
+
+func _animate_player_path(path: Array[Vector2i], index: int) -> void:
+	if index >= path.size():
+		_complete_dynamic_effect()
+		_after_combat_action()
+		return
+	var source: Vector2i = path[index - 1]
+	var target: Vector2i = path[index]
+	if not combat.move_player(target):
+		_complete_dynamic_effect()
+		_refresh_hud()
+		return
+	build_battle_world()
+	var player_node := battle_root.get_node_or_null("Player") as Node3D
+	var duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
+	if player_node == null or duration <= 0.0:
+		_animate_player_path(path, index + 1)
+		return
+	_play_actor_state("Player", "move")
+	var source_height := float(combat.heights.get(source, 0)) * 0.64
+	var target_height := float(combat.heights.get(target, 0)) * 0.64
+	var start_position := _battle_world(source) + Vector3.UP * (source_height - target_height)
+	var target_position := _battle_pawn_world(target, true)
+	player_node.position = start_position
+	var tween := create_tween()
+	active_motion_tween = tween
+	var facing_yaw := _battle_move_facing_yaw(source, target)
+	battle_player_facing_yaw = facing_yaw
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(player_node, "rotation:y", facing_yaw, UNITY_ACTOR_TURN_DURATION * animation_duration_scale)
+	tween.tween_method(_set_battle_actor_step_motion.bind(player_node, start_position, target_position), 0.0, 1.0, duration)
+	tween.finished.connect(func() -> void:
+		if active_motion_tween != tween:
+			return
+		if is_instance_valid(player_node):
+			player_node.position = target_position
+		_animate_player_path(path, index + 1)
+	)
 
 
 func _animate_player_battle_step(source: Vector2i, target: Vector2i) -> void:
@@ -2471,6 +2552,10 @@ func _animate_player_battle_step(source: Vector2i, target: Vector2i) -> void:
 	player_node.position = start_position
 	var tween := create_tween()
 	active_motion_tween = tween
+	var facing_yaw := _battle_move_facing_yaw(source, target)
+	battle_player_facing_yaw = facing_yaw
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(player_node, "rotation:y", facing_yaw, UNITY_ACTOR_TURN_DURATION * animation_duration_scale)
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tween.tween_method(_set_battle_actor_step_motion.bind(player_node, start_position, target_position), 0.0, 1.0, duration)
 	tween.finished.connect(func() -> void:
@@ -3392,7 +3477,8 @@ func _is_valid_battle_target(pos: Vector2i) -> bool:
 		if selected_card >= combat.hand.size():
 			return false
 		return combat.can_target_place_card(selected_card, pos)
-	return combat.can_move_player(pos)
+	var path: Array = combat.player_path_to(pos)
+	return path.size() >= 2 and combat.player_path_cost(path) <= combat.energy
 
 
 func _add_corner_marks(parent: Node3D, prefix: String, color: Color, y: float) -> void:

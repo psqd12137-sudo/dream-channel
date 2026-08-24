@@ -52,6 +52,10 @@ const ROOM_ACTION_RECT := Rect2(1020, 682, 220, 50)
 const ENTER_PENDING_RECT := Rect2(1020, 620, 220, 46)
 const END_TURN_RECT := Rect2(976, 690, 164, 48)
 const RETURN_RECT := Rect2(976, 690, 164, 48)
+const MOVE_UP_RECT := Rect2(1062, 498, 46, 30)
+const MOVE_LEFT_RECT := Rect2(1010, 534, 46, 30)
+const MOVE_RIGHT_RECT := Rect2(1114, 534, 46, 30)
+const MOVE_DOWN_RECT := Rect2(1062, 570, 46, 30)
 const CARD_CANCEL_RECT := Rect2(976, 654, 164, 28)
 const PORTAL_USE_RECT := Rect2(960, 366, 120, 44)
 const PORTAL_STAY_RECT := Rect2(1100, 366, 120, 44)
@@ -799,6 +803,7 @@ func _draw_combat_hud() -> void:
 		_draw_enemy_roster(Rect2(948, 214, 300, 136))
 	if game.test_combat_active:
 		_draw_test_ai_panel()
+	_draw_move_controls()
 
 	_draw_ticket_panel(action_rect, Color("17151cf4"), GOLD)
 	_draw_action_ticket(Rect2(action_rect.position + Vector2(10, 8), Vector2(action_rect.size.x - 20, action_rect.size.y - 16)))
@@ -916,6 +921,18 @@ func _test_mode_label() -> String:
 		"observer_step": return "单步观察"
 		"observer_auto": return "连续观察"
 	return game.test_session.mode
+
+
+func _draw_move_controls() -> void:
+	var combat = game.combat
+	if combat == null:
+		return
+	var enabled: bool = not game.animation_busy and combat.outcome == "" and game.selected_card < 0 and not combat.pending_player_turn
+	_label("直接移动 · 点击方向", Vector2(1008, 484), 10, MUTED if enabled else Color("68757a"))
+	_draw_button(MOVE_UP_RECT, "上", TEAL if enabled and combat.can_move_player(combat.player_pos + Vector2i.UP) else Color("394852"), TEXT)
+	_draw_button(MOVE_LEFT_RECT, "左", TEAL if enabled and combat.can_move_player(combat.player_pos + Vector2i.LEFT) else Color("394852"), TEXT)
+	_draw_button(MOVE_RIGHT_RECT, "右", TEAL if enabled and combat.can_move_player(combat.player_pos + Vector2i.RIGHT) else Color("394852"), TEXT)
+	_draw_button(MOVE_DOWN_RECT, "下", TEAL if enabled and combat.can_move_player(combat.player_pos + Vector2i.DOWN) else Color("394852"), TEXT)
 
 
 func _draw_enemy_roster(rect: Rect2) -> void:
@@ -1223,6 +1240,17 @@ func _input(event: InputEvent) -> void:
 		game.set_sideview_input(float(int(side_right) - int(side_left)), jump)
 		get_viewport().set_input_as_handled()
 		return
+	if key_event.pressed and not key_event.echo and game.phase == "combat" and game.selected_card < 0:
+		var move_direction := Vector2i(-999, -999)
+		match key_event.keycode:
+			KEY_UP, KEY_W: move_direction = Vector2i.UP
+			KEY_LEFT, KEY_A: move_direction = Vector2i.LEFT
+			KEY_RIGHT, KEY_D: move_direction = Vector2i.RIGHT
+			KEY_DOWN, KEY_S: move_direction = Vector2i.DOWN
+		if move_direction != Vector2i(-999, -999):
+			game.move_player_direction(move_direction)
+			get_viewport().set_input_as_handled()
+			return
 	if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE and game.phase == "combat" and game.selected_card >= 0:
 		game.cancel_selected_card()
 		get_viewport().set_input_as_handled()
@@ -1241,6 +1269,8 @@ func _combat_overlay_has_point(point: Vector2) -> bool:
 		return RETURN_RECT.has_point(point)
 	if END_TURN_RECT.has_point(point):
 		return true
+	if _combat_move_controls_has_point(point):
+		return true
 	if game.combat.player_on_portal() and PORTAL_USE_RECT.has_point(point):
 		return true
 	return game.selected_card >= 0 and CARD_CANCEL_RECT.has_point(point)
@@ -1250,6 +1280,22 @@ func _test_combat_overlay_has_point(point: Vector2) -> bool:
 	if game == null or not game.test_combat_active:
 		return false
 	return TEST_AI_PANEL_RECT.has_point(point)
+
+
+func _combat_move_controls_has_point(point: Vector2) -> bool:
+	return MOVE_UP_RECT.has_point(point) or MOVE_LEFT_RECT.has_point(point) or MOVE_RIGHT_RECT.has_point(point) or MOVE_DOWN_RECT.has_point(point)
+
+
+func _combat_move_direction_at_point(point: Vector2) -> Vector2i:
+	if MOVE_UP_RECT.has_point(point):
+		return Vector2i.UP
+	if MOVE_LEFT_RECT.has_point(point):
+		return Vector2i.LEFT
+	if MOVE_RIGHT_RECT.has_point(point):
+		return Vector2i.RIGHT
+	if MOVE_DOWN_RECT.has_point(point):
+		return Vector2i.DOWN
+	return Vector2i(-999, -999)
 
 
 func _handle_test_combat_click(point: Vector2) -> void:
@@ -1382,6 +1428,11 @@ func _gui_input(event: InputEvent) -> void:
 		if mouse_event.pressed:
 			if game.test_combat_active and _test_combat_overlay_has_point(point):
 				_handle_test_combat_click(point)
+				accept_event()
+				return
+			var move_direction := _combat_move_direction_at_point(point)
+			if move_direction != Vector2i(-999, -999):
+				game.move_player_direction(move_direction)
 				accept_event()
 				return
 			for i in range(combat_card_rects.size() - 1, -1, -1):
@@ -1661,8 +1712,10 @@ func _draw_coach(rect: Rect2, kicker: String, body: String) -> void:
 
 
 func _draw_button(rect: Rect2, caption: String, fill: Color, text_color: Color) -> void:
-	draw_rect(Rect2(rect.position + Vector2(5, 5), rect.size), INK, true)
-	draw_rect(rect.grow(2.0), TEXT, true)
+	var flat_fill := fill.is_equal_approx(GOLD)
+	if not flat_fill:
+		draw_rect(Rect2(rect.position + Vector2(5, 5), rect.size), INK, true)
+		draw_rect(rect.grow(2.0), TEXT, true)
 	draw_rect(rect, fill, true)
 	draw_rect(rect, INK, false, 2.0)
 	draw_line(rect.position + Vector2(8, 5), Vector2(rect.end.x - 8, rect.position.y + 5), Color(1, 1, 1, 0.42), 2.0)

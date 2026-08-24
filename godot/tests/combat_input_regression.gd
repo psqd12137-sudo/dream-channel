@@ -52,6 +52,12 @@ func _run() -> void:
 	if move_target != Vector2i(-1, -1):
 		game.handle_battle_cell(move_target)
 		_check(game.combat.player_pos == move_target, "movement must work immediately after placement cancellation")
+		var far_target := _find_far_path_target(game.combat)
+		_check(far_target != Vector2i(-1, -1), "combat room must expose a reachable distant target")
+		if far_target != Vector2i(-1, -1):
+			game.combat.energy = 20
+			game.handle_battle_cell(far_target)
+			_check(game.combat.player_pos == far_target, "clicking a reachable distant cell must auto-walk the player there")
 
 	var attack_origin := Vector2i(maxi(0, game.combat.enemy_pos.x - 1), game.combat.enemy_pos.y)
 	if attack_origin == game.combat.enemy_pos or not game.combat.is_walkable(attack_origin):
@@ -86,6 +92,16 @@ func _first_move_target(combat) -> Vector2i:
 		var target: Vector2i = combat.player_pos + direction
 		if combat.can_move_player(target):
 			return target
+	return Vector2i(-1, -1)
+
+
+func _find_far_path_target(combat) -> Vector2i:
+	for y in range(combat.rows):
+		for x in range(combat.cols):
+			var target := Vector2i(x, y)
+			var path: Array = combat.player_path_to(target)
+			if path.size() >= 3 and combat.player_path_cost(path) <= 20:
+				return target
 	return Vector2i(-1, -1)
 
 
