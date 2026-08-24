@@ -107,7 +107,9 @@ static func build_state(spec: Dictionary, spawn_order: int) -> RefCounted:
 	state.ambush_active = ambush
 	state.revealed = not ambush
 	state.player_sees_enemy = not ambush
-	state.sees_player = not ambush
+	# 与旧 setup 保持一致：开局敌方是否看见玩家由首次 _refresh_vision 决定。
+	state.sees_player = false
+	state.broken = state.max_toughness <= 0
 	return state
 
 

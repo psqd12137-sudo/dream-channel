@@ -1,3 +1,4 @@
+class_name CombatEnemyState
 extends RefCounted
 
 # 单个敌人的唯一权威状态（multi-enemy refactor plan 3.1）。
@@ -43,6 +44,10 @@ var beam_pending_damage := 0
 
 func alive() -> bool:
 	return hp > 0
+
+
+func has_trait(trait_id: String) -> bool:
+	return trait_id in traits
 
 
 func debug_snapshot() -> Dictionary:

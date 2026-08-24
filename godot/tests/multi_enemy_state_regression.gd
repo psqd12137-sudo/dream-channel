@@ -1,12 +1,12 @@
 extends SceneTree
 
-# 阶段 A 失败测试骨架（multi-enemy refactor plan stage A）。
-# 目标契约：
+# 多敌人规则状态回归（multi-enemy refactor plan 阶段 A 骨架、阶段 C 出口）。
+# 契约：
 #   - CombatRules 暴露 enemies: Dictionary / enemy_order: Array[String]
 #   - 集中查询 living_enemy_ids / enemy_by_id / enemy_at / occupied_enemy_cells / all_enemies_defeated
 #   - setup() 第二参数接受标准敌人数组（旧单敌人字典在加载边界转换）
-# 在生产代码实现前，本脚本必须以 missing-contract 失败；失败原因必须是
-# 功能缺失，而不是脚本编译或语法错误，因此所有未来契约访问都走动态分派。
+#   - 伤害入口按 ID 工作；部分击杀不结算，全灭才 victory
+# 所有未来契约访问都走动态分派，保证失败原因是功能缺失而非编译错误。
 
 const CombatRules = preload("res://scripts/combat_rules.gd")
 
@@ -126,13 +126,28 @@ func _test_state_isolation() -> void:
 
 func _test_defeat_semantics() -> void:
 	var rules: Variant = _build_combat(2)
-	rules.call("enemy_by_id", "unit_00").set("hp", 0)
-	var living: Array = rules.call("living_enemy_ids")
-	_check(living.size() == 1 and str(living[0]) == "unit_01", "dead enemy must leave living list, got %s" % str(living))
+	var a: Variant = rules.call("enemy_by_id", "unit_00")
+	var b: Variant = rules.call("enemy_by_id", "unit_01")
+	# 伤害入口按 ID 工作：伤害 unit_00 不得影响 unit_01。
+	rules.call("_apply_enemy_damage", a, 2, 0, "test:isolation")
+	_check(int(a.get("hp")) == 1, "damage must land on unit_00, hp=%s" % str(a.get("hp")))
+	_check(int(b.get("hp")) == 4, "damaging unit_00 must not change unit_01 hp, hp=%s" % str(b.get("hp")))
+	# 部分击杀：unit_00 死亡后战斗不结算，unit_01 仍在行动队列。
+	rules.call("_apply_enemy_damage", a, 9, 0, "test:partial_kill")
+	_check(int(a.get("hp")) <= 0, "unit_00 must be dead after lethal damage")
 	_check(not rules.call("all_enemies_defeated"), "one of two dead must not count as all defeated")
 	_check(str(rules.call("get", "outcome")) == "", "partial kill must not set outcome")
-	rules.call("enemy_by_id", "unit_01").set("hp", 0)
-	_check(rules.call("all_enemies_defeated"), "all dead must be detected as defeated")
+	_check(not (rules.call("get", "event_log") as Array).any(func(line) -> bool: return str(line).begins_with("CombatEnded")), "partial kill must not log CombatEnded")
+	var living: Array = rules.call("living_enemy_ids")
+	_check(living.size() == 1 and str(living[0]) == "unit_01", "dead enemy must leave living list, got %s" % str(living))
+	# 全灭：最后一人死亡时且仅此时结算一次胜利。
+	rules.call("_apply_enemy_damage", b, 9, 0, "test:final_kill")
+	_check(str(rules.call("get", "outcome")) == "victory", "last enemy death must set victory")
+	var endings: int = 0
+	for line in rules.call("get", "event_log"):
+		if str(line).begins_with("CombatEnded"):
+			endings += 1
+	_check(endings == 1, "victory must be settled exactly once, got %d" % endings)
 
 
 func _check(condition: bool, message: String) -> void:
