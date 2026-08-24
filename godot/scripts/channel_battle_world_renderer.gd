@@ -79,6 +79,16 @@ var battle_board_root:
 var battle_actor_root:
 	get: return host.battle_actor_root
 	set(value): host.battle_actor_root = value
+var battle_entry_side: int:
+	get: return host.battle_entry_side
+var battle_entry_cell: Vector2i:
+	get: return host.battle_entry_cell
+
+var battle_hover_root: Node3D = null
+var battle_target_root: Node3D = null
+var battle_hover_markers: Array[MeshInstance3D] = []
+var battle_hover_valid_markers: Array[MeshInstance3D] = []
+var battle_overlay_materials: Dictionary = {}
 var battle_backstage_cells:
 	get: return host.battle_backstage_cells
 var battle_height_prop_assignments:
@@ -152,6 +162,18 @@ func _ensure_battle_layers() -> void:
 		battle_actor_root = Node3D.new()
 		battle_actor_root.name = "BattleActors"
 		battle_root.add_child(battle_actor_root)
+	if battle_hover_root == null or not is_instance_valid(battle_hover_root):
+		battle_hover_root = battle_root.get_node_or_null("BattleHoverOverlay") as Node3D
+	if battle_hover_root == null:
+		battle_hover_root = Node3D.new()
+		battle_hover_root.name = "BattleHoverOverlay"
+		battle_root.add_child(battle_hover_root)
+	if battle_target_root == null or not is_instance_valid(battle_target_root):
+		battle_target_root = battle_root.get_node_or_null("BattleTargetOverlay") as Node3D
+	if battle_target_root == null:
+		battle_target_root = Node3D.new()
+		battle_target_root.name = "BattleTargetOverlay"
+		battle_root.add_child(battle_target_root)
 
 
 func build_battle_world() -> void:
@@ -161,6 +183,7 @@ func build_battle_world() -> void:
 	enemy_nodes.clear()
 	_build_battle_board()
 	_sync_battle_actors()
+	_update_battle_overlays()
 
 
 func refresh_battle_board() -> void:
@@ -169,6 +192,119 @@ func refresh_battle_board() -> void:
 	_ensure_battle_layers()
 	_clear_children(battle_board_root)
 	_build_battle_board()
+	_update_battle_overlays()
+
+
+func update_battle_overlays() -> void:
+	_ensure_battle_layers()
+	_update_battle_overlays()
+
+
+func update_battle_hover() -> void:
+	_ensure_battle_layers()
+	_update_battle_hover_marker()
+
+
+func _update_battle_overlays() -> void:
+	_update_battle_target_markers()
+	_update_battle_hover_marker()
+
+
+func _update_battle_target_markers() -> void:
+	_clear_battle_target_markers()
+	if combat == null or combat.outcome != "" or selected_card < 0:
+		return
+	for y in range(combat.rows):
+		for x in range(combat.cols):
+			var pos := Vector2i(x, y)
+			if not _is_valid_battle_target(pos):
+				continue
+			var cell_node := battle_board_root.get_node_or_null("Cell_%d_%d" % [x, y]) as Node3D
+			if cell_node != null:
+				_add_corner_marks(cell_node, "CardValid", COL_GOLD, _battle_cell_top_y(pos))
+
+
+func _clear_battle_target_markers() -> void:
+	if battle_board_root == null:
+		return
+	for child: Node in battle_board_root.get_children():
+		if not child.name.begins_with("Cell_"):
+			continue
+		for marker: Node in child.get_children():
+			if marker.name.begins_with("CardValid_"):
+				marker.free()
+
+
+func _update_battle_hover_marker() -> void:
+	if battle_hover_root == null:
+		return
+	_ensure_battle_hover_markers()
+	var has_hover: bool = combat != null and hovered_battle_cell != INVALID_CELL and _battle_cell_in_bounds(hovered_battle_cell)
+	if not has_hover:
+		_set_corner_marker_group(battle_hover_markers, false, COL_GREEN, 0.0)
+		_set_corner_marker_group(battle_hover_valid_markers, false, COL_GREEN, 0.0)
+		return
+	var hover_cell_node := battle_board_root.get_node_or_null("Cell_%d_%d" % [hovered_battle_cell.x, hovered_battle_cell.y]) as Node3D
+	if hover_cell_node == null:
+		_set_corner_marker_group(battle_hover_markers, false, COL_GREEN, 0.0)
+		_set_corner_marker_group(battle_hover_valid_markers, false, COL_GREEN, 0.0)
+		return
+	for marker: MeshInstance3D in battle_hover_markers:
+		if marker.get_parent() != hover_cell_node:
+			marker.reparent(hover_cell_node)
+	for marker: MeshInstance3D in battle_hover_valid_markers:
+		if marker.get_parent() != hover_cell_node:
+			marker.reparent(hover_cell_node)
+	var top_y := _battle_cell_top_y(hovered_battle_cell)
+	var is_valid := _is_valid_battle_target(hovered_battle_cell)
+	_set_corner_marker_group(battle_hover_markers, true, Color.WHITE, top_y + 0.055)
+	_set_corner_marker_group(
+		battle_hover_valid_markers,
+		is_valid and selected_card < 0,
+		COL_GREEN,
+		top_y
+	)
+
+
+func _ensure_battle_hover_markers() -> void:
+	if not battle_hover_markers.is_empty() and is_instance_valid(battle_hover_markers[0]):
+		return
+	battle_hover_markers.clear()
+	battle_hover_valid_markers.clear()
+	for index in range(4):
+		var hover_marker := _add_box(battle_hover_root, "Hover_%d" % index, Vector3.ZERO, Vector3(0.28, 0.055, 0.28), _overlay_material(Color.WHITE))
+		battle_hover_markers.append(hover_marker)
+		var valid_marker := _add_box(battle_hover_root, "Valid_%d" % index, Vector3.ZERO, Vector3(0.28, 0.055, 0.28), _overlay_material(COL_GREEN))
+		battle_hover_valid_markers.append(valid_marker)
+
+
+func _set_corner_marker_group(markers: Array[MeshInstance3D], visible: bool, color: Color, y: float) -> void:
+	var edge := BATTLE_CELL * 0.36
+	for index in range(markers.size()):
+		var marker := markers[index]
+		if marker == null or not is_instance_valid(marker):
+			continue
+		var sx := -1.0 if index % 2 == 0 else 1.0
+		var sz := -1.0 if index < 2 else 1.0
+		marker.position = Vector3(sx * edge, y, sz * edge)
+		marker.material_override = _overlay_material(color)
+		marker.visible = visible
+
+
+func _overlay_material(color: Color) -> StandardMaterial3D:
+	var key := color.to_html(true)
+	if not battle_overlay_materials.has(key):
+		battle_overlay_materials[key] = _material(color, false, 0.08)
+	return battle_overlay_materials[key] as StandardMaterial3D
+
+
+func _battle_cell_in_bounds(pos: Vector2i) -> bool:
+	return combat != null and pos.x >= 0 and pos.y >= 0 and pos.x < combat.cols and pos.y < combat.rows
+
+
+func _battle_cell_top_y(pos: Vector2i) -> float:
+	var height := int(combat.heights.get(pos, 0)) if combat != null else 0
+	return 0.28 + float(height) * 0.64 + 0.13
 
 
 func _build_battle_board() -> void:
@@ -252,12 +388,8 @@ func _build_battle_board() -> void:
 			elif path_index >= 0:
 				_add_cylinder(cell_node, "IntentMoveOverlay", Vector3(0, top_y + 0.025, 0), 0.25, 0.045, _material(Color(COL_BLUE, 0.82), true, 0.08))
 				_add_label(cell_node, "IntentMoveGlyph", str(path_index + 1), Vector3(0.0, top_y + 0.25, 0.0), Color.WHITE, 22)
-			# Placement cards need a visible target field. Ordinary movement uses a
-			# hover-only marker so idle combat frames stay visually clean.
-			if _is_valid_battle_target(pos) and (selected_card >= 0 or pos == hovered_battle_cell):
-				_add_corner_marks(cell_node, "Valid", COL_GOLD if selected_card >= 0 else COL_GREEN, top_y)
-			if pos == hovered_battle_cell:
-				_add_corner_marks(cell_node, "Hover", Color.WHITE, top_y + 0.055)
+			# 移动和出牌目标角标属于交互覆盖层，不能跟着整张棋盘反复重建。
+			# 这里只生成房间本体；角标由 _update_battle_overlays() 单独维护。
 			if combat.portals.has(pos):
 				_add_portal_marker(cell_node, pos, top_y)
 			if combat.walls.has(pos) and not backstage:
@@ -1085,22 +1217,32 @@ func _battle_footprint_boundary_edges() -> Array[Dictionary]:
 func _battle_room_entrance_edge(boundary_edges: Array[Dictionary]) -> Dictionary:
 	if boundary_edges.is_empty():
 		return {}
-	var player: Vector2i = combat.player_pos
-	var entered_from: Vector2i = previous_room_pos - current_room_pos
-	var linked_side := RoomRules.DIRS.find(entered_from)
-	var prefer_house_side: bool = linked_side >= 0 and room_rules.placed.has(current_room_pos) and room_rules.cell_has_door(current_room_pos, linked_side)
-	var best: Dictionary = boundary_edges[0]
-	var best_score := INF
+	var preferred_side := battle_entry_side
+	var preferred_cell := battle_entry_cell
+	var candidates: Array[Dictionary] = []
 	for edge: Dictionary in boundary_edges:
-		var cell: Vector2i = edge["cell"]
-		var side := int(edge["side"])
-		var side_penalty := 0.0 if not prefer_house_side or side == linked_side else 100.0
-		var score := side_penalty + float(absi(cell.x - player.x) + absi(cell.y - player.y))
-		if score < best_score:
+		if preferred_side >= 0 and int(edge.get("side", -1)) != preferred_side:
+			continue
+		candidates.append(edge)
+	if candidates.is_empty():
+		# 入口信息缺失时采用稳定的房间边界顺序，不能退化为按角色距离猜门。
+		candidates = boundary_edges.duplicate(true)
+		candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			var side_a := int(a.get("side", 0))
+			var side_b := int(b.get("side", 0))
+			if side_a != side_b:
+				return side_a < side_b
+			var cell_a: Vector2i = a.get("cell", Vector2i.ZERO)
+			var cell_b: Vector2i = b.get("cell", Vector2i.ZERO)
+			return cell_a.y < cell_b.y or (cell_a.y == cell_b.y and cell_a.x < cell_b.x)
+		)
+	var best: Dictionary = candidates[0]
+	for edge: Dictionary in candidates:
+		if edge.get("cell", Vector2i(-999, -999)) == preferred_cell:
 			best = edge
-			best_score = score
+			break
 	best = best.duplicate(true)
-	best["source"] = "house_entry" if prefer_house_side else "player_spawn"
+	best["source"] = "house_entry" if preferred_side >= 0 else "room_definition"
 	return best
 
 
@@ -1249,14 +1391,19 @@ func _apply_battle_room_cutaway() -> void:
 
 func battle_room_shell_debug_state() -> Dictionary:
 	var entrance_count := 0
+	var entrance_key := ""
 	for raw_record: Variant in battle_shell_edge_records.values():
-		if bool((raw_record as Dictionary).get("entrance", false)):
+		var record := raw_record as Dictionary
+		if bool(record.get("entrance", false)):
 			entrance_count += 1
+			entrance_key = str(record.get("cell", Vector2i(-999, -999))) + ":" + str(record.get("side", -1))
 	return {
 		"edges": battle_shell_edge_records.size(),
 		"culled": battle_shell_culled_count,
 		"visible": battle_shell_visible_count,
 		"entrances": entrance_count,
+		"entrance_key": entrance_key,
+		"entry_side": battle_entry_side,
 		"logical_walls": combat.walls.size() if combat != null else 0,
 		"room_type": str(battle_room_context.get("room_type", "")),
 		"theme": str(battle_room_context.get("theme", "")),

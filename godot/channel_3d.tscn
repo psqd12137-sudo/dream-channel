@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://83jksqd5227f" path="res://scripts/channel_3d_hud.gd" id="2_6ggqb"]
 [ext_resource type="Theme" path="res://assets/fonts/app_theme.tres" id="3_app_theme"]
 [ext_resource type="Shader" path="res://shaders/tilt_shift_miniature.gdshader" id="4_tilt_shift"]
+[ext_resource type="Script" path="res://scripts/runtime_render_stats.gd" id="5_runtime_render_stats"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_tilt_shift"]
 shader = ExtResource("4_tilt_shift")
@@ -43,7 +44,8 @@ stretch = true
 [node name="WorldViewport" type="SubViewport" parent="WorldLayer/WorldContainer"]
 handle_input_locally = false
 size = Vector2i(952, 578)
-render_target_update_mode = 4
+# 仅在视口可见时刷新，标题页和后台菜单不再持续渲染 3D 视口。
+render_target_update_mode = 2
 
 [node name="WorldRoot" type="Node3D" parent="WorldLayer/WorldContainer/WorldViewport"]
 
@@ -84,3 +86,6 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 theme = ExtResource("3_app_theme")
 script = ExtResource("2_6ggqb")
+
+[node name="RuntimeRenderStats" type="CanvasLayer" parent="."]
+script = ExtResource("5_runtime_render_stats")
