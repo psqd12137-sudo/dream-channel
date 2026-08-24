@@ -9,5 +9,5 @@
 不会依赖 `E:` 盘符。目录中的中文文件名保留用于和原始 AI/PSD 导出层对应；新增代码
 优先引用稳定的英文命名文件或直接绘制几何包装。
 
-字体 `SmileySans-Oblique.otf` 单独存放在 `res://assets/fonts/`，来源为
-atelierAnchor 的 Smiley Sans v2.0.1，许可证见 `SmileySans-OFL.txt`。
+项目中文界面使用 `SourceHanSansCN-Regular.otf` 与 `SourceHanSansCN-Medium.otf`，
+两份字体均从项目作者本机字体库复制到 `res://assets/fonts/`，运行时不依赖系统字体。

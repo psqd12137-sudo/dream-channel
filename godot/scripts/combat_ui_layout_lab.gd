@@ -1,7 +1,7 @@
 @tool
 extends Control
 
-const APP_FONT: Font = preload("res://assets/fonts/NotoSansCJKsc-Regular.otf")
+const APP_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Regular.otf")
 
 
 func _ready() -> void:

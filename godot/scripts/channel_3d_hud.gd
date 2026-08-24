@@ -17,8 +17,8 @@ const BTN_END_TEXTURE = preload("res://assets/ui/unity_buttons/SP_EndGame.png")
 const BTN_MENU_TEXTURE = preload("res://assets/ui/unity_buttons/SP_Menu.png")
 const HOME_TITLE_80S = preload("res://assets/ui/retro_broadcast/home_title_layer.png")
 const TV_MASCOT = preload("res://assets/ui/retro_broadcast/teli-14.png")
-const APP_FONT: Font = preload("res://assets/fonts/NotoSansCJKsc-Regular.otf")
-const DISPLAY_FONT: Font = preload("res://assets/fonts/SmileySans-Oblique.otf")
+const APP_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Regular.otf")
+const DISPLAY_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Medium.otf")
 
 const INK := Color("17151c")
 const DARK := Color("251b35")
@@ -1719,7 +1719,7 @@ func _draw_button(rect: Rect2, caption: String, fill: Color, text_color: Color) 
 	draw_rect(rect, fill, true)
 	draw_rect(rect, INK, false, 2.0)
 	draw_line(rect.position + Vector2(8, 5), Vector2(rect.end.x - 8, rect.position.y + 5), Color(1, 1, 1, 0.42), 2.0)
-	_draw_display_centered(caption, rect, 15, text_color)
+	_draw_display_centered(caption, rect, 15, text_color, not flat_fill)
 
 
 func _draw_texture_button(rect: Rect2, caption: String, texture: Texture2D, text_color: Color, font_size: int = 14, modulate: Color = Color.WHITE) -> void:
@@ -1747,8 +1747,9 @@ func _label(value: String, pos: Vector2, font_size: int, color: Color) -> void:
 	draw_string(APP_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 
-func _display_label(value: String, pos: Vector2, font_size: int, color: Color) -> void:
-	draw_string(DISPLAY_FONT, pos + Vector2(2, 2), value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, INK)
+func _display_label(value: String, pos: Vector2, font_size: int, color: Color, with_shadow: bool = true) -> void:
+	if with_shadow:
+		draw_string(DISPLAY_FONT, pos + Vector2(2, 2), value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, INK)
 	draw_string(DISPLAY_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 
@@ -1758,10 +1759,10 @@ func _draw_centered(value: String, rect: Rect2, font_size: int, color: Color) ->
 	_label(value, pos, font_size, color)
 
 
-func _draw_display_centered(value: String, rect: Rect2, font_size: int, color: Color) -> void:
+func _draw_display_centered(value: String, rect: Rect2, font_size: int, color: Color, with_shadow: bool = true) -> void:
 	var bounds := DISPLAY_FONT.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	var pos := rect.position + Vector2((rect.size.x - bounds.x) * 0.5, (rect.size.y + bounds.y) * 0.5 - 2.0)
-	_display_label(value, pos, font_size, color)
+	_display_label(value, pos, font_size, color, with_shadow)
 
 
 func _draw_wrapped(value: String, pos: Vector2, width: float, font_size: int, color: Color) -> void:

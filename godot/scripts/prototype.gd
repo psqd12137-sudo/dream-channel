@@ -1,6 +1,6 @@
 extends Control
 
-const APP_FONT: Font = preload("res://assets/fonts/NotoSansCJKsc-Regular.otf")
+const APP_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Regular.otf")
 
 const RoomRules = preload("res://scripts/room_rules.gd")
 const CombatRules = preload("res://scripts/combat_rules.gd")

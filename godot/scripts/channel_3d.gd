@@ -18,7 +18,7 @@ const PCG_HAND_LAYOUT_LAB = preload("res://scenes/pcg_hand_layout_lab.tscn")
 const PCG_HAND_ROOM_SCRIPT = preload("res://scripts/pcg_hand_room.gd")
 const ASSET_EDITOR_SCENE_PATH := "res://scenes/asset_editor_3d.tscn"
 const KAYKIT_DUNGEON_ROOT := "res://assets/third_party/kaykit_dungeon/models/"
-const APP_FONT: Font = preload("res://assets/fonts/NotoSansCJKsc-Regular.otf")
+const APP_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Regular.otf")
 
 const EXE_SOURCE_ID := "CabinSlice_织梦频道.exe@EEC4C574CC22"
 const SNAPSHOT_ROOT := "res://data/exe_snapshot/"
