@@ -23,7 +23,7 @@ func _run() -> void:
 	var c2 := _surface_color(game, h2)
 	_check(c0.get_luminance() > c1.get_luminance() and c1.get_luminance() > c2.get_luminance(), "H0/H1/H2 surfaces must descend from light gray to medium gray to dark gray")
 	var wall: Vector2i = game.combat.walls.keys()[0]
-	var blocker := game.battle_root.get_node_or_null("Cell_%d_%d/Blocker" % [wall.x, wall.y]) as MeshInstance3D
+	var blocker := game.battle_board_root.get_node_or_null("Cell_%d_%d/Blocker" % [wall.x, wall.y]) as MeshInstance3D
 	var wall_color: Color = blocker.material_override.albedo_color if blocker != null else Color.BLACK
 	_check(blocker != null and wall_color.g > wall_color.r and wall_color.g > wall_color.b, "wall/column blockers must use a recognizable green material")
 	_check(_count_named_prefix(game.battle_root, "PortalRing") == 2, "paired portal cells must each render a dedicated ring mesh")
@@ -98,7 +98,7 @@ func _first_cell_at_height(game: Node3D, height: int) -> Vector2i:
 
 
 func _surface_color(game: Node3D, cell: Vector2i) -> Color:
-	var surface := game.battle_root.get_node_or_null("Cell_%d_%d/Surface" % [cell.x, cell.y]) as MeshInstance3D
+	var surface := game.battle_board_root.get_node_or_null("Cell_%d_%d/Surface" % [cell.x, cell.y]) as MeshInstance3D
 	return surface.material_override.albedo_color if surface != null else Color.BLACK
 
 

@@ -17,8 +17,8 @@ func _run() -> void:
 	_check(house_presenter != null and house_presenter.has_3d_model(), "the house-map Lili token must reuse the replaceable 3D player presenter")
 	_check(_count_type(game.house_root.get_node_or_null("LiliToken"), "Label3D") == 0, "house player hierarchy must not contain overhead UI")
 	game.start_combat_lab("hall")
-	var player_presenter = game.battle_root.get_node_or_null("Player/Presenter")
-	var enemy_presenter = game.battle_root.get_node_or_null("Enemy/Presenter")
+	var player_presenter = game.battle_actor_root.get_node_or_null("Player/Presenter")
+	var enemy_presenter = game.battle_actor_root.get_node_or_null("Enemy/Presenter")
 	_check(player_presenter != null and player_presenter.sprite is AnimatedSprite3D, "player pawn must use the replaceable character presenter")
 	_check(enemy_presenter != null and enemy_presenter.sprite is AnimatedSprite3D, "enemy pawn must use the replaceable character presenter")
 	if player_presenter != null:
@@ -39,18 +39,18 @@ func _run() -> void:
 	game.build_battle_world()
 	game.animation_duration_scale = 0.35
 	game.handle_battle_cell(Vector2i(3, 1))
-	player_presenter = game.battle_root.get_node_or_null("Player/Presenter")
+	player_presenter = game.battle_actor_root.get_node_or_null("Player/Presenter")
 	_check(game.animation_busy, "a real player grid step must lock input while the pawn moves")
 	_check(player_presenter != null and player_presenter.current_model_animation().ends_with("Lili_Walk_InPlace"), "player grid movement must play the repaired in-place Walk loop")
 	while game.animation_busy:
 		await process_frame
-	var moved_player := game.battle_root.get_node_or_null("Player") as Node3D
+	var moved_player := game.battle_actor_root.get_node_or_null("Player") as Node3D
 	_check(moved_player != null and moved_player.position.distance_to(game._battle_world(Vector2i(3, 1))) < 0.01, "player model must settle on the authoritative destination cell")
 	_check(moved_player != null and moved_player.get_node_or_null("PawnLabel") == null, "player hierarchy must not contain overhead UI")
 	var last_player_yaw: float = game.battle_player_facing_yaw
 	_check(is_equal_approx(last_player_yaw, PI * 0.5), "moving right must record the player's final facing direction")
 	game.build_battle_world()
-	moved_player = game.battle_root.get_node_or_null("Player") as Node3D
+	moved_player = game.battle_actor_root.get_node_or_null("Player") as Node3D
 	_check(moved_player != null and is_equal_approx(moved_player.rotation.y, last_player_yaw), "rebuilding the battle board must preserve the player's last facing direction")
 	game.animation_duration_scale = 0.0
 
@@ -65,13 +65,13 @@ func _run() -> void:
 	game.combat.energy = 4
 	game.build_battle_world()
 	game.select_or_play_card(0)
-	player_presenter = game.battle_root.get_node_or_null("Player/Presenter")
+	player_presenter = game.battle_actor_root.get_node_or_null("Player/Presenter")
 	_check(player_presenter != null and player_presenter.current_state == "ready", "selecting a placement card must trigger a visible ready pose")
 	_check(player_presenter != null and player_presenter.action_count == 1, "ready pose must be emitted exactly once for the selection")
 	var hp_before: int = game.combat.enemy_hp
 	game.handle_battle_cell(game.combat.enemy_pos)
-	player_presenter = game.battle_root.get_node_or_null("Player/Presenter")
-	enemy_presenter = game.battle_root.get_node_or_null("Enemy/Presenter")
+	player_presenter = game.battle_actor_root.get_node_or_null("Player/Presenter")
+	enemy_presenter = game.battle_actor_root.get_node_or_null("Enemy/Presenter")
 	_check(game.combat.enemy_hp < hp_before, "the presentation test attack must use a real combat hit")
 	_check(player_presenter != null and player_presenter.current_state == "attack", "a real player hit must trigger the attack pose")
 	_check(enemy_presenter != null and enemy_presenter.current_state == "hurt", "enemy HP loss must trigger the hurt reaction")

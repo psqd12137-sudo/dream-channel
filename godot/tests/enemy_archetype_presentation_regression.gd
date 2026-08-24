@@ -49,7 +49,7 @@ func _run() -> void:
 	game.start_combat_lab("hall")
 	game.combat.enemy_archetype = "unregistered_test_enemy"
 	game.build_battle_world()
-	var fallback = game.battle_root.get_node_or_null("Enemy/Presenter")
+	var fallback = game.battle_actor_root.get_node_or_null("Enemy/Presenter")
 	_check(fallback != null and fallback.config.get("model_path", "") == base_enemy.get("model_path", ""), "unknown archetypes must retain the base enemy model fallback")
 	game.queue_free()
 	await process_frame

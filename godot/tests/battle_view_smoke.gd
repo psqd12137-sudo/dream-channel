@@ -45,7 +45,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	_check(game.combat.cols == 9 and game.combat.rows == 4, "hall must exercise the 9x4 arena")
-	var battle_root: Node = game.get_node(WORLD_ROOT + "/BattleRoot")
+	var battle_root: Node = game.battle_board_root
 	var camera: Camera3D = game.get_node(WORLD_ROOT + "/CameraRig/Camera3D")
 	var world_viewport: SubViewport = game.get_node("WorldLayer/WorldContainer/WorldViewport")
 	_check(_count_named_prefix(battle_root, "Cell_") == 36, "hall must render all 36 cells")
@@ -77,15 +77,15 @@ func _run() -> void:
 	_check(_count_meta_recursive(battle_root, "battle_context_prop") >= 2, "battle terrain and blockers must use assets inherited from the big-map room composition")
 	_check(_count_meta_recursive(battle_root, "house_floor_spec") == active_footprint_cells, "active room cells must reuse the formal big-map timber floor specification")
 	_check(_count_meta_recursive(battle_root, "battle_backstage") == game.combat.cols * game.combat.rows - active_footprint_cells, "cells outside the room footprint must read as a green cutting-mat backstage")
-	_check(_count_meta_recursive(battle_root.get_node_or_null("BattleRoomShell"), "cardboard_shell") > 0, "combat walls must use the same cardboard construction language as the big-map room")
+	_check(_count_meta_recursive(game.battle_board_root.get_node_or_null("BattleRoomShell"), "cardboard_shell") > 0, "combat walls must use the same cardboard construction language as the big-map room")
 	_check(_count_named_prefix(battle_root, "BattleShellJunction") < int(shell_state["edges"]), "wall junctions must exist only on contour turns, never as a picket fence at every cell seam")
-	_check(_all_named_prefix_hidden(battle_root.get_node_or_null("BattleRoomShell"), "BackFoot_"), "battle wall support feet must stay hidden so they do not scatter table-like blocks across the arena")
-	_check(battle_root.get_node_or_null("BattleRoomShell/BattleRoomStateLabel") == null, "the room shell must not carry a floating debug title")
+	_check(_all_named_prefix_hidden(game.battle_board_root.get_node_or_null("BattleRoomShell"), "BackFoot_"), "battle wall support feet must stay hidden so they do not scatter table-like blocks across the arena")
+	_check(game.battle_board_root.get_node_or_null("BattleRoomShell/BattleRoomStateLabel") == null, "the room shell must not carry a floating debug title")
 	var trap_cell := _first_empty_cell(game)
 	game.combat.traps[trap_cell] = {"card_id": "jab", "glyph": "刺", "damage": 2}
 	game.build_battle_world()
-	var trap_mesh := battle_root.get_node_or_null("Cell_%d_%d/Trap" % [trap_cell.x, trap_cell.y]) as MeshInstance3D
-	var trap_art := battle_root.get_node_or_null("Cell_%d_%d/ItemArt_jab" % [trap_cell.x, trap_cell.y]) as Sprite3D
+	var trap_mesh := game.battle_board_root.get_node_or_null("Cell_%d_%d/Trap" % [trap_cell.x, trap_cell.y]) as MeshInstance3D
+	var trap_art := game.battle_board_root.get_node_or_null("Cell_%d_%d/ItemArt_jab" % [trap_cell.x, trap_cell.y]) as Sprite3D
 	var trap_radius := (trap_mesh.mesh as CylinderMesh).top_radius if trap_mesh != null else 99.0
 	var art_span := trap_art.pixel_size * float(maxi(trap_art.texture.get_width(), trap_art.texture.get_height())) if trap_art != null else 99.0
 	_check(trap_radius * 2.0 <= game.BATTLE_CELL * 0.30, "trap bases must stay comfortably inside a battle cell")
@@ -121,7 +121,7 @@ func _run() -> void:
 	_check(game.battle_cell_from_viewport(projected) == target_cell, "picking must survive pan and zoom")
 	game.set_battle_hover(projected)
 	await process_frame
-	var hovered_node: Node = battle_root.get_node_or_null("Cell_%d_%d/Hover_0" % [target_cell.x, target_cell.y])
+	var hovered_node: Node = game.battle_board_root.get_node_or_null("Cell_%d_%d/Hover_0" % [target_cell.x, target_cell.y])
 	_check(hovered_node is MeshInstance3D, "hovered cells must render corner markers")
 	var valid_hover_cell := _first_valid_battle_target(game)
 	var valid_projected: Vector2 = camera.unproject_position(game._battle_world(valid_hover_cell))

@@ -46,8 +46,8 @@ func _run() -> void:
 	await process_frame
 	game.combat.player_pos = game.combat.enemy_pos
 	game.build_battle_world()
-	var player_node := game.battle_root.get_node_or_null("Player") as Node3D
-	var enemy_node := game.battle_root.get_node_or_null("Enemy") as Node3D
+	var player_node := game.battle_actor_root.get_node_or_null("Player") as Node3D
+	var enemy_node := game.battle_actor_root.get_node_or_null("Enemy") as Node3D
 	_check(player_node != null and enemy_node != null, "shared cell must keep both rendered pawns")
 	if player_node != null and enemy_node != null:
 		_check(player_node.position.distance_to(enemy_node.position) >= 0.6, "shared pawns must be visually offset instead of occupying identical pixels")

@@ -70,7 +70,7 @@ func _run() -> void:
 	_check(game.combat.can_target_place_card(0, game.combat.enemy_pos), "enemy cell must only be marked when a direct smash is valid")
 	game.handle_battle_cell(game.combat.enemy_pos)
 	_check(game.combat.enemy_hp < hp_before, "clicking a valid enemy target must deal combat damage")
-	_check(game.battle_root.get_node_or_null("Enemy/DamageFeedback") is Label3D, "enemy HP loss must create a model-scale-independent damage popup")
+	_check(game.battle_actor_root.get_node_or_null("Enemy/DamageFeedback") is Label3D, "enemy HP loss must create a model-scale-independent damage popup")
 
 	if game.combat.outcome == "":
 		var hud: Control = game.get_node("HUD/HUDRoot")

@@ -223,7 +223,8 @@ var battle_camera_return_tween: Tween = null
 var battle_room_title := "房间"
 var battle_room_context: Dictionary = {}
 var enemy_nodes: Dictionary = {}
-var battle_enemy_render_positions: Dictionary = {}
+var battle_board_root: Node3D = null
+var battle_actor_root: Node3D = null
 var battle_backstage_cells: Dictionary = {}
 var battle_height_prop_assignments: Dictionary = {}
 var battle_blocker_prop_assignments: Dictionary = {}
@@ -766,7 +767,6 @@ func go_home() -> void:
 	test_focused_enemy_id = ""
 	test_enemy_phase_pending = false
 	_cancel_dynamic_effect()
-	battle_enemy_render_positions.clear()
 	character_animation_demo_mode = false
 	camera.environment = null
 	house_camera_following = false
@@ -929,7 +929,6 @@ func return_to_combat_test_menu() -> void:
 	animation_busy = false
 	active_animation_kind = ""
 	enemy_nodes.clear()
-	battle_enemy_render_positions.clear()
 	combat = null
 	_restore_test_state()
 	test_combat_active = false
@@ -1082,7 +1081,7 @@ func start_character_animation_lab() -> void:
 func demo_character_idle() -> void:
 	if not character_animation_demo_mode or phase != "combat":
 		return
-	var presenter := battle_root.get_node_or_null("Player/Presenter")
+	var presenter := battle_actor_root.get_node_or_null("Player/Presenter")
 	if presenter != null and presenter.has_method("preview_model_animation"):
 		presenter.preview_model_animation("idle")
 	status_message = "待机：正在播放 FBX preset_biped_idle。"
@@ -1107,7 +1106,7 @@ func demo_character_grid_step() -> void:
 func demo_character_attack() -> void:
 	if not character_animation_demo_mode or phase != "combat":
 		return
-	var presenter := battle_root.get_node_or_null("Player/Presenter")
+	var presenter := battle_actor_root.get_node_or_null("Player/Presenter")
 	var duration := 0.0
 	if presenter != null and presenter.has_method("preview_model_animation"):
 		duration = presenter.preview_model_animation("attack", 1.5)
@@ -1118,7 +1117,7 @@ func demo_character_attack() -> void:
 func demo_character_hurt() -> void:
 	if not character_animation_demo_mode or phase != "combat":
 		return
-	var presenter := battle_root.get_node_or_null("Player/Presenter")
+	var presenter := battle_actor_root.get_node_or_null("Player/Presenter")
 	var duration := 0.0
 	if presenter != null and presenter.has_method("preview_model_animation"):
 		duration = presenter.preview_model_animation("hurt", 1.25)
@@ -2093,7 +2092,6 @@ func finish_event_trial(success: bool) -> void:
 
 func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	combat = CombatRules.new()
-	battle_enemy_render_positions.clear()
 	battle_room_title = str(room.get("name", "房间"))
 	battle_player_facing_yaw = house_player_facing_yaw
 	battle_enemy_facing_yaw = PI
@@ -2138,7 +2136,7 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 func _prepare_combat_entry_pose() -> void:
 	battle_root.position = Vector3(0.0, 0.72, 0.0)
 	battle_root.scale = Vector3(0.92, 0.04, 0.92)
-	var player := battle_root.get_node_or_null("Player") as Node3D
+	var player := battle_actor_root.get_node_or_null("Player") as Node3D
 	if player != null:
 		player.visible = false
 	for enemy_id in enemy_nodes.keys():
@@ -2159,7 +2157,7 @@ func _animate_combat_entry(final_message: String) -> void:
 		return
 	battle_root.position = Vector3.ZERO
 	battle_root.scale = Vector3.ONE
-	var player := battle_root.get_node_or_null("Player") as Node3D
+	var player := battle_actor_root.get_node_or_null("Player") as Node3D
 	var enemies_in_scene: Array[Node3D] = []
 	for enemy_id in enemy_nodes.keys():
 		var enemy := enemy_nodes[enemy_id] as Node3D
@@ -2278,16 +2276,6 @@ func end_combat_turn() -> void:
 	hovered_battle_cell = INVALID_CELL
 	var turn_events: Array[Dictionary] = combat.enemy_turn()
 	battle_turn_events = turn_events.duplicate(true)
-	battle_enemy_render_positions.clear()
-	for event: Dictionary in turn_events:
-		if str(event.get("kind", "")) != "move":
-			continue
-		var actor_id := str(event.get("actor_id", ""))
-		var source: Vector2i = event.get("from", INVALID_CELL)
-		if actor_id.is_empty() or source == INVALID_CELL or battle_enemy_render_positions.has(actor_id):
-			continue
-		# enemy_turn() 已经把规则状态推进到终点；重建节点时必须先使用事件起点。
-		battle_enemy_render_positions[actor_id] = source
 	battle_turn_actor_id = "enemy_phase"
 	for event: Dictionary in turn_events:
 		var actor_id := str(event.get("actor_id", ""))
@@ -2300,10 +2288,9 @@ func end_combat_turn() -> void:
 	animation_busy = true
 	active_animation_kind = "enemy_turn"
 	status_message = _enemy_turn_summary(turn_events)
-	# 不要在敌方规则推进后重建战场：enemy_turn() 已经把逻辑位置推进到终点，
-	# 此时重建会制造一个“终点节点”进入渲染帧的机会。保留现有节点，
-	# _animate_enemy_turn() 会把它们从当前可见位置直接播放到事件终点；
-	# 动画结束后由 _after_combat_action() 统一重建最终状态。
+	# 逻辑状态可以先结算，但敌人节点必须保持在演员层等待移动动画。
+	# 这里只刷新格子、意图和危险标记，不重建任何演员节点。
+	refresh_battle_board()
 	_refresh_hud()
 	_animate_enemy_turn(turn_events)
 
@@ -2525,8 +2512,8 @@ func _animate_player_path(path: Array[Vector2i], index: int) -> void:
 		_complete_dynamic_effect()
 		_refresh_hud()
 		return
-	build_battle_world()
-	var player_node := battle_root.get_node_or_null("Player") as Node3D
+	refresh_battle_board()
+	var player_node := battle_actor_root.get_node_or_null("Player") as Node3D
 	var duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
 	if player_node == null or duration <= 0.0:
 		_animate_player_path(path, index + 1)
@@ -2556,7 +2543,7 @@ func _animate_player_path(path: Array[Vector2i], index: int) -> void:
 func _animate_player_battle_step(source: Vector2i, target: Vector2i) -> void:
 	battle_camera_following = true
 	_play_actor_state("Player", "move")
-	var player_node := battle_root.get_node_or_null("Player") as Node3D
+	var player_node := battle_actor_root.get_node_or_null("Player") as Node3D
 	var duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
 	if player_node == null or duration <= 0.0:
 		return
@@ -2602,7 +2589,7 @@ func use_player_portal() -> void:
 
 
 func _animate_player_portal(source: Vector2i, target: Vector2i) -> void:
-	var player_node := battle_root.get_node_or_null("Player") as Node3D
+	var player_node := battle_actor_root.get_node_or_null("Player") as Node3D
 	var duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
 	if player_node == null or duration <= 0.0:
 		return
@@ -2799,7 +2786,6 @@ func _rotation_invariant_fit_size(horizontal_radius: float, vertical_span: float
 
 
 func _after_combat_action() -> void:
-	battle_enemy_render_positions.clear()
 	player_hp = combat.player_hp
 	if test_combat_active and test_session.active and test_enemy_phase_pending:
 		test_session.record_enemy_phase(test_last_events, combat)
@@ -3376,9 +3362,39 @@ func frontier_markers_are_compact() -> bool:
 		marker_count += 1
 	return marker_count == room_rules.frontiers().size()
 
+func _ensure_battle_layers() -> void:
+	if battle_board_root == null or not is_instance_valid(battle_board_root):
+		battle_board_root = battle_root.get_node_or_null("BattleBoard") as Node3D
+	if battle_board_root == null:
+		battle_board_root = Node3D.new()
+		battle_board_root.name = "BattleBoard"
+		battle_root.add_child(battle_board_root)
+	if battle_actor_root == null or not is_instance_valid(battle_actor_root):
+		battle_actor_root = battle_root.get_node_or_null("BattleActors") as Node3D
+	if battle_actor_root == null:
+		battle_actor_root = Node3D.new()
+		battle_actor_root.name = "BattleActors"
+		battle_root.add_child(battle_actor_root)
+
+
 func build_battle_world() -> void:
+	_ensure_battle_layers()
+	_clear_children(battle_board_root)
+	_clear_children(battle_actor_root)
 	enemy_nodes.clear()
-	_clear_children(battle_root)
+	_build_battle_board()
+	_sync_battle_actors()
+
+
+func refresh_battle_board() -> void:
+	if combat == null:
+		return
+	_ensure_battle_layers()
+	_clear_children(battle_board_root)
+	_build_battle_board()
+
+
+func _build_battle_board() -> void:
 	if combat == null:
 		return
 	var intent: Dictionary = combat.preview_intent()
@@ -3395,7 +3411,7 @@ func build_battle_world() -> void:
 	var room_rim: Color = battle_room_context.get("rim", Color("343a3e"))
 	var room_blocker: Color = battle_room_context.get("blocker", COL_WALL_GREEN)
 	_add_box(
-		battle_root,
+		battle_board_root,
 		"ArenaBase",
 		Vector3(0, -0.13, 0),
 		Vector3(float(combat.cols) * BATTLE_CELL + 0.36, 0.22, float(combat.rows) * BATTLE_CELL + 0.36),
@@ -3408,7 +3424,7 @@ func build_battle_world() -> void:
 			var cell_node := Node3D.new()
 			cell_node.name = "Cell_%d_%d" % [x, y]
 			cell_node.position = world
-			battle_root.add_child(cell_node)
+			battle_board_root.add_child(cell_node)
 			var height := int(combat.heights.get(pos, 0))
 			var footprint_active := _battle_cell_in_room_footprint(pos)
 			var backstage := battle_backstage_cells.has(pos)
@@ -3477,16 +3493,20 @@ func build_battle_world() -> void:
 				var card_id := str(trap.get("card_id", ""))
 				_add_trap_item_sprite(cell_node, card_id, top_y)
 				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
+	_add_battle_room_shell()
+	_add_battle_stage_decor()
+
+
+func _sync_battle_actors() -> void:
+	if combat == null:
+		return
 	_add_battle_pawn(combat.player_pos, true, true)
 	for enemy_id in combat.living_enemy_ids():
 		var state = combat.enemy_by_id(enemy_id)
 		if state != null:
-			var render_pos: Vector2i = battle_enemy_render_positions.get(enemy_id, state.pos)
-			_add_battle_pawn(render_pos, false, state.revealed, enemy_id)
+			_add_battle_pawn(state.pos, false, state.revealed, enemy_id)
 	if combat.has_decoy():
 		_add_decoy_pawn(combat.decoy_pos)
-	_add_battle_room_shell()
-	_add_battle_stage_decor()
 
 
 func _is_valid_battle_target(pos: Vector2i) -> bool:
@@ -4013,7 +4033,7 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool, enemy_id: 
 	node.name = node_name
 	node.position = _battle_pawn_world(pos, is_player, enemy_id)
 	node.rotation.y = battle_player_facing_yaw if is_player else battle_enemy_facing_yaw
-	battle_root.add_child(node)
+	battle_actor_root.add_child(node)
 	if not is_player:
 		enemy_nodes[enemy_id] = node
 	var floor_y := 0.39 + float(combat.heights.get(pos, 0)) * 0.64
@@ -4145,7 +4165,7 @@ func _add_decoy_pawn(pos: Vector2i) -> void:
 	var node := Node3D.new()
 	node.name = "PaperDecoy"
 	node.position = _battle_world(pos)
-	battle_root.add_child(node)
+	battle_actor_root.add_child(node)
 	var floor_y := 0.39 + float(combat.heights.get(pos, 0)) * 0.64
 	_add_cylinder(node, "PaperBase", Vector3(0, floor_y + 0.06, 0), 0.42, 0.10, _material(Color("d5b97a")))
 	_add_box(node, "PaperBody", Vector3(0, floor_y + 0.72, 0), Vector3(0.72, 1.22, 0.10), _material(Color("efe0b9")))
@@ -4155,13 +4175,13 @@ func _add_decoy_pawn(pos: Vector2i) -> void:
 
 
 func _play_actor_state(actor_node_name: String, state: String, callout: String = "") -> void:
-	var presenter := battle_root.get_node_or_null("%s/Presenter" % actor_node_name)
+	var presenter := battle_actor_root.get_node_or_null("%s/Presenter" % actor_node_name)
 	if presenter != null and presenter.has_method("play_state"):
 		presenter.play_state(state, callout)
 
 
 func _show_actor_damage_feedback(actor_node_name: String, damage: int) -> void:
-	var actor := battle_root.get_node_or_null(actor_node_name) as Node3D
+	var actor := battle_actor_root.get_node_or_null(actor_node_name) as Node3D
 	if actor == null or damage <= 0:
 		return
 	var popup := Label3D.new()
@@ -4236,7 +4256,7 @@ func _add_battle_stage_decor() -> void:
 	_add_decor_sprite("StageDoor", str(decor.get("door", "")), entrance_position + Vector3.UP * 0.92, 0.0036)
 	_add_decor_sprite("StageWindow", str(decor.get("window", "")), far_position + Vector3.UP * 1.05, 0.0035)
 	var lamp_position := active_center + Vector3.UP * 2.55
-	_add_box(battle_root, "OverheadRigCable", active_center + Vector3.UP * 3.22, Vector3(0.028, 1.34, 0.028), _material(Color("39555b")))
+	_add_box(battle_board_root, "OverheadRigCable", active_center + Vector3.UP * 3.22, Vector3(0.028, 1.34, 0.028), _material(Color("39555b")))
 	_add_decor_sprite("StageLamp", str(decor.get("pendant_lamp", "")), lamp_position, 0.0044)
 	_add_decor_sprite("StageAnchor", str(decor.get("signal_anchor", "")), far_position + Vector3.UP * 0.48, 0.0035)
 
@@ -4253,7 +4273,7 @@ func _add_battle_room_shell() -> void:
 	battle_shell_visible_count = 0
 	var shell := Node3D.new()
 	shell.name = "BattleRoomShell"
-	battle_root.add_child(shell)
+	battle_board_root.add_child(shell)
 	var boundary_edges := _battle_footprint_boundary_edges()
 	var entrance: Dictionary = _battle_room_entrance_edge(boundary_edges)
 	for edge_index in range(boundary_edges.size()):
@@ -4497,7 +4517,7 @@ func _add_decor_sprite(node_name: String, texture_path: String, local_position: 
 	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sprite.shaded = false
 	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
-	battle_root.add_child(sprite)
+	battle_board_root.add_child(sprite)
 
 
 func _add_trap_item_sprite(parent: Node3D, card_id: String, y: float) -> void:

@@ -23,8 +23,8 @@ func _run() -> void:
 	await process_frame
 	game.start_character_animation_lab()
 	_check(game.phase == "combat" and game.character_animation_demo_mode, "home development backend must enter the real combat scene in animation demo mode")
-	_check(game.battle_root.get_node_or_null("Player/Presenter") != null, "animation demo must use the real combat player presenter")
-	var game_presenter = game.battle_root.get_node_or_null("Player/Presenter")
+	_check(game.battle_actor_root.get_node_or_null("Player/Presenter") != null, "animation demo must use the real combat player presenter")
+	var game_presenter = game.battle_actor_root.get_node_or_null("Player/Presenter")
 	game.demo_character_attack()
 	_check(game_presenter.current_model_animation().ends_with("Lili_Attack"), "attack demo must keep the repaired clip playing; got %s" % game_presenter.current_model_animation())
 	game.demo_character_hurt()

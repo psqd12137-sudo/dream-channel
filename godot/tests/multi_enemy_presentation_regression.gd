@@ -46,8 +46,8 @@ func _run() -> void:
 		var node: Node3D = game._enemy_node_for_id(enemy_id)
 		_check(node != null, "enemy node must resolve by id: %s" % enemy_id)
 		_check(node.get_node_or_null("Presenter") != null, "enemy presenter must exist: %s" % enemy_id)
-	_check(game.battle_root.get_node_or_null("Enemy") != null, "first enemy keeps legacy node name")
-	_check(game.battle_root.get_node_or_null("Enemy_bravo") != null, "additional enemy uses stable id node name")
+	_check(game.battle_actor_root.get_node_or_null("Enemy") != null, "first enemy keeps legacy node name")
+	_check(game.battle_actor_root.get_node_or_null("Enemy_bravo") != null, "additional enemy uses stable id node name")
 	var midpoint: Vector3 = game._battle_follow_target_position()
 	var expected := Vector3.ZERO
 	var points := 1

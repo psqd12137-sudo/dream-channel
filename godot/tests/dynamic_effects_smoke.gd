@@ -78,13 +78,13 @@ func _run() -> void:
 		game.start_combat(combat_room, true)
 		_check(game.animation_busy and game.active_animation_kind == "combat_entry", "entering combat from a room must lock input during the stage build")
 		_check(game.battle_root.scale.y < 0.10, "the combat room must begin folded flat before it builds")
-		var entry_player: Node3D = game.battle_root.get_node_or_null("Player") as Node3D
+		var entry_player: Node3D = game.battle_actor_root.get_node_or_null("Player") as Node3D
 		game.set_battle_hover(Vector2(game.world_viewport.size) * 0.5)
 		game.clear_battle_hover()
-		_check(is_instance_valid(entry_player) and game.battle_root.get_node_or_null("Player") == entry_player, "mouse hover must not rebuild and free actors during combat entry")
+		_check(is_instance_valid(entry_player) and game.battle_actor_root.get_node_or_null("Player") == entry_player, "mouse hover must not rebuild and free actors during combat entry")
 		await _wait_for_effect(game, 2.0)
-		var player: Node3D = game.battle_root.get_node_or_null("Player") as Node3D
-		var enemy: Node3D = game.battle_root.get_node_or_null("Enemy") as Node3D
+		var player: Node3D = game.battle_actor_root.get_node_or_null("Player") as Node3D
+		var enemy: Node3D = game.battle_actor_root.get_node_or_null("Enemy") as Node3D
 		_check(not game.animation_busy and game.battle_root.scale.is_equal_approx(Vector3.ONE), "the combat room build must settle before input unlocks")
 		_check(player != null and enemy != null and player.visible and enemy.visible, "player and enemy must finish their combat entrance")
 

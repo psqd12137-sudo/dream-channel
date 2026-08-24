@@ -24,10 +24,10 @@ func _run() -> void:
 	game.combat.patrol_goal = game.combat.INVALID_CELL
 	game.build_battle_world()
 	var start: Vector2i = game.combat.enemy_pos
-	var enemy_node_before := game.battle_root.get_node_or_null("Enemy") as Node3D
+	var enemy_node_before := game.battle_actor_root.get_node_or_null("Enemy") as Node3D
 	game.end_combat_turn()
 	_check(game.animation_busy, "enemy patrol must lock player input while its motion tween is running")
-	var enemy_node := game.battle_root.get_node_or_null("Enemy") as Node3D
+	var enemy_node := game.battle_actor_root.get_node_or_null("Enemy") as Node3D
 	_check(enemy_node != null, "enemy pawn must remain available for patrol animation")
 	_check(enemy_node == enemy_node_before, "enemy patrol must animate the existing pawn without rebuilding it first")
 	if enemy_node != null:
@@ -49,7 +49,7 @@ func _run() -> void:
 	while game.animation_busy:
 		await process_frame
 	_check(game.combat.enemy_pos != start, "enemy rules position must finish on a different patrol cell")
-	var settled_enemy := game.battle_root.get_node_or_null("Enemy") as Node3D
+	var settled_enemy := game.battle_actor_root.get_node_or_null("Enemy") as Node3D
 	_check(settled_enemy != null and settled_enemy.position.distance_to(game._battle_world(game.combat.enemy_pos)) < 0.01, "rendered enemy must settle on the authoritative patrol destination")
 	game.queue_free()
 	await process_frame
