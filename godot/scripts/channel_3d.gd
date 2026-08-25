@@ -3204,6 +3204,13 @@ func refresh_battle_state(sync_actors := true, sync_actor_positions := false) ->
 func update_battle_overlays() -> void:
 	battle_world_renderer.update_battle_overlays()
 
+func cycle_battle_enemy_range_display() -> void:
+	if phase != "combat" or combat == null:
+		return
+	var mode_label := battle_world_renderer.cycle_enemy_range_display()
+	status_message = "敌方范围：%s（按 1 切换）" % mode_label
+	_refresh_hud()
+
 func update_battle_hover() -> void:
 	battle_world_renderer.update_battle_hover()
 

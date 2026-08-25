@@ -29,6 +29,18 @@ func _run() -> void:
 	_check(hud.TEST_AI_ROW_RECT.position.y > reason_bottom, "AI reason text must not overlap the enemy list")
 	_check(hud.TEST_AI_ROW_RECT.position.y + hud.TEST_AI_ROW_STEP * 8.0 <= hud.TEST_AI_STEP_RECT.position.y, "AI enemy list must stop before the control buttons")
 	_check(hud.PLAYER_PROFILE.get_size().x >= 700.0, "Lily HUD portrait must use the complete profile asset")
+	var renderer = game.battle_world_renderer
+	var focused_cells: Dictionary = renderer._battle_intent_cells()
+	_check(_intent_cells_only_contain_enemy(focused_cells, game.test_focused_enemy_id), "focused range mode must only publish the selected enemy range")
+	var range_key := InputEventKey.new()
+	range_key.keycode = KEY_1
+	range_key.pressed = true
+	hud._input(range_key)
+	var all_cells: Dictionary = renderer._battle_intent_cells()
+	_check(_intent_cells_contain_enemy(all_cells, "eight_07"), "all range mode must publish an unselected enemy range")
+	renderer.cycle_enemy_range_display()
+	var hidden_cells: Dictionary = renderer._battle_intent_cells()
+	_check(not _intent_cells_contain_any_enemy(hidden_cells), "hidden range mode must remove all enemy range overlays")
 	game.return_to_combat_test_menu()
 	_check(game.phase == "test_combat_menu", "overlay test combat must return to test menu")
 	game.queue_free()
@@ -45,3 +57,32 @@ func _run() -> void:
 func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
+
+
+func _intent_cells_only_contain_enemy(cells: Dictionary, enemy_id: String) -> bool:
+	for raw_entry in cells.values():
+		var entry: Dictionary = raw_entry
+		for group_name in ["impact", "threat", "enemy_move", "path", "line"]:
+			for raw_marker in (entry.get(group_name, []) as Array):
+				if str((raw_marker as Dictionary).get("enemy_id", "")) != enemy_id:
+					return false
+	return true
+
+
+func _intent_cells_contain_enemy(cells: Dictionary, enemy_id: String) -> bool:
+	for raw_entry in cells.values():
+		var entry: Dictionary = raw_entry
+		for group_name in ["impact", "threat", "enemy_move", "path", "line"]:
+			for raw_marker in (entry.get(group_name, []) as Array):
+				if str((raw_marker as Dictionary).get("enemy_id", "")) == enemy_id:
+					return true
+	return false
+
+
+func _intent_cells_contain_any_enemy(cells: Dictionary) -> bool:
+	for raw_entry in cells.values():
+		var entry: Dictionary = raw_entry
+		for group_name in ["impact", "threat", "enemy_move", "path", "line"]:
+			if not (entry.get(group_name, []) as Array).is_empty():
+				return true
+	return false

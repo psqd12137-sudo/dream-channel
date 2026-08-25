@@ -45,7 +45,7 @@ const COL_GREEN := Color("66b66d")
 const COL_RED := Color("d9574f")
 const COL_ENEMY_THREAT := Color("ef4444")
 const COL_ENEMY_MOVE := Color("6d4cff")
-const COL_PLAYER_MOVE := Color("8b5cf6")
+const COL_PLAYER_MOVE := Color("fffaf2")
 const COL_HOVER_VALID := Color("f5e7a1")
 const COL_HOVER_INVALID := Color("ff6b6b")
 const COL_RANGED_ENEMY := Color("4dbbff")
@@ -54,6 +54,12 @@ const COL_GRID_DARK := Color("26343b")
 const COL_FLOOR_H0 := Color("70777b")
 const COL_WALL_GREEN := Color("3d6e53")
 const INVALID_CELL := Vector2i(-999, -999)
+
+enum EnemyRangeDisplayMode {
+	FOCUSED,
+	ALL,
+	HIDDEN,
+}
 
 var host = null
 
@@ -99,6 +105,7 @@ var battle_hover_markers: Array[MeshInstance3D] = []
 var battle_hover_valid_markers: Array[MeshInstance3D] = []
 var battle_overlay_materials: Dictionary = {}
 var battle_intent_snapshot: Dictionary = {}
+var enemy_range_display_mode := EnemyRangeDisplayMode.FOCUSED
 var full_board_build_count := 0
 var incremental_refresh_count := 0
 var battle_backstage_cells:
@@ -190,6 +197,7 @@ func _ensure_battle_layers() -> void:
 
 func build_battle_world() -> void:
 	full_board_build_count += 1
+	enemy_range_display_mode = EnemyRangeDisplayMode.FOCUSED
 	_ensure_battle_layers()
 	_clear_children(battle_board_root)
 	_clear_children(battle_actor_root)
@@ -222,6 +230,21 @@ func refresh_battle_state(sync_actors := true, sync_actor_positions := false) ->
 func update_battle_overlays() -> void:
 	_ensure_battle_layers()
 	_update_battle_overlays()
+
+
+func cycle_enemy_range_display() -> String:
+	enemy_range_display_mode = (enemy_range_display_mode + 1) % EnemyRangeDisplayMode.size()
+	_refresh_battle_dynamic_visuals()
+	return enemy_range_display_mode_label()
+
+
+func enemy_range_display_mode_label() -> String:
+	match enemy_range_display_mode:
+		EnemyRangeDisplayMode.ALL:
+			return "全体敌人"
+		EnemyRangeDisplayMode.HIDDEN:
+			return "不显示"
+	return "单个敌人"
 
 
 func update_battle_hover() -> void:
@@ -412,18 +435,19 @@ func _battle_intent_cells() -> Dictionary:
 			intent_cells[raw_cell] = player_entry
 	var focused_enemy_id := _focused_battle_enemy_id()
 	for enemy_id in combat.living_enemy_ids():
+		if not _enemy_range_display_allows(enemy_id, focused_enemy_id):
+			continue
 		var enemy_intent: Dictionary = battle_intent_snapshot.get(enemy_id, {})
 		if enemy_intent.is_empty():
 			continue
-		if enemy_id == focused_enemy_id:
-			for raw_cell in enemy_intent.get("move_cells", []):
-				var move_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
-				(move_entry["enemy_move"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
-				intent_cells[raw_cell] = move_entry
-			for raw_cell in enemy_intent.get("threat_cells", []):
-				var threat_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
-				(threat_entry["threat"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
-				intent_cells[raw_cell] = threat_entry
+		for raw_cell in enemy_intent.get("move_cells", []):
+			var move_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			(move_entry["enemy_move"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+			intent_cells[raw_cell] = move_entry
+		for raw_cell in enemy_intent.get("threat_cells", []):
+			var threat_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			(threat_entry["threat"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+			intent_cells[raw_cell] = threat_entry
 		for raw_cell in enemy_intent.get("impact_cells", enemy_intent.get("hurt", [])):
 			var impact_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			(impact_entry["impact"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
@@ -432,12 +456,19 @@ func _battle_intent_cells() -> Dictionary:
 			var path_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			(path_entry["path"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
 			intent_cells[raw_cell] = path_entry
-		if enemy_id == focused_enemy_id:
-			for raw_cell in enemy_intent.get("line_cells", []):
-				var line_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
-				(line_entry["line"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
-				intent_cells[raw_cell] = line_entry
+		for raw_cell in enemy_intent.get("line_cells", []):
+			var line_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			(line_entry["line"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+			intent_cells[raw_cell] = line_entry
 	return intent_cells
+
+
+func _enemy_range_display_allows(enemy_id: String, focused_enemy_id: String) -> bool:
+	if enemy_range_display_mode == EnemyRangeDisplayMode.HIDDEN:
+		return false
+	if enemy_range_display_mode == EnemyRangeDisplayMode.ALL:
+		return true
+	return enemy_id == focused_enemy_id
 
 
 func _clear_battle_cell_dynamic(cell_node: Node3D) -> void:
@@ -508,7 +539,7 @@ func _refresh_battle_dynamic_visuals() -> void:
 			elif not threats.is_empty():
 				_add_battle_cell_fill(cell_node, "IntentThreatFill", top_y, COL_ENEMY_THREAT, 0.50)
 			elif not player_moves.is_empty():
-				_add_battle_cell_fill(cell_node, "PlayerReachableFill", top_y, COL_PLAYER_MOVE, 0.34)
+				_add_battle_cell_fill(cell_node, "PlayerReachableFill", top_y, COL_PLAYER_MOVE, 0.22)
 			elif not enemy_moves.is_empty():
 				_add_battle_cell_fill(cell_node, "IntentMoveOverlayFill", top_y, COL_ENEMY_MOVE, 0.28)
 			if not paths.is_empty() and impacts.is_empty():
@@ -647,9 +678,9 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 func _focused_battle_enemy_id() -> String:
 	if combat == null:
 		return ""
-	var focused_enemy_id := str(host.battle_focused_enemy_id)
+	var focused_enemy_id := str(host.test_focused_enemy_id) if host.test_combat_active else str(host.battle_focused_enemy_id)
 	if focused_enemy_id.is_empty():
-		focused_enemy_id = str(host.test_focused_enemy_id)
+		focused_enemy_id = str(host.battle_focused_enemy_id) if host.test_combat_active else str(host.test_focused_enemy_id)
 	if not focused_enemy_id.is_empty() and battle_intent_snapshot.has(focused_enemy_id):
 		return focused_enemy_id
 	var hovered_enemy = combat.enemy_at(hovered_battle_cell)

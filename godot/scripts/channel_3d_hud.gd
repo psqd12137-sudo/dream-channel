@@ -980,9 +980,9 @@ func _draw_enemy_roster(rect: Rect2) -> void:
 
 
 func _focused_enemy_id() -> String:
-	var focused_enemy_id := str(game.battle_focused_enemy_id)
+	var focused_enemy_id := str(game.test_focused_enemy_id) if game.test_combat_active else str(game.battle_focused_enemy_id)
 	if focused_enemy_id.is_empty():
-		focused_enemy_id = str(game.test_focused_enemy_id)
+		focused_enemy_id = str(game.battle_focused_enemy_id) if game.test_combat_active else str(game.test_focused_enemy_id)
 	return focused_enemy_id
 
 
@@ -1282,6 +1282,10 @@ func _input(event: InputEvent) -> void:
 			side_right = key_event.pressed
 		var jump := key_event.pressed and key_event.keycode in [KEY_W, KEY_UP, KEY_SPACE]
 		game.set_sideview_input(float(int(side_right) - int(side_left)), jump)
+		get_viewport().set_input_as_handled()
+		return
+	if key_event.pressed and not key_event.echo and game.phase == "combat" and key_event.keycode == KEY_1:
+		game.cycle_battle_enemy_range_display()
 		get_viewport().set_input_as_handled()
 		return
 	if key_event.pressed and not key_event.echo and game.phase == "combat" and game.selected_card < 0:
