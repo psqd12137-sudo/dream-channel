@@ -31,14 +31,14 @@ func _run() -> void:
 		_check(enemy_presenter.has_3d_model(), "enemy presenter must instantiate the temporary Quaternius model and animation player")
 		_check(enemy_presenter.current_model_animation().to_lower().contains("idle"), "enemy model must begin in its skeletal Idle loop")
 	var ranged_target := Vector2i(2, 1)
-	var expected_ranged_yaw := game._battle_move_facing_yaw(game.combat.enemy_pos, ranged_target)
+	var expected_ranged_yaw: float = game._battle_move_facing_yaw(game.combat.enemy_pos, ranged_target)
 	_check(
 		is_equal_approx(game._battle_enemy_attack_facing_yaw(game.battle_actor_root.get_node_or_null("Enemy"), {"target": ranged_target}), expected_ranged_yaw),
 		"remote attack facing must turn toward the player target before the attack pose"
 	)
 	var projectile_start := Vector3(-2.0, 0.84, 0.0)
 	var projectile_target := Vector3(2.0, 0.36, 0.0)
-	var projectile_middle := game._battle_enemy_projectile_position(0.5, projectile_start, projectile_target)
+	var projectile_middle: Vector3 = game._battle_enemy_projectile_position(0.5, projectile_start, projectile_target)
 	_check(projectile_middle.y > maxf(projectile_start.y, projectile_target.y), "remote projectile must rise above both endpoints on its parabolic flight")
 	_check(game._battle_enemy_projectile_position(0.0, projectile_start, projectile_target).distance_to(projectile_start) < 0.001, "remote projectile arc must begin at the enemy hand position")
 	_check(game._battle_enemy_projectile_position(1.0, projectile_start, projectile_target).distance_to(projectile_target) < 0.001, "remote projectile arc must land at the target position")
