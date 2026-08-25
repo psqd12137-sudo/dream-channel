@@ -89,6 +89,8 @@ var battle_target_root: Node3D = null
 var battle_hover_markers: Array[MeshInstance3D] = []
 var battle_hover_valid_markers: Array[MeshInstance3D] = []
 var battle_overlay_materials: Dictionary = {}
+var full_board_build_count := 0
+var incremental_refresh_count := 0
 var battle_backstage_cells:
 	get: return host.battle_backstage_cells
 var battle_height_prop_assignments:
@@ -177,6 +179,7 @@ func _ensure_battle_layers() -> void:
 
 
 func build_battle_world() -> void:
+	full_board_build_count += 1
 	_ensure_battle_layers()
 	_clear_children(battle_board_root)
 	_clear_children(battle_actor_root)
@@ -187,11 +190,19 @@ func build_battle_world() -> void:
 
 
 func refresh_battle_board() -> void:
+	# 敌方事件已经先结算逻辑状态；动画期间只更新静态棋盘上的动态标记，
+	# 演员节点必须保留在原位，交给事件动画逐格移动。
+	refresh_battle_state(false, false)
+
+
+func refresh_battle_state(sync_actors := true, sync_actor_positions := false) -> void:
 	if combat == null:
 		return
+	incremental_refresh_count += 1
 	_ensure_battle_layers()
-	_clear_children(battle_board_root)
-	_build_battle_board()
+	_refresh_battle_dynamic_visuals()
+	if sync_actors:
+		_reconcile_battle_actors(sync_actor_positions)
 	_update_battle_overlays()
 
 
@@ -310,15 +321,6 @@ func _battle_cell_top_y(pos: Vector2i) -> float:
 func _build_battle_board() -> void:
 	if combat == null:
 		return
-	var intent: Dictionary = combat.preview_intent()
-	var intent_cells: Dictionary = {}
-	for enemy_id in combat.living_enemy_ids():
-		var enemy_intent: Dictionary = combat.preview_intent(enemy_id)
-		for raw_cell in enemy_intent.get("hurt", []):
-			intent_cells[raw_cell] = {"kind": "hurt", "enemy_id": enemy_id, "intent": enemy_intent}
-		for raw_cell in enemy_intent.get("path", []):
-			if not intent_cells.has(raw_cell):
-				intent_cells[raw_cell] = {"kind": "path", "enemy_id": enemy_id, "intent": enemy_intent}
 	var room_floor_a: Color = battle_room_context.get("floor_a", COL_FLOOR_H0)
 	var room_floor_b: Color = battle_room_context.get("floor_b", room_floor_a.darkened(0.035))
 	var room_rim: Color = battle_room_context.get("rim", Color("343a3e"))
@@ -344,12 +346,6 @@ func _build_battle_board() -> void:
 			cell_node.set_meta("room_footprint_active", footprint_active)
 			var platform_height := 0.28 + float(height) * 0.64
 			var rim_color := room_rim if height == 0 else room_rim.darkened(0.12) if height == 1 else room_rim.darkened(0.24)
-			var cell_intent: Dictionary = intent_cells.get(pos, {})
-			var cell_intent_data: Dictionary = cell_intent.get("intent", intent)
-			if cell_intent.get("kind", "") == "hurt" or pos in intent.get("hurt", []):
-				rim_color = COL_RED
-			elif cell_intent.get("kind", "") == "path" or pos in intent.get("path", []):
-				rim_color = COL_BLUE
 			var surface_color := room_floor_a if (x + y) % 2 == 0 else room_floor_b
 			if height == 1:
 				surface_color = surface_color.darkened(0.12)
@@ -365,6 +361,7 @@ func _build_battle_board() -> void:
 			else:
 				_add_box(cell_node, "TerrainFoot", Vector3(0, 0.14, 0), Vector3(BATTLE_CELL - 0.08, 0.28, BATTLE_CELL - 0.08), _material(rim_color))
 				_add_battle_height_asset(cell_node, pos, height, platform_height + 0.13)
+			cell_node.set_meta("battle_base_rim", rim_color)
 			_add_battle_floor_model(cell_node, pos, footprint_active)
 			# Surface remains only as a picking/standing plane. The visible finish is
 			# the same KayKit timber module used by the formal big-map composer.
@@ -372,24 +369,8 @@ func _build_battle_board() -> void:
 			var surface_material := _material(Color(surface_color, surface_alpha), true, 0.018)
 			_add_box(cell_node, "Surface", Vector3(0, platform_height + 0.055, 0), Vector3(BATTLE_CELL - 0.34, 0.11, BATTLE_CELL - 0.34), surface_material)
 			var top_y := platform_height + 0.13
-			var is_hurt_cell: bool = cell_intent.get("kind", "") == "hurt" or pos in (intent.get("hurt", []) as Array)
-			var path_cells: Array = cell_intent_data.get("path", intent.get("path", []))
-			var path_index: int = path_cells.find(pos)
-			if is_hurt_cell:
-				# Keep danger readable without painting a large debug-like label across
-				# the inherited timber floor. A compact token plus red corners reads as
-				# a tabletop warning marker.
-				_add_cylinder(cell_node, "IntentAttackOverlay", Vector3(0, top_y + 0.035, 0), 0.34, 0.055, _material(Color(COL_RED, 0.86), true, 0.10))
-				_add_corner_marks(cell_node, "IntentAttackCorner", COL_RED, top_y + 0.015)
-				var attack_glyph := "!"
-				if int(intent.get("hits", 1)) > 1:
-					attack_glyph = "×%d" % int(intent.get("hits", 1))
-				_add_label(cell_node, "IntentAttackGlyph", attack_glyph, Vector3(0.0, top_y + 0.30, 0.0), Color.WHITE, 25)
-			elif path_index >= 0:
-				_add_cylinder(cell_node, "IntentMoveOverlay", Vector3(0, top_y + 0.025, 0), 0.25, 0.045, _material(Color(COL_BLUE, 0.82), true, 0.08))
-				_add_label(cell_node, "IntentMoveGlyph", str(path_index + 1), Vector3(0.0, top_y + 0.25, 0.0), Color.WHITE, 22)
 			# 移动和出牌目标角标属于交互覆盖层，不能跟着整张棋盘反复重建。
-			# 这里只生成房间本体；角标由 _update_battle_overlays() 单独维护。
+			# 这里只生成房间本体；动态危险标记和角标由独立刷新路径维护。
 			if combat.portals.has(pos):
 				_add_portal_marker(cell_node, pos, top_y)
 			if combat.walls.has(pos) and not backstage:
@@ -404,6 +385,70 @@ func _build_battle_board() -> void:
 				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
 	_add_battle_room_shell()
 	_add_battle_stage_decor()
+	_refresh_battle_dynamic_visuals()
+
+
+func _battle_intent_cells() -> Dictionary:
+	var intent_cells: Dictionary = {}
+	if combat == null:
+		return intent_cells
+	for enemy_id in combat.living_enemy_ids():
+		var enemy_intent: Dictionary = combat.preview_intent(enemy_id)
+		for raw_cell in enemy_intent.get("hurt", []):
+			intent_cells[raw_cell] = {"kind": "hurt", "enemy_id": enemy_id, "intent": enemy_intent}
+		for raw_cell in enemy_intent.get("path", []):
+			if not intent_cells.has(raw_cell):
+				intent_cells[raw_cell] = {"kind": "path", "enemy_id": enemy_id, "intent": enemy_intent}
+	return intent_cells
+
+
+func _clear_battle_cell_dynamic(cell_node: Node3D) -> void:
+	for child: Node in cell_node.get_children():
+		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_"):
+			child.free()
+
+
+func _refresh_battle_dynamic_visuals() -> void:
+	if combat == null or battle_board_root == null:
+		return
+	var default_intent: Dictionary = combat.preview_intent()
+	var intent_cells := _battle_intent_cells()
+	for y in range(combat.rows):
+		for x in range(combat.cols):
+			var pos := Vector2i(x, y)
+			var cell_node := battle_board_root.get_node_or_null("Cell_%d_%d" % [x, y]) as Node3D
+			if cell_node == null:
+				continue
+			_clear_battle_cell_dynamic(cell_node)
+			var base_rim: Color = cell_node.get_meta("battle_base_rim", COL_GRID_DARK)
+			var cell_intent: Dictionary = intent_cells.get(pos, {})
+			var cell_intent_data: Dictionary = cell_intent.get("intent", default_intent)
+			var rim_color := COL_RED if cell_intent.get("kind", "") == "hurt" else COL_BLUE if cell_intent.get("kind", "") == "path" else base_rim
+			var rim_node := cell_node.get_node_or_null("Frame") as MeshInstance3D
+			if rim_node == null:
+				rim_node = cell_node.get_node_or_null("TerrainFoot") as MeshInstance3D
+			if rim_node != null:
+				rim_node.material_override = _material(rim_color, false, 0.04 if rim_color != COL_GRID_DARK else 0.0)
+			var top_y := _battle_cell_top_y(pos)
+			var is_hurt_cell: bool = cell_intent.get("kind", "") == "hurt"
+			var path_cells: Array = cell_intent_data.get("path", [])
+			var path_index: int = path_cells.find(pos)
+			if is_hurt_cell:
+				# 动态危险标记单独维护，避免玩家落格后重新实例化整张棋盘。
+				_add_cylinder(cell_node, "IntentAttackOverlay", Vector3(0, top_y + 0.035, 0), 0.34, 0.055, _material(Color(COL_RED, 0.86), true, 0.10))
+				_add_corner_marks(cell_node, "IntentAttackCorner", COL_RED, top_y + 0.015)
+				var attack_glyph := "!"
+				if int(cell_intent_data.get("hits", 1)) > 1:
+					attack_glyph = "×%d" % int(cell_intent_data.get("hits", 1))
+				_add_label(cell_node, "IntentAttackGlyph", attack_glyph, Vector3(0.0, top_y + 0.30, 0.0), Color.WHITE, 25)
+			elif path_index >= 0:
+				_add_cylinder(cell_node, "IntentMoveOverlay", Vector3(0, top_y + 0.025, 0), 0.25, 0.045, _material(Color(COL_BLUE, 0.82), true, 0.08))
+				_add_label(cell_node, "IntentMoveGlyph", str(path_index + 1), Vector3(0.0, top_y + 0.25, 0.0), Color.WHITE, 22)
+			if combat.traps.has(pos):
+				var trap: Dictionary = combat.traps[pos]
+				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
+				_add_trap_item_sprite(cell_node, str(trap.get("card_id", "")), top_y)
+				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
 
 
 func _sync_battle_actors() -> void:
@@ -416,6 +461,83 @@ func _sync_battle_actors() -> void:
 			_add_battle_pawn(state.pos, false, state.revealed, enemy_id)
 	if combat.has_decoy():
 		_add_decoy_pawn(combat.decoy_pos)
+
+
+func _reconcile_battle_actors(sync_positions: bool) -> void:
+	if combat == null or battle_actor_root == null:
+		return
+	var player := battle_actor_root.get_node_or_null("Player") as Node3D
+	if player == null:
+		_add_battle_pawn(combat.player_pos, true, true)
+	elif sync_positions:
+		player.position = _battle_pawn_world(combat.player_pos, true)
+	var living: Dictionary = {}
+	for enemy_id in combat.living_enemy_ids():
+		living[enemy_id] = true
+		var state = combat.enemy_by_id(enemy_id)
+		var enemy_node := _enemy_node_for_id(enemy_id)
+		if enemy_node == null:
+			_add_battle_pawn(state.pos, false, state.revealed, enemy_id)
+			enemy_node = _enemy_node_for_id(enemy_id)
+		elif sync_positions:
+			enemy_node.position = _battle_pawn_world(state.pos, false, enemy_id)
+		if enemy_node != null:
+			_refresh_enemy_node_visual(enemy_node, state)
+	for raw_enemy_id in enemy_nodes.keys().duplicate():
+		var enemy_id := str(raw_enemy_id)
+		if living.has(enemy_id):
+			continue
+		var dead_node := enemy_nodes[raw_enemy_id] as Node3D
+		if dead_node != null and is_instance_valid(dead_node):
+			dead_node.free()
+		enemy_nodes.erase(raw_enemy_id)
+	var decoy := battle_actor_root.get_node_or_null("PaperDecoy") as Node3D
+	if combat.has_decoy():
+		if decoy == null:
+			_add_decoy_pawn(combat.decoy_pos)
+		elif sync_positions:
+			decoy.position = _battle_world(combat.decoy_pos)
+	elif decoy != null:
+		decoy.free()
+
+
+func _refresh_enemy_node_visual(node: Node3D, state) -> void:
+	var presenter := node.get_node_or_null("Presenter")
+	if presenter != null and presenter.has_method("set_obscured"):
+		presenter.set_obscured(not state.revealed)
+	for child: Node in node.get_children():
+		if child.name == "EnemyIntentBadge" or child.name == "EnemyIntent":
+			child.free()
+	if not state.revealed or combat.outcome != "":
+		return
+	var floor_y := 0.39 + float(combat.heights.get(state.pos, 0)) * 0.64
+	var intent: Dictionary = combat.preview_intent(state.id)
+	var intent_color := _battle_intent_color(str(intent.get("type", "stall")))
+	var intent_badge := MeshInstance3D.new()
+	intent_badge.name = "EnemyIntentBadge"
+	var intent_quad := QuadMesh.new()
+	intent_quad.size = Vector2(0.72, 0.72)
+	intent_badge.mesh = intent_quad
+	intent_badge.position = Vector3(0, floor_y + 2.44, 0)
+	var badge_material := _material(Color(intent_color, 0.88), true, 0.08)
+	badge_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	badge_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	intent_badge.material_override = badge_material
+	node.add_child(intent_badge)
+	var intent_label := Label3D.new()
+	intent_label.font = APP_FONT
+	intent_label.name = "EnemyIntent"
+	intent_label.position = Vector3(0, floor_y + 2.44, 0.02)
+	intent_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	intent_label.no_depth_test = true
+	intent_label.font_size = 38
+	intent_label.pixel_size = 0.010
+	intent_label.outline_size = 7
+	intent_label.outline_modulate = Color("10151c")
+	intent_label.modulate = Color.WHITE
+	intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intent_label.text = _battle_intent_glyph(str(intent.get("type", "stall")))
+	node.add_child(intent_label)
 
 
 func _is_valid_battle_target(pos: Vector2i) -> bool:
@@ -959,35 +1081,8 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool, enemy_id: 
 	presenter.state_changed.connect(_on_presenter_state_changed)
 	if not is_player:
 		presenter.set_obscured(not revealed)
-	if not is_player:
-		if revealed and combat != null and str(combat.outcome) == "":
-			var intent: Dictionary = combat.preview_intent(enemy_id)
-			var intent_color := _battle_intent_color(str(intent.get("type", "stall")))
-			var intent_badge := MeshInstance3D.new()
-			intent_badge.name = "EnemyIntentBadge"
-			var intent_quad := QuadMesh.new()
-			intent_quad.size = Vector2(0.72, 0.72)
-			intent_badge.mesh = intent_quad
-			intent_badge.position = Vector3(0, floor_y + 2.44, 0)
-			var badge_material := _material(Color(intent_color, 0.88), true, 0.08)
-			badge_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-			badge_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-			intent_badge.material_override = badge_material
-			node.add_child(intent_badge)
-			var intent_label := Label3D.new()
-			intent_label.font = APP_FONT
-			intent_label.name = "EnemyIntent"
-			intent_label.position = Vector3(0, floor_y + 2.44, 0.02)
-			intent_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-			intent_label.no_depth_test = true
-			intent_label.font_size = 38
-			intent_label.pixel_size = 0.010
-			intent_label.outline_size = 7
-			intent_label.outline_modulate = Color("10151c")
-			intent_label.modulate = Color.WHITE
-			intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			intent_label.text = _battle_intent_glyph(str(intent.get("type", "stall")))
-			node.add_child(intent_label)
+	if not is_player and enemy_state != null:
+		_refresh_enemy_node_visual(node, enemy_state)
 
 
 func _battle_intent_color(intent_type: String) -> Color:

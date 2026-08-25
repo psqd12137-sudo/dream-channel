@@ -37,6 +37,10 @@ func _run() -> void:
 	game.combat.heights.clear()
 	game.combat.energy = 5
 	game.build_battle_world()
+	var board_before_move: Node3D = game.battle_board_root
+	var player_before_move: Node3D = game.battle_actor_root.get_node_or_null("Player")
+	var full_builds_before_move: int = game.battle_world_renderer.full_board_build_count
+	var incremental_refreshes_before_move: int = game.battle_world_renderer.incremental_refresh_count
 	game.animation_duration_scale = 0.35
 	game.handle_battle_cell(Vector2i(3, 1))
 	player_presenter = game.battle_actor_root.get_node_or_null("Player/Presenter")
@@ -46,6 +50,10 @@ func _run() -> void:
 		await process_frame
 	var moved_player := game.battle_actor_root.get_node_or_null("Player") as Node3D
 	_check(moved_player != null and moved_player.position.distance_to(game._battle_world(Vector2i(3, 1))) < 0.01, "player model must settle on the authoritative destination cell")
+	_check(game.battle_world_renderer.full_board_build_count == full_builds_before_move, "player arrival must not rebuild the static battle board")
+	_check(game.battle_world_renderer.incremental_refresh_count > incremental_refreshes_before_move, "player arrival must refresh dynamic battle state")
+	_check(game.battle_board_root == board_before_move, "player arrival must preserve the battle board node")
+	_check(moved_player == player_before_move, "player arrival must preserve the animated player node")
 	_check(moved_player != null and moved_player.get_node_or_null("PawnLabel") == null, "player hierarchy must not contain overhead UI")
 	var last_player_yaw: float = game.battle_player_facing_yaw
 	_check(is_equal_approx(last_player_yaw, PI * 0.5), "moving right must record the player's final facing direction")
@@ -64,6 +72,8 @@ func _run() -> void:
 	game.combat.hand.assign(["jab", "guard", "brace", "fling"])
 	game.combat.energy = 4
 	game.build_battle_world()
+	var full_builds_before_card: int = game.battle_world_renderer.full_board_build_count
+	var board_before_card: Node3D = game.battle_board_root
 	game.select_or_play_card(0)
 	player_presenter = game.battle_actor_root.get_node_or_null("Player/Presenter")
 	_check(player_presenter != null and player_presenter.current_state == "ready", "selecting a placement card must trigger a visible ready pose")
@@ -78,6 +88,8 @@ func _run() -> void:
 	var player_attack_animation := str(game.presentation.get("actors", {}).get("player", {}).get("animation_map", {}).get("attack", ""))
 	_check(player_presenter != null and player_presenter.current_model_animation().ends_with(player_attack_animation), "player attack must play the animation declared by the presentation manifest")
 	_check(enemy_presenter != null and enemy_presenter.current_model_animation().to_lower().contains("hitreact"), "enemy damage must play the archetype model hit reaction")
+	_check(game.battle_world_renderer.full_board_build_count == full_builds_before_card, "card resolution must not rebuild the static battle board")
+	_check(game.battle_board_root == board_before_card, "card resolution must preserve the battle board node")
 
 	_check(_count_named_prefix(game.battle_root, "StageDoor") == 1, "battle stage must include the imported Web door decoration")
 	_check(_count_named_prefix(game.battle_root, "StageLamp") == 1, "battle stage must include the imported Web lamp decoration")

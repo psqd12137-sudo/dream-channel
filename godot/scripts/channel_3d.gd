@@ -1706,7 +1706,7 @@ func _enemy_turn_summary(turn_events: Array[Dictionary]) -> String:
 func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 	if animation_duration_scale <= 0.0:
 		_complete_dynamic_effect()
-		_after_combat_action()
+		_after_combat_action(true)
 		return
 	if turn_events.is_empty():
 		var wait_tween := create_tween()
@@ -1716,7 +1716,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 		if active_motion_tween != wait_tween:
 			return
 		_complete_dynamic_effect()
-		_after_combat_action()
+		_after_combat_action(false)
 		return
 	_position_enemy_turn_starts(turn_events)
 	var tween := create_tween()
@@ -1788,7 +1788,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 	if active_motion_tween != tween:
 		return
 	_complete_dynamic_effect()
-	_after_combat_action()
+	_after_combat_action(false)
 
 
 func _position_enemy_turn_starts(turn_events: Array[Dictionary]) -> void:
@@ -1900,7 +1900,7 @@ func move_player_to(target: Vector2i) -> bool:
 		for index in range(1, path.size()):
 			if not combat.move_player(path[index]):
 				return false
-		_after_combat_action()
+		_after_combat_action(true)
 		return true
 	animation_busy = true
 	active_animation_kind = "player_path"
@@ -1992,7 +1992,7 @@ func use_player_portal() -> void:
 	if not combat.use_player_portal():
 		return
 	status_message = "你花费 %d 行动力穿过传送门。" % combat.move_cost
-	_after_combat_action()
+	_after_combat_action(animation_duration_scale <= 0.0)
 	_animate_player_portal(source, target)
 
 
@@ -2196,7 +2196,7 @@ func _rotation_invariant_fit_size(horizontal_radius: float, vertical_span: float
 	return maxf(minimum, maxf(projected_height, projected_width / maxf(0.5, aspect)) * 1.08)
 
 
-func _after_combat_action() -> void:
+func _after_combat_action(sync_actor_positions: bool = false) -> void:
 	player_hp = combat.player_hp
 	if test_combat_active and test_session.active and test_enemy_phase_pending:
 		test_session.record_enemy_phase(test_last_events, combat)
@@ -2207,7 +2207,9 @@ func _after_combat_action() -> void:
 		combat.start_player_turn()
 		battle_turn_actor_id = "player"
 		battle_turn_events.clear()
-	build_battle_world()
+	# 移动、出牌和敌方事件的静态棋盘都已存在；这里只更新危险标记、陷阱
+	# 与演员编队，避免玩家落到新格子的收尾帧同步重建整套房间资产。
+	battle_world_renderer.refresh_battle_state(true, sync_actor_positions)
 	if combat.outcome != "":
 		status_message = "战斗胜利。" if combat.outcome == "victory" else "本集信号中断。"
 	_refresh_hud()
@@ -3062,6 +3064,9 @@ func build_battle_world() -> void:
 
 func refresh_battle_board() -> void:
 	battle_world_renderer.refresh_battle_board()
+
+func refresh_battle_state(sync_actors := true, sync_actor_positions := false) -> void:
+	battle_world_renderer.refresh_battle_state(sync_actors, sync_actor_positions)
 
 func update_battle_overlays() -> void:
 	battle_world_renderer.update_battle_overlays()

@@ -103,6 +103,11 @@ func _validate_scenario(scenario: Dictionary, index: int, used_ids: Dictionary) 
 		var role := str(enemy.get("behavior_role", "auto"))
 		if role not in VALID_ROLES:
 			result.append("%s 敌人 %s behavior_role 无效：%s" % [prefix, enemy_id, role])
+		var attack_range := int(enemy.get("attack_range", 1))
+		if attack_range < 1:
+			result.append("%s 敌人 %s attack_range 必须为正数" % [prefix, enemy_id])
+		if "ranged" in (enemy.get("traits", []) as Array) and attack_range < 2:
+			result.append("%s 敌人 %s 使用 ranged 时 attack_range 至少为 2" % [prefix, enemy_id])
 	var observer: Variant = scenario.get("observer", {})
 	if not observer is Dictionary:
 		result.append("%s.observer 必须是对象" % prefix)

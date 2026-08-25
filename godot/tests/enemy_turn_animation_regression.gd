@@ -23,6 +23,8 @@ func _run() -> void:
 	game.combat.last_seen = game.combat.INVALID_CELL
 	game.combat.patrol_goal = game.combat.INVALID_CELL
 	game.build_battle_world()
+	var board_before_enemy_turn: Node3D = game.battle_board_root
+	var full_builds_before_enemy_turn: int = game.battle_world_renderer.full_board_build_count
 	var start: Vector2i = game.combat.enemy_pos
 	var enemy_node_before := game.battle_actor_root.get_node_or_null("Enemy") as Node3D
 	var enemy_id := str(game.combat.enemy_order[0])
@@ -59,6 +61,8 @@ func _run() -> void:
 	_check(game.combat.enemy_pos != start, "enemy rules position must finish on a different patrol cell")
 	var settled_enemy := game.battle_actor_root.get_node_or_null("Enemy") as Node3D
 	_check(settled_enemy != null and settled_enemy.position.distance_to(game._battle_world(game.combat.enemy_pos)) < 0.01, "rendered enemy must settle on the authoritative patrol destination")
+	_check(game.battle_world_renderer.full_board_build_count == full_builds_before_enemy_turn, "enemy action must not rebuild the static battle board")
+	_check(game.battle_board_root == board_before_enemy_turn, "enemy action must preserve the battle board node")
 	game.queue_free()
 	await process_frame
 	if failures.is_empty():

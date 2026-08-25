@@ -103,6 +103,7 @@ static func build_state(spec: Dictionary, spawn_order: int) -> RefCounted:
 	for raw_trait in spec.get("traits", []):
 		traits.append(str(raw_trait))
 	state.traits = traits
+	state.attack_range = maxi(1, int(spec.get("attack_range", 3 if "ranged" in state.traits else 1)))
 	state.trait_labels = (spec.get("trait_labels", {}) as Dictionary).duplicate(true)
 	var ambush := bool(spec.get("ambush", false))
 	state.ambush_active = ambush
@@ -127,6 +128,8 @@ static func _fill_defaults(spec: Dictionary, arena: Dictionary) -> void:
 		spec["action_points"] = 3
 	if not spec.has("attack_cost"):
 		spec["attack_cost"] = 2
+	if not spec.has("attack_range"):
+		spec["attack_range"] = 3 if "ranged" in spec.get("traits", []) else 1
 	if not spec.has("tier"):
 		spec["tier"] = 1
 	if not spec.has("archetype"):
