@@ -36,7 +36,7 @@ func _init() -> void:
 	_check(Vector2i(0, 2) not in ranged.get("threat_cells", []), "threat range must reserve action points for the attack")
 	_check(Vector2i(0, 1) in ranged.get("impact_cells", []), "snapshot must expose the actual ranged impact cell")
 	_check(Vector2i(0, 1) in ranged.get("coverage_cells", []), "snapshot must expose ranged coverage")
-	_check(Vector2i(2, 0) in ranged.get("line_cells", []), "snapshot must expose line-of-fire cells")
+	_check(Vector2i(1, 1) in ranged.get("line_cells", []), "snapshot must expose line-of-fire cells from the post-move attack origin")
 	var single: Dictionary = combat.preview_intent("ranged_a")
 	_check(
 		single.get("attack_kind", "") == ranged.get("attack_kind", ""),

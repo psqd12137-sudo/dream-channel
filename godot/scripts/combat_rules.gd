@@ -613,6 +613,9 @@ func _empty_enemy_intent(enemy_id := "") -> Dictionary:
 		"sees_player": false,
 		"attack_kind": "",
 		"hits": 0,
+		"intent_value": "",
+		"movement_steps": 0,
+		"movement_delta": 0,
 		"pending": false,
 		"enemy_id": enemy_id,
 	}
@@ -648,6 +651,7 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 		result["type"] = "attack"
 		result["attack_kind"] = "beam"
 		result["hits"] = 1
+		result["intent_value"] = str(state.beam_pending_damage)
 		result["pending"] = true
 		return result
 	if state.blind_turns > 0:
@@ -670,6 +674,7 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 			result["type"] = "attack"
 			result["attack_kind"] = "faceShock"
 			result["hits"] = 1
+			result["intent_value"] = "1"
 			return result
 	var goal := _enemy_goal(state)
 	if goal == INVALID_CELL:
@@ -690,37 +695,21 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 		result["detail"] = "已经贴近目标，但剩余行动力不足以发动攻击。"
 		result["type"] = "stall"
 		return result
-	if state.has_trait("backstab"):
-		var back_cell := player_back_cell()
-		if state.pos == back_cell:
-			result["label"] = "等待背刺窗口"
-			result["detail"] = "已到达玩家背后，但当前行动力不足以发动背刺。"
-			return result
-		var back_path := _backstab_path(state)
-		var required_cost: int = _enemy_path_cost(back_path) + _effective_attack_cost(state) if not back_path.is_empty() else 999
-		if required_cost > remaining:
-			var retreat_step := _choose_backstab_retreat_step(state)
-			if retreat_step != INVALID_CELL:
-				result["path"] = [retreat_step]
-				result["type"] = "retreat"
-				result["label"] = "拉开距离 1步"
-				result["detail"] = "本回合无法绕到背后，先远离玩家，绝不从正面攻击。"
-				return result
-	var plan := _enemy_attack_plan(state, state.pos, remaining, state.sees_player)
+	var sequence: Dictionary = _preview_enemy_action_sequence(state, goal, remaining)
+	var preview_path: Array[Vector2i] = []
+	preview_path.assign(sequence.get("path", []))
+	result["path"] = preview_path
+	var plan: Dictionary = sequence.get("attack_plan", {})
 	if not plan.is_empty():
-		return _intent_from_attack_plan(state, plan, result)
-	var step := _choose_enemy_step(state, state.pos, goal)
-	if step != INVALID_CELL and step != goal and remaining > 0:
-		result["path"] = [step]
-		var after_remaining := remaining - 1 - int((traps.get(step, {}) as Dictionary).get("slow", 0))
-		var sees_after := _has_line_of_sight(step, player_pos) and state.blind_turns <= 0
-		var after_plan := _enemy_attack_plan(state, step, after_remaining, sees_after)
-		if not after_plan.is_empty():
-			after_plan["origin"] = step
-			result = _intent_from_attack_plan(state, after_plan, result)
-			result["path"] = [step]
+		result = _intent_from_attack_plan(state, plan, result)
+		result["path"] = preview_path
+	_apply_movement_intent_value(result, state.pos, preview_path)
 	if result["type"] != "attack":
-		if state.sees_player:
+		if bool(sequence.get("retreat", false)):
+			result["type"] = "retreat"
+			result["label"] = "拉开距离 %d步" % preview_path.size()
+			result["detail"] = "本回合无法绕到背后，先远离玩家，绝不从正面攻击。"
+		elif state.sees_player:
 			result["type"] = "chase"
 			result["label"] = "追击 %d步" % result["path"].size()
 			result["detail"] = "已建立视野；蓝色编号是本回合移动顺序。"
@@ -736,6 +725,67 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 		result["label"] = "重新选点"
 		result["detail"] = "当前巡逻点已到达，下回合会选择新的搜查方向。"
 	return result
+
+
+func _preview_enemy_action_sequence(state: CombatEnemyState, goal: Vector2i, remaining: int) -> Dictionary:
+	var path: Array[Vector2i] = []
+	var origin: Vector2i = state.pos
+	var retreating: bool = false
+	var guard: int = 20
+	while remaining > 0 and guard > 0:
+		guard -= 1
+		var sees_player_from_origin: bool = _has_line_of_sight(origin, player_pos) and state.blind_turns <= 0
+		var attack_plan: Dictionary = _enemy_attack_plan(state, origin, remaining, sees_player_from_origin)
+		if not attack_plan.is_empty():
+			attack_plan["origin"] = origin
+			return {"path": path, "attack_plan": attack_plan, "retreat": retreating}
+		if has_decoy() and manhattan(origin, decoy_pos) == 1:
+			break
+		var step: Vector2i = INVALID_CELL
+		if state.has_trait("backstab"):
+			var back_cell: Vector2i = player_back_cell()
+			if origin == back_cell:
+				break
+			var back_path: Array[Vector2i] = _backstab_path_from(state, origin)
+			var required_cost: int = _enemy_path_cost(back_path) + _effective_attack_cost(state) if not back_path.is_empty() else 999
+			if required_cost > remaining:
+				step = _choose_backstab_retreat_step_from(state, origin)
+				retreating = true
+			else:
+				step = _choose_enemy_step(state, origin, goal)
+		elif sees_player_from_origin and manhattan(origin, player_pos) <= 1 and remaining < _effective_attack_cost(state):
+			break
+		elif origin == goal:
+			break
+		else:
+			step = _choose_enemy_step(state, origin, goal)
+		if step == INVALID_CELL or step == player_pos or (has_decoy() and step == decoy_pos):
+			break
+		path.append(step)
+		remaining -= 1 + int((traps.get(step, {}) as Dictionary).get("slow", 0))
+		origin = step
+	return {"path": path, "attack_plan": {}, "retreat": retreating}
+
+
+func _apply_movement_intent_value(result: Dictionary, origin: Vector2i, path: Array[Vector2i]) -> void:
+	result["movement_steps"] = path.size()
+	result["movement_delta"] = 0
+	if path.is_empty():
+		return
+	var show_movement_value: bool = str(result.get("type", "stall")) != "attack"
+	var final_cell: Vector2i = path[path.size() - 1]
+	var start_distance: int = manhattan(origin, player_pos)
+	var final_distance: int = manhattan(final_cell, player_pos)
+	if final_distance < start_distance:
+		result["movement_delta"] = path.size()
+		if show_movement_value:
+			result["intent_value"] = "+%d" % path.size()
+	elif final_distance > start_distance:
+		result["movement_delta"] = -path.size()
+		if show_movement_value:
+			result["intent_value"] = "-%d" % path.size()
+	elif show_movement_value:
+		result["intent_value"] = "=%d" % path.size()
 
 
 func enemy_turn() -> Array[Dictionary]:
@@ -856,6 +906,9 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 		var goal := _enemy_goal(state)
 		if goal == INVALID_CELL:
 			turn_events.append({"kind": "wait", "actor_id": state.id, "label": "没有可达的搜查点"})
+			break
+		if state.pos == goal:
+			turn_events.append({"kind": "wait", "actor_id": state.id, "label": "已到达战术位置"})
 			break
 		var raw_step := _choose_enemy_step(state, state.pos, goal)
 		if raw_step == INVALID_CELL:
@@ -1016,7 +1069,7 @@ func _intent_from_attack_plan(state: CombatEnemyState, plan: Dictionary, base: D
 	var display_kind := "beam" if kind == "beam_charge" else kind
 	var attack_origin: Vector2i = plan.get("origin", state.pos)
 	var hits := _planned_attack_hits(state, plan, _enemy_turn_budget(state))
-	var damage := _raw_enemy_damage(state, state.pos)
+	var damage := _raw_enemy_damage(state, attack_origin)
 	result["hurt"] = (plan.get("cells", [player_pos]) as Array).duplicate()
 	result["impact_cells"] = result["hurt"].duplicate()
 	result["range_origin"] = attack_origin
@@ -1028,6 +1081,7 @@ func _intent_from_attack_plan(state: CombatEnemyState, plan: Dictionary, base: D
 	result["type"] = "attack"
 	result["attack_kind"] = display_kind
 	result["hits"] = hits
+	result["intent_value"] = str(damage)
 	result["pending"] = kind == "beam_charge"
 	var labels := {
 		"melee": "挥击",
@@ -1249,24 +1303,35 @@ func _choose_enemy_step(state: CombatEnemyState, origin: Vector2i, goal: Vector2
 
 
 func _backstab_path(state: CombatEnemyState) -> Array[Vector2i]:
+	return _backstab_path_from(state, state.pos)
+
+
+func _backstab_path_from(state: CombatEnemyState, origin: Vector2i) -> Array[Vector2i]:
 	var empty_path: Array[Vector2i] = []
 	var goal := player_back_cell()
 	if not is_walkable(goal) or goal == player_pos:
 		return empty_path
 	var blocked := occupied_enemy_cells(state.id)
 	blocked[player_pos] = true
-	var path := _find_path(state.pos, goal, blocked)
-	if path.size() < 2 and state.pos != goal:
+	var path := _find_path(origin, goal, blocked)
+	if path.size() < 2 and origin != goal:
 		return empty_path
 	return path
 
 
 func _choose_backstab_retreat_step(state: CombatEnemyState) -> Vector2i:
+	return _choose_backstab_retreat_step_from(state, state.pos)
+
+
+func _choose_backstab_retreat_step_from(state: CombatEnemyState, origin: Vector2i) -> Vector2i:
 	var blocked := occupied_enemy_cells(state.id)
 	var candidates: Array[Dictionary] = []
+	var current_distance: int = manhattan(origin, player_pos)
 	for direction: Vector2i in DIRS:
-		var cell: Vector2i = state.pos + direction
+		var cell: Vector2i = origin + direction
 		if not is_walkable(cell) or cell == player_pos or cell == decoy_pos or blocked.has(cell):
+			continue
+		if manhattan(cell, player_pos) <= current_distance:
 			continue
 		var trap: Dictionary = traps.get(cell, {})
 		candidates.append({

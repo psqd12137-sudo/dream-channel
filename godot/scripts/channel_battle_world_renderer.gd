@@ -685,7 +685,7 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 		presenter.set_obscured(not state.revealed)
 	_refresh_enemy_selection_outline(node, state)
 	for child: Node in node.get_children():
-		if child.name == "EnemyIntentBadge" or child.name == "EnemyIntent":
+		if child.name == "EnemyIntentBadge" or child.name == "EnemyIntent" or child.name == "EnemyIntentValue":
 			child.free()
 	if not state.revealed or combat.outcome != "":
 		return
@@ -693,12 +693,13 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	var intent: Dictionary = battle_intent_snapshot.get(state.id, {})
 	if intent.is_empty():
 		intent = combat.preview_intent(state.id)
-	var attack_kind := str(intent.get("attack_kind", ""))
+	var attack_kind: String = str(intent.get("attack_kind", ""))
+	var intent_value: String = str(intent.get("intent_value", ""))
 	var intent_color := COL_RANGED_ENEMY if attack_kind == "ranged" else _battle_intent_color(str(intent.get("type", "stall")))
 	var intent_badge := MeshInstance3D.new()
 	intent_badge.name = "EnemyIntentBadge"
 	var intent_quad := QuadMesh.new()
-	intent_quad.size = Vector2(0.78, 0.78)
+	intent_quad.size = Vector2(1.18, 0.78) if intent_value != "" else Vector2(0.78, 0.78)
 	intent_badge.mesh = intent_quad
 	intent_badge.position = Vector3(0, floor_y + 2.44, 0)
 	var badge_material := _material(Color(intent_color, 0.88), true, 0.08)
@@ -710,13 +711,16 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	intent_icon.name = "EnemyIntent"
 	var intent_texture: Texture2D = _battle_intent_icon_texture(str(intent.get("type", "stall")), attack_kind)
 	intent_icon.texture = intent_texture
-	intent_icon.position = Vector3(0, floor_y + 2.44, 0.02)
+	intent_icon.position = Vector3(-0.22 if intent_value != "" else 0.0, floor_y + 2.44, 0.02)
 	intent_icon.pixel_size = 0.78 / float(maxi(1, maxi(intent_texture.get_width(), intent_texture.get_height())))
 	intent_icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	intent_icon.shaded = false
 	intent_icon.no_depth_test = true
 	intent_icon.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
 	node.add_child(intent_icon)
+	if intent_value != "":
+		var value_label: Label3D = _add_label(node, "EnemyIntentValue", intent_value, Vector3(0.31, floor_y + 2.44, 0.04), Color("fff4c2"), 34)
+		value_label.outline_size = 12
 
 
 func _refresh_enemy_selection_outline(node: Node3D, state) -> void:

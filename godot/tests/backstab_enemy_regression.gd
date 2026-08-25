@@ -36,6 +36,7 @@ func _test_backstab_attacks_from_back() -> void:
 		if str(event.get("kind", "")) == "attack" and str(event.get("attack_kind", "")) == "backstab":
 			backstab_hit = true
 	_check(str(intent.get("attack_kind", "")) == "backstab", "背后相邻时意图必须显示背刺")
+	_check(str(intent.get("intent_value", "")) == "8", "背刺意图必须直接显示攻击力")
 	_check(backstab_hit, "背后相邻时必须执行背刺事件")
 	_check(combat.player_hp == 4, "背刺者应造成 8 点高额伤害")
 
@@ -49,6 +50,12 @@ func _test_backstab_retreats_when_route_is_unavailable() -> void:
 		if str(event.get("kind", "")) == "attack":
 			attacked = true
 	_check(str(intent.get("type", "")) == "retreat", "本回合无法绕到背后时意图必须显示拉开距离")
+	_check(str(intent.get("intent_value", "")).begins_with("-"), "背刺者远离玩家时必须显示负数步数")
+	var move_count: int = 0
+	for event: Dictionary in events:
+		if str(event.get("kind", "")) == "move":
+			move_count += 1
+	_check(int(intent.get("movement_steps", 0)) == move_count, "背刺者预览步数必须与实际移动一致")
 	_check(not attacked, "背后攻击位不可达时不能退化为正面攻击")
 	_check(combat.manhattan(combat.enemy_pos, combat.player_pos) > 1, "背刺者无法绕后时必须拉开与玩家的距离")
 	_check(combat.player_hp == 12, "拉开距离时不能对玩家造成伤害")
