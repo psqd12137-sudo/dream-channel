@@ -104,6 +104,7 @@ const ENEMY_STEP_DURATION := 0.48
 const ENEMY_TURN_DURATION := 0.22
 const ENEMY_ATTACK_DURATION := 0.62
 const ENEMY_EVENT_PAUSE_DURATION := 0.16
+const ENEMY_PROJECTILE_DURATION := 0.42
 const BATTLE_STAGE_BUILD_DURATION := 0.34
 const BATTLE_ACTOR_ENTRY_DURATION := 0.30
 const CHASE_TRACK_LENGTH := 14.0
@@ -268,6 +269,10 @@ var hovered_house_cell := INVALID_CELL
 var animation_busy := false
 var active_animation_kind := ""
 var active_motion_tween: Tween = null
+var battle_projectile_nodes: Array[Node3D] = []
+var battle_active_projectile: Node3D = null
+var battle_projectile_start := Vector3.ZERO
+var battle_projectile_target := Vector3.ZERO
 var build_preview_tween: Tween = null
 var lab_root: Node3D = null
 var home_tests_open := false
@@ -1748,9 +1753,15 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 				continue
 			var attack_kind := str(event.get("attack_kind", "attack"))
 			var attack_callouts := {"lunge": "突进!", "faceShock": "突脸!", "guardBreak": "破防!", "slam": "砸地!", "beam": "激光!"}
-			if attack_kind == "ranged":
+			var is_ranged_attack := attack_kind == "ranged"
+			if is_ranged_attack:
 				_queue_enemy_attack_facing(tween, enemy_node, event)
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", str(attack_callouts.get(attack_kind, "袭击!"))))
+			if is_ranged_attack:
+				# 远程攻击先抛出石块，石块落地后再播放玩家受击反馈。
+				tween.tween_callback(_launch_enemy_projectile.bind(enemy_node, event))
+				tween.tween_method(_set_enemy_projectile_arc, 0.0, 1.0, ENEMY_PROJECTILE_DURATION * animation_duration_scale)
+				tween.tween_callback(_finish_enemy_projectile)
 			if event.get("target", INVALID_CELL) == combat.player_pos and int(event.get("damage", 0)) > 0:
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "受击!"))
 			tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -1812,6 +1823,63 @@ func _position_enemy_turn_starts(turn_events: Array[Dictionary]) -> void:
 
 func _set_enemy_step_motion(weight: float, enemy_node: Node3D, start_position: Vector3, target_position: Vector3) -> void:
 	_set_battle_actor_step_motion(weight, enemy_node, start_position, target_position)
+
+
+func _battle_enemy_projectile_position(weight: float, start_position: Vector3, target_position: Vector3) -> Vector3:
+	var smooth_weight := clampf(weight, 0.0, 1.0)
+	var position := start_position.lerp(target_position, smooth_weight)
+	position.y += sin(PI * smooth_weight) * maxf(0.72, start_position.distance_to(target_position) * 0.18)
+	return position
+
+
+func _launch_enemy_projectile(enemy_node: Node3D, event: Dictionary) -> void:
+	_finish_enemy_projectile()
+	if battle_actor_root == null or enemy_node == null:
+		return
+	var target_cell: Vector2i = event.get("target", combat.player_pos)
+	if target_cell == INVALID_CELL:
+		return
+	var player_node := battle_actor_root.get_node_or_null("Player") as Node3D
+	battle_projectile_start = enemy_node.position + Vector3(0.0, 0.84, 0.0)
+	battle_projectile_target = _battle_pawn_world(target_cell, true) + Vector3(0.0, 0.36, 0.0)
+	if player_node != null:
+		battle_projectile_target = player_node.position + Vector3(0.0, 0.36, 0.0)
+	var projectile := MeshInstance3D.new()
+	projectile.name = "EnemyProjectile_Rock"
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.12
+	mesh.height = 0.20
+	mesh.radial_segments = 8
+	mesh.rings = 4
+	projectile.mesh = mesh
+	projectile.position = battle_projectile_start
+	projectile.rotation = Vector3(-0.22, 0.35, 0.18)
+	projectile.material_override = _material(Color("66707a"), false, 0.05)
+	battle_actor_root.add_child(projectile)
+	battle_projectile_nodes.append(projectile)
+	battle_active_projectile = projectile
+
+
+func _set_enemy_projectile_arc(weight: float) -> void:
+	if battle_active_projectile == null or not is_instance_valid(battle_active_projectile):
+		return
+	battle_active_projectile.position = _battle_enemy_projectile_position(weight, battle_projectile_start, battle_projectile_target)
+	var smooth_weight := clampf(weight, 0.0, 1.0)
+	battle_active_projectile.rotation = Vector3(-0.22 + smooth_weight * 3.2, 0.35 + smooth_weight * 5.8, 0.18 + smooth_weight * 2.4)
+
+
+func _finish_enemy_projectile() -> void:
+	if battle_active_projectile != null and is_instance_valid(battle_active_projectile):
+		battle_active_projectile.queue_free()
+	battle_active_projectile = null
+
+
+func _clear_battle_projectiles() -> void:
+	_finish_enemy_projectile()
+	for projectile in battle_projectile_nodes:
+		if projectile != null and is_instance_valid(projectile):
+			projectile.queue_free()
+	battle_projectile_nodes.clear()
 
 
 func _set_battle_actor_step_motion(weight: float, actor_node: Node3D, start_position: Vector3, target_position: Vector3) -> void:
@@ -2972,12 +3040,14 @@ func _find_room_node(pos: Vector2i) -> Node3D:
 func _cancel_dynamic_effect() -> void:
 	if active_motion_tween != null and active_motion_tween.is_valid():
 		active_motion_tween.kill()
+	_clear_battle_projectiles()
 	active_motion_tween = null
 	animation_busy = false
 	active_animation_kind = ""
 
 
 func _complete_dynamic_effect() -> void:
+	_clear_battle_projectiles()
 	active_motion_tween = null
 	animation_busy = false
 	active_animation_kind = ""
