@@ -918,6 +918,8 @@ func _enemy_attack_plan(state: CombatEnemyState, origin: Vector2i, remaining: in
 			return {"kind": "beam_charge", "cost": attack_cost, "cells": beam_cells}
 	if state.has_trait("ranged") and distance >= 2 and distance <= state.attack_range and _has_line_of_sight(origin, player_pos) and remaining >= attack_cost:
 		return {"kind": "ranged", "cost": attack_cost, "cells": [player_pos]}
+	if state.has_trait("ranged") and distance <= 1:
+		return {}
 	if distance <= 1 and remaining >= attack_cost:
 		if state.has_trait("guardBreak") and _player_defense_total(origin) > 0 and remaining >= attack_cost + 1:
 			return {"kind": "guardBreak", "cost": attack_cost + 1, "cells": [player_pos]}

@@ -10,6 +10,7 @@ var run_rules := {"player_hp": 20, "base_speed": 3, "base_energy": 5, "hand_size
 func _init() -> void:
 	_test_ranged_attack()
 	_test_ranged_attack_requires_line_of_sight()
+	_test_ranged_attack_does_not_become_melee()
 	if failures.is_empty():
 		print("CHANNEL_RANGED_ENEMY: PASS ranged-intent-line-of-sight-execution")
 		quit(0)
@@ -47,6 +48,28 @@ func _test_ranged_attack_requires_line_of_sight() -> void:
 	_check(str(intent.get("attack_kind", "")) != "ranged", "a wall must prevent a ranged attack intent")
 	_check(combat.player_hp == hp_before, "a wall must prevent ranged damage")
 	_check(not events.any(func(event: Dictionary) -> bool: return str(event.get("attack_kind", "")) == "ranged"), "a wall must prevent ranged execution")
+
+
+func _test_ranged_attack_does_not_become_melee() -> void:
+	var combat: RefCounted = CombatRules.new()
+	combat.setup({"cols": 3, "rows": 1, "player": [0, 0], "enemy": [1, 0], "walls": [], "heights": {}, "portals": []}, {
+		"id": "close_sentry",
+		"name": "贴脸哨兵",
+		"spawn": [1, 0],
+		"hp": 10,
+		"damage": 2,
+		"toughness": 3,
+		"action_points": 2,
+		"attack_cost": 2,
+		"attack_range": 2,
+		"traits": ["ranged"],
+	}, cards, [], 20260825, run_rules, [])
+	var hp_before: int = combat.player_hp
+	var intent: Dictionary = combat.preview_intent()
+	var events: Array[Dictionary] = combat.enemy_turn()
+	_check(str(intent.get("type", "")) != "attack", "a ranged enemy must not advertise an attack while adjacent")
+	_check(combat.player_hp == hp_before, "a ranged enemy must not deal melee damage while adjacent")
+	_check(not events.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack"), "a ranged enemy must not emit a melee attack while adjacent")
 
 
 func _build(arena: Dictionary) -> RefCounted:
