@@ -34,6 +34,7 @@ func _init() -> void:
 		if str(event.get("kind", "")) == "enemy_damaged" and int(event.get("damage", 0)) == 2:
 			trap_damage_event_found = true
 			_check(str(event.get("label", "")).contains("地刺"), "spike trigger event must identify the spike trap")
+			_check((event.get("trap", {}) as Dictionary).get("glyph", "") == "刺", "spike damage event must carry the triggered trap visual snapshot")
 	_check(trap_damage_event_found, "enemy stepping on a damage trap must publish a damage event for presentation")
 
 	var ready_combat = CombatRules.new()

@@ -1432,7 +1432,7 @@ func _trigger_trap(state: CombatEnemyState, pos: Vector2i, chasing_decoy: bool =
 	_apply_blind(state, trap)
 	if not bool(trap.get("persistent", false)):
 		traps.erase(pos)
-	return {"damage": dealt, "source": source, "label": "地刺" if trap_id in ["spike", "jab"] else "陷阱"}
+	return {"damage": dealt, "source": source, "label": "地刺" if trap_id in ["spike", "jab"] else "陷阱", "trap": trap.duplicate(true)}
 
 
 func _apply_enemy_damage(state: CombatEnemyState, damage: int, toughness_damage: int, source: String) -> int:

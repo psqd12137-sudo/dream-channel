@@ -1683,6 +1683,7 @@ func end_combat_turn() -> void:
 	hovered_battle_cell = INVALID_CELL
 	var turn_events: Array[Dictionary] = combat.enemy_turn()
 	battle_turn_events = turn_events.duplicate(true)
+	battle_world_renderer.set_battle_triggered_traps(turn_events)
 	battle_turn_actor_id = "enemy_phase"
 	for event: Dictionary in turn_events:
 		var actor_id := str(event.get("actor_id", ""))
@@ -1806,6 +1807,8 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			var trap_damage := int(event.get("damage", 0))
 			if trap_damage <= 0:
 				continue
+			var trap_target: Vector2i = event.get("target", INVALID_CELL)
+			tween.tween_callback(battle_world_renderer.consume_battle_triggered_trap.bind(trap_target))
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "hurt", "-%d" % trap_damage))
 			tween.tween_callback(_show_enemy_damage_feedback.bind(actor_id, trap_damage))
 			tween.tween_property(enemy_node, "scale", Vector3(1.16, 0.86, 1.16), ENEMY_ATTACK_DURATION * 0.42 * animation_duration_scale)
@@ -2340,6 +2343,7 @@ func _after_combat_action(sync_actor_positions: bool = false) -> void:
 		battle_turn_events.clear()
 	# 移动、出牌和敌方事件的静态棋盘都已存在；这里只更新危险标记、陷阱
 	# 与演员编队，避免玩家落到新格子的收尾帧同步重建整套房间资产。
+	battle_world_renderer.clear_battle_triggered_traps()
 	battle_world_renderer.refresh_battle_state(true, sync_actor_positions)
 	if combat.outcome != "":
 		status_message = "战斗胜利。" if combat.outcome == "victory" else "本集信号中断。"

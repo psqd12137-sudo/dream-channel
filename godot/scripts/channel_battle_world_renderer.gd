@@ -106,6 +106,7 @@ var battle_hover_valid_markers: Array[MeshInstance3D] = []
 var battle_overlay_materials: Dictionary = {}
 var battle_intent_snapshot: Dictionary = {}
 var enemy_range_display_mode := EnemyRangeDisplayMode.FOCUSED
+var battle_triggered_traps: Dictionary = {}
 var full_board_build_count := 0
 var incremental_refresh_count := 0
 var battle_backstage_cells:
@@ -198,6 +199,7 @@ func _ensure_battle_layers() -> void:
 func build_battle_world() -> void:
 	full_board_build_count += 1
 	enemy_range_display_mode = EnemyRangeDisplayMode.FOCUSED
+	battle_triggered_traps.clear()
 	_ensure_battle_layers()
 	_clear_children(battle_board_root)
 	_clear_children(battle_actor_root)
@@ -230,6 +232,33 @@ func refresh_battle_state(sync_actors := true, sync_actor_positions := false) ->
 func update_battle_overlays() -> void:
 	_ensure_battle_layers()
 	_update_battle_overlays()
+
+
+func set_battle_triggered_traps(events: Array[Dictionary]) -> void:
+	battle_triggered_traps.clear()
+	for event: Dictionary in events:
+		if str(event.get("kind", "")) != "enemy_damaged" or not str(event.get("source", "")).begins_with("trap:"):
+			continue
+		var target: Vector2i = event.get("target", INVALID_CELL)
+		var trap: Variant = event.get("trap", {})
+		if target != INVALID_CELL and trap is Dictionary:
+			battle_triggered_traps[target] = (trap as Dictionary).duplicate(true)
+
+
+func clear_battle_triggered_traps() -> void:
+	battle_triggered_traps.clear()
+
+
+func consume_battle_triggered_trap(target: Vector2i) -> void:
+	if not battle_triggered_traps.has(target):
+		return
+	battle_triggered_traps.erase(target)
+	var cell_node := battle_board_root.get_node_or_null("Cell_%d_%d" % [target.x, target.y]) as Node3D
+	if cell_node == null:
+		return
+	for child: Node in cell_node.get_children():
+		if child.name.begins_with("Trap") or child.name.begins_with("ItemArt_"):
+			child.free()
 
 
 func cycle_enemy_range_display() -> String:
@@ -569,8 +598,11 @@ func _refresh_battle_dynamic_visuals() -> void:
 				_add_battle_cell_fill(cell_node, "HoverValidFill" if hover_valid else "HoverInvalidFill", top_y, COL_HOVER_VALID if hover_valid else COL_HOVER_INVALID, 0.18)
 				if not hover_valid and selected_card < 0:
 					_add_label(cell_node, "HoverInvalidGlyph", "×", Vector3(0, top_y + 0.26, 0), COL_HOVER_INVALID, 28)
-			if combat.traps.has(pos):
-				var trap: Dictionary = combat.traps[pos]
+			var visible_trap: Dictionary = combat.traps.get(pos, {})
+			if battle_triggered_traps.has(pos):
+				visible_trap = battle_triggered_traps[pos]
+			if not visible_trap.is_empty():
+				var trap: Dictionary = visible_trap
 				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
 				_add_trap_item_sprite(cell_node, str(trap.get("card_id", "")), top_y)
 				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
