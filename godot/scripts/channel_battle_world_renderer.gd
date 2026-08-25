@@ -12,6 +12,7 @@ const APP_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Regular.otf")
 const INTENT_ATTACK_ICON: Texture2D = preload("res://assets/ui/battle_intent_attack.png")
 const INTENT_RANGED_ICON: Texture2D = preload("res://assets/ui/battle_intent_ranged.png")
 const INTENT_MOVE_ICON: Texture2D = preload("res://assets/ui/battle_intent_move.png")
+const SALT_RING_HIT_SHEET: Texture2D = preload("res://assets/effects/salt_ring_hit_sheet.png")
 
 const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interior/"
 const BATTLE_FLOOR_LIGHT := "res://assets/third_party/kaykit_dungeon/models/floor_wood_large.gltf.glb"
@@ -110,6 +111,7 @@ var battle_intent_snapshot: Dictionary = {}
 var enemy_range_display_mode := EnemyRangeDisplayMode.FOCUSED
 var player_range_display_enabled := true
 var battle_triggered_traps: Dictionary = {}
+var salt_ring_hit_frames: SpriteFrames = null
 var full_board_build_count := 0
 var incremental_refresh_count := 0
 var battle_backstage_cells:
@@ -201,8 +203,6 @@ func _ensure_battle_layers() -> void:
 
 func build_battle_world() -> void:
 	full_board_build_count += 1
-	enemy_range_display_mode = EnemyRangeDisplayMode.FOCUSED
-	player_range_display_enabled = true
 	battle_triggered_traps.clear()
 	_ensure_battle_layers()
 	_clear_children(battle_board_root)
@@ -212,6 +212,12 @@ func build_battle_world() -> void:
 	_build_battle_board()
 	_sync_battle_actors()
 	_update_battle_overlays()
+
+
+func reset_battle_display_preferences() -> void:
+	# 显示偏好属于一场战斗的交互状态；完整重绘不能覆盖玩家刚刚选择的模式。
+	enemy_range_display_mode = EnemyRangeDisplayMode.FOCUSED
+	player_range_display_enabled = true
 
 
 func refresh_battle_board() -> void:
@@ -568,7 +574,7 @@ func _refresh_battle_dynamic_visuals() -> void:
 			var top_y := _battle_cell_top_y(pos)
 			if pos == combat.player_pos:
 				_add_battle_cell_fill(cell_node, "PlayerPositionFill", top_y, COL_PLAYER_POSITION, 0.42)
-			elif not impacts.is_empty():
+			if not impacts.is_empty():
 				_add_battle_cell_fill(cell_node, "IntentAttackOverlayFill", top_y, COL_RED, 0.88)
 				var attack_glyph := "!"
 				if int(cell_intent_data.get("hits", 1)) > 1:
@@ -1427,6 +1433,73 @@ func _play_enemy_state(enemy_id: String, state: String, callout: String = "") ->
 
 func _show_enemy_damage_feedback(enemy_id: String, damage: int) -> void:
 	_show_actor_damage_feedback(_enemy_node_name(enemy_id), damage)
+
+
+func _is_salt_ring_event(event: Dictionary) -> bool:
+	var trap_value: Variant = event.get("trap", {})
+	var trap: Dictionary = trap_value if trap_value is Dictionary else {}
+	var card_id := str(trap.get("card_id", event.get("card_id", "")))
+	return card_id == "salt" or card_id == "guard"
+
+
+func _salt_ring_hit_frames() -> SpriteFrames:
+	if salt_ring_hit_frames != null:
+		return salt_ring_hit_frames
+	var frames := SpriteFrames.new()
+	frames.add_animation("salt_ring")
+	frames.set_animation_speed("salt_ring", 12.0)
+	frames.set_animation_loop("salt_ring", false)
+	var sheet := SALT_RING_HIT_SHEET.get_image()
+	var sheet_width := sheet.get_width()
+	var sheet_height := sheet.get_height()
+	for frame_index in range(9):
+		var column := frame_index % 3
+		var row := frame_index / 3
+		var left := column * sheet_width / 3
+		var top := row * sheet_height / 3
+		var right := (column + 1) * sheet_width / 3
+		var bottom := (row + 1) * sheet_height / 3
+		var frame := sheet.get_region(Rect2i(left, top, right - left, bottom - top))
+		frame.convert(Image.FORMAT_RGBA8)
+		for y in range(frame.get_height()):
+			for x in range(frame.get_width()):
+				var color := frame.get_pixel(x, y)
+				var luminance := color.r * 0.299 + color.g * 0.587 + color.b * 0.114
+				var ink_alpha := smoothstep(0.12, 0.24, luminance)
+				frame.set_pixel(x, y, Color(color.r, color.g, color.b, color.a * ink_alpha))
+		frames.add_frame("salt_ring", ImageTexture.create_from_image(frame))
+	salt_ring_hit_frames = frames
+	return salt_ring_hit_frames
+
+
+func _show_enemy_salt_ring_effect(enemy_id: String) -> void:
+	var actor := _enemy_node_for_id(enemy_id)
+	if actor == null:
+		return
+	var state = combat.enemy_by_id(enemy_id) if combat != null else null
+	if state != null and not state.revealed:
+		return
+	var existing := actor.get_node_or_null("SaltRingHitEffect")
+	if existing != null:
+		existing.queue_free()
+	var effect := AnimatedSprite3D.new()
+	effect.name = "SaltRingHitEffect"
+	effect.sprite_frames = _salt_ring_hit_frames()
+	effect.animation = "salt_ring"
+	effect.position = Vector3(0, 2.22, 0.08)
+	effect.pixel_size = 0.00425
+	effect.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	effect.shaded = false
+	effect.no_depth_test = true
+	effect.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	effect.render_priority = 100
+	effect.modulate = Color("fff0c9")
+	actor.add_child(effect)
+	effect.animation_finished.connect(func() -> void:
+		if is_instance_valid(effect):
+			effect.queue_free()
+	)
+	effect.play("salt_ring")
 
 
 func _add_decoy_pawn(pos: Vector2i) -> void:

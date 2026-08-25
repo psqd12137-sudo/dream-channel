@@ -35,6 +35,8 @@ func _run() -> void:
 	var move_intent_icon: Texture2D = game.battle_world_renderer._battle_intent_icon_texture("chase")
 	_check(attack_intent_icon != null and ranged_intent_icon != null and move_intent_icon != null, "enemy attack, ranged, and movement intent icons must load")
 	_check(attack_intent_icon != move_intent_icon and attack_intent_icon != ranged_intent_icon and move_intent_icon != ranged_intent_icon, "enemy attack, ranged, and movement intent icons must be distinct")
+	# 长廊测试默认让敌人埋伏；演示测试关注选中后的信息框与单体威胁预览，先明确揭示敌人。
+	game.combat.enemy_revealed = true
 	var selectable_enemy_id: String = ""
 	for enemy_id in game.combat.enemy_order:
 		var enemy_state = game.combat.enemy_by_id(str(enemy_id))
@@ -94,7 +96,6 @@ func _run() -> void:
 	game.combat.enemy_pos = Vector2i(4, 1)
 	game.combat.walls.clear()
 	game.combat.heights.clear()
-	game.combat.enemy_revealed = true
 	game.combat.enemy_sees_player = true
 	game.combat.player_sees_enemy = true
 	game.combat.hand.assign(["jab", "guard", "brace", "fling"])

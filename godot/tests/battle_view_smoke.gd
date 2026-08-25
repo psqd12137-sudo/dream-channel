@@ -124,14 +124,16 @@ func _run() -> void:
 	_check(game.battle_cell_from_viewport(projected) == target_cell, "picking must survive pan and zoom")
 	game.set_battle_hover(projected)
 	await process_frame
-	var hovered_node: Node = game.battle_board_root.get_node_or_null("Cell_%d_%d/Hover_0" % [target_cell.x, target_cell.y])
-	_check(hovered_node is MeshInstance3D, "hovered cells must render corner markers")
+	var hovered_node: Node = game.battle_board_root.get_node_or_null("Cell_%d_%d/HoverValidFill" % [target_cell.x, target_cell.y])
+	if hovered_node == null:
+		hovered_node = game.battle_board_root.get_node_or_null("Cell_%d_%d/HoverInvalidFill" % [target_cell.x, target_cell.y])
+	_check(hovered_node is MeshInstance3D, "悬停格必须渲染整格覆层")
 	_check(game.battle_board_root.get_node("Cell_%d_%d" % [target_cell.x, target_cell.y]) == stable_cell, "hovering must not rebuild the battle board")
 	var valid_hover_cell := _first_valid_battle_target(game)
 	var valid_projected: Vector2 = camera.unproject_position(game._battle_world(valid_hover_cell))
 	game.set_battle_hover(valid_projected)
 	await process_frame
-	_check(_count_named_prefix(battle_root, "Valid_") > 0, "reachable cells must render green markers")
+	_check(_count_named_prefix(battle_root, "HoverValidFill") > 0, "可用悬停格必须渲染绿色覆层")
 	var entrance_key := str(shell_state.get("entrance_key", ""))
 	var original_player_pos: Vector2i = game.combat.player_pos
 	game.combat.player_pos = Vector2i(game.combat.cols - 1, 0)

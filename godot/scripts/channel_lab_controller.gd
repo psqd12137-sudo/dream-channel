@@ -60,7 +60,7 @@ var player_max_hp:
 var player_speed:
 	get: return host.player_speed
 	set(value): host.player_speed = value
-var run_deck:
+var run_deck: Array[String]:
 	get: return host.run_deck
 	set(value): host.run_deck = value
 var test_saved_state:
@@ -102,7 +102,7 @@ var enemy_nodes:
 var combat:
 	get: return host.combat
 	set(value): host.combat = value
-var test_last_events:
+var test_last_events: Array[Dictionary]:
 	get: return host.test_last_events
 	set(value): host.test_last_events = value
 var test_enemy_phase_pending:
@@ -129,7 +129,7 @@ var camera:
 var lab_root:
 	get: return host.lab_root
 	set(value): host.lab_root = value
-var room_catalog:
+var room_catalog: Array[Dictionary]:
 	get: return host.room_catalog
 	set(value): host.room_catalog = value
 var kenney_build_lab_mode:
@@ -141,7 +141,7 @@ var show_house_diagnostics:
 var large_room_mix_test_mode:
 	get: return host.large_room_mix_test_mode
 	set(value): host.large_room_mix_test_mode = value
-var omen_options:
+var omen_options: Array[String]:
 	get: return host.omen_options
 	set(value): host.omen_options = value
 var character_animation_demo_mode:
@@ -162,13 +162,13 @@ var lab_camera_pitch:
 var lab_camera_distance:
 	get: return host.lab_camera_distance
 	set(value): host.lab_camera_distance = value
-var lab_platforms:
+var lab_platforms: Array[Dictionary]:
 	get: return host.lab_platforms
 	set(value): host.lab_platforms = value
 var lab_player:
 	get: return host.lab_player
 	set(value): host.lab_player = value
-var lab_collectibles:
+var lab_collectibles: Array[Dictionary]:
 	get: return host.lab_collectibles
 	set(value): host.lab_collectibles = value
 var lab_velocity:
@@ -183,7 +183,7 @@ var lab_jump_was_down:
 var lab_collected:
 	get: return host.lab_collected
 	set(value): host.lab_collected = value
-var puzzle_board:
+var puzzle_board: Array[int]:
 	get: return host.puzzle_board
 	set(value): host.puzzle_board = value
 var puzzle_moves_left:
@@ -198,7 +198,7 @@ var puzzle_status:
 var event_context:
 	get: return host.event_context
 	set(value): host.event_context = value
-var search_targets:
+var search_targets: Array[Dictionary]:
 	get: return host.search_targets
 	set(value): host.search_targets = value
 var search_found:
@@ -237,7 +237,7 @@ var chase_countdown_text:
 var chase_miss_flash_remaining:
 	get: return host.chase_miss_flash_remaining
 	set(value): host.chase_miss_flash_remaining = value
-var chase_used_sentences:
+var chase_used_sentences: Array[String]:
 	get: return host.chase_used_sentences
 	set(value): host.chase_used_sentences = value
 var chase_finish_delay_remaining:

@@ -33,7 +33,7 @@ func _run() -> void:
 	_check(next_node != null and next_node.get_node_or_null("EnemySelectionOutline") != null, "selection outline must follow the clicked enemy")
 	var hud = game.get_node("HUD/HUDRoot")
 	_check(hud.TEST_AI_PANEL_RECT.size.x > 0.0 and hud.TEST_AI_STEP_RECT.size.x > 0.0, "AI overlay must expose clickable debug controls")
-	var reason_bottom := hud.TEST_AI_PANEL_RECT.position.y + 114.0 + 4.0 * 14.0
+	var reason_bottom: float = hud.TEST_AI_PANEL_RECT.position.y + 114.0 + 4.0 * 14.0
 	_check(hud.TEST_AI_ROW_RECT.position.y > reason_bottom, "AI reason text must not overlap the enemy list")
 	_check(hud.TEST_AI_ROW_RECT.position.y + hud.TEST_AI_ROW_STEP * 8.0 <= hud.TEST_AI_STEP_RECT.position.y, "AI enemy list must stop before the control buttons")
 	_check(hud.PLAYER_PROFILE.get_size().x >= 700.0, "Lily HUD portrait must use the complete profile asset")

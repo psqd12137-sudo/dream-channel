@@ -731,11 +731,16 @@ func _preview_enemy_action_sequence(state: CombatEnemyState, goal: Vector2i, rem
 	var path: Array[Vector2i] = []
 	var origin: Vector2i = state.pos
 	var retreating: bool = false
+	var allow_attack: bool = state.revealed
 	var guard: int = 20
 	while remaining > 0 and guard > 0:
 		guard -= 1
-		var sees_player_from_origin: bool = _has_line_of_sight(origin, player_pos) and state.blind_turns <= 0
+		# 起点必须沿用当前状态；只有模拟移动到新格后，才重新用几何视线判断。
+		# 否则测试台或事件快照中的“尚未发现”会被预览层直接改写成攻击意图。
+		var sees_player_from_origin: bool = (state.sees_player if origin == state.pos else _has_line_of_sight(origin, player_pos)) and state.blind_turns <= 0
 		var attack_plan: Dictionary = _enemy_attack_plan(state, origin, remaining, sees_player_from_origin)
+		if not allow_attack:
+			attack_plan.clear()
 		if not attack_plan.is_empty():
 			attack_plan["origin"] = origin
 			return {"path": path, "attack_plan": attack_plan, "retreat": retreating}
@@ -815,6 +820,7 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 	var turn_events: Array[Dictionary] = []
 	if outcome != "":
 		return turn_events
+	var hidden_at_turn_start: bool = not state.revealed
 	_refresh_enemy_vision(state, false)
 	if _ai_blackboard != null:
 		_ai_blackboard.plan_enemy(state.id)
@@ -851,7 +857,7 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 	while remaining > 0 and outcome == "" and guard > 0:
 		guard -= 1
 		_refresh_enemy_vision(state, false)
-		if player_exposed and state.sees_player:
+		if player_exposed and state.sees_player and not hidden_at_turn_start:
 			player_exposed = false
 			if state.has_trait("cornerCut"):
 				var free_step := _choose_enemy_step(state, state.pos, player_pos)
@@ -903,7 +909,7 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 		if state.sees_player and manhattan(state.pos, player_pos) <= 1 and remaining < _effective_attack_cost(state):
 			turn_events.append({"kind": "wait", "actor_id": state.id, "label": "等待攻击窗口"})
 			break
-		var attack_plan := _enemy_attack_plan(state, state.pos, remaining, state.sees_player)
+		var attack_plan := _enemy_attack_plan(state, state.pos, remaining, state.sees_player and not hidden_at_turn_start)
 		if not attack_plan.is_empty():
 			if state.has_trait("backstab"):
 				state.backstab_reengaging = false
@@ -1291,18 +1297,19 @@ func _choose_enemy_step(state: CombatEnemyState, origin: Vector2i, goal: Vector2
 	if candidates.is_empty():
 		return INVALID_CELL
 	if state.has_trait("vault"):
-		var current_distance := manhattan(origin, goal)
+		var climb_target: Vector2i = player_pos if state.sees_player else goal
+		var current_distance := manhattan(origin, climb_target)
 		var climb_options := candidates.filter(func(option: Dictionary) -> bool:
-			return int(option["height"]) > _tile_height(origin) and manhattan(option["cell"], goal) <= current_distance
+			return int(option["height"]) > _tile_height(origin) and manhattan(option["cell"], climb_target) <= current_distance
 		)
 		if not climb_options.is_empty():
 			climb_options.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["height"]) > int(b["height"]))
 			return climb_options[0]["cell"]
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		if int(a["distance"]) != int(b["distance"]):
-			return int(a["distance"]) < int(b["distance"])
 		if state.has_trait("trapAware") and int(a["hazard"]) != int(b["hazard"]):
 			return int(a["hazard"]) < int(b["hazard"])
+		if int(a["distance"]) != int(b["distance"]):
+			return int(a["distance"]) < int(b["distance"])
 		if state.has_trait("vault") and int(a["height"]) != int(b["height"]):
 			return int(a["height"]) > int(b["height"])
 		return str(a["cell"]) < str(b["cell"])
@@ -1377,7 +1384,20 @@ func _move_enemy_to(state: CombatEnemyState, target: Vector2i, verb: String, eve
 			"target": state.pos,
 			"damage": trap_damage,
 			"source": trap_result.get("source", "trap"),
+			"trap": trap_result.get("trap", {}),
 			"label": "踩中%s" % str(trap_result.get("label", "陷阱")),
+		})
+	elif not trap_result.is_empty():
+		# 盐圈不造成伤害，但仍需要一个事件让演出层表现“踩中/眩晕”。
+		events.append({
+			"kind": "enemy_trap_triggered",
+			"actor_id": state.id,
+			"target_enemy_id": state.id,
+			"target": state.pos,
+			"damage": 0,
+			"source": trap_result.get("source", "trap"),
+			"label": "踩中%s" % str(trap_result.get("label", "陷阱")),
+			"trap": trap_result.get("trap", {}),
 		})
 	_refresh_vision(true)
 	if not state.alive():
@@ -1465,7 +1485,13 @@ func _play_place(card: Dictionary, target: Vector2i) -> bool:
 			first_smash_used = true
 		var smash_tough := int(place_data.get("smashTough", 1 if damage > 0 else 0))
 		var dealt := _apply_enemy_damage(smash_state, damage, smash_tough, "smash")
-		last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": smash_state.id, "damage": dealt, "source": "smash"})
+		last_card_events.append({
+			"kind": "enemy_damaged",
+			"target_enemy_id": smash_state.id,
+			"damage": dealt,
+			"source": "smash",
+			"trap": effect.duplicate(true),
+		})
 		_apply_blind(smash_state, effect)
 	else:
 		traps[target] = effect

@@ -1518,6 +1518,7 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
 	battle_focused_enemy_id = _default_battle_enemy_id()
+	battle_world_renderer.reset_battle_display_preferences()
 	phase = "combat"
 	world_container.visible = true
 	house_root.visible = false
@@ -1649,6 +1650,8 @@ func select_or_play_card(index: int) -> void:
 			var damage_feedback_shown := false
 			for raw_event in combat.last_card_events:
 				var damage_event: Dictionary = raw_event
+				if _is_salt_ring_event(damage_event):
+					_show_enemy_salt_ring_effect(str(damage_event.get("target_enemy_id", "")))
 				if str(damage_event.get("kind", "")) != "enemy_damaged" or int(damage_event.get("damage", 0)) <= 0:
 					continue
 				var damage_enemy_id := str(damage_event.get("target_enemy_id", ""))
@@ -1805,6 +1808,8 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			if enemy_node == null:
 				continue
 			var trap_damage := int(event.get("damage", 0))
+			if _is_salt_ring_event(event):
+				tween.tween_callback(_show_enemy_salt_ring_effect.bind(actor_id))
 			if trap_damage <= 0:
 				continue
 			var trap_target: Vector2i = event.get("target", INVALID_CELL)
@@ -1813,6 +1818,12 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			tween.tween_callback(_show_enemy_damage_feedback.bind(actor_id, trap_damage))
 			tween.tween_property(enemy_node, "scale", Vector3(1.16, 0.86, 1.16), ENEMY_ATTACK_DURATION * 0.42 * animation_duration_scale)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.58 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
+		elif kind == "enemy_trap_triggered":
+			if enemy_node == null:
+				continue
+			if _is_salt_ring_event(event):
+				tween.tween_callback(_show_enemy_salt_ring_effect.bind(actor_id))
 			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 		else:
 			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
@@ -3327,6 +3338,12 @@ func _play_enemy_state(enemy_id: String, state: String, callout: String = "") ->
 
 func _show_enemy_damage_feedback(enemy_id: String, damage: int) -> void:
 	battle_world_renderer._show_enemy_damage_feedback(enemy_id, damage)
+
+func _is_salt_ring_event(event: Dictionary) -> bool:
+	return battle_world_renderer._is_salt_ring_event(event)
+
+func _show_enemy_salt_ring_effect(enemy_id: String) -> void:
+	battle_world_renderer._show_enemy_salt_ring_effect(enemy_id)
 
 func _add_decoy_pawn(pos: Vector2i) -> void:
 	battle_world_renderer._add_decoy_pawn(pos)

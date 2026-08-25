@@ -73,7 +73,9 @@ func _resolve_role(state) -> String:
 
 
 func _build_plan(state, role: String) -> Dictionary:
-	if state.ambush_active and not state.sees_player:
+	# 规则层只允许埋伏停留一拍；黑板必须使用同一边界，避免预览已经显示巡逻，
+	# 实际执行却继续把敌人规划成埋伏状态。
+	if state.ambush_active and not state.sees_player and state.ambush_idle_turns < 1:
 		return _plan(state, "ambush", state.pos, INVALID_CELL, "埋伏等待玩家暴露")
 	if not state.sees_player:
 		if state.last_seen != INVALID_CELL:
@@ -116,7 +118,10 @@ func _choose_attack_slot(state, role: String) -> Vector2i:
 	for cell in candidate_cells:
 		if not rules.call("is_walkable", cell) or blocked.has(cell) or reservations.has(cell):
 			continue
-		var path: Array = rules.call("_backstab_path", state) if state.has_trait("backstab") else rules.call("_find_path", state.pos, cell, blocked)
+		var path: Array[Vector2i] = []
+		var raw_path: Variant = rules.call("_backstab_path", state) if state.has_trait("backstab") else rules.call("_find_path", state.pos, cell, blocked)
+		if raw_path is Array:
+			path.assign(raw_path as Array)
 		if path.size() < 2 and state.pos != cell:
 			continue
 		if state.has_trait("ranged") or state.has_trait("beam") or state.has_trait("backstab"):

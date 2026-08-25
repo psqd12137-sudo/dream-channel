@@ -222,7 +222,7 @@ $tests = @(
   "room_footprint_regression", "multi_room_build_regression", "large_room_mix_lab_regression",
   "enemy_patrol_intent_regression", "enemy_vision_state_regression", "enemy_intent_snapshot_regression",
   "player_movement_range_regression",
-  "enemy_turn_animation_regression", "enemy_traits_regression", "ranged_enemy_regression", "shared_cell_regression",
+  "enemy_turn_animation_regression", "enemy_traits_regression", "ranged_enemy_regression", "backstab_enemy_regression", "salt_ring_effect_regression", "shared_cell_regression",
   "enemy_archetype_presentation_regression", "turn_timing_regression",
   "multi_enemy_roster_regression", "multi_enemy_legacy_compat_regression",
   "multi_enemy_state_regression", "multi_enemy_turn_regression",
@@ -237,11 +237,20 @@ $tests = @(
   "run_progression_save_regression", "kenney_formal_build_flow_regression",
   "formal_build_promoted_regression", "kaykit_asset_bounds_probe", "character_animation_lab_smoke"
 )
+$failed = @()
 foreach ($t in $tests) {
-  & $g --headless --path $p --script "res://tests/$t.gd"
-  if ($LASTEXITCODE -ne 0) { Write-Host "FAILED: $t" }
+  $proc = Start-Process -FilePath $g -ArgumentList @("--headless", "--path", $p, "--script", "res://tests/$t.gd") -Wait -PassThru -NoNewWindow
+  if ($proc.ExitCode -ne 0) {
+    $failed += $t
+    Write-Host "FAILED: $t (exit $($proc.ExitCode))"
+  }
+}
+if ($failed.Count -gt 0) {
+  throw "回归失败：$($failed -join ', ')"
 }
 ```
+
+这里使用 `Start-Process -Wait -PassThru` 读取 Godot 的真实进程退出码；Windows 图形版可执行文件直接用 `&` 时，`$LASTEXITCODE` 可能为空，导致脚本把 `push_error` 后的失败误报成成功。
 
 - `latest_3d_smoke.gd` 覆盖二选一预兆、三张票根、摆下后隐藏、进入后揭示、3D 房屋网格与 3D 战斗网格；`dynamic_effects_smoke.gd` 额外覆盖房间翻转悬落、角色移动、未知揭示与输入锁。
 - `camera_dolly_follow_regression.gd` 覆盖开局由远至近运镜、普通进房保持全景、手动特写跟随（只平移不旋转）、松手延迟回位（保持玩家选择的旋转）、战斗镜头对准玩家-怪物中点偏上。

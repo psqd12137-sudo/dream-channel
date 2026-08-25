@@ -148,8 +148,8 @@ dream-channel/
 
 - 战斗规则已支持任意数量 `N` 个敌人：敌人拥有稳定 `enemy_id`，独立维护生命、韧性、视野、埋伏、致盲、记忆位置和行动状态；敌方回合按内容顺序逐个行动。
 - 旧房间格式 `room.enemy + arena.enemy` 仍然兼容；正式快照目前仍以单敌人为主，多敌人房间使用 `room.enemies[]` 配置，尚未大规模写入正式内容。
-- 当前敌人 AI 仍是确定性的优先级规则状态机，不是行为树、规划器或学习型 AI；本轮已加入回合级战术黑板和基础闭环。敌人会根据配置或特性自动分为 `hunter`、`flanker`、`controller`，每个敌方阶段重新感知、预订互不重叠的攻击位、执行移动/攻击，并在下一阶段重新规划；HUD 意图预览与实际行动共用这套计划。
-- 现阶段仍未实现集火、保护、撤退、动态编队、诱导玩家走位和跨回合战术记忆；这些属于下一阶段。正式快照目前仍以单敌人为主，多敌人房间使用 `room.enemies[]` 配置。多敌人基础计划见 [.omc/plans/multi-enemy-refactor-plan.md](./.omc/plans/multi-enemy-refactor-plan.md)。
+- 当前敌人 AI 仍是确定性的优先级规则状态机，不是行为树、规划器或学习型 AI；本轮已加入回合级战术黑板和基础闭环。敌人会根据配置或特性自动分为 `hunter`、`flanker`、`controller`，每个敌方阶段重新感知、预订互不重叠的攻击位、执行移动/攻击，并在下一阶段重新规划；HUD 与行动共用同一套攻击、寻路和状态边界。
+- 背刺敌人在本回合无法抵达玩家背部时会撤退并跨回合重整；集火、保护、动态编队、诱导玩家走位和通用撤退策略仍未实现，这些属于下一阶段。正式快照目前仍以单敌人为主，多敌人房间使用 `room.enemies[]` 配置。多敌人基础计划见 [.omc/plans/multi-enemy-refactor-plan.md](./.omc/plans/multi-enemy-refactor-plan.md)。
 - 主菜单现有“后台测试 → 战斗与 AI 测试”已升级为隔离测试台：提供固定 Seed 的房间预设、手动战斗、AI 单步/连续观察、敌人角色与攻击位调试信息；测试不会结算正式奖励、推进集数或改写正式存档。详细执行计划见 [.omc/plans/combat-ai-test-mode-plan.md](./.omc/plans/combat-ai-test-mode-plan.md)。
 
 ## Godot 战斗测试与操作说明
