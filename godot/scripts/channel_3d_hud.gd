@@ -57,6 +57,8 @@ const MOVE_LEFT_RECT := Rect2(1010, 534, 46, 30)
 const MOVE_RIGHT_RECT := Rect2(1114, 534, 46, 30)
 const MOVE_DOWN_RECT := Rect2(1062, 570, 46, 30)
 const CARD_CANCEL_RECT := Rect2(976, 654, 164, 28)
+const ENEMY_ROSTER_RECT := Rect2(948, 214, 300, 136)
+const ENEMY_DETAIL_RECT := Rect2(948, 356, 300, 128)
 const PORTAL_USE_RECT := Rect2(960, 366, 120, 44)
 const PORTAL_STAY_RECT := Rect2(1100, 366, 120, 44)
 const HOME_START_RECT := Rect2(76, 610, 300, 58)
@@ -798,7 +800,9 @@ func _draw_combat_hud() -> void:
 	_draw_actor_strip(Rect2(24, 92, 300, 108), PLAYER_PROFILE, "莉莉", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_block, 4, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
 	_draw_actor_strip(Rect2(948, 92, 300, 108), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, combat.enemy_hp if combat.enemy_revealed else -1, combat.enemy_max_hp, "韧性", combat.enemy_toughness if combat.enemy_revealed else 0, combat.enemy_max_toughness, "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
 	if combat.enemy_order.size() > 1:
-		_draw_enemy_roster(Rect2(948, 214, 300, 136))
+		_draw_enemy_roster(ENEMY_ROSTER_RECT)
+	if not combat.player_on_portal():
+		_draw_focused_enemy_detail(ENEMY_DETAIL_RECT)
 	if game.test_combat_active:
 		_draw_test_ai_panel()
 	_draw_move_controls()
@@ -942,6 +946,7 @@ func _draw_enemy_roster(rect: Rect2) -> void:
 	var columns := 4
 	var cell_width := (rect.size.x - 20.0) / float(columns)
 	var cell_height := 45.0
+	var focused_enemy_id := _focused_enemy_id()
 	for index in range(combat.enemy_order.size()):
 		var enemy_id := str(combat.enemy_order[index])
 		var state = combat.enemy_by_id(enemy_id)
@@ -952,9 +957,10 @@ func _draw_enemy_roster(rect: Rect2) -> void:
 		var cell := Rect2(rect.position + Vector2(10.0 + float(column) * cell_width, 32.0 + float(row) * cell_height), Vector2(cell_width - 4.0, cell_height - 5.0))
 		var alive: bool = state.hp > 0
 		var revealed: bool = state.revealed
-		var accent := MAGENTA if alive and revealed else Color("68757a") if alive else Color("4a4448")
+		var selected: bool = enemy_id == focused_enemy_id
+		var accent := GOLD if selected else MAGENTA if alive and revealed else Color("68757a") if alive else Color("4a4448")
 		draw_rect(cell, Color("fff3df1c") if alive else Color("11151a88"), true)
-		draw_rect(cell, accent, false, 1.0)
+		draw_rect(cell, accent, false, 2.0 if selected else 1.0)
 		var title := str(state.name) if revealed else "未知敌人"
 		_label(_shorten(title, 8), cell.position + Vector2(6, 14), 9, TEXT if alive else Color("9b8d93"))
 		if revealed:
@@ -962,6 +968,34 @@ func _draw_enemy_roster(rect: Rect2) -> void:
 			_label(hp_text, cell.position + Vector2(6, 29), 8, Color("ffb3b0") if alive else Color("9b8d93"))
 		else:
 			_label("未现身", cell.position + Vector2(6, 29), 8, Color("a9b8bb"))
+
+
+func _focused_enemy_id() -> String:
+	var focused_enemy_id := str(game.battle_focused_enemy_id)
+	if focused_enemy_id.is_empty():
+		focused_enemy_id = str(game.test_focused_enemy_id)
+	return focused_enemy_id
+
+
+func _draw_focused_enemy_detail(rect: Rect2) -> void:
+	var combat = game.combat
+	draw_rect(Rect2(rect.position + Vector2(4, 5), rect.size), Color("050a0ecc"), true)
+	draw_rect(rect, Color("17151cf4"), true)
+	draw_rect(rect, GOLD if not _focused_enemy_id().is_empty() else Color("53636a"), false, 2.0)
+	var focused_enemy_id := _focused_enemy_id()
+	if focused_enemy_id.is_empty():
+		_label("敌人详情", rect.position + Vector2(12, 22), 12, Color("ffd1e6"))
+		_label("点击棋盘上的敌人或上方编组查看单体信息", rect.position + Vector2(12, 52), 10, MUTED)
+		return
+	var state = combat.enemy_by_id(focused_enemy_id)
+	if state == null:
+		return
+	var intent: Dictionary = game.battle_world_renderer.battle_intent_snapshot.get(focused_enemy_id, {})
+	_label("%s · T%d · %s" % [str(state.name), state.tier, str(state.archetype_label)], rect.position + Vector2(12, 21), 12, GOLD)
+	_label("生命 %d/%d   韧性 %d/%d" % [state.hp, state.max_hp, state.toughness, state.max_toughness], rect.position + Vector2(12, 43), 10, TEXT)
+	_label("伤害 %d   攻击距离 %d   行动力 %d" % [state.damage, state.attack_range, state.action_points], rect.position + Vector2(12, 63), 10, MUTED)
+	_label("意图：%s" % str(intent.get("label", "观望")), rect.position + Vector2(12, 84), 10, TEXT)
+	_draw_wrapped(_shorten(str(intent.get("detail", "")), 72), rect.position + Vector2(12, 98), 270, 9, Color("d9ede5"))
 
 
 func _draw_card_target_arrow(start: Vector2, target: Vector2) -> void:
@@ -1269,6 +1303,8 @@ func _combat_overlay_has_point(point: Vector2) -> bool:
 		return true
 	if _combat_move_controls_has_point(point):
 		return true
+	if game.combat.enemy_order.size() > 1 and ENEMY_ROSTER_RECT.has_point(point):
+		return true
 	if game.combat.player_on_portal() and PORTAL_USE_RECT.has_point(point):
 		return true
 	return game.selected_card >= 0 and CARD_CANCEL_RECT.has_point(point)
@@ -1315,6 +1351,24 @@ func _handle_test_combat_click(point: Vector2) -> void:
 		if row.has_point(point):
 			game.focus_test_enemy(str(game.combat.enemy_order[index]))
 			return
+
+
+func _combat_enemy_id_at_point(point: Vector2) -> String:
+	if game == null or game.combat == null or game.combat.enemy_order.size() <= 1 or not ENEMY_ROSTER_RECT.has_point(point):
+		return ""
+	var columns := 4
+	var cell_width := (ENEMY_ROSTER_RECT.size.x - 20.0) / float(columns)
+	var cell_height := 45.0
+	for index in range(game.combat.enemy_order.size()):
+		var row := index / columns
+		var column := index % columns
+		var cell := Rect2(ENEMY_ROSTER_RECT.position + Vector2(10.0 + float(column) * cell_width, 32.0 + float(row) * cell_height), Vector2(cell_width - 4.0, cell_height - 5.0))
+		if not cell.has_point(point):
+			continue
+		var enemy_id := str(game.combat.enemy_order[index])
+		var state = game.combat.enemy_by_id(enemy_id)
+		return enemy_id if state != null and state.revealed else ""
+	return ""
 
 
 func _house_overlay_has_point(point: Vector2) -> bool:
@@ -1426,6 +1480,11 @@ func _gui_input(event: InputEvent) -> void:
 		if mouse_event.pressed:
 			if game.test_combat_active and _test_combat_overlay_has_point(point):
 				_handle_test_combat_click(point)
+				accept_event()
+				return
+			var clicked_enemy_id := _combat_enemy_id_at_point(point)
+			if not clicked_enemy_id.is_empty():
+				game.select_battle_enemy(clicked_enemy_id)
 				accept_event()
 				return
 			var move_direction := _combat_move_direction_at_point(point)

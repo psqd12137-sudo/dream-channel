@@ -282,6 +282,7 @@ var test_saved_state: Dictionary = {}
 var test_auto_accumulator := 0.0
 var test_last_events: Array[Dictionary] = []
 var test_focused_enemy_id := ""
+var battle_focused_enemy_id := ""
 var test_enemy_phase_pending := false
 var battle_turn_actor_id := "player"
 var battle_turn_events: Array[Dictionary] = []
@@ -724,6 +725,7 @@ func go_home() -> void:
 	test_auto_accumulator = 0.0
 	test_last_events.clear()
 	test_focused_enemy_id = ""
+	battle_focused_enemy_id = ""
 	test_enemy_phase_pending = false
 	_cancel_dynamic_effect()
 	character_animation_demo_mode = false
@@ -1515,6 +1517,7 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	_prepare_battle_prop_assignments()
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
+	battle_focused_enemy_id = ""
 	phase = "combat"
 	world_container.visible = true
 	house_root.visible = false
@@ -1932,6 +1935,11 @@ func move_player_direction(direction: Vector2i) -> bool:
 func handle_battle_cell(target: Vector2i) -> void:
 	if animation_busy or combat == null or combat.outcome != "" or target == INVALID_CELL:
 		return
+	if selected_card < 0:
+		var clicked_enemy: Variant = combat.enemy_at(target)
+		if clicked_enemy != null:
+			select_battle_enemy(str(clicked_enemy.get("id")))
+			return
 	if selected_card < 0 and combat.player_on_portal() and target == combat.player_portal_destination():
 		use_player_portal()
 		return
@@ -1970,6 +1978,19 @@ func handle_battle_cell(target: Vector2i) -> void:
 			return
 		status_message = "这个格子无法到达，或当前行动力不足。"
 		_refresh_hud()
+
+
+func select_battle_enemy(enemy_id: String) -> void:
+	if combat == null:
+		return
+	var state = combat.enemy_by_id(enemy_id)
+	if state == null or not state.revealed:
+		return
+	battle_focused_enemy_id = enemy_id
+	if test_combat_active:
+		test_focused_enemy_id = enemy_id
+	battle_world_renderer.refresh_battle_state(false, false)
+	_refresh_hud()
 
 
 func move_player_to(target: Vector2i) -> bool:

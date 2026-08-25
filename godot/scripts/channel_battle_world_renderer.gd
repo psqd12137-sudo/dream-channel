@@ -10,6 +10,7 @@ const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const APP_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Regular.otf")
 const INTENT_ATTACK_ICON: Texture2D = preload("res://assets/ui/battle_intent_attack.svg")
+const INTENT_RANGED_ICON: Texture2D = preload("res://assets/ui/battle_intent_ranged.svg")
 const INTENT_MOVE_ICON: Texture2D = preload("res://assets/ui/battle_intent_move.svg")
 
 const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interior/"
@@ -645,9 +646,11 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 func _focused_battle_enemy_id() -> String:
 	if combat == null:
 		return ""
-	var test_focus := str(host.test_focused_enemy_id)
-	if not test_focus.is_empty() and battle_intent_snapshot.has(test_focus):
-		return test_focus
+	var focused_enemy_id := str(host.battle_focused_enemy_id)
+	if focused_enemy_id.is_empty():
+		focused_enemy_id = str(host.test_focused_enemy_id)
+	if not focused_enemy_id.is_empty() and battle_intent_snapshot.has(focused_enemy_id):
+		return focused_enemy_id
 	var hovered_enemy = combat.enemy_at(hovered_battle_cell)
 	if hovered_enemy != null and battle_intent_snapshot.has(hovered_enemy.id):
 		return hovered_enemy.id
@@ -1232,7 +1235,9 @@ func _battle_intent_glyph(intent_type: String, attack_kind: String = "") -> Stri
 
 
 func _battle_intent_icon_texture(intent_type: String, attack_kind: String = "") -> Texture2D:
-	if attack_kind in ["ranged", "beam"] or intent_type in ["attack", "ambush"]:
+	if attack_kind == "ranged":
+		return INTENT_RANGED_ICON
+	if attack_kind in ["beam", "melee", "lunge", "guardBreak", "slam", "faceShock", "decoy"] or intent_type in ["attack", "ambush"]:
 		return INTENT_ATTACK_ICON
 	return INTENT_MOVE_ICON
 
