@@ -1264,8 +1264,8 @@ func _backstab_path(state: CombatEnemyState) -> Array[Vector2i]:
 func _choose_backstab_retreat_step(state: CombatEnemyState) -> Vector2i:
 	var blocked := occupied_enemy_cells(state.id)
 	var candidates: Array[Dictionary] = []
-	for direction in DIRS:
-		var cell := state.pos + direction
+	for direction: Vector2i in DIRS:
+		var cell: Vector2i = state.pos + direction
 		if not is_walkable(cell) or cell == player_pos or cell == decoy_pos or blocked.has(cell):
 			continue
 		var trap: Dictionary = traps.get(cell, {})
