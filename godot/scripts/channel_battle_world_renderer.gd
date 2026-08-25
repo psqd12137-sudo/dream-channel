@@ -720,9 +720,9 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	node.add_child(intent_icon)
 	if intent_value != "":
 		# 数值统一使用纯白字与黑描边，避免被移动/攻击底色染色。
-		var value_label: Label3D = _add_label(node, "EnemyIntentValue", intent_value, Vector3(0.39, floor_y + 2.44, 0.06), Color.WHITE, 54)
+		var value_label: Label3D = _add_label(node, "EnemyIntentValue", intent_value, Vector3(0.39, floor_y + 2.44, 0.06), Color.WHITE, 40)
 		value_label.outline_modulate = Color("14151d")
-		value_label.outline_size = 12
+		value_label.outline_size = 9
 		value_label.no_depth_test = true
 		value_label.shaded = false
 		value_label.render_priority = 100

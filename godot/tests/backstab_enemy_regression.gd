@@ -9,6 +9,7 @@ func _init() -> void:
 	_test_backstab_never_attacks_from_front()
 	_test_backstab_attacks_from_back()
 	_test_backstab_retreats_when_route_is_unavailable()
+	_test_backstab_reengages_after_retreat()
 	_test_mixed_assault_backstab_sequence()
 	if failures.is_empty():
 		print("CHANNEL_BACKSTAB_ENEMY: PASS facing-backstab-retreat")
@@ -60,6 +61,16 @@ func _test_backstab_retreats_when_route_is_unavailable() -> void:
 	_check(not attacked, "背后攻击位不可达时不能退化为正面攻击")
 	_check(combat.manhattan(combat.enemy_pos, combat.player_pos) > 1, "背刺者无法绕后时必须拉开与玩家的距离")
 	_check(combat.player_hp == 12, "拉开距离时不能对玩家造成伤害")
+
+
+func _test_backstab_reengages_after_retreat() -> void:
+	var combat = _combat(Vector2i(3, 1), 4, 8)
+	var retreat_intent: Dictionary = combat.preview_intent()
+	combat.enemy_turn()
+	var approach_intent: Dictionary = combat.preview_intent()
+	_check(str(retreat_intent.get("type", "")) == "retreat", "背刺者第一次无法绕后时应先撤离")
+	_check(str(approach_intent.get("type", "")) != "retreat", "撤离后下一回合必须重新接近背后")
+	_check(str(approach_intent.get("intent_value", "")).begins_with("+"), "重新接近背后时意图必须显示正向步数")
 
 
 func _test_mixed_assault_backstab_sequence() -> void:

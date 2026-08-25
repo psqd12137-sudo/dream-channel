@@ -748,9 +748,12 @@ func _preview_enemy_action_sequence(state: CombatEnemyState, goal: Vector2i, rem
 				break
 			var back_path: Array[Vector2i] = _backstab_path_from(state, origin)
 			var required_cost: int = _enemy_path_cost(back_path) + _effective_attack_cost(state) if not back_path.is_empty() else 999
-			if required_cost > remaining:
+			if required_cost > remaining and not state.backstab_reengaging:
 				step = _choose_backstab_retreat_step_from(state, origin)
 				retreating = true
+				if step != INVALID_CELL:
+					path.append(step)
+					return {"path": path, "attack_plan": {}, "retreat": retreating}
 			else:
 				step = _choose_enemy_step(state, origin, goal)
 		elif sees_player_from_origin and manhattan(origin, player_pos) <= 1 and remaining < _effective_attack_cost(state):
@@ -883,17 +886,18 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 				break
 			var back_path := _backstab_path(state)
 			var required_cost: int = _enemy_path_cost(back_path) + _effective_attack_cost(state) if not back_path.is_empty() else 999
-			if state.pos != back_cell and required_cost > remaining:
+			if state.pos != back_cell and required_cost > remaining and not state.backstab_reengaging:
 				var retreat_step := _choose_backstab_retreat_step(state)
 				if retreat_step != INVALID_CELL:
 					_move_enemy_to(state, retreat_step, "拉开距离", turn_events)
 					if not state.alive():
 						break
+					state.backstab_reengaging = true
 					remaining -= 1
 					if traps.has(state.pos):
 						remaining -= int((traps[state.pos] as Dictionary).get("slow", 0))
 						remaining = maxi(0, remaining)
-					continue
+					break
 				turn_events.append({"kind": "wait", "actor_id": state.id, "label": "等待背后攻击位"})
 				break
 		if state.sees_player and manhattan(state.pos, player_pos) <= 1 and remaining < _effective_attack_cost(state):
@@ -901,6 +905,8 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 			break
 		var attack_plan := _enemy_attack_plan(state, state.pos, remaining, state.sees_player)
 		if not attack_plan.is_empty():
+			if state.has_trait("backstab"):
+				state.backstab_reengaging = false
 			var execution := _execute_enemy_attack_plan(state, attack_plan, remaining)
 			turn_events.append_array(execution.get("events", []))
 			remaining -= int(execution.get("cost", 0))

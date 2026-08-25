@@ -41,6 +41,7 @@ var patrol_goal := INVALID_CELL
 var ambush_active := false
 var ambush_idle_turns := 0
 var ambush_note := ""
+var backstab_reengaging := false
 var broken := false
 var execute_bonus_pending := false
 var crush_bonus_pending := false
@@ -101,6 +102,7 @@ func debug_snapshot() -> Dictionary:
 		"ambush_active": ambush_active,
 		"ambush_idle_turns": ambush_idle_turns,
 		"ambush_note": ambush_note,
+		"backstab_reengaging": backstab_reengaging,
 		"broken": broken,
 		"execute_bonus_pending": execute_bonus_pending,
 		"crush_bonus_pending": crush_bonus_pending,
