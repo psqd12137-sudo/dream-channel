@@ -38,6 +38,9 @@ func _run() -> void:
 	_check(hud.TEST_AI_ROW_RECT.position.y + hud.TEST_AI_ROW_STEP * 8.0 <= hud.TEST_AI_STEP_RECT.position.y, "AI enemy list must stop before the control buttons")
 	_check(hud.PLAYER_PROFILE.get_size().x >= 700.0, "Lily HUD portrait must use the complete profile asset")
 	var renderer = game.battle_world_renderer
+	renderer.hovered_battle_cell = game.combat.enemy_by_id("eight_07").pos
+	renderer.update_battle_hover()
+	_check(renderer.battle_hover_markers.is_empty(), "hover feedback must not recreate four corner dots")
 	var focused_cells: Dictionary = renderer._battle_intent_cells()
 	_check(_intent_cells_only_contain_enemy(focused_cells, game.test_focused_enemy_id), "focused range mode must only publish the selected enemy range")
 	var range_key := InputEventKey.new()

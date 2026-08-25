@@ -290,6 +290,8 @@ func enemy_range_display_mode_label() -> String:
 
 func update_battle_hover() -> void:
 	_ensure_battle_layers()
+	# 悬停反馈改由格子覆层绘制，鼠标移动时刷新当前格子的有效/无效状态。
+	_refresh_battle_dynamic_visuals()
 	_update_battle_hover_marker()
 
 
@@ -326,32 +328,9 @@ func _clear_battle_target_markers() -> void:
 func _update_battle_hover_marker() -> void:
 	if battle_hover_root == null:
 		return
-	_ensure_battle_hover_markers()
-	var has_hover: bool = combat != null and hovered_battle_cell != INVALID_CELL and _battle_cell_in_bounds(hovered_battle_cell)
-	if not has_hover:
-		_set_corner_marker_group(battle_hover_markers, false, COL_GREEN, 0.0)
-		_set_corner_marker_group(battle_hover_valid_markers, false, COL_GREEN, 0.0)
-		return
-	var hover_cell_node := battle_board_root.get_node_or_null("Cell_%d_%d" % [hovered_battle_cell.x, hovered_battle_cell.y]) as Node3D
-	if hover_cell_node == null:
-		_set_corner_marker_group(battle_hover_markers, false, COL_GREEN, 0.0)
-		_set_corner_marker_group(battle_hover_valid_markers, false, COL_GREEN, 0.0)
-		return
-	for marker: MeshInstance3D in battle_hover_markers:
-		if marker.get_parent() != hover_cell_node:
-			marker.reparent(hover_cell_node)
-	for marker: MeshInstance3D in battle_hover_valid_markers:
-		if marker.get_parent() != hover_cell_node:
-			marker.reparent(hover_cell_node)
-	var top_y := _battle_cell_top_y(hovered_battle_cell)
-	var is_valid := _is_valid_battle_target(hovered_battle_cell)
-	_set_corner_marker_group(battle_hover_markers, true, Color.WHITE, top_y + 0.055)
-	_set_corner_marker_group(
-		battle_hover_valid_markers,
-		is_valid and selected_card < 0,
-		COL_GREEN,
-		top_y
-	)
+	# 保留旧数组兼容已有场景，但不再把四个角点挂到棋盘上。
+	_set_corner_marker_group(battle_hover_markers, false, Color.WHITE, 0.0)
+	_set_corner_marker_group(battle_hover_valid_markers, false, COL_GREEN, 0.0)
 
 
 func _ensure_battle_hover_markers() -> void:
