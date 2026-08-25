@@ -1748,6 +1748,8 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 				continue
 			var attack_kind := str(event.get("attack_kind", "attack"))
 			var attack_callouts := {"lunge": "突进!", "faceShock": "突脸!", "guardBreak": "破防!", "slam": "砸地!", "beam": "激光!"}
+			if attack_kind == "ranged":
+				_queue_enemy_attack_facing(tween, enemy_node, event)
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", str(attack_callouts.get(attack_kind, "袭击!"))))
 			if event.get("target", INVALID_CELL) == combat.player_pos and int(event.get("damage", 0)) > 0:
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "受击!"))
@@ -1768,6 +1770,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 		elif kind == "beam_charge":
 			if enemy_node == null:
 				continue
+			_queue_enemy_attack_facing(tween, enemy_node, event)
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "ready", "蓄力!"))
 			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			tween.tween_property(enemy_node, "scale", Vector3(0.86, 1.28, 0.86), 0.24 * animation_duration_scale)
@@ -1776,6 +1779,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 		elif kind == "beam_fire":
 			if enemy_node == null:
 				continue
+			_queue_enemy_attack_facing(tween, enemy_node, event)
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", "激光!"))
 			if int(event.get("damage", 0)) > 0:
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "命中!"))
@@ -1820,6 +1824,23 @@ func _set_battle_actor_step_motion(weight: float, actor_node: Node3D, start_posi
 
 func _battle_move_facing_yaw(source: Vector2i, target: Vector2i) -> float:
 	return atan2(float(target.x - source.x), float(target.y - source.y))
+
+
+func _battle_enemy_attack_facing_yaw(enemy_node: Node3D, event: Dictionary) -> float:
+	var enemy_state = _enemy_state_for_node(enemy_node)
+	var attack_origin: Vector2i = enemy_state.pos if enemy_state != null else combat.enemy_pos
+	var attack_target: Vector2i = event.get("target", combat.player_pos)
+	if attack_origin == attack_target:
+		return enemy_node.rotation.y
+	return _battle_move_facing_yaw(attack_origin, attack_target)
+
+
+func _queue_enemy_attack_facing(tween: Tween, enemy_node: Node3D, event: Dictionary) -> void:
+	var attack_facing_yaw := _battle_enemy_attack_facing_yaw(enemy_node, event)
+	battle_enemy_facing_yaw = attack_facing_yaw
+	# 远程攻击先用短转身对准玩家，再进入攻击姿态，避免敌人朝侧面开火。
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(enemy_node, "rotation:y", attack_facing_yaw, ENEMY_TURN_DURATION * animation_duration_scale)
 
 
 func _handle_battle_world_click(screen_pos: Vector2) -> void:

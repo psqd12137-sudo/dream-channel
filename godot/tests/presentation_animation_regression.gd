@@ -30,6 +30,12 @@ func _run() -> void:
 	if enemy_presenter != null:
 		_check(enemy_presenter.has_3d_model(), "enemy presenter must instantiate the temporary Quaternius model and animation player")
 		_check(enemy_presenter.current_model_animation().to_lower().contains("idle"), "enemy model must begin in its skeletal Idle loop")
+	var ranged_target := Vector2i(2, 1)
+	var expected_ranged_yaw := game._battle_move_facing_yaw(game.combat.enemy_pos, ranged_target)
+	_check(
+		is_equal_approx(game._battle_enemy_attack_facing_yaw(game.battle_actor_root.get_node_or_null("Enemy"), {"target": ranged_target}), expected_ranged_yaw),
+		"remote attack facing must turn toward the player target before the attack pose"
+	)
 
 	game.combat.player_pos = Vector2i(2, 1)
 	game.combat.enemy_pos = Vector2i(7, 1)
