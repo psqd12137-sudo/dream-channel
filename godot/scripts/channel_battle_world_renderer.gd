@@ -685,7 +685,7 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 		presenter.set_obscured(not state.revealed)
 	_refresh_enemy_selection_outline(node, state)
 	for child: Node in node.get_children():
-		if child.name == "EnemyIntentBadge" or child.name == "EnemyIntent" or child.name == "EnemyIntentValueBadge" or child.name == "EnemyIntentValue":
+		if child.name == "EnemyIntentBadge" or child.name == "EnemyIntent" or child.name == "EnemyIntentValue":
 			child.free()
 	if not state.revealed or combat.outcome != "":
 		return
@@ -719,20 +719,10 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	intent_icon.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
 	node.add_child(intent_icon)
 	if intent_value != "":
-		var value_badge := MeshInstance3D.new()
-		value_badge.name = "EnemyIntentValueBadge"
-		var value_quad := QuadMesh.new()
-		value_quad.size = Vector2(0.52, 0.68)
-		value_badge.mesh = value_quad
-		value_badge.position = Vector3(0.39, floor_y + 2.44, 0.035)
-		var value_material := _material(Color("fff4c2"), true, 0.12)
-		value_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-		value_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		value_badge.material_override = value_material
-		node.add_child(value_badge)
-		var value_label: Label3D = _add_label(node, "EnemyIntentValue", intent_value, Vector3(0.39, floor_y + 2.44, 0.06), Color("171923"), 54)
-		value_label.outline_modulate = Color("fff4c2")
-		value_label.outline_size = 10
+		# 数值统一使用纯白字与黑描边，避免被移动/攻击底色染色。
+		var value_label: Label3D = _add_label(node, "EnemyIntentValue", intent_value, Vector3(0.39, floor_y + 2.44, 0.06), Color.WHITE, 54)
+		value_label.outline_modulate = Color("14151d")
+		value_label.outline_size = 12
 
 
 func _refresh_enemy_selection_outline(node: Node3D, state) -> void:
