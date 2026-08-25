@@ -18,7 +18,9 @@ func _run() -> void:
 	var mixed_enemies: Array = catalog.get_scenario("mixed_assault").get("room", {}).get("enemies", [])
 	_check(mixed_enemies.size() == 2, "mixed_assault must contain melee and ranged enemies")
 	_check(int(mixed_enemies[0].get("attack_range", 0)) == 1, "mixed_assault must configure a melee enemy")
-	_check(int(mixed_enemies[1].get("attack_range", 0)) == 4 and "ranged" in (mixed_enemies[1].get("traits", []) as Array), "mixed_assault must configure a four-cell ranged enemy")
+	_check(int(mixed_enemies[0].get("action_points", 0)) == 2, "mixed_assault must keep the melee enemy movement budget short")
+	_check(int(mixed_enemies[1].get("action_points", 0)) == 2, "mixed_assault must keep the ranged enemy movement budget short")
+	_check(int(mixed_enemies[1].get("attack_range", 0)) == 2 and "ranged" in (mixed_enemies[1].get("traits", []) as Array), "mixed_assault must configure a compact two-cell ranged enemy")
 	_check(catalog.get_scenario("hud_eight").get("room", {}).get("enemies", []).size() == 8, "hud_eight must contain eight enemies")
 	_check(catalog.get_scenario("missing").is_empty(), "unknown scenario must resolve to an empty dictionary")
 	if failures.is_empty():
