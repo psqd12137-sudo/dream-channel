@@ -9,9 +9,9 @@ const CharacterPresenter = preload("res://scripts/character_presenter.gd")
 const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const APP_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Regular.otf")
-const INTENT_ATTACK_ICON: Texture2D = preload("res://assets/ui/battle_intent_attack.svg")
-const INTENT_RANGED_ICON: Texture2D = preload("res://assets/ui/battle_intent_ranged.svg")
-const INTENT_MOVE_ICON: Texture2D = preload("res://assets/ui/battle_intent_move.svg")
+const INTENT_ATTACK_ICON: Texture2D = preload("res://assets/ui/battle_intent_attack.png")
+const INTENT_RANGED_ICON: Texture2D = preload("res://assets/ui/battle_intent_ranged.png")
+const INTENT_MOVE_ICON: Texture2D = preload("res://assets/ui/battle_intent_move.png")
 
 const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interior/"
 const BATTLE_FLOOR_LIGHT := "res://assets/third_party/kaykit_dungeon/models/floor_wood_large.gltf.glb"
@@ -633,9 +633,10 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	node.add_child(intent_badge)
 	var intent_icon := Sprite3D.new()
 	intent_icon.name = "EnemyIntent"
-	intent_icon.texture = _battle_intent_icon_texture(str(intent.get("type", "stall")), attack_kind)
+	var intent_texture: Texture2D = _battle_intent_icon_texture(str(intent.get("type", "stall")), attack_kind)
+	intent_icon.texture = intent_texture
 	intent_icon.position = Vector3(0, floor_y + 2.44, 0.02)
-	intent_icon.pixel_size = 0.0061
+	intent_icon.pixel_size = 0.78 / float(maxi(1, maxi(intent_texture.get_width(), intent_texture.get_height())))
 	intent_icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	intent_icon.shaded = false
 	intent_icon.no_depth_test = true
