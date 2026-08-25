@@ -2004,6 +2004,7 @@ func select_battle_enemy(enemy_id: String) -> void:
 	if test_combat_active:
 		test_focused_enemy_id = enemy_id
 	battle_world_renderer.refresh_battle_state(false, false)
+	battle_world_renderer.refresh_battle_selection_visuals()
 	_refresh_hud()
 
 

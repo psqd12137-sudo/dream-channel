@@ -229,6 +229,18 @@ func refresh_battle_state(sync_actors := true, sync_actor_positions := false) ->
 	_update_battle_overlays()
 
 
+func refresh_battle_selection_visuals() -> void:
+	# 选中敌人只改变演员上的描边，不需要重建棋盘或重新同步位置。
+	if combat == null:
+		return
+	for raw_enemy_id in combat.living_enemy_ids():
+		var enemy_id: String = str(raw_enemy_id)
+		var state = combat.enemy_by_id(enemy_id)
+		var enemy_node: Node3D = _enemy_node_for_id(enemy_id)
+		if state != null and enemy_node != null:
+			_refresh_enemy_selection_outline(enemy_node, state)
+
+
 func update_battle_overlays() -> void:
 	_ensure_battle_layers()
 	_update_battle_overlays()
@@ -672,6 +684,7 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	var presenter := node.get_node_or_null("Presenter")
 	if presenter != null and presenter.has_method("set_obscured"):
 		presenter.set_obscured(not state.revealed)
+	_refresh_enemy_selection_outline(node, state)
 	for child: Node in node.get_children():
 		if child.name == "EnemyIntentBadge" or child.name == "EnemyIntent":
 			child.free()
@@ -705,6 +718,39 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	intent_icon.no_depth_test = true
 	intent_icon.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
 	node.add_child(intent_icon)
+
+
+func _refresh_enemy_selection_outline(node: Node3D, state) -> void:
+	var existing: Node3D = node.get_node_or_null("EnemySelectionOutline") as Node3D
+	var selected_enemy_id: String = _selected_battle_enemy_id()
+	var should_show: bool = state != null and state.revealed and combat.outcome == "" and str(state.id) == selected_enemy_id
+	if not should_show:
+		if existing != null:
+			existing.free()
+		return
+	if existing != null:
+		return
+	var floor_y := 0.39 + float(combat.heights.get(state.pos, 0)) * 0.64
+	var outline := MeshInstance3D.new()
+	outline.name = "EnemySelectionOutline"
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.48
+	ring.outer_radius = 0.58
+	ring.rings = 32
+	ring.ring_segments = 10
+	outline.mesh = ring
+	outline.position = Vector3(0, floor_y + 0.08, 0)
+	outline.material_override = _material(Color(COL_GOLD, 0.96), true, 0.22)
+	outline.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.add_child(outline)
+
+
+func _selected_battle_enemy_id() -> String:
+	if host.test_combat_active and not str(host.test_focused_enemy_id).is_empty():
+		return str(host.test_focused_enemy_id)
+	if not str(host.battle_focused_enemy_id).is_empty():
+		return str(host.battle_focused_enemy_id)
+	return str(host.test_focused_enemy_id)
 
 
 func _focused_battle_enemy_id() -> String:
