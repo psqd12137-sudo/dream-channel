@@ -85,7 +85,8 @@ const TEST_AI_PANEL_RECT := Rect2(24, 214, 360, 390)
 const TEST_AI_STEP_RECT := Rect2(36, 556, 104, 34)
 const TEST_AI_PAUSE_RECT := Rect2(148, 556, 104, 34)
 const TEST_AI_RESTART_RECT := Rect2(260, 556, 104, 34)
-const TEST_AI_ROW_RECT := Rect2(36, 394, 336, 25)
+const TEST_AI_ROW_RECT := Rect2(36, 394, 336, 18)
+const TEST_AI_ROW_STEP := 18.0
 const HOME_RESOLUTION_RECT := Rect2(76, 714, 180, 36)
 const HOME_WINDOW_MODE_RECT := Rect2(270, 714, 102, 36)
 const HOME_TILT_SHIFT_RECT := Rect2(386, 714, 112, 36)
@@ -912,7 +913,7 @@ func _draw_test_ai_panel() -> void:
 		var state = combat.enemy_by_id(enemy_id)
 		if state == null:
 			continue
-		var row := Rect2(TEST_AI_ROW_RECT.position + Vector2(0, float(index) * 25.0), TEST_AI_ROW_RECT.size)
+		var row := Rect2(TEST_AI_ROW_RECT.position + Vector2(0, float(index) * TEST_AI_ROW_STEP), TEST_AI_ROW_RECT.size)
 		if row.position.y + row.size.y > 548.0:
 			break
 		var selected: bool = enemy_id == game.test_focused_enemy_id
@@ -1356,7 +1357,7 @@ func _handle_test_combat_click(point: Vector2) -> void:
 		game.restart_test_combat()
 		return
 	for index in range(game.combat.enemy_order.size()):
-		var row := Rect2(TEST_AI_ROW_RECT.position + Vector2(0, float(index) * 25.0), TEST_AI_ROW_RECT.size)
+		var row := Rect2(TEST_AI_ROW_RECT.position + Vector2(0, float(index) * TEST_AI_ROW_STEP), TEST_AI_ROW_RECT.size)
 		if row.position.y + row.size.y > 548.0:
 			break
 		if row.has_point(point):
