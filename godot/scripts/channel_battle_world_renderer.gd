@@ -90,6 +90,7 @@ var battle_target_root: Node3D = null
 var battle_hover_markers: Array[MeshInstance3D] = []
 var battle_hover_valid_markers: Array[MeshInstance3D] = []
 var battle_overlay_materials: Dictionary = {}
+var battle_intent_snapshot: Dictionary = {}
 var full_board_build_count := 0
 var incremental_refresh_count := 0
 var battle_backstage_cells:
@@ -185,6 +186,7 @@ func build_battle_world() -> void:
 	_clear_children(battle_board_root)
 	_clear_children(battle_actor_root)
 	enemy_nodes.clear()
+	battle_intent_snapshot = combat.preview_all_intents() if combat != null else {}
 	_build_battle_board()
 	_sync_battle_actors()
 	_update_battle_overlays()
@@ -201,6 +203,8 @@ func refresh_battle_state(sync_actors := true, sync_actor_positions := false) ->
 		return
 	incremental_refresh_count += 1
 	_ensure_battle_layers()
+	# 一次动态刷新只规划一轮全体敌人，格子和头顶标记共享同一份快照。
+	battle_intent_snapshot = combat.preview_all_intents()
 	_refresh_battle_dynamic_visuals()
 	if sync_actors:
 		_reconcile_battle_actors(sync_actor_positions)
@@ -393,13 +397,28 @@ func _battle_intent_cells() -> Dictionary:
 	var intent_cells: Dictionary = {}
 	if combat == null:
 		return intent_cells
+	var focused_enemy_id := _focused_battle_enemy_id()
 	for enemy_id in combat.living_enemy_ids():
-		var enemy_intent: Dictionary = combat.preview_intent(enemy_id)
-		for raw_cell in enemy_intent.get("hurt", []):
-			intent_cells[raw_cell] = {"kind": "hurt", "enemy_id": enemy_id, "intent": enemy_intent}
+		var enemy_intent: Dictionary = battle_intent_snapshot.get(enemy_id, {})
+		if enemy_intent.is_empty():
+			continue
+		for raw_cell in enemy_intent.get("impact_cells", enemy_intent.get("hurt", [])):
+			var impact_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "path": [], "coverage": [], "line": []})
+			(impact_entry["impact"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+			intent_cells[raw_cell] = impact_entry
 		for raw_cell in enemy_intent.get("path", []):
-			if not intent_cells.has(raw_cell):
-				intent_cells[raw_cell] = {"kind": "path", "enemy_id": enemy_id, "intent": enemy_intent}
+			var path_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "path": [], "coverage": [], "line": []})
+			(path_entry["path"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+			intent_cells[raw_cell] = path_entry
+		if enemy_id == focused_enemy_id:
+			for raw_cell in enemy_intent.get("coverage_cells", []):
+				var coverage_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "path": [], "coverage": [], "line": []})
+				(coverage_entry["coverage"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+				intent_cells[raw_cell] = coverage_entry
+			for raw_cell in enemy_intent.get("line_cells", []):
+				var line_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "path": [], "coverage": [], "line": []})
+				(line_entry["line"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+				intent_cells[raw_cell] = line_entry
 	return intent_cells
 
 
@@ -412,7 +431,9 @@ func _clear_battle_cell_dynamic(cell_node: Node3D) -> void:
 func _refresh_battle_dynamic_visuals() -> void:
 	if combat == null or battle_board_root == null:
 		return
-	var default_intent: Dictionary = combat.preview_intent()
+	if battle_intent_snapshot.is_empty():
+		battle_intent_snapshot = combat.preview_all_intents()
+	var default_intent: Dictionary = battle_intent_snapshot.get("", {})
 	var intent_cells := _battle_intent_cells()
 	for y in range(combat.rows):
 		for x in range(combat.cols):
@@ -422,29 +443,82 @@ func _refresh_battle_dynamic_visuals() -> void:
 				continue
 			_clear_battle_cell_dynamic(cell_node)
 			var base_rim: Color = cell_node.get_meta("battle_base_rim", COL_GRID_DARK)
-			var cell_intent: Dictionary = intent_cells.get(pos, {})
-			var cell_intent_data: Dictionary = cell_intent.get("intent", default_intent)
-			var rim_color := COL_RED if cell_intent.get("kind", "") == "hurt" else COL_BLUE if cell_intent.get("kind", "") == "path" else base_rim
+			var cell_intent: Dictionary = intent_cells.get(pos, {"impact": [], "path": [], "coverage": [], "line": []})
+			var impacts: Array = cell_intent.get("impact", [])
+			var paths: Array = cell_intent.get("path", [])
+			var coverages: Array = cell_intent.get("coverage", [])
+			var lines: Array = cell_intent.get("line", [])
+			var primary_entry: Dictionary = {"intent": default_intent}
+			if not impacts.is_empty():
+				primary_entry = impacts[0]
+			elif not paths.is_empty():
+				primary_entry = paths[0]
+			elif not coverages.is_empty():
+				primary_entry = coverages[0]
+			elif not lines.is_empty():
+				primary_entry = lines[0]
+			var cell_intent_data: Dictionary = primary_entry.get("intent", default_intent)
+			var rim_color := base_rim
+			if not impacts.is_empty():
+				rim_color = COL_RED
+			elif not paths.is_empty():
+				rim_color = COL_BLUE
+			elif not coverages.is_empty():
+				rim_color = Color("55c8df")
 			var rim_node := cell_node.get_node_or_null("Frame") as MeshInstance3D
 			if rim_node == null:
 				rim_node = cell_node.get_node_or_null("TerrainFoot") as MeshInstance3D
 			if rim_node != null:
 				rim_node.material_override = _material(rim_color, false, 0.04 if rim_color != COL_GRID_DARK else 0.0)
 			var top_y := _battle_cell_top_y(pos)
-			var is_hurt_cell: bool = cell_intent.get("kind", "") == "hurt"
-			var path_cells: Array = cell_intent_data.get("path", [])
-			var path_index: int = path_cells.find(pos)
-			if is_hurt_cell:
+			if not impacts.is_empty():
 				# 动态危险标记单独维护，避免玩家落格后重新实例化整张棋盘。
-				_add_cylinder(cell_node, "IntentAttackOverlay", Vector3(0, top_y + 0.035, 0), 0.34, 0.055, _material(Color(COL_RED, 0.86), true, 0.10))
+				_add_cylinder(
+					cell_node,
+					"IntentAttackOverlay",
+					Vector3(0, top_y + 0.035, 0),
+					0.34,
+					0.055,
+					_material(Color(COL_RED, 0.86), true, 0.10)
+				)
 				_add_corner_marks(cell_node, "IntentAttackCorner", COL_RED, top_y + 0.015)
 				var attack_glyph := "!"
 				if int(cell_intent_data.get("hits", 1)) > 1:
 					attack_glyph = "×%d" % int(cell_intent_data.get("hits", 1))
+				if impacts.size() > 1:
+					attack_glyph = "×%d" % impacts.size()
 				_add_label(cell_node, "IntentAttackGlyph", attack_glyph, Vector3(0.0, top_y + 0.30, 0.0), Color.WHITE, 25)
-			elif path_index >= 0:
+			elif not paths.is_empty():
+				var path_intent: Dictionary = paths[0].get("intent", {})
+				var path_cells: Array = path_intent.get("path", [])
+				var path_index: int = path_cells.find(pos)
 				_add_cylinder(cell_node, "IntentMoveOverlay", Vector3(0, top_y + 0.025, 0), 0.25, 0.045, _material(Color(COL_BLUE, 0.82), true, 0.08))
-				_add_label(cell_node, "IntentMoveGlyph", str(path_index + 1), Vector3(0.0, top_y + 0.25, 0.0), Color.WHITE, 22)
+				_add_label(
+					cell_node,
+					"IntentMoveGlyph",
+					str(path_index + 1 if path_index >= 0 else "·"),
+					Vector3(0.0, top_y + 0.25, 0.0),
+					Color.WHITE,
+					22
+				)
+			elif not coverages.is_empty():
+				_add_cylinder(
+					cell_node,
+					"IntentRangeOverlay",
+					Vector3(0, top_y + 0.025, 0),
+					0.31,
+					0.045,
+					_material(Color(Color("55c8df"), 0.42), true, 0.12)
+				)
+				_add_corner_marks(cell_node, "IntentRangeCorner", Color("55c8df"), top_y + 0.015)
+			elif not lines.is_empty():
+				_add_box(
+					cell_node,
+					"IntentLineOverlay",
+					Vector3(0, top_y + 0.026, 0),
+					Vector3(0.16, 0.04, 0.16),
+					_material(Color(Color("55c8df"), 0.68), true, 0.12)
+				)
 			if combat.traps.has(pos):
 				var trap: Dictionary = combat.traps[pos]
 				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
@@ -512,8 +586,11 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	if not state.revealed or combat.outcome != "":
 		return
 	var floor_y := 0.39 + float(combat.heights.get(state.pos, 0)) * 0.64
-	var intent: Dictionary = combat.preview_intent(state.id)
-	var intent_color := _battle_intent_color(str(intent.get("type", "stall")))
+	var intent: Dictionary = battle_intent_snapshot.get(state.id, {})
+	if intent.is_empty():
+		intent = combat.preview_intent(state.id)
+	var attack_kind := str(intent.get("attack_kind", ""))
+	var intent_color := COL_RANGED_ENEMY if attack_kind == "ranged" else _battle_intent_color(str(intent.get("type", "stall")))
 	var intent_badge := MeshInstance3D.new()
 	intent_badge.name = "EnemyIntentBadge"
 	var intent_quad := QuadMesh.new()
@@ -537,8 +614,25 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	intent_label.outline_modulate = Color("10151c")
 	intent_label.modulate = Color.WHITE
 	intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	intent_label.text = _battle_intent_glyph(str(intent.get("type", "stall")))
+	intent_label.text = _battle_intent_glyph(str(intent.get("type", "stall")), attack_kind)
 	node.add_child(intent_label)
+
+
+func _focused_battle_enemy_id() -> String:
+	if combat == null:
+		return ""
+	var test_focus := str(host.test_focused_enemy_id)
+	if not test_focus.is_empty() and battle_intent_snapshot.has(test_focus):
+		return test_focus
+	var hovered_enemy = combat.enemy_at(hovered_battle_cell)
+	if hovered_enemy != null and battle_intent_snapshot.has(hovered_enemy.id):
+		return hovered_enemy.id
+	var visible_ranged: Array[String] = []
+	for enemy_id in combat.living_enemy_ids():
+		var intent: Dictionary = battle_intent_snapshot.get(enemy_id, {})
+		if bool(intent.get("enemy_revealed", false)) and int(intent.get("attack_range", 0)) > 1:
+			visible_ranged.append(enemy_id)
+	return visible_ranged[0] if visible_ranged.size() == 1 else ""
 
 
 func _is_valid_battle_target(pos: Vector2i) -> bool:
@@ -1098,9 +1192,14 @@ func _battle_intent_color(intent_type: String) -> Color:
 	return Color("c8d4d8")
 
 
-func _battle_intent_glyph(intent_type: String) -> String:
+func _battle_intent_glyph(intent_type: String, attack_kind: String = "") -> String:
 	match intent_type:
-		"attack": return "攻"
+		"attack":
+			if attack_kind == "ranged":
+				return "远"
+			if attack_kind == "beam":
+				return "束"
+			return "攻"
 		"chase": return "追"
 		"search": return "搜"
 		"patrol": return "巡"

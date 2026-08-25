@@ -85,19 +85,36 @@ func _build_plan(state, role: String) -> Dictionary:
 	match role:
 		"flanker": return _plan(state, "flank", slot, slot, "侧翼占位，避免与正面敌人重叠")
 		"controller": return _plan(state, "control", slot, slot, "优先占据攻击位并控制玩家走位")
+	if state.has_trait("ranged"):
+		return _plan(state, "engage", slot, slot, "占据视线内的远程射击位")
+	if state.has_trait("beam"):
+		return _plan(state, "control", slot, slot, "占据直线射击位并控制玩家走位")
 	return _plan(state, "engage", slot, slot, "占据独立攻击位")
 
 
 func _choose_attack_slot(state, role: String) -> Vector2i:
 	var candidates: Array[Dictionary] = []
 	var blocked: Dictionary = rules.call("occupied_enemy_cells", state.id)
-	for direction in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
-		var cell: Vector2i = focus_target + direction
+	var candidate_cells: Array[Vector2i] = []
+	if state.has_trait("ranged") or state.has_trait("beam"):
+		# 远程敌人不能继续套用近战四邻格；候选位必须由规则层
+		# 的同一套攻击计划确认，确保 AI、预览和执行的射程/视线一致。
+		for y in range(int(rules.get("rows"))):
+			for x in range(int(rules.get("cols"))):
+				candidate_cells.append(Vector2i(x, y))
+	else:
+		for direction in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
+			candidate_cells.append(focus_target + direction)
+	for cell in candidate_cells:
 		if not rules.call("is_walkable", cell) or blocked.has(cell) or reservations.has(cell):
 			continue
 		var path: Array = rules.call("_find_path", state.pos, cell, blocked)
 		if path.size() < 2 and state.pos != cell:
 			continue
+		if state.has_trait("ranged") or state.has_trait("beam"):
+			var attack_plan: Dictionary = rules.call("_enemy_attack_plan", state, cell, 99, true)
+			if attack_plan.is_empty():
+				continue
 		var height := int(rules.call("_tile_height", cell))
 		var side := absi(cell.x - focus_target.x)
 		var portal_bonus := 1 if rules.get("portals").has(cell) else 0

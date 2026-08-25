@@ -27,6 +27,14 @@ func _test_ranged_attack() -> void:
 	var events: Array[Dictionary] = combat.enemy_turn()
 	_check(str(intent.get("attack_kind", "")) == "ranged", "ranged enemy must publish a ranged attack intent")
 	_check(Vector2i(0, 0) in intent.get("hurt", []), "ranged intent must mark the player cell as dangerous")
+	_check(
+		Vector2i(0, 0) in intent.get("coverage_cells", []),
+		"ranged intent must expose the visible attack range"
+	)
+	_check(
+		Vector2i(3, 0) in intent.get("line_cells", []),
+		"ranged intent must expose the line of fire"
+	)
 	_check(combat.enemy_pos == enemy_before and combat.player_hp == hp_before - 2, "ranged attack must damage from distance without moving")
 	_check(events.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack" and str(event.get("attack_kind", "")) == "ranged"), "ranged turn must emit a ranged attack event")
 

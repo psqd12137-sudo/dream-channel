@@ -220,7 +220,7 @@ $tests = @(
   "ui_hit_regression", "combat_input_regression", "input_intent_regression",
   "card_system_regression", "dynamic_effects_smoke", "quaternius_room_art_smoke",
   "room_footprint_regression", "multi_room_build_regression", "large_room_mix_lab_regression",
-  "enemy_patrol_intent_regression", "enemy_vision_state_regression",
+  "enemy_patrol_intent_regression", "enemy_vision_state_regression", "enemy_intent_snapshot_regression",
   "enemy_turn_animation_regression", "enemy_traits_regression", "ranged_enemy_regression", "shared_cell_regression",
   "enemy_archetype_presentation_regression", "turn_timing_regression",
   "multi_enemy_roster_regression", "multi_enemy_legacy_compat_regression",

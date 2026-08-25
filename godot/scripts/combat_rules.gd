@@ -595,27 +595,71 @@ func _play_random_enemy(card_id: String, card: Dictionary) -> bool:
 
 
 func preview_intent(enemy_id := "") -> Dictionary:
-	var state: CombatEnemyState = enemy_by_id(str(enemy_id)) if str(enemy_id) != "" else _focus_enemy_state()
-	if state == null:
-		return {"path": [], "hurt": [], "label": "观望", "detail": "", "type": "stall", "enemy_revealed": false, "sees_player": false, "attack_kind": "", "hits": 0, "pending": false, "enemy_id": ""}
-	# 意图预览与真正的敌方回合共享同一轮战术计划，避免 HUD 显示
-	# “追击”而实际回合却按另一攻击位行动。预览只重建计划，不执行动作。
+	# 保留单敌人接口，调用方迁移期间仍可继续读取旧契约。
+	var intents := preview_all_intents()
+	var requested_id := str(enemy_id)
+	if requested_id.is_empty():
+		var focused := _focus_enemy_state()
+		requested_id = focused.id if focused != null else ""
+	return intents.get(requested_id, _empty_enemy_intent(requested_id))
+
+
+func preview_all_intents() -> Dictionary:
+	# 意图快照必须在同一轮黑板规划中生成；渲染层不应逐敌调用
+	# preview_intent，否则会重复规划全体敌人并反复改写 AI 调试字段。
+	var intents: Dictionary = {}
 	var blackboard := EnemyAISquadBlackboard.new()
 	blackboard.begin_turn(self)
-	var result := _preview_intent_for(state)
-	result["ai_role"] = state.ai_role
-	result["ai_state"] = state.ai_state
-	result["ai_reason"] = state.ai_reason
-	result["tactical_goal"] = state.tactical_goal
-	return result
+	for enemy_id in living_enemy_ids():
+		var state: CombatEnemyState = enemy_by_id(enemy_id)
+		if state == null:
+			continue
+		var result := _preview_intent_for(state)
+		result["ai_role"] = state.ai_role
+		result["ai_state"] = state.ai_state
+		result["ai_reason"] = state.ai_reason
+		result["tactical_goal"] = state.tactical_goal
+		result["tactical_plan"] = blackboard.plan_for(enemy_id).duplicate(true)
+		intents[enemy_id] = result
+	return intents
+
+
+func _empty_enemy_intent(enemy_id := "") -> Dictionary:
+	return {
+		"path": [],
+		"hurt": [],
+		"impact_cells": [],
+		"coverage_cells": [],
+		"line_cells": [],
+		"range_origin": INVALID_CELL,
+		"attack_range": 0,
+		"label": "观望",
+		"detail": "",
+		"type": "stall",
+		"enemy_revealed": false,
+		"sees_player": false,
+		"attack_kind": "",
+		"hits": 0,
+		"pending": false,
+		"enemy_id": enemy_id,
+	}
 
 
 func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
-	var result := {"path": [], "hurt": [], "label": "观望", "detail": "", "type": "stall", "enemy_revealed": state.revealed, "sees_player": state.sees_player, "attack_kind": "", "hits": 0, "pending": false, "enemy_id": state.id}
+	var result := _empty_enemy_intent(state.id)
+	result["enemy_revealed"] = state.revealed
+	result["sees_player"] = state.sees_player
+	result["attack_range"] = state.attack_range
+	if state.revealed and state.sees_player:
+		result["range_origin"] = state.pos
+		result["coverage_cells"] = _enemy_attack_coverage(state, state.pos, state.sees_player)
 	if outcome != "":
 		return result
 	if not state.beam_pending_cells.is_empty():
 		result["hurt"] = state.beam_pending_cells.duplicate()
+		result["impact_cells"] = state.beam_pending_cells.duplicate()
+		result["line_cells"] = state.beam_pending_cells.duplicate()
+		result["range_origin"] = state.pos
 		result["label"] = "激光即将发射 %d" % state.beam_pending_damage
 		result["detail"] = "上一拍锁定的红色射线将在敌方回合落下；离开红格即可躲避。"
 		result["type"] = "attack"
@@ -637,6 +681,7 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 		var exposed_plan := _enemy_attack_plan(state, state.pos, _enemy_turn_budget(state), true)
 		if exposed_plan.is_empty():
 			result["hurt"] = [player_pos]
+			result["impact_cells"] = [player_pos]
 			result["label"] = "突脸惊吓 1"
 			result["detail"] = "你重新暴露在视线中；即使它够不着也会造成 1 点惊吓。"
 			result["type"] = "attack"
@@ -651,6 +696,7 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 	var remaining := _enemy_turn_budget(state)
 	if has_decoy() and manhattan(state.pos, decoy_pos) == 1 and remaining >= _effective_attack_cost(state):
 		result["hurt"] = [decoy_pos]
+		result["impact_cells"] = [decoy_pos]
 		result["label"] = "撕碎纸影"
 		result["detail"] = "纸影会替你承受这一击；敌人若仍有行动力会继续行动。"
 		result["type"] = "attack"
@@ -671,6 +717,7 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 		var sees_after := _has_line_of_sight(step, player_pos) and state.blind_turns <= 0
 		var after_plan := _enemy_attack_plan(state, step, after_remaining, sees_after)
 		if not after_plan.is_empty():
+			after_plan["origin"] = step
 			result = _intent_from_attack_plan(state, after_plan, result)
 			result["path"] = [step]
 	if result["type"] != "attack":
@@ -854,13 +901,58 @@ func _enemy_attack_plan(state: CombatEnemyState, origin: Vector2i, remaining: in
 	return {}
 
 
+func _enemy_attack_coverage(state: CombatEnemyState, origin: Vector2i, can_see: bool = true) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if not can_see:
+		return cells
+	for y in range(rows):
+		for x in range(cols):
+			var target := Vector2i(x, y)
+			if target == origin or not is_walkable(target):
+				continue
+			var distance := manhattan(origin, target)
+			var valid := false
+			if state.has_trait("ranged"):
+				valid = distance >= 2 and distance <= state.attack_range and _has_line_of_sight(origin, target)
+			elif state.has_trait("beam"):
+				valid = distance >= 2 and distance <= 3 and (origin.x == target.x or origin.y == target.y) and _has_line_of_sight(origin, target)
+			elif state.has_trait("slam") or state.has_trait("guardBreak"):
+				valid = distance <= 1
+			elif state.has_trait("lunge"):
+				valid = distance <= 2
+			else:
+				valid = distance <= 1
+			if valid:
+				cells.append(target)
+	return cells
+
+
+func _attack_line_cells(origin: Vector2i, target: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var samples := maxi(absi(target.x - origin.x), absi(target.y - origin.y))
+	for i in range(1, samples):
+		var t := float(i) / float(samples)
+		var cell := Vector2i(roundi(lerpf(float(origin.x), float(target.x), t)), roundi(lerpf(float(origin.y), float(target.y), t)))
+		if cell != origin and cell != target and cell not in cells:
+			cells.append(cell)
+	return cells
+
+
 func _intent_from_attack_plan(state: CombatEnemyState, plan: Dictionary, base: Dictionary) -> Dictionary:
 	var result := base.duplicate(true)
 	var kind := str(plan.get("kind", "melee"))
 	var display_kind := "beam" if kind == "beam_charge" else kind
+	var attack_origin: Vector2i = plan.get("origin", state.pos)
 	var hits := _planned_attack_hits(state, plan, _enemy_turn_budget(state))
 	var damage := _raw_enemy_damage(state, state.pos)
 	result["hurt"] = (plan.get("cells", [player_pos]) as Array).duplicate()
+	result["impact_cells"] = result["hurt"].duplicate()
+	result["range_origin"] = attack_origin
+	result["coverage_cells"] = _enemy_attack_coverage(state, attack_origin, true)
+	if kind == "beam_charge":
+		result["line_cells"] = result["impact_cells"].duplicate()
+	elif kind == "ranged":
+		result["line_cells"] = _attack_line_cells(attack_origin, player_pos)
 	result["type"] = "attack"
 	result["attack_kind"] = display_kind
 	result["hits"] = hits
