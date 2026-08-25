@@ -887,6 +887,8 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 				var retreat_step := _choose_backstab_retreat_step(state)
 				if retreat_step != INVALID_CELL:
 					_move_enemy_to(state, retreat_step, "拉开距离", turn_events)
+					if not state.alive():
+						break
 					remaining -= 1
 					if traps.has(state.pos):
 						remaining -= int((traps[state.pos] as Dictionary).get("slow", 0))

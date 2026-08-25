@@ -9,6 +9,7 @@ func _init() -> void:
 	_test_backstab_never_attacks_from_front()
 	_test_backstab_attacks_from_back()
 	_test_backstab_retreats_when_route_is_unavailable()
+	_test_mixed_assault_backstab_sequence()
 	if failures.is_empty():
 		print("CHANNEL_BACKSTAB_ENEMY: PASS facing-backstab-retreat")
 		quit(0)
@@ -59,6 +60,35 @@ func _test_backstab_retreats_when_route_is_unavailable() -> void:
 	_check(not attacked, "背后攻击位不可达时不能退化为正面攻击")
 	_check(combat.manhattan(combat.enemy_pos, combat.player_pos) > 1, "背刺者无法绕后时必须拉开与玩家的距离")
 	_check(combat.player_hp == 12, "拉开距离时不能对玩家造成伤害")
+
+
+func _test_mixed_assault_backstab_sequence() -> void:
+	var combat: RefCounted = CombatRules.new()
+	combat.setup({
+		"cols": 9, "rows": 5, "player": [1, 2], "player_facing": [0, 1],
+		"walls": [], "heights": {}, "portals": [],
+	}, [
+		{"id": "close_hunter", "name": "近战猎手", "spawn": [4, 2], "action_points": 2, "attack_range": 1, "traits": []},
+		{"id": "far_sentry", "name": "远射哨兵", "spawn": [7, 2], "action_points": 2, "attack_range": 2, "traits": ["ranged"]},
+		{"id": "black_assassin", "name": "黑影背刺者", "spawn": [3, 1], "behavior_role": "flanker", "action_points": 4, "attack_cost": 2, "attack_range": 1, "hp": 1, "toughness": 0, "damage": 8, "traits": ["backstab"]},
+	], {}, [], 20260825, {"player_hp": 50, "base_energy": 5}, [])
+	var intent: Dictionary = combat.preview_intent("black_assassin")
+	var intent_path: Array[Vector2i] = []
+	intent_path.assign(intent.get("path", []))
+	_check(intent_path == [Vector2i(2, 1), Vector2i(1, 1)], "混战场景的黑色敌人预览必须显示完整绕后路径")
+	_check(str(intent.get("attack_kind", "")) == "backstab" and str(intent.get("intent_value", "")) == "8", "混战场景预览必须显示背刺攻击力")
+	var events: Array[Dictionary] = combat.enemy_turn()
+	var black_moves: Array[Vector2i] = []
+	var black_attacked := false
+	for event: Dictionary in events:
+		if str(event.get("actor_id", "")) != "black_assassin":
+			continue
+		if str(event.get("kind", "")) == "move":
+			black_moves.append(event.get("to", Vector2i(-1, -1)) as Vector2i)
+		if str(event.get("kind", "")) == "attack" and str(event.get("attack_kind", "")) == "backstab":
+			black_attacked = true
+	_check(black_moves == [Vector2i(2, 1), Vector2i(1, 1)], "混战场景的黑色敌人必须沿背后路线移动")
+	_check(black_attacked, "混战场景的黑色敌人绕到背后后必须攻击")
 
 
 func _combat(enemy_pos: Vector2i, action_points: int, damage: int):
