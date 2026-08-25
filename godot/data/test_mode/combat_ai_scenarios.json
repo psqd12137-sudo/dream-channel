@@ -60,27 +60,28 @@
       "observer": {"max_rounds": 10, "player_script": "alternate_cells"}
     },
     {
-      "id": "ranged_sentry",
-      "name": "远程哨位",
+      "id": "mixed_assault",
+      "name": "远近混打",
       "category": "ai",
-      "description": "验证远程敌人在攻击距离内保持站位、发布红格并直接射击。",
+      "description": "验证近战敌人持续逼近、远程敌人在攻击距离内保持站位并直接射击。",
       "seed": 2026082408,
       "room": {
-        "id": "test_ranged_sentry",
-        "name": "测试房 · 远程哨位",
+        "id": "test_mixed_assault",
+        "name": "测试房 · 远近混打",
         "room_type": "gallery",
         "theme": "paper",
         "arena": {
           "cols": 9,
-          "rows": 3,
-          "player": [1, 1],
+          "rows": 5,
+          "player": [1, 2],
           "walls": [],
           "heights": {},
           "portals": [],
           "traps": []
         },
         "enemies": [
-          {"id": "sentry", "name": "远射哨兵", "spawn": [6, 1], "behavior_role": "controller", "attack_range": 4, "traits": ["ranged"]}
+          {"id": "close_hunter", "name": "近战猎手", "spawn": [4, 2], "behavior_role": "hunter", "attack_range": 1, "traits": []},
+          {"id": "far_sentry", "name": "远射哨兵", "spawn": [7, 2], "behavior_role": "controller", "attack_range": 4, "traits": ["ranged"]}
         ]
       },
       "run_rules": {"player_hp": 50, "base_energy": 5},
