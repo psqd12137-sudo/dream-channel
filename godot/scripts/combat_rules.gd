@@ -378,8 +378,8 @@ func player_path_cost(path: Array[Vector2i]) -> int:
 	return total
 
 
-func player_reachable_cells() -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
+func player_reachable_cells() -> Array:
+	var cells: Array = []
 	if outcome != "":
 		return cells
 	for y in range(rows):
@@ -946,8 +946,8 @@ func _enemy_attack_coverage(state: CombatEnemyState, origin: Vector2i, can_see: 
 	return cells
 
 
-func enemy_reachable_cells(state: CombatEnemyState, budget: int = -1) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
+func enemy_reachable_cells(state: CombatEnemyState, budget: int = -1) -> Array:
+	var cells: Array = []
 	if state == null or not state.alive():
 		return cells
 	var movement_budget := _enemy_turn_budget(state) if budget < 0 else budget
@@ -967,11 +967,11 @@ func enemy_reachable_cells(state: CombatEnemyState, budget: int = -1) -> Array[V
 	return cells
 
 
-func enemy_threat_cells(state: CombatEnemyState, move_cells: Array[Vector2i]) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
+func enemy_threat_cells(state: CombatEnemyState, move_cells: Array) -> Array:
+	var cells: Array = []
 	if state == null or not state.alive() or state.blind_turns > 0:
 		return cells
-	var origins: Array[Vector2i] = []
+	var origins: Array = []
 	origins.append(state.pos)
 	for cell in move_cells:
 		if cell not in origins:
