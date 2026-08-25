@@ -841,6 +841,8 @@ func _enemy_attack_plan(state: CombatEnemyState, origin: Vector2i, remaining: in
 		var beam_cells := _beam_cells(origin, player_pos)
 		if player_pos in beam_cells:
 			return {"kind": "beam_charge", "cost": attack_cost, "cells": beam_cells}
+	if state.has_trait("ranged") and distance >= 2 and distance <= state.attack_range and _has_line_of_sight(origin, player_pos) and remaining >= attack_cost:
+		return {"kind": "ranged", "cost": attack_cost, "cells": [player_pos]}
 	if distance <= 1 and remaining >= attack_cost:
 		if state.has_trait("guardBreak") and _player_defense_total(origin) > 0 and remaining >= attack_cost + 1:
 			return {"kind": "guardBreak", "cost": attack_cost + 1, "cells": [player_pos]}
@@ -865,6 +867,7 @@ func _intent_from_attack_plan(state: CombatEnemyState, plan: Dictionary, base: D
 	result["pending"] = kind == "beam_charge"
 	var labels := {
 		"melee": "挥击",
+		"ranged": "远射",
 		"lunge": "突进",
 		"guardBreak": "破防",
 		"slam": "砸地",

@@ -16,6 +16,7 @@ var toughness := 3
 var damage := 1
 var action_points := 3
 var attack_cost := 2
+var attack_range := 1
 var name := "雪花剪影"
 var tier := 1
 var archetype := "execute"
@@ -75,6 +76,7 @@ func debug_snapshot() -> Dictionary:
 		"damage": damage,
 		"action_points": action_points,
 		"attack_cost": attack_cost,
+		"attack_range": attack_range,
 		"name": name,
 		"tier": tier,
 		"archetype": archetype,

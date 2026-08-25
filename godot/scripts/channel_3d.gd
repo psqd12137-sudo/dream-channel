@@ -78,6 +78,7 @@ const CAMERA_DIRECTION := Vector3(9.5, 12.5, 11.5)
 const HOUSE_CAMERA_DIRECTION := Vector3(10.5, 13.5, 11.5)
 const CAMERA_ZOOM_MIN := 0.55
 const CAMERA_ZOOM_MAX := 1.35
+const CAMERA_ZOOM_SMOOTH_RATE := 12.0
 const CAMERA_ORBIT_SENSITIVITY := 0.008
 const CAMERA_INTRO_FAR_SCALE := 2.4
 const CAMERA_INTRO_DURATION := 1.35
@@ -252,6 +253,8 @@ var battle_room_context: Dictionary = {}
 var enemy_nodes: Dictionary = {}
 var battle_board_root: Node3D = null
 var battle_actor_root: Node3D = null
+var battle_entry_side := -1
+var battle_entry_cell := INVALID_CELL
 var battle_backstage_cells: Dictionary = {}
 var battle_height_prop_assignments: Dictionary = {}
 var battle_blocker_prop_assignments: Dictionary = {}
@@ -420,10 +423,17 @@ func _update_camera_follow(delta: float) -> void:
 				_clamp_house_camera_target()
 				_apply_house_camera()
 	elif phase == "combat" and combat != null and camera != null:
+		var battle_camera_changed := false
 		if battle_camera_return_delay > 0.0:
 			battle_camera_return_delay = maxf(0.0, battle_camera_return_delay - delta)
 			if battle_camera_return_delay <= 0.0 and not battle_camera_user_hold:
 				_start_battle_camera_return()
+		var target_size := battle_camera_fit_size * battle_camera_zoom_ratio
+		var size_factor := CameraFollowMath.smooth_factor(CAMERA_ZOOM_SMOOTH_RATE, delta)
+		var next_size := lerpf(camera.size, target_size, size_factor)
+		if absf(next_size - camera.size) > 0.001:
+			camera.size = next_size
+			battle_camera_changed = true
 		if battle_camera_following and not battle_camera_user_hold and not battle_camera_returning:
 			var follow_target := _battle_follow_target_position() + _battle_camera_frame_offset()
 			var factor := CameraFollowMath.smooth_factor(HOUSE_CAMERA_FOLLOW_RATE, delta)
@@ -431,7 +441,9 @@ func _update_camera_follow(delta: float) -> void:
 			if not next_target.is_equal_approx(battle_camera_target):
 				battle_camera_target = next_target
 				_clamp_battle_camera_target()
-				_apply_battle_camera()
+				battle_camera_changed = true
+		if battle_camera_changed:
+			_apply_battle_camera()
 
 
 func _house_follow_target_position() -> Vector3:
@@ -1490,6 +1502,8 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	run_rules["base_speed"] = player_speed
 	run_rules["base_speed"] = player_speed
 	combat.setup(room.get("arena", {}), enemy_specs, content.get("cards", {}), run_deck, run_seed + room_rules.instance_count() * 17, run_rules, active_relics)
+	battle_entry_cell = combat.player_pos
+	battle_entry_side = _resolve_battle_entry_side(room)
 	battle_room_context = BattleRoomArtContext.build(room, combat.cols, combat.rows, BATTLE_CELL, run_seed + str(room.get("instance_id", room.get("id", "room"))).hash())
 	_apply_battle_footprint_to_combat()
 	_align_battle_terrain_to_room_context()
@@ -1603,7 +1617,7 @@ func select_or_play_card(index: int) -> void:
 			return
 		selected_card = index
 		status_message = "已选%s：金色角标可放置；点敌人格可直接砸击。再次点牌、右键或 Esc 可取消。" % str(card.get("name", combat.hand[index]))
-		build_battle_world()
+		update_battle_overlays()
 		_play_actor_state("Player", "ready", "准备·%s" % str(card.get("name", combat.hand[index])))
 	else:
 		var enemy_hp_before: int = combat.enemy_hp
@@ -1614,7 +1628,7 @@ func select_or_play_card(index: int) -> void:
 				return
 			selected_card = index
 			status_message = "已选%s：点击目标敌人格生效。再次点牌、右键或 Esc 可取消。" % str(card.get("name", combat.hand[index]))
-			build_battle_world()
+			update_battle_overlays()
 			_play_actor_state("Player", "ready", "瞄准·%s" % str(card.get("name", combat.hand[index])))
 			_refresh_hud()
 			return
@@ -1650,7 +1664,7 @@ func cancel_selected_card(message: String = "已取消选牌；绿色角标表�
 		return
 	selected_card = -1
 	status_message = message
-	build_battle_world()
+	update_battle_overlays()
 	_refresh_hud()
 
 
@@ -1692,7 +1706,7 @@ func _enemy_turn_summary(turn_events: Array[Dictionary]) -> String:
 func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 	if animation_duration_scale <= 0.0:
 		_complete_dynamic_effect()
-		_after_combat_action()
+		_after_combat_action(true)
 		return
 	if turn_events.is_empty():
 		var wait_tween := create_tween()
@@ -1702,7 +1716,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 		if active_motion_tween != wait_tween:
 			return
 		_complete_dynamic_effect()
-		_after_combat_action()
+		_after_combat_action(false)
 		return
 	_position_enemy_turn_starts(turn_events)
 	var tween := create_tween()
@@ -1774,7 +1788,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 	if active_motion_tween != tween:
 		return
 	_complete_dynamic_effect()
-	_after_combat_action()
+	_after_combat_action(false)
 
 
 func _position_enemy_turn_starts(turn_events: Array[Dictionary]) -> void:
@@ -1886,8 +1900,7 @@ func move_player_to(target: Vector2i) -> bool:
 		for index in range(1, path.size()):
 			if not combat.move_player(path[index]):
 				return false
-		build_battle_world()
-		_after_combat_action()
+		_after_combat_action(true)
 		return true
 	animation_busy = true
 	active_animation_kind = "player_path"
@@ -1906,7 +1919,8 @@ func _animate_player_path(path: Array[Vector2i], index: int) -> void:
 		_complete_dynamic_effect()
 		_refresh_hud()
 		return
-	refresh_battle_board()
+	# 移动过程中只移动演员节点；棋盘、家具和房间外壳保持复用。
+	# 路径结束后由 _after_combat_action() 统一刷新一次敌人意图和状态。
 	var player_node := battle_actor_root.get_node_or_null("Player") as Node3D
 	var duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
 	if player_node == null or duration <= 0.0:
@@ -1978,7 +1992,7 @@ func use_player_portal() -> void:
 	if not combat.use_player_portal():
 		return
 	status_message = "你花费 %d 行动力穿过传送门。" % combat.move_cost
-	_after_combat_action()
+	_after_combat_action(animation_duration_scale <= 0.0)
 	_animate_player_portal(source, target)
 
 
@@ -2024,7 +2038,7 @@ func set_battle_hover(view_pos: Vector2) -> void:
 	if next_hover == hovered_battle_cell:
 		return
 	hovered_battle_cell = next_hover
-	build_battle_world()
+	update_battle_hover()
 
 
 func clear_battle_hover() -> void:
@@ -2034,7 +2048,7 @@ func clear_battle_hover() -> void:
 		return
 	hovered_battle_cell = INVALID_CELL
 	if phase == "combat":
-		build_battle_world()
+		update_battle_hover()
 
 
 func set_house_hover(view_pos: Vector2) -> void:
@@ -2143,10 +2157,13 @@ func zoom_battle_camera(view_pos: Vector2, zoom_factor: float) -> void:
 	battle_camera_following = false
 	_cancel_battle_camera_return()
 	var before: Variant = _screen_to_plane(view_pos, 0.0)
-	camera.size = clampf(camera.size * zoom_factor, battle_camera_fit_size * CAMERA_ZOOM_MIN, battle_camera_fit_size * CAMERA_ZOOM_MAX)
-	battle_camera_zoom_ratio = camera.size / maxf(0.001, battle_camera_fit_size)
-	_apply_battle_camera()
+	var next_ratio := clampf(battle_camera_zoom_ratio * zoom_factor, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX)
+	battle_camera_zoom_ratio = next_ratio
+	# 先用目标尺寸计算鼠标锚点，但不立即改变实际尺寸；实际缩放交给每帧平滑追赶。
+	var current_size := camera.size
+	camera.size = battle_camera_fit_size * next_ratio
 	var after: Variant = _screen_to_plane(view_pos, 0.0)
+	camera.size = current_size
 	if before is Vector3 and after is Vector3:
 		var anchor_shift: Vector3 = before - after
 		battle_camera_target += Vector3(anchor_shift.x, 0.0, anchor_shift.z)
@@ -2179,7 +2196,7 @@ func _rotation_invariant_fit_size(horizontal_radius: float, vertical_span: float
 	return maxf(minimum, maxf(projected_height, projected_width / maxf(0.5, aspect)) * 1.08)
 
 
-func _after_combat_action() -> void:
+func _after_combat_action(sync_actor_positions: bool = false) -> void:
 	player_hp = combat.player_hp
 	if test_combat_active and test_session.active and test_enemy_phase_pending:
 		test_session.record_enemy_phase(test_last_events, combat)
@@ -2190,7 +2207,9 @@ func _after_combat_action() -> void:
 		combat.start_player_turn()
 		battle_turn_actor_id = "player"
 		battle_turn_events.clear()
-	build_battle_world()
+	# 移动、出牌和敌方事件的静态棋盘都已存在；这里只更新危险标记、陷阱
+	# 与演员编队，避免玩家落到新格子的收尾帧同步重建整套房间资产。
+	battle_world_renderer.refresh_battle_state(true, sync_actor_positions)
 	if combat.outcome != "":
 		status_message = "战斗胜利。" if combat.outcome == "victory" else "本集信号中断。"
 	_refresh_hud()
@@ -2516,13 +2535,16 @@ func zoom_house_camera(view_pos: Vector2, zoom_factor: float) -> void:
 	_cancel_house_camera_return()
 	var before: Variant = _screen_to_plane(view_pos, 0.0)
 	var base_size := HOUSE_CAMERA_CLOSEUP_SIZE if house_camera_closeup else house_camera_fit_size
-	var next_size := clampf(house_camera_size_current * zoom_factor, base_size * CAMERA_ZOOM_MIN, base_size * CAMERA_ZOOM_MAX)
-	house_camera_size_current = next_size
+	var current_target := _house_camera_size_target()
+	var next_size := clampf(current_target * zoom_factor, base_size * CAMERA_ZOOM_MIN, base_size * CAMERA_ZOOM_MAX)
 	house_camera_size_target = next_size
 	house_camera_zoom_ratio = next_size / maxf(0.001, base_size)
 	house_camera_user_adjusted = true
-	_apply_house_camera()
+	# 只临时使用目标尺寸计算鼠标锚点，实际镜头尺寸由每帧平滑逻辑推进。
+	var current_actual_size := camera.size
+	camera.size = next_size * lerpf(CAMERA_INTRO_FAR_SCALE, 1.0, house_camera_intro_weight)
 	var after: Variant = _screen_to_plane(view_pos, 0.0)
+	camera.size = current_actual_size
 	if before is Vector3 and after is Vector3:
 		var anchor_shift: Vector3 = before - after
 		house_camera_target += Vector3(anchor_shift.x, 0.0, anchor_shift.z)
@@ -2841,6 +2863,74 @@ func _rooms_connected(a: Vector2i, b: Vector2i) -> bool:
 	return room_rules.cell_has_door(a, side) and room_rules.cell_has_door(b, (side + 2) % 4)
 
 
+func _resolve_battle_entry_side(room: Dictionary) -> int:
+	# 战斗房间的门位必须来自真实入场方向或房间定义，不能根据角色当前
+	# 位置猜最近的一面墙。测试场没有大地图入口时，再使用出生格所在边。
+	var arena: Dictionary = room.get("arena", {}) as Dictionary
+	var explicit_side := _room_side_from_value(arena.get("entry_side", room.get("entry_side", -1)))
+	if explicit_side >= 0:
+		return explicit_side
+	var linked_side := _room_side_from_delta(previous_room_pos - current_room_pos)
+	if linked_side >= 0 and room_rules.placed.has(current_room_pos) and room_rules.cell_has_door(current_room_pos, linked_side):
+		return linked_side
+	var spawn_sides := _battle_spawn_boundary_sides()
+	var doors: Array = room.get("doors", []) as Array
+	for side: int in spawn_sides:
+		if side < doors.size() and bool(doors[side]):
+			return side
+	if not spawn_sides.is_empty():
+		return spawn_sides[0]
+	for side in range(mini(4, doors.size())):
+		if bool(doors[side]):
+			return side
+	return -1
+
+
+func _room_side_from_value(value: Variant) -> int:
+	if value is int or value is float:
+		var side := int(value)
+		return side if side >= 0 and side < 4 else -1
+	var label := str(value).to_lower()
+	match label:
+		"up", "north", "n":
+			return 0
+		"right", "east", "e":
+			return 1
+		"down", "south", "s":
+			return 2
+		"left", "west", "w":
+			return 3
+	return -1
+
+
+func _room_side_from_delta(delta: Vector2i) -> int:
+	if delta == Vector2i.UP:
+		return 0
+	if delta == Vector2i.RIGHT:
+		return 1
+	if delta == Vector2i.DOWN:
+		return 2
+	if delta == Vector2i.LEFT:
+		return 3
+	return -1
+
+
+func _battle_spawn_boundary_sides() -> Array[int]:
+	var result: Array[int] = []
+	if combat == null:
+		return result
+	var spawn: Vector2i = combat.player_pos
+	if spawn.y == 0:
+		result.append(0)
+	if spawn.x == combat.cols - 1:
+		result.append(1)
+	if spawn.y == combat.rows - 1:
+		result.append(2)
+	if spawn.x == 0:
+		result.append(3)
+	return result
+
+
 func _contains_room(rooms: Array[Dictionary], room_id: String) -> bool:
 	for room in rooms:
 		if str(room.get("id", "")) == room_id:
@@ -2974,6 +3064,15 @@ func build_battle_world() -> void:
 
 func refresh_battle_board() -> void:
 	battle_world_renderer.refresh_battle_board()
+
+func refresh_battle_state(sync_actors := true, sync_actor_positions := false) -> void:
+	battle_world_renderer.refresh_battle_state(sync_actors, sync_actor_positions)
+
+func update_battle_overlays() -> void:
+	battle_world_renderer.update_battle_overlays()
+
+func update_battle_hover() -> void:
+	battle_world_renderer.update_battle_hover()
 
 func _build_battle_board() -> void:
 	battle_world_renderer._build_battle_board()

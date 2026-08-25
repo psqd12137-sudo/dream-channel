@@ -12,11 +12,16 @@ var model_animation_player: AnimationPlayer = null
 var action_tween: Tween = null
 var base_position := Vector3.ZERO
 var preview_generation := 0
+var visual_tint := Color.WHITE
+var visual_tint_strength := 0.0
 
 
 func configure(next_actor_id: String, next_config: Dictionary) -> void:
 	actor_id = next_actor_id
 	config = next_config.duplicate(true)
+	var raw_tint: Variant = config.get("model_tint", Color.WHITE)
+	visual_tint = raw_tint if raw_tint is Color else Color.WHITE
+	visual_tint_strength = clampf(float(config.get("model_tint_strength", 0.0)), 0.0, 1.0)
 	base_position = position
 	_configure_model()
 	sprite = AnimatedSprite3D.new()
@@ -28,6 +33,7 @@ func configure(next_actor_id: String, next_config: Dictionary) -> void:
 	sprite.pixel_size = float(config.get("pixel_size", 0.002))
 	sprite.position = Vector3(0, float(config.get("visual_y", 0.85)), 0)
 	sprite.sprite_frames = _build_frames(config)
+	sprite.modulate = _sprite_tint()
 	sprite.visible = model_root == null
 	add_child(sprite)
 	sprite.play("idle")
@@ -47,7 +53,7 @@ func play_state(state: String, callout: String = "") -> void:
 	rotation = Vector3.ZERO
 	scale = Vector3.ONE
 	if sprite != null:
-		sprite.modulate = Color.WHITE
+		sprite.modulate = _sprite_tint()
 	_play_model_animation(state)
 	if sprite.sprite_frames.has_animation(state) and sprite.sprite_frames.get_frame_count(state) > 0:
 		sprite.play(state)
@@ -100,7 +106,7 @@ func preview_model_animation(state: String, playback_speed: float = 1.0) -> floa
 	rotation = Vector3.ZERO
 	scale = Vector3.ONE
 	if sprite != null:
-		sprite.modulate = Color.WHITE
+		sprite.modulate = _sprite_tint()
 	var animation_map: Dictionary = config.get("animation_map", {})
 	var resolved := _resolve_model_animation(str(animation_map.get(state, "")))
 	if resolved.is_empty():
@@ -153,7 +159,7 @@ func _return_to_idle() -> void:
 	rotation = Vector3.ZERO
 	scale = Vector3.ONE
 	if sprite != null:
-		sprite.modulate = Color.WHITE
+		sprite.modulate = _sprite_tint()
 		sprite.play("idle")
 	_play_model_animation("idle")
 
@@ -163,7 +169,7 @@ func set_obscured(obscured: bool) -> void:
 		model_root.visible = not obscured
 	if sprite != null:
 		sprite.visible = obscured or model_root == null
-		sprite.modulate = Color("30383d") if obscured else Color.WHITE
+		sprite.modulate = Color("30383d") if obscured else _sprite_tint()
 
 
 func has_3d_model() -> bool:
@@ -199,6 +205,7 @@ func _configure_model() -> void:
 	model_root.rotation.y = deg_to_rad(float(config.get("model_yaw", 180.0)))
 	model_root.scale = Vector3.ONE * float(config.get("model_scale", 0.72))
 	add_child(model_root)
+	_apply_model_tint()
 	for child: Node in model_root.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := child as MeshInstance3D
 		if mesh_instance != null:
@@ -206,6 +213,29 @@ func _configure_model() -> void:
 	var players := model_root.find_children("*", "AnimationPlayer", true, false)
 	if not players.is_empty():
 		model_animation_player = players[0] as AnimationPlayer
+
+
+func _apply_model_tint() -> void:
+	if model_root == null or visual_tint_strength <= 0.0:
+		return
+	# 复制每个表面的材质，只改变颜色乘算，不改动导入模型和原始贴图资源。
+	for child: Node in model_root.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := child as MeshInstance3D
+		if mesh_instance == null or mesh_instance.mesh == null:
+			continue
+		for surface_index in range(mesh_instance.mesh.get_surface_count()):
+			var source: Material = mesh_instance.get_surface_override_material(surface_index)
+			if source == null:
+				source = mesh_instance.mesh.surface_get_material(surface_index)
+			if not source is StandardMaterial3D:
+				continue
+			var material := (source as StandardMaterial3D).duplicate() as StandardMaterial3D
+			material.albedo_color = material.albedo_color.lerp(visual_tint, visual_tint_strength)
+			mesh_instance.set_surface_override_material(surface_index, material)
+
+
+func _sprite_tint() -> Color:
+	return Color.WHITE.lerp(visual_tint, visual_tint_strength)
 
 
 func _play_model_animation(state: String) -> void:

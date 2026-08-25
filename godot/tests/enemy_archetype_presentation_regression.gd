@@ -40,6 +40,14 @@ func _run() -> void:
 			_check(presenter.current_model_animation().to_lower().contains(expected), "%s must map %s to %s" % [archetype, state, expected])
 		presenter.queue_free()
 	_check(model_paths.size() == ARCHETYPES.size(), "all five enemy archetypes must use distinct silhouettes")
+	var tinted_config := base_enemy.duplicate(true)
+	tinted_config["model_tint"] = Color("4dbbff")
+	tinted_config["model_tint_strength"] = 0.55
+	var tinted_presenter := CharacterPresenter.new()
+	root.add_child(tinted_presenter)
+	tinted_presenter.configure("enemy:ranged", tinted_config)
+	_check(_count_surface_overrides(tinted_presenter) > 0, "ranged tint must duplicate and recolor imported model materials")
+	tinted_presenter.queue_free()
 
 	var game := (load("res://channel_3d.tscn") as PackedScene).instantiate() as Node3D
 	game.animation_duration_scale = 0.0
@@ -51,6 +59,15 @@ func _run() -> void:
 	game.build_battle_world()
 	var fallback = game.battle_actor_root.get_node_or_null("Enemy/Presenter")
 	_check(fallback != null and fallback.config.get("model_path", "") == base_enemy.get("model_path", ""), "unknown archetypes must retain the base enemy model fallback")
+	var rendered_enemy = game.combat.enemy_by_id(game.combat.enemy_order[0])
+	var ranged_traits: Array[String] = ["ranged"]
+	rendered_enemy.traits = ranged_traits
+	game.build_battle_world()
+	var ranged_presenter = game.battle_actor_root.get_node_or_null("Enemy/Presenter")
+	_check(ranged_presenter != null and float(ranged_presenter.config.get("model_tint_strength", 0.0)) > 0.0, "ranged enemy presentation must carry a visible model tint")
+	var ranged_base := game.battle_actor_root.get_node_or_null("Enemy/PawnBase") as MeshInstance3D
+	var ranged_base_material := ranged_base.material_override as StandardMaterial3D if ranged_base != null else null
+	_check(ranged_base_material != null and ranged_base_material.albedo_color.b > ranged_base_material.albedo_color.r, "ranged enemy base must use the ranged color")
 	game.queue_free()
 	await process_frame
 	_finish()
@@ -69,3 +86,16 @@ func _finish() -> void:
 func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
+
+
+func _count_surface_overrides(node: Node) -> int:
+	var count := 0
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			for surface_index in range(mesh_instance.mesh.get_surface_count()):
+				if mesh_instance.get_surface_override_material(surface_index) != null:
+					count += 1
+	for child in node.get_children():
+		count += _count_surface_overrides(child)
+	return count

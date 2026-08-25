@@ -56,8 +56,18 @@ func _run() -> void:
 		_check(far_target != Vector2i(-1, -1), "combat room must expose a reachable distant target")
 		if far_target != Vector2i(-1, -1):
 			game.combat.energy = 20
+			var board_cell_before_animated_path: Node = game.battle_board_root.get_node("Cell_0_0")
+			game.animation_duration_scale = 0.18
 			game.handle_battle_cell(far_target)
+			await process_frame
+			_check(game.battle_board_root.get_node("Cell_0_0") == board_cell_before_animated_path, "player movement must not rebuild the battle board on each step")
+			var animation_frames := 0
+			while game.animation_busy and animation_frames < 240:
+				await process_frame
+				animation_frames += 1
 			_check(game.combat.player_pos == far_target, "clicking a reachable distant cell must auto-walk the player there")
+			_check(not game.animation_busy, "player path animation must finish without leaving a stale busy state")
+			game.animation_duration_scale = 0.0
 
 	var attack_origin := Vector2i(maxi(0, game.combat.enemy_pos.x - 1), game.combat.enemy_pos.y)
 	if attack_origin == game.combat.enemy_pos or not game.combat.is_walkable(attack_origin):

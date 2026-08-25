@@ -109,12 +109,15 @@ func _run() -> void:
 	game.pan_battle_camera(Vector2(120, -60))
 	_check(game.battle_camera_target != Vector3.ZERO, "middle-drag pan must change the camera target")
 	game.zoom_battle_camera(Vector2(world_viewport.size) * 0.5, 0.9)
+	# 缩放改为逐帧平滑追赶目标，等待一帧后再验证镜头已经开始缩放。
+	await process_frame
 	_check(camera.size < initial_size, "wheel-up must zoom in")
 	_check(camera.size >= game.battle_camera_fit_size * game.CAMERA_ZOOM_MIN, "zoom must respect the minimum")
 	game.reset_battle_camera()
 	_check(is_equal_approx(camera.size, game.battle_camera_fit_size), "reset must restore fit size")
 
 	var target_cell := Vector2i(2, 1)
+	var stable_cell: Node = game.battle_board_root.get_node("Cell_%d_%d" % [target_cell.x, target_cell.y])
 	game.pan_battle_camera(Vector2(-90, 45))
 	game.zoom_battle_camera(Vector2(world_viewport.size) * 0.5, 0.8)
 	var projected: Vector2 = camera.unproject_position(game._battle_world(target_cell))
@@ -123,11 +126,20 @@ func _run() -> void:
 	await process_frame
 	var hovered_node: Node = game.battle_board_root.get_node_or_null("Cell_%d_%d/Hover_0" % [target_cell.x, target_cell.y])
 	_check(hovered_node is MeshInstance3D, "hovered cells must render corner markers")
+	_check(game.battle_board_root.get_node("Cell_%d_%d" % [target_cell.x, target_cell.y]) == stable_cell, "hovering must not rebuild the battle board")
 	var valid_hover_cell := _first_valid_battle_target(game)
 	var valid_projected: Vector2 = camera.unproject_position(game._battle_world(valid_hover_cell))
 	game.set_battle_hover(valid_projected)
 	await process_frame
 	_check(_count_named_prefix(battle_root, "Valid_") > 0, "reachable cells must render green markers")
+	var entrance_key := str(shell_state.get("entrance_key", ""))
+	var original_player_pos: Vector2i = game.combat.player_pos
+	game.combat.player_pos = Vector2i(game.combat.cols - 1, 0)
+	game.build_battle_world()
+	var moved_player_shell: Dictionary = game.battle_room_shell_debug_state()
+	_check(str(moved_player_shell.get("entrance_key", "")) == entrance_key, "room entrance must not move when the player moves")
+	game.combat.player_pos = original_player_pos
+	game.build_battle_world()
 
 	game.queue_free()
 	await process_frame
