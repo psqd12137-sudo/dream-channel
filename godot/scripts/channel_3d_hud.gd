@@ -1,6 +1,6 @@
 extends Control
 
-const PLAYER_PROFILE = preload("res://assets/web_show/characters/lili/bust.png")
+const PLAYER_PROFILE = preload("res://assets/latest_web/SP_Lili_Profile.png")
 const ENEMY_PROFILE = preload("res://assets/web_show/characters/enemy/bust.png")
 const OMEN_ICON = preload("res://assets/latest_web/OmenIcon.png")
 const COMBAT_UI_LAYOUT = preload("res://scenes/combat_ui_layout.tscn")
@@ -85,7 +85,7 @@ const TEST_AI_PANEL_RECT := Rect2(24, 214, 360, 390)
 const TEST_AI_STEP_RECT := Rect2(36, 556, 104, 34)
 const TEST_AI_PAUSE_RECT := Rect2(148, 556, 104, 34)
 const TEST_AI_RESTART_RECT := Rect2(260, 556, 104, 34)
-const TEST_AI_ROW_RECT := Rect2(36, 328, 336, 25)
+const TEST_AI_ROW_RECT := Rect2(36, 394, 336, 25)
 const HOME_RESOLUTION_RECT := Rect2(76, 714, 180, 36)
 const HOME_WINDOW_MODE_RECT := Rect2(270, 714, 102, 36)
 const HOME_TILT_SHIFT_RECT := Rect2(386, 714, 112, 36)
@@ -904,7 +904,8 @@ func _draw_test_ai_panel() -> void:
 		_label("关注：%s · %s/%s" % [focused.id, focused.ai_role, focused.ai_state], TEST_AI_PANEL_RECT.position + Vector2(12, 68), 11, TEXT)
 		_label("视线：%s  最后目击：%s" % ["有" if focused.sees_player else "无", str(focused.last_seen)], TEST_AI_PANEL_RECT.position + Vector2(12, 88), 10, MUTED)
 		_label("目标：%s  攻击位：%s" % [str(focused.tactical_goal), str(focused.tactical_reserved_cell)], TEST_AI_PANEL_RECT.position + Vector2(12, 106), 10, MUTED)
-		_draw_wrapped(str(focused.ai_reason), TEST_AI_PANEL_RECT.position + Vector2(12, 114), 332, 10, Color("d9ede5"))
+		# 理由区限制行数，给下方敌人列表留出稳定的独立空间。
+		_draw_wrapped_lines(str(focused.ai_reason), TEST_AI_PANEL_RECT.position + Vector2(12, 114), 332, 10, Color("d9ede5"), 4)
 	var plans: Dictionary = combat.preview_all_tactical_plans()
 	for index in range(combat.enemy_order.size()):
 		var enemy_id := str(combat.enemy_order[index])
@@ -1035,7 +1036,8 @@ func _draw_actor_strip(rect: Rect2, portrait: Texture2D, title: String, accent: 
 		draw_rect(rect.grow(-3.0), Color(action_color, 0.20), true)
 	draw_rect(Rect2(rect.position, Vector2(8, rect.size.y)), accent, true)
 	draw_rect(rect, accent, false, 2.0)
-	draw_texture_rect(portrait, Rect2(rect.position + Vector2(14, 12), Vector2(62, 88)), false)
+	# 头像按比例容纳，避免方形头像被拉伸，也避免原图边缘被裁掉。
+	_draw_texture_contained(portrait, Rect2(rect.position + Vector2(14, 12), Vector2(62, 88)))
 	_label(_shorten(title, 14), rect.position + Vector2(88, 25), 16, INK)
 	_draw_health_bar(Rect2(rect.position + Vector2(88, 34), Vector2(rect.size.x - 102, 20)), hp, max_hp)
 	_label(secondary_label, rect.position + Vector2(88, 72), 10, Color("43535b"))
