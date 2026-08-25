@@ -1169,7 +1169,6 @@ func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int
 		_draw_card_frame_contained(frame, rect, fade)
 	else:
 		draw_rect(rect, Color(accent.darkened(0.32), 1.0) * fade, true)
-	draw_rect(rect, Color(GOLD if selected else accent.darkened(0.30), fade.a), false, scaled.call(4.0 if selected else 1.5))
 	var cost_center := rect.position + Vector2(scaled.call(22.0), scaled.call(23.0))
 	draw_circle(cost_center, scaled.call(15.0), Color(accent, fade.a))
 	draw_circle(cost_center, scaled.call(15.0), Color(INK, fade.a), false, scaled.call(1.5))
@@ -1185,6 +1184,9 @@ func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int
 	if unaffordable:
 		draw_rect(rect.grow(-scaled.call(4.0)), Color("10182078"), true)
 		_draw_chip(Rect2(rect.position + Vector2(scaled.call(18.0), rect.size.y - scaled.call(28.0)), Vector2(rect.size.x - scaled.call(36.0), scaled.call(20.0))), "行动力不足", Color("4d3940"), TEXT, maxi(7, roundi(scaled.call(8.0))))
+	if selected:
+		# 卡面资源已经自带外框，选中时只在外侧加高亮，避免重复描边。
+		draw_rect(rect.grow(scaled.call(3.0)), Color(GOLD, fade.a), false, scaled.call(2.0))
 	if not is_zero_approx(tilt_deg):
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
