@@ -3128,7 +3128,7 @@ func _add_box(parent: Node3D, node_name: String, local_position: Vector3, box_si
 	return instance
 
 
-func _add_cylinder(parent: Node3D, node_name: String, local_position: Vector3, radius: float, height: float, material: StandardMaterial3D) -> MeshInstance3D:
+func _add_cylinder(parent: Node3D, node_name: String, local_position: Vector3, radius: float, height: float, material: Material) -> MeshInstance3D:
 	var instance := MeshInstance3D.new()
 	instance.name = node_name
 	var mesh := CylinderMesh.new()

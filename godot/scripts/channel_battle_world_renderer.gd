@@ -13,6 +13,7 @@ const INTENT_ATTACK_ICON: Texture2D = preload("res://assets/ui/battle_intent_att
 const INTENT_RANGED_ICON: Texture2D = preload("res://assets/ui/battle_intent_ranged.png")
 const INTENT_MOVE_ICON: Texture2D = preload("res://assets/ui/battle_intent_move.png")
 const SALT_RING_HIT_SHEET: Texture2D = preload("res://assets/effects/salt_ring_hit_sheet.png")
+const SALT_RING_SMOKE_SHADER: Shader = preload("res://shaders/salt_ring_smoke.gdshader")
 
 const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interior/"
 const BATTLE_FLOOR_LIGHT := "res://assets/third_party/kaykit_dungeon/models/floor_wood_large.gltf.glb"
@@ -154,7 +155,7 @@ func _add_box(parent: Node3D, node_name: String, local_position: Vector3, box_si
 	return host._add_box(parent, node_name, local_position, box_size, material)
 
 
-func _add_cylinder(parent: Node3D, node_name: String, local_position: Vector3, radius: float, height: float, material: StandardMaterial3D) -> MeshInstance3D:
+func _add_cylinder(parent: Node3D, node_name: String, local_position: Vector3, radius: float, height: float, material: Material) -> MeshInstance3D:
 	return host._add_cylinder(parent, node_name, local_position, radius, height, material)
 
 
@@ -455,10 +456,7 @@ func _build_battle_board() -> void:
 				_add_battle_blocker_asset(cell_node, pos, platform_height)
 			elif combat.traps.has(pos):
 				var trap: Dictionary = combat.traps[pos]
-				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
-				var card_id := str(trap.get("card_id", ""))
-				_add_trap_item_sprite(cell_node, card_id, top_y)
-				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
+				_add_trap_visual(cell_node, trap, top_y)
 	_add_battle_room_shell()
 	_add_battle_stage_decor()
 	_refresh_battle_dynamic_visuals()
@@ -620,9 +618,7 @@ func _refresh_battle_dynamic_visuals() -> void:
 				visible_trap = battle_triggered_traps[pos]
 			if not visible_trap.is_empty():
 				var trap: Dictionary = visible_trap
-				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
-				_add_trap_item_sprite(cell_node, str(trap.get("card_id", "")), top_y)
-				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
+				_add_trap_visual(cell_node, trap, top_y)
 
 
 func _add_battle_cell_fill(parent: Node3D, node_name: String, top_y: float, color: Color, alpha: float) -> MeshInstance3D:
@@ -633,6 +629,29 @@ func _add_battle_cell_fill(parent: Node3D, node_name: String, top_y: float, colo
 		Vector3(BATTLE_CELL - 0.16, 0.035, BATTLE_CELL - 0.16),
 		_material(Color(color, alpha), true, 0.10)
 	)
+
+
+func _add_trap_visual(cell_node: Node3D, trap: Dictionary, top_y: float) -> void:
+	var card_id := str(trap.get("card_id", ""))
+	if card_id in ["salt", "guard"]:
+		var smoke_material := ShaderMaterial.new()
+		smoke_material.shader = SALT_RING_SMOKE_SHADER
+		smoke_material.set_shader_parameter("smoke_color", Color("f3dda0"))
+		smoke_material.set_shader_parameter("opacity", 0.72)
+		smoke_material.set_shader_parameter("scroll_speed", 0.035)
+		var smoke := _add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.44, 0), 0.82, 0.88, smoke_material)
+		var smoke_mesh := smoke.mesh as CylinderMesh
+		if smoke_mesh != null:
+			smoke_mesh.radial_segments = 32
+			smoke_mesh.rings = 8
+			smoke_mesh.cap_top = false
+			smoke_mesh.cap_bottom = false
+		smoke.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		smoke.set_meta("collision_free", true)
+		return
+	_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
+	_add_trap_item_sprite(cell_node, card_id, top_y)
+	_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
 
 
 func _sync_battle_actors() -> void:
