@@ -3211,7 +3211,7 @@ func update_battle_overlays() -> void:
 func cycle_battle_enemy_range_display() -> void:
 	if phase != "combat" or combat == null:
 		return
-	var mode_label := battle_world_renderer.cycle_enemy_range_display()
+	var mode_label: String = battle_world_renderer.cycle_enemy_range_display()
 	status_message = "敌方范围：%s（按 1 切换）" % mode_label
 	_refresh_hud()
 
