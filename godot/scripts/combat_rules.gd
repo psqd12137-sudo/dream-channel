@@ -3,6 +3,7 @@ extends RefCounted
 const CombatEnemyRoster = preload("res://scripts/combat_enemy_roster.gd")
 const EnemyTurnScheduler = preload("res://scripts/enemy_turn_scheduler.gd")
 const EnemyAISquadBlackboard = preload("res://scripts/enemy_ai_blackboard.gd")
+const CombatCardExecutor = preload("res://scripts/combat_card_executor.gd")
 
 const DIRS := [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 const INVALID_CELL := Vector2i(-999, -999)
@@ -58,6 +59,7 @@ var deck: Array[String] = []
 var discard: Array[String] = []
 var hand: Array[String] = []
 var last_card_events: Array[Dictionary] = []
+var card_executor: CombatCardExecutor
 var rng := RandomNumberGenerator.new()
 var round_number := 1
 var outcome := ""
@@ -444,76 +446,18 @@ func can_target_place_card(hand_index: int, target: Vector2i) -> bool:
 
 
 func play_card(hand_index: int, target: Vector2i, enemy_id: String = "") -> bool:
-	if outcome != "" or hand_index < 0 or hand_index >= hand.size():
-		return false
-	var card_id := hand[hand_index]
-	if not cards.has(card_id):
-		return false
-	var card: Dictionary = cards[card_id]
-	var cost := card_cost(card)
-	if energy < cost:
-		return false
-	var card_type := str(card.get("type", ""))
-	var target_state := _resolve_single_enemy(card, enemy_id)
-	if card_target_type(card) == "single_enemy" and target_state == null:
-		# 多敌人时单体牌必须显式选中合法敌人，否则不消耗。
-		return false
-	last_card_events.clear()
-	var accepted := false
-	if card_type == "place":
-		accepted = _play_place(card, target)
-	elif card.has("allEnemies"):
-		accepted = _play_all_enemies(card_id, card)
-	elif card.has("area"):
-		accepted = _play_area(card_id, card, target)
-	elif card.has("randomEnemy"):
-		accepted = _play_random_enemy(card_id, card)
-	elif bool(card.get("shove", false)):
-		accepted = _play_shove(bool(card.get("preferPortal", false)), int(card.get("drawOnPortal", 0)), target_state)
-	elif bool(card.get("climbToHigher", false)):
-		accepted = _play_climb()
-	elif bool(card.get("topple", false)):
-		accepted = _play_topple(target_state)
-	elif card.has("puppetBang"):
-		accepted = _play_puppet_bang(card.get("puppetBang", {}), target_state)
-	elif card.has("saltLash"):
-		accepted = _play_salt_lash(card.get("saltLash", {}), target_state)
-	elif card.has("ifBlinded") or card.has("elseBlind"):
-		accepted = _play_blind_followup(card, target_state)
-	elif card.has("drainTough"):
-		accepted = _play_rupture(card, target_state)
-	elif card.has("gain_block"):
-		player_block += int(card.get("gain_block", 0))
-		accepted = true
-	elif card.has("gainBlock"):
-		player_block += int(card.get("gainBlock", 0))
-		accepted = true
-	elif card_type == "medicine" or card.has("gainEnergy"):
-		energy += int(card.get("gainEnergy", 0))
-		turn_energy_max = maxi(turn_energy_max, energy)
-		player_hp -= int(card.get("selfDamage", 0))
-		accepted = true
-	elif card_type == "ready":
-		ready_effect = (card.get("ready", {}) as Dictionary).duplicate(true)
-		ready_effect["card_id"] = card_id
-		ready_effect["name"] = str(card.get("name", card_id))
-		accepted = true
-	elif card.has("grantRetain"):
-		retain_slots = maxi(retain_slots, int(card.get("grantRetain", 0)))
-		accepted = true
-	elif card.has("retainThisTurn"):
-		retain_this_turn += int(card.get("retainThisTurn", 0))
-		accepted = true
-	elif card.has("discountNext"):
-		placement_discount += int(card.get("discountNext", 0))
-		accepted = true
-	if not accepted:
-		return false
+	if card_executor == null:
+		card_executor = CombatCardExecutor.new(self)
+	return card_executor.execute(hand_index, target, enemy_id)
+
+
+func _commit_card_play(card_id: String, card: Dictionary, cost: int, target: Vector2i, hand_index: int) -> void:
+	# 结算资源和牌堆统一放在执行器的最后一步，避免失败的牌改变状态。
 	for enemy_state in _iter_enemy_states():
 		if target == enemy_state.pos or _has_line_of_sight(player_pos, enemy_state.pos):
 			reveal_enemy("card", enemy_state)
 	energy -= cost
-	if card_type == "place" and placement_discount > 0:
+	if str(card.get("type", "")) == "place" and placement_discount > 0:
 		placement_discount = 0
 	hand.remove_at(hand_index)
 	if not bool(card.get("exhaust", false)):
@@ -525,7 +469,6 @@ func play_card(hand_index: int, target: Vector2i, enemy_id: String = "") -> bool
 	if player_hp <= 0:
 		outcome = "defeat"
 		event_log.append("CombatEnded outcome=defeat")
-	return true
 
 
 func card_cost(card: Dictionary) -> int:
