@@ -44,7 +44,7 @@ func _run() -> void:
 	_check(not selectable_enemy_id.is_empty(), "presentation combat must expose at least one selectable enemy")
 	if not selectable_enemy_id.is_empty():
 		game.select_battle_enemy(selectable_enemy_id)
-		_check(game.battle_focused_enemy_id == selectable_enemy_id, "clicking an enemy must preserve the selected enemy for its detail panel")
+		_check(game.battle_focused_enemy_id == selectable_enemy_id, "clicking an enemy must preserve the selected enemy for the top information panel")
 		_check(game.battle_world_renderer._focused_battle_enemy_id() == selectable_enemy_id, "selected enemy must drive the individual threat preview")
 	var ranged_target := Vector2i(2, 1)
 	var expected_ranged_yaw: float = game._battle_move_facing_yaw(game.combat.enemy_pos, ranged_target)

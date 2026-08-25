@@ -1517,7 +1517,7 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	_prepare_battle_prop_assignments()
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
-	battle_focused_enemy_id = ""
+	battle_focused_enemy_id = _default_battle_enemy_id()
 	phase = "combat"
 	world_container.visible = true
 	house_root.visible = false
@@ -1991,6 +1991,16 @@ func select_battle_enemy(enemy_id: String) -> void:
 		test_focused_enemy_id = enemy_id
 	battle_world_renderer.refresh_battle_state(false, false)
 	_refresh_hud()
+
+
+func _default_battle_enemy_id() -> String:
+	if combat == null:
+		return ""
+	for enemy_id in combat.enemy_order:
+		var state = combat.enemy_by_id(str(enemy_id))
+		if state != null and state.revealed and state.hp > 0:
+			return str(enemy_id)
+	return ""
 
 
 func move_player_to(target: Vector2i) -> bool:

@@ -58,7 +58,6 @@ const MOVE_RIGHT_RECT := Rect2(1114, 534, 46, 30)
 const MOVE_DOWN_RECT := Rect2(1062, 570, 46, 30)
 const CARD_CANCEL_RECT := Rect2(976, 654, 164, 28)
 const ENEMY_ROSTER_RECT := Rect2(948, 214, 300, 136)
-const ENEMY_DETAIL_RECT := Rect2(948, 356, 300, 128)
 const PORTAL_USE_RECT := Rect2(960, 366, 120, 44)
 const PORTAL_STAY_RECT := Rect2(1100, 366, 120, 44)
 const HOME_START_RECT := Rect2(76, 610, 300, 58)
@@ -797,12 +796,20 @@ func _draw_combat_hud() -> void:
 	var hand_rect := _combat_layout_rect("HandArea", Rect2(170, 470, 940, 290))
 	var deck_rect := _combat_layout_rect("DeckArea", Rect2(24, 640, 104, 150))
 	var discard_rect := _combat_layout_rect("DiscardArea", Rect2(1152, 640, 104, 150))
+	var focused_enemy: Variant = _focused_enemy_state()
+	var enemy_panel_rect := Rect2(948, 92, 300, 118)
+	var enemy_title: String = combat.enemy_name if focused_enemy == null else str(focused_enemy.name)
+	var enemy_hp: int = combat.enemy_hp if focused_enemy == null else int(focused_enemy.hp)
+	var enemy_max_hp: int = combat.enemy_max_hp if focused_enemy == null else int(focused_enemy.max_hp)
+	var enemy_toughness: int = combat.enemy_toughness if focused_enemy == null else int(focused_enemy.toughness)
+	var enemy_max_toughness: int = combat.enemy_max_toughness if focused_enemy == null else int(focused_enemy.max_toughness)
+	var enemy_footer: String = "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label] if focused_enemy == null else "T%d · %s" % [focused_enemy.tier, focused_enemy.archetype_label]
 	_draw_actor_strip(Rect2(24, 92, 300, 108), PLAYER_PROFILE, "莉莉", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_block, 4, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
-	_draw_actor_strip(Rect2(948, 92, 300, 108), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, combat.enemy_hp if combat.enemy_revealed else -1, combat.enemy_max_hp, "韧性", combat.enemy_toughness if combat.enemy_revealed else 0, combat.enemy_max_toughness, "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
+	_draw_actor_strip(enemy_panel_rect, ENEMY_PROFILE, enemy_title if focused_enemy == null or focused_enemy.revealed else "怪家伙", MAGENTA, enemy_hp if focused_enemy == null or focused_enemy.revealed else -1, enemy_max_hp, "韧性", enemy_toughness if focused_enemy == null or focused_enemy.revealed else 0, enemy_max_toughness, enemy_footer, _actor_presentation_state("Enemy"))
+	if focused_enemy != null and focused_enemy.revealed:
+		_draw_enemy_intent_summary(enemy_panel_rect, focused_enemy)
 	if combat.enemy_order.size() > 1:
 		_draw_enemy_roster(ENEMY_ROSTER_RECT)
-	if not combat.player_on_portal():
-		_draw_focused_enemy_detail(ENEMY_DETAIL_RECT)
 	if game.test_combat_active:
 		_draw_test_ai_panel()
 	_draw_move_controls()
@@ -977,25 +984,27 @@ func _focused_enemy_id() -> String:
 	return focused_enemy_id
 
 
-func _draw_focused_enemy_detail(rect: Rect2) -> void:
-	var combat = game.combat
-	draw_rect(Rect2(rect.position + Vector2(4, 5), rect.size), Color("050a0ecc"), true)
-	draw_rect(rect, Color("17151cf4"), true)
-	draw_rect(rect, GOLD if not _focused_enemy_id().is_empty() else Color("53636a"), false, 2.0)
+func _focused_enemy_state():
 	var focused_enemy_id := _focused_enemy_id()
-	if focused_enemy_id.is_empty():
-		_label("敌人详情", rect.position + Vector2(12, 22), 12, Color("ffd1e6"))
-		_label("点击棋盘上的敌人或上方编组查看单体信息", rect.position + Vector2(12, 52), 10, MUTED)
-		return
-	var state = combat.enemy_by_id(focused_enemy_id)
-	if state == null:
-		return
-	var intent: Dictionary = game.battle_world_renderer.battle_intent_snapshot.get(focused_enemy_id, {})
-	_label("%s · T%d · %s" % [str(state.name), state.tier, str(state.archetype_label)], rect.position + Vector2(12, 21), 12, GOLD)
-	_label("生命 %d/%d   韧性 %d/%d" % [state.hp, state.max_hp, state.toughness, state.max_toughness], rect.position + Vector2(12, 43), 10, TEXT)
-	_label("伤害 %d   攻击距离 %d   行动力 %d" % [state.damage, state.attack_range, state.action_points], rect.position + Vector2(12, 63), 10, MUTED)
-	_label("意图：%s" % str(intent.get("label", "观望")), rect.position + Vector2(12, 84), 10, TEXT)
-	_draw_wrapped(_shorten(str(intent.get("detail", "")), 72), rect.position + Vector2(12, 98), 270, 9, Color("d9ede5"))
+	if not focused_enemy_id.is_empty():
+		var focused = game.combat.enemy_by_id(focused_enemy_id)
+		if focused != null:
+			return focused
+	for enemy_id in game.combat.enemy_order:
+		var state = game.combat.enemy_by_id(str(enemy_id))
+		if state != null and state.revealed and state.hp > 0:
+			return state
+	return null
+
+
+func _draw_enemy_intent_summary(rect: Rect2, state) -> void:
+	var intent: Dictionary = game.battle_world_renderer.battle_intent_snapshot.get(str(state.id), {})
+	var attack_kind := str(intent.get("attack_kind", ""))
+	var intent_type := str(intent.get("type", "stall"))
+	var marker := "弓" if attack_kind == "ranged" else "刀" if intent_type in ["attack", "ambush"] else "脚"
+	var intent_color := BLUE if attack_kind == "ranged" else RED if intent_type in ["attack", "ambush"] else TEAL
+	var summary := "%s %s · 伤%d 距%d AP%d" % [marker, str(intent.get("label", "观望")), state.damage, state.attack_range, state.action_points]
+	_label(_shorten(summary, 25), rect.position + Vector2(88, 113), 9, intent_color)
 
 
 func _draw_card_target_arrow(start: Vector2, target: Vector2) -> void:
