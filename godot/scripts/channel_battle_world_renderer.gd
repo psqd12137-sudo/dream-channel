@@ -9,6 +9,8 @@ const CharacterPresenter = preload("res://scripts/character_presenter.gd")
 const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const APP_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Regular.otf")
+const INTENT_ATTACK_ICON: Texture2D = preload("res://assets/ui/battle_intent_attack.svg")
+const INTENT_MOVE_ICON: Texture2D = preload("res://assets/ui/battle_intent_move.svg")
 
 const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interior/"
 const BATTLE_FLOOR_LIGHT := "res://assets/third_party/kaykit_dungeon/models/floor_wood_large.gltf.glb"
@@ -620,7 +622,7 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	var intent_badge := MeshInstance3D.new()
 	intent_badge.name = "EnemyIntentBadge"
 	var intent_quad := QuadMesh.new()
-	intent_quad.size = Vector2(0.72, 0.72)
+	intent_quad.size = Vector2(0.78, 0.78)
 	intent_badge.mesh = intent_quad
 	intent_badge.position = Vector3(0, floor_y + 2.44, 0)
 	var badge_material := _material(Color(intent_color, 0.88), true, 0.08)
@@ -628,20 +630,16 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	badge_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	intent_badge.material_override = badge_material
 	node.add_child(intent_badge)
-	var intent_label := Label3D.new()
-	intent_label.font = APP_FONT
-	intent_label.name = "EnemyIntent"
-	intent_label.position = Vector3(0, floor_y + 2.44, 0.02)
-	intent_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	intent_label.no_depth_test = true
-	intent_label.font_size = 38
-	intent_label.pixel_size = 0.010
-	intent_label.outline_size = 7
-	intent_label.outline_modulate = Color("10151c")
-	intent_label.modulate = Color.WHITE
-	intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	intent_label.text = _battle_intent_glyph(str(intent.get("type", "stall")), attack_kind)
-	node.add_child(intent_label)
+	var intent_icon := Sprite3D.new()
+	intent_icon.name = "EnemyIntent"
+	intent_icon.texture = _battle_intent_icon_texture(str(intent.get("type", "stall")), attack_kind)
+	intent_icon.position = Vector3(0, floor_y + 2.44, 0.02)
+	intent_icon.pixel_size = 0.0061
+	intent_icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	intent_icon.shaded = false
+	intent_icon.no_depth_test = true
+	intent_icon.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	node.add_child(intent_icon)
 
 
 func _focused_battle_enemy_id() -> String:
@@ -1231,6 +1229,12 @@ func _battle_intent_glyph(intent_type: String, attack_kind: String = "") -> Stri
 		"patrol": return "巡"
 		"ambush": return "伏"
 	return "待"
+
+
+func _battle_intent_icon_texture(intent_type: String, attack_kind: String = "") -> Texture2D:
+	if attack_kind in ["ranged", "beam"] or intent_type in ["attack", "ambush"]:
+		return INTENT_ATTACK_ICON
+	return INTENT_MOVE_ICON
 
 
 func _battle_actor_presentation(actor_key: String, enemy_id: String = "") -> Dictionary:

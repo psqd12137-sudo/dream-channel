@@ -30,6 +30,10 @@ func _run() -> void:
 	if enemy_presenter != null:
 		_check(enemy_presenter.has_3d_model(), "enemy presenter must instantiate the temporary Quaternius model and animation player")
 		_check(enemy_presenter.current_model_animation().to_lower().contains("idle"), "enemy model must begin in its skeletal Idle loop")
+	var attack_intent_icon: Texture2D = game.battle_world_renderer._battle_intent_icon_texture("attack")
+	var move_intent_icon: Texture2D = game.battle_world_renderer._battle_intent_icon_texture("chase")
+	_check(attack_intent_icon != null and move_intent_icon != null, "enemy attack and movement intent icons must load")
+	_check(attack_intent_icon != move_intent_icon, "enemy attack and movement intent icons must be distinct")
 	var ranged_target := Vector2i(2, 1)
 	var expected_ranged_yaw: float = game._battle_move_facing_yaw(game.combat.enemy_pos, ranged_target)
 	_check(
