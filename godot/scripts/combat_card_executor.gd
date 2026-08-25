@@ -16,7 +16,7 @@ func execute(hand_index: int, target: Vector2i, enemy_id: String = "") -> bool:
 	if not combat.cards.has(card_id):
 		return false
 	var card: Dictionary = combat.cards[card_id]
-	var cost := combat.card_cost(card)
+	var cost: int = combat.card_cost(card)
 	if combat.energy < cost:
 		return false
 	var target_state = combat.resolve_single_enemy(card, enemy_id)
