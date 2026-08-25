@@ -723,6 +723,9 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 		var value_label: Label3D = _add_label(node, "EnemyIntentValue", intent_value, Vector3(0.39, floor_y + 2.44, 0.06), Color.WHITE, 54)
 		value_label.outline_modulate = Color("14151d")
 		value_label.outline_size = 12
+		value_label.no_depth_test = true
+		value_label.shaded = false
+		value_label.render_priority = 100
 
 
 func _refresh_enemy_selection_outline(node: Node3D, state) -> void:
