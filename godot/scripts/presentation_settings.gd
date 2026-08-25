@@ -9,6 +9,7 @@ extends RefCounted
 
 const DISPLAY_SETTINGS_PATH := "user://channel_display.cfg"
 const DISPLAY_RESOLUTIONS := [Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080), Vector2i(2560, 1440)]
+const PIXEL_ART_SHADER_PATH := "res://shaders/pixel_art_3d.gdshader"
 
 var host: Node
 var world_container: SubViewportContainer
@@ -19,6 +20,9 @@ var resolution_index := 2
 var fullscreen := false
 var tilt_shift_enabled := true
 var change_generation := 0
+var default_world_material: Material
+var test_visual_filter_material: ShaderMaterial
+var active_test_visual_filter_id := ""
 
 
 func _init(next_host: Node, next_world_container: SubViewportContainer, next_hud: Control, next_home_video: VideoStreamPlayer) -> void:
@@ -26,6 +30,7 @@ func _init(next_host: Node, next_world_container: SubViewportContainer, next_hud
 	world_container = next_world_container
 	hud = next_hud
 	home_video = next_home_video
+	default_world_material = world_container.material
 
 
 func resolution_label() -> String:
@@ -56,6 +61,33 @@ func toggle_tilt_shift() -> void:
 	_apply_tilt_shift_state()
 	_save_display_settings()
 	host._refresh_hud()
+
+
+func apply_test_visual_filter(visual: Dictionary) -> void:
+	clear_test_visual_filter()
+	var filter_id := str(visual.get("filter", "")).strip_edges()
+	if filter_id != "pixel_art_3d":
+		return
+	var shader := load(PIXEL_ART_SHADER_PATH) as Shader
+	if shader == null:
+		return
+	test_visual_filter_material = ShaderMaterial.new()
+	test_visual_filter_material.shader = shader
+	test_visual_filter_material.set_shader_parameter("effect_enabled", true)
+	test_visual_filter_material.set_shader_parameter("pixel_size", maxf(1.0, float(visual.get("pixel_size", 3.0))))
+	test_visual_filter_material.set_shader_parameter("palette_steps", maxf(2.0, float(visual.get("palette_steps", 5.0))))
+	test_visual_filter_material.set_shader_parameter("saturation", maxf(0.5, float(visual.get("saturation", 1.12))))
+	test_visual_filter_material.set_shader_parameter("contrast", maxf(0.5, float(visual.get("contrast", 1.08))))
+	test_visual_filter_material.set_shader_parameter("dither_strength", maxf(0.0, float(visual.get("dither_strength", 0.045))))
+	world_container.material = test_visual_filter_material
+	active_test_visual_filter_id = filter_id
+
+
+func clear_test_visual_filter() -> void:
+	if world_container != null:
+		world_container.material = default_world_material
+	test_visual_filter_material = null
+	active_test_visual_filter_id = ""
 
 
 func load_settings() -> void:
@@ -126,9 +158,9 @@ func _save_display_settings() -> void:
 
 
 func _apply_tilt_shift_state() -> void:
-	if world_container == null:
+	if default_world_material == null:
 		return
-	var shader_material := world_container.material as ShaderMaterial
+	var shader_material := default_world_material as ShaderMaterial
 	if shader_material == null:
 		return
 	shader_material.set_shader_parameter("effect_enabled", tilt_shift_enabled)

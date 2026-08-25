@@ -44,7 +44,7 @@
 7. 战斗规则已支持任意数量 `N` 个敌人：每个敌人用稳定 `enemy_id` 管理独立状态，按出生/内容顺序依次行动；单体卡牌必须在多敌人场景中明确选择目标，群体、范围和随机目标牌会按实际受击敌人反馈。
 
 当前 AI 边界：敌人使用确定性的优先级规则状态机，并新增回合级战术黑板和基础闭环；敌人可按配置或特性分为 `hunter`、`flanker`、`controller`，每个敌方阶段重新感知、预订互不重叠的攻击位、由既有移动/攻击执行器完成行动，下一阶段再重新规划；HUD 意图预览与实际行动共用计划。视线、埋伏、最后目击点、巡逻、寻路、传送门、陷阱、高差、诱饵和特性攻击仍保持兼容。集火、保护、撤退、动态编队、诱导玩家走位和跨回合战术记忆尚未实现。正式内容快照仍主要使用旧的单敌人字段，多敌人内容通过房间的 `enemies[]` 数组接入。多敌人基础重构记录在仓库根 `.omc/plans/multi-enemy-refactor-plan.md`。
-7. 战斗与 AI 测试台现含单敌人、三角色、视野搜索、埋伏释放、四敌人窄口、传送门/陷阱/高差和八敌人压力预设，支持手动战斗、AI 单步/连续观察、固定 Seed 重开和 AI 调试面板；测试不会结算正式奖励或写入正式存档。
+7. 战斗与 AI 测试台现含单敌人、三角色、视野搜索、埋伏释放、四敌人窄口、传送门/陷阱/高差、八敌人压力和像素滤镜展示预设，支持手动战斗、AI 单步/连续观察、固定 Seed 重开和 AI 调试面板；测试不会结算正式奖励或写入正式存档。像素滤镜展示只作用于该测试关卡的 3D 世界视口，返回测试台或正式流程后恢复默认移轴滤镜。
 8. 节目后台仍保留横版跳跃收集、八数码拼图、3D 微缩搜物，以及直接复用正式黄色扩建格、票根选择、旋转与摆放规则的 Kenney 桌模 PCG 测试。
 
 详细的已完成/待补齐矩阵见 `WEB_GODOT_PARITY.md`。
@@ -227,7 +227,7 @@ $tests = @(
   "multi_enemy_state_regression", "multi_enemy_turn_regression",
   "multi_enemy_pathing_regression", "multi_enemy_targeting_regression",
   "multi_enemy_presentation_regression",
-  "combat_test_catalog_regression", "combat_test_entry_regression",
+  "combat_test_catalog_regression", "pixel_filter_regression", "combat_test_entry_regression",
   "combat_test_isolation_regression", "combat_test_observer_regression",
   "combat_test_ai_overlay_regression",
   "completion_labs_smoke", "diorama_art_lab_smoke", "pcg_diorama_stitch_smoke",

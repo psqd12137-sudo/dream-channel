@@ -239,6 +239,42 @@
       "run_rules": {"player_hp": 120, "base_energy": 5},
       "deck": ["jab", "guard", "brace", "fling"],
       "observer": {"max_rounds": 10, "player_script": "stationary"}
+    },
+    {
+      "id": "pixel_art_showcase",
+      "name": "像素滤镜展示",
+      "category": "presentation",
+      "description": "验证 3D 像素艺术滤镜只作用于当前测试关卡。",
+      "seed": 2026082408,
+      "visual": {
+        "filter": "pixel_art_3d",
+        "pixel_size": 3,
+        "palette_steps": 5,
+        "saturation": 1.12,
+        "contrast": 1.08,
+        "dither_strength": 0.045
+      },
+      "room": {
+        "id": "test_pixel_art_showcase",
+        "name": "测试房 · 像素滤镜展示",
+        "room_type": "hall",
+        "theme": "paper",
+        "arena": {
+          "cols": 8,
+          "rows": 6,
+          "player": [4, 3],
+          "walls": ["2,1", "2,2", "5,3", "5,4"],
+          "heights": {"1,4": 1, "6,1": 1},
+          "portals": [],
+          "traps": []
+        },
+        "enemies": [
+          {"id": "pixel_showcase_enemy", "name": "像素展示者", "spawn": [1, 3], "traits": []}
+        ]
+      },
+      "run_rules": {"player_hp": 50, "base_energy": 5},
+      "deck": ["jab", "guard", "brace", "fling"],
+      "observer": {"max_rounds": 10, "player_script": "stationary"}
     }
   ]
 }

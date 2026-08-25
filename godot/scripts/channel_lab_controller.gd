@@ -388,6 +388,7 @@ func start_test_combat(mode: String = "manual") -> bool:
 	var test_enemies: Array = (scenario.get("room", {}) as Dictionary).get("enemies", [])
 	test_focused_enemy_id = str(test_enemies[0].get("id", "")) if not test_enemies.is_empty() else ""
 	test_combat_active = true
+	host.apply_test_visual_filter(scenario.get("visual", {}))
 	start_combat((scenario.get("room", {}) as Dictionary).duplicate(true))
 	status_message = "测试场景：%s。" % str(scenario.get("description", scenario.get("name", "")))
 	_refresh_hud()
@@ -406,6 +407,7 @@ func restart_test_combat() -> bool:
 func return_to_combat_test_menu() -> void:
 	if not test_combat_active:
 		return
+	host.clear_test_visual_filter()
 	_cancel_dynamic_effect()
 	if active_motion_tween != null and active_motion_tween.is_valid():
 		active_motion_tween.kill()
