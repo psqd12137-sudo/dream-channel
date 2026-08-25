@@ -967,11 +967,12 @@ func enemy_reachable_cells(state: CombatEnemyState, budget: int = -1) -> Array[V
 	return cells
 
 
-func enemy_threat_cells(state: CombatEnemyState, move_cells: Array[Vector2i] = []) -> Array[Vector2i]:
+func enemy_threat_cells(state: CombatEnemyState, move_cells: Array[Vector2i]) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	if state == null or not state.alive() or state.blind_turns > 0:
 		return cells
-	var origins: Array[Vector2i] = [state.pos]
+	var origins: Array[Vector2i] = []
+	origins.append(state.pos)
 	for cell in move_cells:
 		if cell not in origins:
 			origins.append(cell)
