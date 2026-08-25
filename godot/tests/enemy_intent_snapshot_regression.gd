@@ -16,8 +16,8 @@ func _init() -> void:
 			"heights": {},
 		},
 		[
-			{"id": "ranged_a", "name": "远射甲", "spawn": [3, 0], "attack_range": 4, "traits": ["ranged"]},
-			{"id": "ranged_b", "name": "远射乙", "spawn": [3, 2], "attack_range": 4, "traits": ["ranged"]},
+			{"id": "ranged_a", "name": "远射甲", "spawn": [3, 0], "attack_range": 3, "traits": ["ranged"]},
+			{"id": "ranged_b", "name": "远射乙", "spawn": [3, 2], "attack_range": 3, "traits": ["ranged"]},
 			{"id": "melee", "name": "近战", "spawn": [6, 1], "traits": []},
 		],
 		{},
@@ -30,8 +30,10 @@ func _init() -> void:
 	_check(intents.size() == 3, "bulk intent snapshot must include every living enemy")
 	var ranged: Dictionary = intents.get("ranged_a", {})
 	_check(str(ranged.get("attack_kind", "")) == "ranged", "snapshot must preserve ranged attack kind")
+	_check(int(ranged.get("attack_range", 0)) == 3, "ranged snapshot must use the shortened attack range")
 	_check(Vector2i(2, 0) in ranged.get("move_cells", []), "snapshot must expose enemy movement range")
 	_check(Vector2i(0, 1) in ranged.get("threat_cells", []), "snapshot must expose attack threat after movement")
+	_check(Vector2i(0, 2) not in ranged.get("threat_cells", []), "threat range must reserve action points for the attack")
 	_check(Vector2i(0, 1) in ranged.get("impact_cells", []), "snapshot must expose the actual ranged impact cell")
 	_check(Vector2i(0, 1) in ranged.get("coverage_cells", []), "snapshot must expose ranged coverage")
 	_check(Vector2i(2, 0) in ranged.get("line_cells", []), "snapshot must expose line-of-fire cells")

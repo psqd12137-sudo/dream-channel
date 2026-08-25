@@ -81,7 +81,7 @@
         },
         "enemies": [
           {"id": "close_hunter", "name": "近战猎手", "spawn": [4, 2], "behavior_role": "hunter", "attack_range": 1, "traits": []},
-          {"id": "far_sentry", "name": "远射哨兵", "spawn": [7, 2], "behavior_role": "controller", "attack_range": 4, "traits": ["ranged"]}
+          {"id": "far_sentry", "name": "远射哨兵", "spawn": [7, 2], "behavior_role": "controller", "attack_range": 3, "traits": ["ranged"]}
         ]
       },
       "run_rules": {"player_hp": 50, "base_energy": 5},

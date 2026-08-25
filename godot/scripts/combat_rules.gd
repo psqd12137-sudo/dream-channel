@@ -671,7 +671,13 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 	if state.revealed:
 		var move_cells := enemy_reachable_cells(state)
 		result["move_cells"] = move_cells
-		result["threat_cells"] = enemy_threat_cells(state, move_cells)
+		var turn_budget := _enemy_turn_budget(state)
+		var attack_cost := _effective_attack_cost(state)
+		var attack_move_cells: Array = []
+		if turn_budget >= attack_cost:
+			# 红色威胁区必须为攻击保留行动力，不能把完整移动力再叠一遍攻击距离。
+			attack_move_cells = enemy_reachable_cells(state, turn_budget - attack_cost)
+			result["threat_cells"] = enemy_threat_cells(state, attack_move_cells)
 	if state.revealed and state.sees_player:
 		result["range_origin"] = state.pos
 		result["coverage_cells"] = _enemy_attack_coverage(state, state.pos, state.sees_player)
