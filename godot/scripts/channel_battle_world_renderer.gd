@@ -46,6 +46,7 @@ const COL_RED := Color("d9574f")
 const COL_ENEMY_THREAT := Color("ef4444")
 const COL_ENEMY_MOVE := Color("6d4cff")
 const COL_PLAYER_MOVE := Color("fffaf2")
+const COL_PLAYER_POSITION := Color("f4c542")
 const COL_HOVER_VALID := Color("f5e7a1")
 const COL_HOVER_INVALID := Color("ff6b6b")
 const COL_RANGED_ENEMY := Color("4dbbff")
@@ -106,6 +107,7 @@ var battle_hover_valid_markers: Array[MeshInstance3D] = []
 var battle_overlay_materials: Dictionary = {}
 var battle_intent_snapshot: Dictionary = {}
 var enemy_range_display_mode := EnemyRangeDisplayMode.FOCUSED
+var player_range_display_enabled := true
 var battle_triggered_traps: Dictionary = {}
 var full_board_build_count := 0
 var incremental_refresh_count := 0
@@ -199,6 +201,7 @@ func _ensure_battle_layers() -> void:
 func build_battle_world() -> void:
 	full_board_build_count += 1
 	enemy_range_display_mode = EnemyRangeDisplayMode.FOCUSED
+	player_range_display_enabled = true
 	battle_triggered_traps.clear()
 	_ensure_battle_layers()
 	_clear_children(battle_board_root)
@@ -286,6 +289,16 @@ func enemy_range_display_mode_label() -> String:
 		EnemyRangeDisplayMode.HIDDEN:
 			return "不显示"
 	return "单个敌人"
+
+
+func toggle_player_range_display() -> bool:
+	player_range_display_enabled = not player_range_display_enabled
+	_refresh_battle_dynamic_visuals()
+	return player_range_display_enabled
+
+
+func player_range_display_label() -> String:
+	return "显示" if player_range_display_enabled else "隐藏"
 
 
 func update_battle_hover() -> void:
@@ -448,11 +461,13 @@ func _battle_intent_cells() -> Dictionary:
 	var intent_cells: Dictionary = {}
 	if combat == null:
 		return intent_cells
-	if selected_card < 0:
+	if selected_card < 0 and player_range_display_enabled:
 		for raw_cell in combat.player_reachable_cells():
 			var player_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			(player_entry["player_move"] as Array).append({"intent": {"enemy_id": "player"}})
 			intent_cells[raw_cell] = player_entry
+	if host.active_animation_kind == "enemy_turn":
+		return intent_cells
 	var focused_enemy_id := _focused_battle_enemy_id()
 	for enemy_id in combat.living_enemy_ids():
 		if not _enemy_range_display_allows(enemy_id, focused_enemy_id):
@@ -493,7 +508,7 @@ func _enemy_range_display_allows(enemy_id: String, focused_enemy_id: String) -> 
 
 func _clear_battle_cell_dynamic(cell_node: Node3D) -> void:
 	for child: Node in cell_node.get_children():
-		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_") or child.name.begins_with("PlayerReachable") or child.name.begins_with("EnemyReachable") or child.name.begins_with("Hover"):
+		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_") or child.name.begins_with("PlayerReachable") or child.name.begins_with("PlayerPosition") or child.name.begins_with("EnemyReachable") or child.name.begins_with("Hover"):
 			child.free()
 
 
@@ -534,7 +549,9 @@ func _refresh_battle_dynamic_visuals() -> void:
 				primary_entry = lines[0]
 			var cell_intent_data: Dictionary = primary_entry.get("intent", default_intent)
 			var rim_color := base_rim
-			if not impacts.is_empty():
+			if pos == combat.player_pos:
+				rim_color = COL_PLAYER_POSITION
+			elif not impacts.is_empty():
 				rim_color = COL_RED
 			elif not threats.is_empty():
 				rim_color = COL_ENEMY_THREAT
@@ -548,7 +565,9 @@ func _refresh_battle_dynamic_visuals() -> void:
 			if rim_node != null:
 				rim_node.material_override = _material(rim_color, false, 0.04 if rim_color != COL_GRID_DARK else 0.0)
 			var top_y := _battle_cell_top_y(pos)
-			if not impacts.is_empty():
+			if pos == combat.player_pos:
+				_add_battle_cell_fill(cell_node, "PlayerPositionFill", top_y, COL_PLAYER_POSITION, 0.42)
+			elif not impacts.is_empty():
 				_add_battle_cell_fill(cell_node, "IntentAttackOverlayFill", top_y, COL_RED, 0.88)
 				var attack_glyph := "!"
 				if int(cell_intent_data.get("hits", 1)) > 1:

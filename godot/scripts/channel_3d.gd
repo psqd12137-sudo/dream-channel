@@ -3213,8 +3213,18 @@ func cycle_battle_enemy_range_display() -> void:
 	if phase != "combat" or combat == null:
 		return
 	var mode_label: String = battle_world_renderer.cycle_enemy_range_display()
-	status_message = "敌方范围：%s（按 1 切换）" % mode_label
-	_refresh_hud()
+	if test_combat_active:
+		status_message = "敌方范围：%s（按 1 切换）" % mode_label
+		_refresh_hud()
+
+
+func toggle_battle_player_range_display() -> void:
+	if phase != "combat" or combat == null:
+		return
+	var enabled: bool = battle_world_renderer.toggle_player_range_display()
+	if test_combat_active:
+		status_message = "玩家可达范围：%s（按 2 切换）" % ("显示" if enabled else "隐藏")
+		_refresh_hud()
 
 func update_battle_hover() -> void:
 	battle_world_renderer.update_battle_hover()

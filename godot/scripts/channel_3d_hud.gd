@@ -900,13 +900,14 @@ func _draw_test_ai_panel() -> void:
 	draw_rect(TEST_AI_PANEL_RECT, TEAL, false, 2.0)
 	_label("AI 调试 · %s" % str(game.test_session.scenario_id), TEST_AI_PANEL_RECT.position + Vector2(12, 23), 13, GOLD)
 	_label("模式：%s    回合：%d/%d" % [_test_mode_label(), game.test_session.round_count, game.test_session.max_rounds], TEST_AI_PANEL_RECT.position + Vector2(12, 45), 10, MUTED)
+	_label("范围：敌方·%s（1）  玩家可达·%s（2）" % [game.battle_world_renderer.enemy_range_display_mode_label(), game.battle_world_renderer.player_range_display_label()], TEST_AI_PANEL_RECT.position + Vector2(12, 60), 10, GOLD)
 	var focused = combat.enemy_by_id(game.test_focused_enemy_id)
 	if focused != null:
-		_label("关注：%s · %s/%s" % [focused.id, focused.ai_role, focused.ai_state], TEST_AI_PANEL_RECT.position + Vector2(12, 68), 11, TEXT)
-		_label("视线：%s  最后目击：%s" % ["有" if focused.sees_player else "无", str(focused.last_seen)], TEST_AI_PANEL_RECT.position + Vector2(12, 88), 10, MUTED)
-		_label("目标：%s  攻击位：%s" % [str(focused.tactical_goal), str(focused.tactical_reserved_cell)], TEST_AI_PANEL_RECT.position + Vector2(12, 106), 10, MUTED)
+		_label("关注：%s · %s/%s" % [focused.id, focused.ai_role, focused.ai_state], TEST_AI_PANEL_RECT.position + Vector2(12, 82), 11, TEXT)
+		_label("视线：%s  最后目击：%s" % ["有" if focused.sees_player else "无", str(focused.last_seen)], TEST_AI_PANEL_RECT.position + Vector2(12, 102), 10, MUTED)
+		_label("目标：%s  攻击位：%s" % [str(focused.tactical_goal), str(focused.tactical_reserved_cell)], TEST_AI_PANEL_RECT.position + Vector2(12, 120), 10, MUTED)
 		# 理由区限制行数，给下方敌人列表留出稳定的独立空间。
-		_draw_wrapped_lines(str(focused.ai_reason), TEST_AI_PANEL_RECT.position + Vector2(12, 114), 332, 10, Color("d9ede5"), 4)
+		_draw_wrapped_lines(str(focused.ai_reason), TEST_AI_PANEL_RECT.position + Vector2(12, 128), 332, 10, Color("d9ede5"), 4)
 	var plans: Dictionary = combat.preview_all_tactical_plans()
 	for index in range(combat.enemy_order.size()):
 		var enemy_id := str(combat.enemy_order[index])
@@ -1288,6 +1289,10 @@ func _input(event: InputEvent) -> void:
 		return
 	if key_event.pressed and not key_event.echo and game.phase == "combat" and key_event.keycode == KEY_1:
 		game.cycle_battle_enemy_range_display()
+		get_viewport().set_input_as_handled()
+		return
+	if key_event.pressed and not key_event.echo and game.phase == "combat" and key_event.keycode == KEY_2:
+		game.toggle_battle_player_range_display()
 		get_viewport().set_input_as_handled()
 		return
 	if key_event.pressed and not key_event.echo and game.phase == "combat" and game.selected_card < 0:
