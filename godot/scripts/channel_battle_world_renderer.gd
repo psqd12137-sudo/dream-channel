@@ -40,6 +40,11 @@ const COL_GOLD := Color("f2a51e")
 const COL_MAGENTA := Color("d63b72")
 const COL_GREEN := Color("66b66d")
 const COL_RED := Color("d9574f")
+const COL_ENEMY_THREAT := Color("ef4444")
+const COL_ENEMY_MOVE := Color("6d4cff")
+const COL_PLAYER_MOVE := Color("8b5cf6")
+const COL_HOVER_VALID := Color("f5e7a1")
+const COL_HOVER_INVALID := Color("ff6b6b")
 const COL_RANGED_ENEMY := Color("4dbbff")
 const COL_BLUE := Color("4c92bd")
 const COL_GRID_DARK := Color("26343b")
@@ -397,26 +402,36 @@ func _battle_intent_cells() -> Dictionary:
 	var intent_cells: Dictionary = {}
 	if combat == null:
 		return intent_cells
+	if selected_card < 0:
+		for raw_cell in combat.player_reachable_cells():
+			var player_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			(player_entry["player_move"] as Array).append({"intent": {"enemy_id": "player"}})
+			intent_cells[raw_cell] = player_entry
 	var focused_enemy_id := _focused_battle_enemy_id()
 	for enemy_id in combat.living_enemy_ids():
 		var enemy_intent: Dictionary = battle_intent_snapshot.get(enemy_id, {})
 		if enemy_intent.is_empty():
 			continue
+		if enemy_id == focused_enemy_id:
+			for raw_cell in enemy_intent.get("move_cells", []):
+				var move_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+				(move_entry["enemy_move"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+				intent_cells[raw_cell] = move_entry
+			for raw_cell in enemy_intent.get("threat_cells", []):
+				var threat_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+				(threat_entry["threat"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+				intent_cells[raw_cell] = threat_entry
 		for raw_cell in enemy_intent.get("impact_cells", enemy_intent.get("hurt", [])):
-			var impact_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "path": [], "coverage": [], "line": []})
+			var impact_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			(impact_entry["impact"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
 			intent_cells[raw_cell] = impact_entry
 		for raw_cell in enemy_intent.get("path", []):
-			var path_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "path": [], "coverage": [], "line": []})
+			var path_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			(path_entry["path"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
 			intent_cells[raw_cell] = path_entry
 		if enemy_id == focused_enemy_id:
-			for raw_cell in enemy_intent.get("coverage_cells", []):
-				var coverage_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "path": [], "coverage": [], "line": []})
-				(coverage_entry["coverage"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
-				intent_cells[raw_cell] = coverage_entry
 			for raw_cell in enemy_intent.get("line_cells", []):
-				var line_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "path": [], "coverage": [], "line": []})
+				var line_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 				(line_entry["line"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
 				intent_cells[raw_cell] = line_entry
 	return intent_cells
@@ -424,7 +439,7 @@ func _battle_intent_cells() -> Dictionary:
 
 func _clear_battle_cell_dynamic(cell_node: Node3D) -> void:
 	for child: Node in cell_node.get_children():
-		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_"):
+		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_") or child.name.begins_with("PlayerReachable") or child.name.begins_with("EnemyReachable") or child.name.begins_with("Hover"):
 			child.free()
 
 
@@ -443,28 +458,36 @@ func _refresh_battle_dynamic_visuals() -> void:
 				continue
 			_clear_battle_cell_dynamic(cell_node)
 			var base_rim: Color = cell_node.get_meta("battle_base_rim", COL_GRID_DARK)
-			var cell_intent: Dictionary = intent_cells.get(pos, {"impact": [], "path": [], "coverage": [], "line": []})
+			var cell_intent: Dictionary = intent_cells.get(pos, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			var impacts: Array = cell_intent.get("impact", [])
+			var threats: Array = cell_intent.get("threat", [])
+			var player_moves: Array = cell_intent.get("player_move", [])
+			var enemy_moves: Array = cell_intent.get("enemy_move", [])
 			var paths: Array = cell_intent.get("path", [])
-			var coverages: Array = cell_intent.get("coverage", [])
 			var lines: Array = cell_intent.get("line", [])
 			var primary_entry: Dictionary = {"intent": default_intent}
 			if not impacts.is_empty():
 				primary_entry = impacts[0]
+			elif not threats.is_empty():
+				primary_entry = threats[0]
+			elif not player_moves.is_empty():
+				primary_entry = player_moves[0]
+			elif not enemy_moves.is_empty():
+				primary_entry = enemy_moves[0]
 			elif not paths.is_empty():
 				primary_entry = paths[0]
-			elif not coverages.is_empty():
-				primary_entry = coverages[0]
 			elif not lines.is_empty():
 				primary_entry = lines[0]
 			var cell_intent_data: Dictionary = primary_entry.get("intent", default_intent)
 			var rim_color := base_rim
 			if not impacts.is_empty():
 				rim_color = COL_RED
-			elif not paths.is_empty():
-				rim_color = COL_BLUE
-			elif not coverages.is_empty():
-				rim_color = Color("55c8df")
+			elif not threats.is_empty():
+				rim_color = COL_ENEMY_THREAT
+			elif not player_moves.is_empty():
+				rim_color = COL_PLAYER_MOVE
+			elif not enemy_moves.is_empty():
+				rim_color = COL_ENEMY_MOVE
 			var rim_node := cell_node.get_node_or_null("Frame") as MeshInstance3D
 			if rim_node == null:
 				rim_node = cell_node.get_node_or_null("TerrainFoot") as MeshInstance3D
@@ -472,27 +495,25 @@ func _refresh_battle_dynamic_visuals() -> void:
 				rim_node.material_override = _material(rim_color, false, 0.04 if rim_color != COL_GRID_DARK else 0.0)
 			var top_y := _battle_cell_top_y(pos)
 			if not impacts.is_empty():
-				# 动态危险标记单独维护，避免玩家落格后重新实例化整张棋盘。
-				_add_cylinder(
-					cell_node,
-					"IntentAttackOverlay",
-					Vector3(0, top_y + 0.035, 0),
-					0.34,
-					0.055,
-					_material(Color(COL_RED, 0.86), true, 0.10)
-				)
-				_add_corner_marks(cell_node, "IntentAttackCorner", COL_RED, top_y + 0.015)
+				_add_battle_cell_fill(cell_node, "IntentAttackOverlayFill", top_y, COL_RED, 0.88)
 				var attack_glyph := "!"
 				if int(cell_intent_data.get("hits", 1)) > 1:
 					attack_glyph = "×%d" % int(cell_intent_data.get("hits", 1))
 				if impacts.size() > 1:
 					attack_glyph = "×%d" % impacts.size()
 				_add_label(cell_node, "IntentAttackGlyph", attack_glyph, Vector3(0.0, top_y + 0.30, 0.0), Color.WHITE, 25)
-			elif not paths.is_empty():
+			elif not threats.is_empty():
+				_add_battle_cell_fill(cell_node, "IntentThreatFill", top_y, COL_ENEMY_THREAT, 0.50)
+			elif not player_moves.is_empty():
+				_add_battle_cell_fill(cell_node, "PlayerReachableFill", top_y, COL_PLAYER_MOVE, 0.34)
+			elif not enemy_moves.is_empty():
+				_add_battle_cell_fill(cell_node, "IntentMoveOverlayFill", top_y, COL_ENEMY_MOVE, 0.28)
+			if not paths.is_empty() and impacts.is_empty():
 				var path_intent: Dictionary = paths[0].get("intent", {})
 				var path_cells: Array = path_intent.get("path", [])
 				var path_index: int = path_cells.find(pos)
-				_add_cylinder(cell_node, "IntentMoveOverlay", Vector3(0, top_y + 0.025, 0), 0.25, 0.045, _material(Color(COL_BLUE, 0.82), true, 0.08))
+				if threats.is_empty() and enemy_moves.is_empty():
+					_add_battle_cell_fill(cell_node, "IntentMoveOverlayFill", top_y, COL_ENEMY_MOVE, 0.42)
 				_add_label(
 					cell_node,
 					"IntentMoveGlyph",
@@ -501,29 +522,34 @@ func _refresh_battle_dynamic_visuals() -> void:
 					Color.WHITE,
 					22
 				)
-			elif not coverages.is_empty():
-				_add_cylinder(
-					cell_node,
-					"IntentRangeOverlay",
-					Vector3(0, top_y + 0.025, 0),
-					0.31,
-					0.045,
-					_material(Color(Color("55c8df"), 0.42), true, 0.12)
-				)
-				_add_corner_marks(cell_node, "IntentRangeCorner", Color("55c8df"), top_y + 0.015)
 			elif not lines.is_empty():
 				_add_box(
 					cell_node,
 					"IntentLineOverlay",
 					Vector3(0, top_y + 0.026, 0),
 					Vector3(0.16, 0.04, 0.16),
-					_material(Color(Color("55c8df"), 0.68), true, 0.12)
+					_material(Color(COL_ENEMY_THREAT, 0.72), true, 0.12)
 				)
+			if pos == hovered_battle_cell:
+				var hover_valid := _is_valid_battle_target(pos)
+				_add_battle_cell_fill(cell_node, "HoverValidFill" if hover_valid else "HoverInvalidFill", top_y, COL_HOVER_VALID if hover_valid else COL_HOVER_INVALID, 0.18)
+				if not hover_valid and selected_card < 0:
+					_add_label(cell_node, "HoverInvalidGlyph", "×", Vector3(0, top_y + 0.26, 0), COL_HOVER_INVALID, 28)
 			if combat.traps.has(pos):
 				var trap: Dictionary = combat.traps[pos]
 				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
 				_add_trap_item_sprite(cell_node, str(trap.get("card_id", "")), top_y)
 				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
+
+
+func _add_battle_cell_fill(parent: Node3D, node_name: String, top_y: float, color: Color, alpha: float) -> MeshInstance3D:
+	return _add_box(
+		parent,
+		node_name,
+		Vector3(0, top_y + 0.026, 0),
+		Vector3(BATTLE_CELL - 0.16, 0.035, BATTLE_CELL - 0.16),
+		_material(Color(color, alpha), true, 0.10)
+	)
 
 
 func _sync_battle_actors() -> void:

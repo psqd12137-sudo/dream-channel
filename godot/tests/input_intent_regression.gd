@@ -49,6 +49,7 @@ func _run() -> void:
 	game.build_battle_world()
 	_check(_count_named_prefix(game.battle_root, "IntentMoveOverlay") > 0, "patrol movement intent must be rendered as colored map overlays")
 	_check(_count_named_prefix(game.battle_root, "IntentMoveGlyph") > 0, "patrol movement cells must carry ordered map glyphs")
+	_check(_count_named_prefix(game.battle_root, "PlayerReachableFill") > 0, "player movement range must cover reachable cells")
 
 	game.combat.enemy_pos = game.combat.player_pos + Vector2i.RIGHT
 	game.combat.enemy_sees_player = true

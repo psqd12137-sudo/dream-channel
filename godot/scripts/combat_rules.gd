@@ -378,6 +378,19 @@ func player_path_cost(path: Array[Vector2i]) -> int:
 	return total
 
 
+func player_reachable_cells() -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if outcome != "":
+		return cells
+	for y in range(rows):
+		for x in range(cols):
+			var target := Vector2i(x, y)
+			var path := player_path_to(target)
+			if path.size() >= 2 and player_path_cost(path) <= energy:
+				cells.append(target)
+	return cells
+
+
 func player_move_cost(target: Vector2i) -> int:
 	return move_cost + (hostile_pass_cost if enemy_at(target) != null else 0)
 
@@ -627,6 +640,8 @@ func preview_all_intents() -> Dictionary:
 func _empty_enemy_intent(enemy_id := "") -> Dictionary:
 	return {
 		"path": [],
+		"move_cells": [],
+		"threat_cells": [],
 		"hurt": [],
 		"impact_cells": [],
 		"coverage_cells": [],
@@ -650,6 +665,10 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 	result["enemy_revealed"] = state.revealed
 	result["sees_player"] = state.sees_player
 	result["attack_range"] = state.attack_range
+	if state.revealed:
+		var move_cells := enemy_reachable_cells(state)
+		result["move_cells"] = move_cells
+		result["threat_cells"] = enemy_threat_cells(state, move_cells)
 	if state.revealed and state.sees_player:
 		result["range_origin"] = state.pos
 		result["coverage_cells"] = _enemy_attack_coverage(state, state.pos, state.sees_player)
@@ -925,6 +944,50 @@ func _enemy_attack_coverage(state: CombatEnemyState, origin: Vector2i, can_see: 
 			if valid:
 				cells.append(target)
 	return cells
+
+
+func enemy_reachable_cells(state: CombatEnemyState, budget: int = -1) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if state == null or not state.alive():
+		return cells
+	var movement_budget := _enemy_turn_budget(state) if budget < 0 else budget
+	var blocked := occupied_enemy_cells(state.id)
+	for y in range(rows):
+		for x in range(cols):
+			var target := Vector2i(x, y)
+			if target == state.pos or target == player_pos or target == decoy_pos:
+				continue
+			if not is_walkable(target) or blocked.has(target):
+				continue
+			var path := _find_path(state.pos, target, blocked, false)
+			if path.size() < 2 or path.back() != target:
+				continue
+			if _enemy_path_cost(path) <= movement_budget:
+				cells.append(target)
+	return cells
+
+
+func enemy_threat_cells(state: CombatEnemyState, move_cells: Array[Vector2i] = []) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if state == null or not state.alive() or state.blind_turns > 0:
+		return cells
+	var origins: Array[Vector2i] = [state.pos]
+	for cell in move_cells:
+		if cell not in origins:
+			origins.append(cell)
+	for origin in origins:
+		for target in _enemy_attack_coverage(state, origin, true):
+			if target not in cells:
+				cells.append(target)
+	return cells
+
+
+func _enemy_path_cost(path: Array[Vector2i]) -> int:
+	var total := 0
+	for index in range(1, path.size()):
+		var cell: Vector2i = path[index]
+		total += 1 + int((traps.get(cell, {}) as Dictionary).get("slow", 0))
+	return total
 
 
 func _attack_line_cells(origin: Vector2i, target: Vector2i) -> Array[Vector2i]:

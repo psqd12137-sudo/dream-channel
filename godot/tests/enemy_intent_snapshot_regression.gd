@@ -30,6 +30,8 @@ func _init() -> void:
 	_check(intents.size() == 3, "bulk intent snapshot must include every living enemy")
 	var ranged: Dictionary = intents.get("ranged_a", {})
 	_check(str(ranged.get("attack_kind", "")) == "ranged", "snapshot must preserve ranged attack kind")
+	_check(Vector2i(2, 0) in ranged.get("move_cells", []), "snapshot must expose enemy movement range")
+	_check(Vector2i(0, 1) in ranged.get("threat_cells", []), "snapshot must expose attack threat after movement")
 	_check(Vector2i(0, 1) in ranged.get("impact_cells", []), "snapshot must expose the actual ranged impact cell")
 	_check(Vector2i(0, 1) in ranged.get("coverage_cells", []), "snapshot must expose ranged coverage")
 	_check(Vector2i(2, 0) in ranged.get("line_cells", []), "snapshot must expose line-of-fire cells")
