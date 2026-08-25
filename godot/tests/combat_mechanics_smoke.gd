@@ -25,9 +25,16 @@ func _init() -> void:
 	_check(trap_combat.energy == 5 and trap_combat.energy_rolls.is_empty(), "player turns must use a fixed 5 AP budget without 0/1/2 dice")
 	var jab_index: int = trap_combat.hand.find("jab")
 	_check(jab_index >= 0 and trap_combat.play_card(jab_index, Vector2i(1, 0)), "jab should place on an adjacent cell")
-	trap_combat.enemy_turn()
+	var trap_events: Array = trap_combat.enemy_turn()
 	_check(trap_combat.enemy_hp == 8, "enemy should take 2 trap damage")
 	_check(trap_combat.enemy_toughness == 1, "basic damage trap should drain 2 toughness")
+	var trap_damage_event_found := false
+	for raw_event in trap_events:
+		var event: Dictionary = raw_event
+		if str(event.get("kind", "")) == "enemy_damaged" and int(event.get("damage", 0)) == 2:
+			trap_damage_event_found = true
+			_check(str(event.get("label", "")).contains("地刺"), "spike trigger event must identify the spike trap")
+	_check(trap_damage_event_found, "enemy stepping on a damage trap must publish a damage event for presentation")
 
 	var ready_combat = CombatRules.new()
 	ready_combat.setup(arena, _enemy(4), cards, ["brace", "guard", "focus", "tonic"], 2, rules, [])

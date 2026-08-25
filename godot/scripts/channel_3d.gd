@@ -1800,6 +1800,17 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			tween.tween_property(enemy_node, "scale", Vector3(1.30, 0.76, 1.30), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
 			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
+		elif kind == "enemy_damaged":
+			if enemy_node == null:
+				continue
+			var trap_damage := int(event.get("damage", 0))
+			if trap_damage <= 0:
+				continue
+			tween.tween_callback(_play_enemy_state.bind(actor_id, "hurt", "-%d" % trap_damage))
+			tween.tween_callback(_show_enemy_damage_feedback.bind(actor_id, trap_damage))
+			tween.tween_property(enemy_node, "scale", Vector3(1.16, 0.86, 1.16), ENEMY_ATTACK_DURATION * 0.42 * animation_duration_scale)
+			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.58 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 		else:
 			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 	await tween.finished

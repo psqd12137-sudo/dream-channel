@@ -882,6 +882,8 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 			break
 		var verb := "追击" if state.sees_player else "搜索" if state.last_seen != INVALID_CELL else "巡逻"
 		_move_enemy_to(state, raw_step, verb, turn_events)
+		if not state.alive():
+			break
 		remaining -= 1
 		if traps.has(state.pos):
 			remaining -= int((traps[state.pos] as Dictionary).get("slow", 0))
@@ -1255,8 +1257,22 @@ func _move_enemy_to(state: CombatEnemyState, target: Vector2i, verb: String, eve
 	state.pos = target
 	events.append({"kind": "move", "actor_id": state.id, "from": from, "to": state.pos, "via_portal": state.just_portaled, "free": free_step, "label": verb})
 	event_log.append("Enemy%s from=%s to=%s free=%s" % [verb, from, state.pos, str(free_step)])
-	_trigger_trap(state, state.pos, has_decoy() and _enemy_goal(state) == decoy_pos)
+	var trap_result: Dictionary = _trigger_trap(state, state.pos, has_decoy() and _enemy_goal(state) == decoy_pos)
+	var trap_damage := int(trap_result.get("damage", 0))
+	if trap_damage > 0:
+		# 把踩陷阱单独发布为敌方事件，演出层才能在移动后显示实际伤害。
+		events.append({
+			"kind": "enemy_damaged",
+			"actor_id": state.id,
+			"target_enemy_id": state.id,
+			"target": state.pos,
+			"damage": trap_damage,
+			"source": trap_result.get("source", "trap"),
+			"label": "踩中%s" % str(trap_result.get("label", "陷阱")),
+		})
 	_refresh_vision(true)
+	if not state.alive():
+		return
 	if not was_adjacent and manhattan(state.pos, player_pos) == 1:
 		_trigger_ready(state)
 
@@ -1399,10 +1415,11 @@ func _shove_enemy(state: CombatEnemyState, prefer_portal: bool) -> bool:
 	return state.just_portaled
 
 
-func _trigger_trap(state: CombatEnemyState, pos: Vector2i, chasing_decoy: bool = false) -> void:
+func _trigger_trap(state: CombatEnemyState, pos: Vector2i, chasing_decoy: bool = false) -> Dictionary:
 	if not traps.has(pos):
-		return
+		return {}
 	var trap: Dictionary = traps[pos]
+	var trap_id := str(trap.get("card_id", "trap"))
 	var damage := int(trap.get("damage", 0))
 	if chasing_decoy and damage > 0:
 		damage += 1
@@ -1410,10 +1427,12 @@ func _trigger_trap(state: CombatEnemyState, pos: Vector2i, chasing_decoy: bool =
 	if state.just_portaled:
 		damage += int(trap.get("portalBonus", 0))
 	var default_tough := 2 if damage > 0 else 1 if int(trap.get("slow", 0)) > 0 else 0
-	_apply_enemy_damage(state, damage, int(trap.get("tough", trap.get("toughness", default_tough))), "trap:%s" % str(trap.get("card_id", "trap")))
+	var source := "trap:%s" % trap_id
+	var dealt := _apply_enemy_damage(state, damage, int(trap.get("tough", trap.get("toughness", default_tough))), source)
 	_apply_blind(state, trap)
 	if not bool(trap.get("persistent", false)):
 		traps.erase(pos)
+	return {"damage": dealt, "source": source, "label": "地刺" if trap_id in ["spike", "jab"] else "陷阱"}
 
 
 func _apply_enemy_damage(state: CombatEnemyState, damage: int, toughness_damage: int, source: String) -> int:
