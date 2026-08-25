@@ -1756,9 +1756,9 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			if enemy_node == null:
 				continue
 			var attack_kind := str(event.get("attack_kind", "attack"))
-			var attack_callouts := {"lunge": "突进!", "faceShock": "突脸!", "guardBreak": "破防!", "slam": "砸地!", "beam": "激光!"}
+			var attack_callouts := {"backstab": "背刺!", "lunge": "突进!", "faceShock": "突脸!", "guardBreak": "破防!", "slam": "砸地!", "beam": "激光!"}
 			var is_ranged_attack := attack_kind == "ranged"
-			if is_ranged_attack:
+			if is_ranged_attack or attack_kind == "backstab":
 				_queue_enemy_attack_facing(tween, enemy_node, event)
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", str(attack_callouts.get(attack_kind, "袭击!"))))
 			if is_ranged_attack:

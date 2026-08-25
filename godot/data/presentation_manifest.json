@@ -156,7 +156,21 @@
                                                                  "attack":  "Punch",
                                                                  "hurt":  "HitReact"
                                                              }
-                                       }
+                                       },
+                              "assassin":  {
+                                              "model_path":  "res://assets/third_party/quaternius_ultimate_monsters/BlueDemon.gltf",
+                                              "model_scale":  0.58,
+                                              "model_y":  0.0,
+                                              "model_yaw":  0.0,
+                                              "label_y":  1.48,
+                                              "animation_map":  {
+                                                                    "idle":  "Idle",
+                                                                    "move":  "Walk",
+                                                                    "ready":  "Idle",
+                                                                    "attack":  "Punch",
+                                                                    "hurt":  "HitReact"
+                                                                }
+                                          }
                           },
     "items":  {
                   "adrenaline":  "res://assets/ui/cards/BloodyCity.png",

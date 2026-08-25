@@ -63,6 +63,8 @@ func _resolve_role(state) -> String:
 	var configured := str(state.behavior_role)
 	if configured != "" and configured != "auto":
 		return configured
+	if state.has_trait("backstab"):
+		return "flanker"
 	if state.has_trait("beam") or state.has_trait("trapAware") or state.has_trait("slam"):
 		return "controller"
 	if state.has_trait("lunge") or state.has_trait("cornerCut"):
@@ -81,7 +83,11 @@ func _build_plan(state, role: String) -> Dictionary:
 		return _plan(state, "decoy_hunt", decoy_target, INVALID_CELL, "纸傀儡优先级高于玩家")
 	var slot := _choose_attack_slot(state, role)
 	if slot == INVALID_CELL:
+		if state.has_trait("backstab"):
+			return _plan(state, "backstab", rules.call("player_back_cell"), INVALID_CELL, "暂时无法抵达背后，保持距离等待绕行")
 		return _plan(state, "engage", focus_target, INVALID_CELL, "没有可用攻击位，直接压向玩家")
+	if state.has_trait("backstab"):
+		return _plan(state, "backstab", slot, slot, "绕到玩家背后，只从背部攻击")
 	match role:
 		"flanker": return _plan(state, "flank", slot, slot, "侧翼占位，避免与正面敌人重叠")
 		"controller": return _plan(state, "control", slot, slot, "优先占据攻击位并控制玩家走位")
@@ -96,7 +102,9 @@ func _choose_attack_slot(state, role: String) -> Vector2i:
 	var candidates: Array[Dictionary] = []
 	var blocked: Dictionary = rules.call("occupied_enemy_cells", state.id)
 	var candidate_cells: Array[Vector2i] = []
-	if state.has_trait("ranged") or state.has_trait("beam"):
+	if state.has_trait("backstab"):
+		candidate_cells.append(rules.call("player_back_cell"))
+	elif state.has_trait("ranged") or state.has_trait("beam"):
 		# 远程敌人不能继续套用近战四邻格；候选位必须由规则层
 		# 的同一套攻击计划确认，确保 AI、预览和执行的射程/视线一致。
 		for y in range(int(rules.get("rows"))):
@@ -108,10 +116,10 @@ func _choose_attack_slot(state, role: String) -> Vector2i:
 	for cell in candidate_cells:
 		if not rules.call("is_walkable", cell) or blocked.has(cell) or reservations.has(cell):
 			continue
-		var path: Array = rules.call("_find_path", state.pos, cell, blocked)
+		var path: Array = rules.call("_backstab_path", state) if state.has_trait("backstab") else rules.call("_find_path", state.pos, cell, blocked)
 		if path.size() < 2 and state.pos != cell:
 			continue
-		if state.has_trait("ranged") or state.has_trait("beam"):
+		if state.has_trait("ranged") or state.has_trait("beam") or state.has_trait("backstab"):
 			var attack_plan: Dictionary = rules.call("_enemy_attack_plan", state, cell, 99, true)
 			if attack_plan.is_empty():
 				continue

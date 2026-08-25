@@ -50,6 +50,7 @@ const COL_PLAYER_POSITION := Color("f4c542")
 const COL_HOVER_VALID := Color("f5e7a1")
 const COL_HOVER_INVALID := Color("ff6b6b")
 const COL_RANGED_ENEMY := Color("4dbbff")
+const COL_BACKSTAB_ENEMY := Color("101216")
 const COL_BLUE := Color("4c92bd")
 const COL_GRID_DARK := Color("26343b")
 const COL_FLOOR_H0 := Color("70777b")
@@ -1300,7 +1301,8 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool, enemy_id: 
 	var floor_y := 0.39 + float(combat.heights.get(pos, 0)) * 0.64
 	var enemy_state = combat.enemy_by_id(enemy_id) if not is_player else null
 	var is_ranged_enemy: bool = enemy_state != null and enemy_state.has_trait("ranged")
-	var visible_enemy_color: Color = COL_RANGED_ENEMY if is_ranged_enemy else COL_RED
+	var is_backstab_enemy: bool = enemy_state != null and enemy_state.has_trait("backstab")
+	var visible_enemy_color: Color = COL_BACKSTAB_ENEMY if is_backstab_enemy else COL_RANGED_ENEMY if is_ranged_enemy else COL_RED
 	var base_color: Color = COL_TEAL if is_player else visible_enemy_color if revealed else Color("1f2930")
 	_add_cylinder(node, "PawnBase", Vector3(0, floor_y + 0.026, 0), 0.46, 0.052, _material(Color(base_color, 0.58), true, 0.035))
 	var presenter := CharacterPresenter.new()
@@ -1360,7 +1362,11 @@ func _battle_actor_presentation(actor_key: String, enemy_id: String = "") -> Dic
 	var archetype: String = str(state.archetype) if state != null else combat.enemy_archetype
 	var variant: Dictionary = archetypes.get(archetype, {})
 	config.merge(variant, true)
-	if state != null and state.has_trait("ranged"):
+	if state != null and state.has_trait("backstab"):
+		# 背刺敌人用黑色 tint 与黑色底座区分，仍复用已验证的动画模型。
+		config["model_tint"] = COL_BACKSTAB_ENEMY
+		config["model_tint_strength"] = 0.78
+	elif state != null and state.has_trait("ranged"):
 		# 远程敌人沿用原模型和贴图，只通过材质 tint 与底座颜色做识别。
 		config["model_tint"] = COL_RANGED_ENEMY
 		config["model_tint_strength"] = 0.55

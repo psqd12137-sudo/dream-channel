@@ -20,6 +20,9 @@ func _run() -> void:
 	var manifest: Dictionary = JSON.parse_string(file.get_as_text())
 	var base_enemy: Dictionary = manifest.get("actors", {}).get("enemy", {})
 	var variants: Dictionary = manifest.get("enemy_archetypes", {})
+	var assassin: Dictionary = variants.get("assassin", {})
+	_check(str(assassin.get("model_path", "")).contains("BlueDemon.gltf"), "assassin must reuse the verified animated enemy silhouette")
+	_check(str(assassin.get("animation_map", {}).get("attack", "")).to_lower() == "punch", "assassin must have an attack animation mapping")
 	var model_paths: Dictionary = {}
 	for archetype: String in ARCHETYPES:
 		var variant: Dictionary = variants.get(archetype, {})

@@ -63,7 +63,7 @@
       "id": "mixed_assault",
       "name": "远近混打",
       "category": "ai",
-      "description": "验证近战敌人持续逼近、远程敌人在攻击距离内保持站位并直接射击。",
+      "description": "验证近战逼近、远程射击，以及黑色背刺者绕到玩家背后再攻击。",
       "seed": 2026082408,
       "room": {
         "id": "test_mixed_assault",
@@ -74,6 +74,7 @@
           "cols": 9,
           "rows": 5,
           "player": [1, 2],
+          "player_facing": [0, 1],
           "walls": [],
           "heights": {},
           "portals": [],
@@ -81,7 +82,8 @@
         },
         "enemies": [
           {"id": "close_hunter", "name": "近战猎手", "spawn": [4, 2], "behavior_role": "hunter", "action_points": 2, "attack_range": 1, "traits": []},
-          {"id": "far_sentry", "name": "远射哨兵", "spawn": [7, 2], "behavior_role": "controller", "action_points": 2, "attack_range": 2, "traits": ["ranged"]}
+          {"id": "far_sentry", "name": "远射哨兵", "spawn": [7, 2], "behavior_role": "controller", "action_points": 2, "attack_range": 2, "traits": ["ranged"]},
+          {"id": "black_assassin", "name": "黑影背刺者", "spawn": [3, 1], "behavior_role": "flanker", "action_points": 4, "attack_cost": 2, "attack_range": 1, "hp": 1, "toughness": 0, "damage": 8, "archetype": "assassin", "archetype_label": "背刺者", "archetype_desc": "只从玩家背后攻击；无法绕到背后时会拉开距离。", "traits": ["backstab"], "trait_labels": {"backstab": "只从背后攻击"}}
         ]
       },
       "run_rules": {"player_hp": 50, "base_energy": 5},
