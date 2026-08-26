@@ -9,6 +9,14 @@ const CharacterPresenter = preload("res://scripts/character_presenter.gd")
 const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const APP_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Regular.otf")
+const INTENT_ATTACK_ICON: Texture2D = preload("res://assets/ui/battle_intent_attack.png")
+const INTENT_RANGED_ICON: Texture2D = preload("res://assets/ui/battle_intent_ranged.png")
+const INTENT_MOVE_ICON: Texture2D = preload("res://assets/ui/battle_intent_move.png")
+const SALT_RING_HIT_SHEET: Texture2D = preload("res://assets/effects/salt_ring_hit_sheet.png")
+const SALT_RING_TEXTURE: Texture2D = preload("res://assets/effects/salt_ring_texture.png")
+const SALT_RING_TEXTURE_CHARGES_2: Texture2D = preload("res://assets/effects/salt_ring_texture_charges_2.png")
+const SALT_RING_TEXTURE_CHARGES_1: Texture2D = preload("res://assets/effects/salt_ring_texture_charges_1.png")
+const SALT_RING_SMOKE_SHADER: Shader = preload("res://shaders/salt_ring_smoke.gdshader")
 
 const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interior/"
 const BATTLE_FLOOR_LIGHT := "res://assets/third_party/kaykit_dungeon/models/floor_wood_large.gltf.glb"
@@ -40,12 +48,26 @@ const COL_GOLD := Color("f2a51e")
 const COL_MAGENTA := Color("d63b72")
 const COL_GREEN := Color("66b66d")
 const COL_RED := Color("d9574f")
-const COL_RANGED_ENEMY := Color("4dbbff")
+const COL_ENEMY_THREAT := Color("ef4444")
+const COL_ENEMY_MOVE := Color("6d4cff")
+const COL_PLAYER_MOVE := Color("fffaf2")
+const COL_PLAYER_POSITION := Color("f4c542")
+const COL_HOVER_VALID := Color("f5e7a1")
+const COL_HOVER_INVALID := Color("ff6b6b")
+const COL_RANGED_ENEMY := Color("d9574f")
+const COL_RANGED_INTENT := Color("4dbbff")
+const COL_BACKSTAB_ENEMY := Color("101216")
 const COL_BLUE := Color("4c92bd")
 const COL_GRID_DARK := Color("26343b")
 const COL_FLOOR_H0 := Color("70777b")
 const COL_WALL_GREEN := Color("3d6e53")
 const INVALID_CELL := Vector2i(-999, -999)
+
+enum EnemyRangeDisplayMode {
+	FOCUSED,
+	ALL,
+	HIDDEN,
+}
 
 var host = null
 
@@ -87,9 +109,20 @@ var battle_entry_cell: Vector2i:
 
 var battle_hover_root: Node3D = null
 var battle_target_root: Node3D = null
+var battle_intent_line_root: Node3D = null
 var battle_hover_markers: Array[MeshInstance3D] = []
 var battle_hover_valid_markers: Array[MeshInstance3D] = []
 var battle_overlay_materials: Dictionary = {}
+var battle_intent_overlay_nodes: Dictionary = {}
+var battle_feedback_queue: Array[Dictionary] = []
+var battle_feedback_playing := false
+var battle_feedback_generation := 0
+var battle_intent_snapshot: Dictionary = {}
+var battle_debug_hidden := false
+var enemy_range_display_mode := EnemyRangeDisplayMode.FOCUSED
+var player_range_display_enabled := true
+var battle_triggered_traps: Dictionary = {}
+var salt_ring_hit_frames: SpriteFrames = null
 var full_board_build_count := 0
 var incremental_refresh_count := 0
 var battle_backstage_cells:
@@ -115,6 +148,18 @@ var hovered_battle_cell:
 	get: return host.hovered_battle_cell
 var battle_turn_actor_id:
 	get: return host.battle_turn_actor_id
+var combat_is_boss:
+	get: return host.combat_is_boss
+var boss_anchor_cells:
+	get: return host.boss_anchor_cells
+var boss_anchor_hp:
+	get: return host.boss_anchor_hp
+var boss_phase_name:
+	get: return host.boss_phase_name
+var active_animation_kind:
+	get: return host.active_animation_kind
+var battle_feedback_root:
+	get: return host.battle_feedback_root
 
 func _init(next_host) -> void:
 	host = next_host
@@ -124,15 +169,30 @@ func _clear_children(parent: Node) -> void:
 	host._clear_children(parent)
 
 
+func clear_battle_feedback_overlay() -> void:
+	battle_intent_overlay_nodes.clear()
+	battle_feedback_generation += 1
+	battle_feedback_queue.clear()
+	battle_feedback_playing = false
+	if battle_feedback_root == null:
+		return
+	for child: Node in battle_feedback_root.get_children():
+		child.queue_free()
+
+
 func _battle_world(pos: Vector2i) -> Vector3:
 	return host._battle_world(pos)
+
+
+func _battle_feedback_screen_position(world_position: Vector3) -> Vector2:
+	return host._battle_feedback_screen_position(world_position)
 
 
 func _add_box(parent: Node3D, node_name: String, local_position: Vector3, box_size: Vector3, material: StandardMaterial3D) -> MeshInstance3D:
 	return host._add_box(parent, node_name, local_position, box_size, material)
 
 
-func _add_cylinder(parent: Node3D, node_name: String, local_position: Vector3, radius: float, height: float, material: StandardMaterial3D) -> MeshInstance3D:
+func _add_cylinder(parent: Node3D, node_name: String, local_position: Vector3, radius: float, height: float, material: Material) -> MeshInstance3D:
 	return host._add_cylinder(parent, node_name, local_position, radius, height, material)
 
 
@@ -144,8 +204,8 @@ func _material(color: Color, transparent: bool = false, emission_strength: float
 	return host._material(color, transparent, emission_strength)
 
 
-func _add_decor_sprite(node_name: String, texture_path: String, local_position: Vector3, pixel_size: float) -> void:
-	host._add_decor_sprite(node_name, texture_path, local_position, pixel_size)
+func _add_decor_sprite(node_name: String, texture_path: String, local_position: Vector3, pixel_size: float, billboard: bool = true, rotation_y: float = 0.0) -> void:
+	host._add_decor_sprite(node_name, texture_path, local_position, pixel_size, billboard, rotation_y)
 
 
 func _add_trap_item_sprite(parent: Node3D, card_id: String, y: float) -> void:
@@ -177,17 +237,33 @@ func _ensure_battle_layers() -> void:
 		battle_target_root = Node3D.new()
 		battle_target_root.name = "BattleTargetOverlay"
 		battle_root.add_child(battle_target_root)
+	if battle_intent_line_root == null or not is_instance_valid(battle_intent_line_root):
+		battle_intent_line_root = battle_root.get_node_or_null("BattleIntentLines") as Node3D
+	if battle_intent_line_root == null:
+		battle_intent_line_root = Node3D.new()
+		battle_intent_line_root.name = "BattleIntentLines"
+		battle_root.add_child(battle_intent_line_root)
 
 
 func build_battle_world() -> void:
 	full_board_build_count += 1
+	battle_triggered_traps.clear()
+	clear_battle_feedback_overlay()
 	_ensure_battle_layers()
+	_clear_children(battle_intent_line_root)
 	_clear_children(battle_board_root)
 	_clear_children(battle_actor_root)
 	enemy_nodes.clear()
+	battle_intent_snapshot = combat.preview_all_intents() if combat != null else {}
 	_build_battle_board()
 	_sync_battle_actors()
 	_update_battle_overlays()
+
+
+func reset_battle_display_preferences() -> void:
+	# 显示偏好属于一场战斗的交互状态；完整重绘不能覆盖玩家刚刚选择的模式。
+	enemy_range_display_mode = EnemyRangeDisplayMode.FOCUSED
+	player_range_display_enabled = true
 
 
 func refresh_battle_board() -> void:
@@ -201,10 +277,24 @@ func refresh_battle_state(sync_actors := true, sync_actor_positions := false) ->
 		return
 	incremental_refresh_count += 1
 	_ensure_battle_layers()
+	# 一次动态刷新只规划一轮全体敌人，格子和头顶标记共享同一份快照。
+	battle_intent_snapshot = combat.preview_all_intents()
 	_refresh_battle_dynamic_visuals()
 	if sync_actors:
 		_reconcile_battle_actors(sync_actor_positions)
 	_update_battle_overlays()
+
+
+func refresh_battle_selection_visuals() -> void:
+	# 选中敌人只改变演员上的描边，不需要重建棋盘或重新同步位置。
+	if combat == null:
+		return
+	for raw_enemy_id in combat.living_enemy_ids():
+		var enemy_id: String = str(raw_enemy_id)
+		var state = combat.enemy_by_id(enemy_id)
+		var enemy_node: Node3D = _enemy_node_for_id(enemy_id)
+		if state != null and enemy_node != null:
+			_refresh_enemy_selection_outline(enemy_node, state)
 
 
 func update_battle_overlays() -> void:
@@ -212,8 +302,86 @@ func update_battle_overlays() -> void:
 	_update_battle_overlays()
 
 
+func update_battle_debug_visibility() -> void:
+	if battle_board_root == null:
+		return
+	var should_hide: bool = not _battle_debug_visible()
+	if should_hide == battle_debug_hidden:
+		return
+	battle_debug_hidden = should_hide
+	_clear_battle_target_markers()
+	_refresh_battle_dynamic_visuals()
+	_update_battle_hover_marker()
+	if not should_hide:
+		_update_battle_target_markers()
+
+
+func _battle_debug_visible() -> bool:
+	# 敌方回合的逻辑状态会先结算，动画状态再逐步表现；因此不能只依赖
+	# animation_busy。过渡帧仍标记为 enemy_turn 时，所有预览层都必须隐藏。
+	return not host.animation_busy and str(active_animation_kind) != "enemy_turn"
+
+
+func _battle_enemy_intel_visible() -> bool:
+	return host != null and host.has_method("enemy_intel_visible") and bool(host.enemy_intel_visible())
+
+
+func set_battle_triggered_traps(events: Array[Dictionary]) -> void:
+	battle_triggered_traps.clear()
+	for event: Dictionary in events:
+		if str(event.get("kind", "")) not in ["enemy_damaged", "enemy_trap_triggered"] or not str(event.get("source", "")).begins_with("trap:"):
+			continue
+		var target: Vector2i = event.get("target", INVALID_CELL)
+		var trap: Variant = event.get("trap", {})
+		if target != INVALID_CELL and trap is Dictionary:
+			battle_triggered_traps[target] = (trap as Dictionary).duplicate(true)
+
+
+func clear_battle_triggered_traps() -> void:
+	battle_triggered_traps.clear()
+
+
+func consume_battle_triggered_trap(target: Vector2i) -> void:
+	if not battle_triggered_traps.has(target):
+		return
+	battle_triggered_traps.erase(target)
+	var cell_node := battle_board_root.get_node_or_null("Cell_%d_%d" % [target.x, target.y]) as Node3D
+	if cell_node == null:
+		return
+	for child: Node in cell_node.get_children():
+		if child.name.begins_with("Trap") or child.name.begins_with("ItemArt_"):
+			child.free()
+
+
+func cycle_enemy_range_display() -> String:
+	enemy_range_display_mode = (enemy_range_display_mode + 1) % EnemyRangeDisplayMode.size()
+	_refresh_battle_dynamic_visuals()
+	return enemy_range_display_mode_label()
+
+
+func enemy_range_display_mode_label() -> String:
+	match enemy_range_display_mode:
+		EnemyRangeDisplayMode.ALL:
+			return "全体敌人"
+		EnemyRangeDisplayMode.HIDDEN:
+			return "不显示"
+	return "单个敌人"
+
+
+func toggle_player_range_display() -> bool:
+	player_range_display_enabled = not player_range_display_enabled
+	_refresh_battle_dynamic_visuals()
+	return player_range_display_enabled
+
+
+func player_range_display_label() -> String:
+	return "显示" if player_range_display_enabled else "隐藏"
+
+
 func update_battle_hover() -> void:
 	_ensure_battle_layers()
+	# 悬停反馈改由格子覆层绘制，鼠标移动时刷新当前格子的有效/无效状态。
+	_refresh_battle_dynamic_visuals()
 	_update_battle_hover_marker()
 
 
@@ -250,32 +418,9 @@ func _clear_battle_target_markers() -> void:
 func _update_battle_hover_marker() -> void:
 	if battle_hover_root == null:
 		return
-	_ensure_battle_hover_markers()
-	var has_hover: bool = combat != null and hovered_battle_cell != INVALID_CELL and _battle_cell_in_bounds(hovered_battle_cell)
-	if not has_hover:
-		_set_corner_marker_group(battle_hover_markers, false, COL_GREEN, 0.0)
-		_set_corner_marker_group(battle_hover_valid_markers, false, COL_GREEN, 0.0)
-		return
-	var hover_cell_node := battle_board_root.get_node_or_null("Cell_%d_%d" % [hovered_battle_cell.x, hovered_battle_cell.y]) as Node3D
-	if hover_cell_node == null:
-		_set_corner_marker_group(battle_hover_markers, false, COL_GREEN, 0.0)
-		_set_corner_marker_group(battle_hover_valid_markers, false, COL_GREEN, 0.0)
-		return
-	for marker: MeshInstance3D in battle_hover_markers:
-		if marker.get_parent() != hover_cell_node:
-			marker.reparent(hover_cell_node)
-	for marker: MeshInstance3D in battle_hover_valid_markers:
-		if marker.get_parent() != hover_cell_node:
-			marker.reparent(hover_cell_node)
-	var top_y := _battle_cell_top_y(hovered_battle_cell)
-	var is_valid := _is_valid_battle_target(hovered_battle_cell)
-	_set_corner_marker_group(battle_hover_markers, true, Color.WHITE, top_y + 0.055)
-	_set_corner_marker_group(
-		battle_hover_valid_markers,
-		is_valid and selected_card < 0,
-		COL_GREEN,
-		top_y
-	)
+	# 保留旧数组兼容已有场景，但不再把四个角点挂到棋盘上。
+	_set_corner_marker_group(battle_hover_markers, false, Color.WHITE, 0.0)
+	_set_corner_marker_group(battle_hover_valid_markers, false, COL_GREEN, 0.0)
 
 
 func _ensure_battle_hover_markers() -> void:
@@ -380,39 +525,90 @@ func _build_battle_board() -> void:
 				_add_battle_blocker_asset(cell_node, pos, platform_height)
 			elif combat.traps.has(pos):
 				var trap: Dictionary = combat.traps[pos]
-				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
-				var card_id := str(trap.get("card_id", ""))
-				_add_trap_item_sprite(cell_node, card_id, top_y)
-				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
+				_add_trap_visual(cell_node, trap, top_y)
+			if combat_is_boss and pos in boss_anchor_cells:
+				_add_boss_anchor_visual(cell_node, pos, top_y)
 	_add_battle_room_shell()
 	_add_battle_stage_decor()
 	_refresh_battle_dynamic_visuals()
+
+
+func _add_boss_anchor_visual(cell_node: Node3D, cell: Vector2i, top_y: float) -> void:
+	var remaining := int(boss_anchor_hp.get(cell, 0))
+	var active := remaining > 0
+	var color := Color("f2a51e") if active else Color("5b6267")
+	var core := _add_cylinder(cell_node, "BossAnchorCore", Vector3(0, top_y + 0.24, 0), 0.24, 0.48, _material(color, false, 0.22 if active else 0.0))
+	core.rotation.x = 0.0
+	_add_cylinder(cell_node, "BossAnchorRing", Vector3(0, top_y + 0.055, 0), 0.54, 0.06, _material(Color(color, 0.80), true, 0.12 if active else 0.0))
+	_add_label(cell_node, "BossAnchorLabel", "锚 %d" % remaining if active else "锚·熄灭", Vector3(0, top_y + 0.82, 0), Color("ffe8a3") if active else Color("9ba4a9"), 13)
 
 
 func _battle_intent_cells() -> Dictionary:
 	var intent_cells: Dictionary = {}
 	if combat == null:
 		return intent_cells
+	if not _battle_debug_visible():
+		return intent_cells
+	if selected_card < 0 and player_range_display_enabled:
+		for raw_cell in combat.player_reachable_cells():
+			var player_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			(player_entry["player_move"] as Array).append({"intent": {"enemy_id": "player"}})
+			intent_cells[raw_cell] = player_entry
+	var focused_enemy_id := _focused_battle_enemy_id()
 	for enemy_id in combat.living_enemy_ids():
-		var enemy_intent: Dictionary = combat.preview_intent(enemy_id)
-		for raw_cell in enemy_intent.get("hurt", []):
-			intent_cells[raw_cell] = {"kind": "hurt", "enemy_id": enemy_id, "intent": enemy_intent}
+		if not _enemy_range_display_allows(enemy_id, focused_enemy_id):
+			continue
+		var enemy_intent: Dictionary = battle_intent_snapshot.get(enemy_id, {})
+		if enemy_intent.is_empty():
+			continue
+		var enemy_state = combat.enemy_by_id(enemy_id)
+		if enemy_state == null or (not enemy_state.revealed and not _battle_enemy_intel_visible()):
+			continue
+		for raw_cell in enemy_intent.get("move_cells", []):
+			var move_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			(move_entry["enemy_move"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+			intent_cells[raw_cell] = move_entry
+		for raw_cell in enemy_intent.get("threat_cells", []):
+			var threat_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			(threat_entry["threat"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+			intent_cells[raw_cell] = threat_entry
+		for raw_cell in enemy_intent.get("impact_cells", enemy_intent.get("hurt", [])):
+			var impact_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			(impact_entry["impact"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+			intent_cells[raw_cell] = impact_entry
 		for raw_cell in enemy_intent.get("path", []):
-			if not intent_cells.has(raw_cell):
-				intent_cells[raw_cell] = {"kind": "path", "enemy_id": enemy_id, "intent": enemy_intent}
+			var path_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			(path_entry["path"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+			intent_cells[raw_cell] = path_entry
+		for raw_cell in enemy_intent.get("line_cells", []):
+			var line_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			(line_entry["line"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
+			intent_cells[raw_cell] = line_entry
 	return intent_cells
+
+
+func _enemy_range_display_allows(enemy_id: String, focused_enemy_id: String) -> bool:
+	if enemy_range_display_mode == EnemyRangeDisplayMode.HIDDEN:
+		return false
+	if enemy_range_display_mode == EnemyRangeDisplayMode.ALL:
+		return true
+	return enemy_id == focused_enemy_id
 
 
 func _clear_battle_cell_dynamic(cell_node: Node3D) -> void:
 	for child: Node in cell_node.get_children():
-		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_"):
+		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_") or child.name.begins_with("PlayerReachable") or child.name.begins_with("PlayerPosition") or child.name.begins_with("EnemyReachable") or child.name.begins_with("Hover"):
 			child.free()
 
 
 func _refresh_battle_dynamic_visuals() -> void:
 	if combat == null or battle_board_root == null:
 		return
-	var default_intent: Dictionary = combat.preview_intent()
+	var show_battle_debug: bool = _battle_debug_visible()
+	if battle_intent_snapshot.is_empty():
+		battle_intent_snapshot = combat.preview_all_intents()
+	_refresh_battle_intent_arrows()
+	_refresh_boss_anchor_visuals()
 	var intent_cells := _battle_intent_cells()
 	for y in range(combat.rows):
 		for x in range(combat.cols):
@@ -422,34 +618,296 @@ func _refresh_battle_dynamic_visuals() -> void:
 				continue
 			_clear_battle_cell_dynamic(cell_node)
 			var base_rim: Color = cell_node.get_meta("battle_base_rim", COL_GRID_DARK)
-			var cell_intent: Dictionary = intent_cells.get(pos, {})
-			var cell_intent_data: Dictionary = cell_intent.get("intent", default_intent)
-			var rim_color := COL_RED if cell_intent.get("kind", "") == "hurt" else COL_BLUE if cell_intent.get("kind", "") == "path" else base_rim
+			var cell_intent: Dictionary = intent_cells.get(pos, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			var impacts: Array = cell_intent.get("impact", [])
+			var threats: Array = cell_intent.get("threat", [])
+			var player_moves: Array = cell_intent.get("player_move", [])
+			var enemy_moves: Array = cell_intent.get("enemy_move", [])
+			var paths: Array = cell_intent.get("path", [])
+			var lines: Array = cell_intent.get("line", [])
+			var rim_color := base_rim
+			if show_battle_debug and pos == combat.player_pos:
+				rim_color = COL_PLAYER_POSITION
+			elif show_battle_debug and not impacts.is_empty():
+				rim_color = COL_RED
+			elif show_battle_debug and not threats.is_empty():
+				rim_color = COL_ENEMY_THREAT
+			elif show_battle_debug and not player_moves.is_empty():
+				rim_color = COL_PLAYER_MOVE
+			elif show_battle_debug and not enemy_moves.is_empty():
+				rim_color = COL_ENEMY_MOVE
 			var rim_node := cell_node.get_node_or_null("Frame") as MeshInstance3D
 			if rim_node == null:
 				rim_node = cell_node.get_node_or_null("TerrainFoot") as MeshInstance3D
 			if rim_node != null:
 				rim_node.material_override = _material(rim_color, false, 0.04 if rim_color != COL_GRID_DARK else 0.0)
 			var top_y := _battle_cell_top_y(pos)
-			var is_hurt_cell: bool = cell_intent.get("kind", "") == "hurt"
-			var path_cells: Array = cell_intent_data.get("path", [])
-			var path_index: int = path_cells.find(pos)
-			if is_hurt_cell:
-				# 动态危险标记单独维护，避免玩家落格后重新实例化整张棋盘。
-				_add_cylinder(cell_node, "IntentAttackOverlay", Vector3(0, top_y + 0.035, 0), 0.34, 0.055, _material(Color(COL_RED, 0.86), true, 0.10))
-				_add_corner_marks(cell_node, "IntentAttackCorner", COL_RED, top_y + 0.015)
-				var attack_glyph := "!"
-				if int(cell_intent_data.get("hits", 1)) > 1:
-					attack_glyph = "×%d" % int(cell_intent_data.get("hits", 1))
-				_add_label(cell_node, "IntentAttackGlyph", attack_glyph, Vector3(0.0, top_y + 0.30, 0.0), Color.WHITE, 25)
-			elif path_index >= 0:
-				_add_cylinder(cell_node, "IntentMoveOverlay", Vector3(0, top_y + 0.025, 0), 0.25, 0.045, _material(Color(COL_BLUE, 0.82), true, 0.08))
-				_add_label(cell_node, "IntentMoveGlyph", str(path_index + 1), Vector3(0.0, top_y + 0.25, 0.0), Color.WHITE, 22)
-			if combat.traps.has(pos):
-				var trap: Dictionary = combat.traps[pos]
-				_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
-				_add_trap_item_sprite(cell_node, str(trap.get("card_id", "")), top_y)
-				_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
+			if show_battle_debug:
+				if pos == combat.player_pos:
+					_add_battle_cell_fill(cell_node, "PlayerPositionFill", top_y, COL_PLAYER_POSITION, 0.42)
+				if not impacts.is_empty():
+					_add_battle_cell_fill(cell_node, "IntentAttackOverlayFill", top_y, COL_RED, 0.88)
+				elif not threats.is_empty():
+					_add_battle_cell_fill(cell_node, "IntentThreatFill", top_y, COL_ENEMY_THREAT, 0.50)
+				elif not player_moves.is_empty():
+					_add_battle_cell_fill(cell_node, "PlayerReachableFill", top_y, COL_PLAYER_MOVE, 0.22)
+				elif not enemy_moves.is_empty():
+					_add_battle_cell_fill(cell_node, "IntentMoveOverlayFill", top_y, COL_ENEMY_MOVE, 0.28)
+				if not paths.is_empty() and impacts.is_empty():
+					if threats.is_empty() and enemy_moves.is_empty():
+						_add_battle_cell_fill(cell_node, "IntentMoveOverlayFill", top_y, COL_ENEMY_MOVE, 0.42)
+				elif not lines.is_empty():
+					_add_box(
+						cell_node,
+						"IntentLineOverlay",
+						Vector3(0, top_y + 0.026, 0),
+						Vector3(0.16, 0.04, 0.16),
+						_material(Color(COL_ENEMY_THREAT, 0.72), true, 0.12)
+					)
+				var glyph_entry: Dictionary = {}
+				var glyph_node_prefix := ""
+				if not impacts.is_empty():
+					glyph_entry = impacts[0]
+					glyph_node_prefix = "IntentAttackGlyph"
+				elif not enemy_moves.is_empty():
+					glyph_entry = enemy_moves[0]
+					glyph_node_prefix = "IntentMoveGlyph"
+				elif not paths.is_empty():
+					glyph_entry = paths[0]
+					glyph_node_prefix = "IntentMoveGlyph"
+				if show_battle_debug and not glyph_entry.is_empty():
+					var glyph_intent: Dictionary = glyph_entry.get("intent", {})
+					var glyph_type := str(glyph_intent.get("type", "stall"))
+					var glyph_attack_kind := str(glyph_intent.get("attack_kind", ""))
+					var glyph_color := _battle_intent_color(glyph_type)
+					_add_label(
+						cell_node,
+						glyph_node_prefix,
+						_battle_intent_glyph(glyph_type, glyph_attack_kind),
+						Vector3(0, top_y + 0.30, 0),
+						Color(glyph_color, 0.96),
+						18
+					)
+				if pos == hovered_battle_cell:
+					var hover_valid := _is_valid_battle_target(pos)
+					_add_battle_cell_fill(cell_node, "HoverValidFill" if hover_valid else "HoverInvalidFill", top_y, COL_HOVER_VALID if hover_valid else COL_HOVER_INVALID, 0.18)
+					if not hover_valid and selected_card < 0:
+						_add_label(cell_node, "HoverInvalidGlyph", "×", Vector3(0, top_y + 0.26, 0), COL_HOVER_INVALID, 28)
+			var visible_trap: Dictionary = combat.traps.get(pos, {})
+			if battle_triggered_traps.has(pos):
+				visible_trap = battle_triggered_traps[pos]
+			if not visible_trap.is_empty():
+				var trap: Dictionary = visible_trap
+				_add_trap_visual(cell_node, trap, top_y)
+
+
+func _refresh_boss_anchor_visuals() -> void:
+	if not combat_is_boss or battle_board_root == null:
+		return
+	for cell: Vector2i in boss_anchor_cells:
+		var cell_node := battle_board_root.get_node_or_null("Cell_%d_%d" % [cell.x, cell.y]) as Node3D
+		if cell_node == null:
+			continue
+		var remaining := int(boss_anchor_hp.get(cell, 0))
+		var active := remaining > 0
+		var color := Color("f2a51e") if active else Color("5b6267")
+		var core := cell_node.get_node_or_null("BossAnchorCore") as MeshInstance3D
+		if core != null:
+			core.material_override = _material(color, false, 0.22 if active else 0.0)
+		var ring := cell_node.get_node_or_null("BossAnchorRing") as MeshInstance3D
+		if ring != null:
+			ring.material_override = _material(Color(color, 0.80), true, 0.12 if active else 0.0)
+		var label := cell_node.get_node_or_null("BossAnchorLabel") as Label3D
+		if label != null:
+			label.text = "锚 %d" % remaining if active else "锚·熄灭"
+			label.modulate = Color("ffe8a3") if active else Color("9ba4a9")
+
+
+func _refresh_battle_intent_arrows() -> void:
+	if battle_intent_line_root == null or not is_instance_valid(battle_intent_line_root):
+		return
+	_clear_children(battle_intent_line_root)
+	if not _battle_debug_visible():
+		return
+	var focused_enemy_id := _focused_battle_enemy_id()
+	for enemy_id in combat.living_enemy_ids():
+		if not _enemy_range_display_allows(enemy_id, focused_enemy_id):
+			continue
+		var state = combat.enemy_by_id(enemy_id)
+		var intent: Dictionary = battle_intent_snapshot.get(enemy_id, {})
+		if state == null or (not state.revealed and not _battle_enemy_intel_visible()) or intent.is_empty():
+			continue
+		var impact_cells: Array = intent.get("impact_cells", intent.get("hurt", []))
+		if not impact_cells.is_empty():
+			var attack_paths := _battle_intent_attack_paths(state.pos, intent)
+			for index in range(attack_paths.size()):
+				_add_battle_intent_path_arrow(attack_paths[index], COL_GREEN, "%s_%d" % [enemy_id, index])
+			continue
+		var path_cells: Array = intent.get("path", [])
+		if path_cells.is_empty():
+			continue
+		var movement_path: Array = [state.pos]
+		movement_path.append_array(path_cells)
+		_add_battle_intent_path_arrow(movement_path, COL_GREEN, "%s_move" % enemy_id)
+
+
+func _battle_intent_attack_paths(state_pos: Vector2i, intent: Dictionary) -> Array:
+	# 攻击意图可能包含“先移动、再攻击”。只画攻击起点到目标的直线
+	# 会把中间的寻路拐点抹掉，因此要把实际移动路径接到攻击目标上。
+	var impact_cells: Array = intent.get("impact_cells", intent.get("hurt", []))
+	if impact_cells.is_empty():
+		return []
+	var path_cells: Array = intent.get("path", [])
+	var route_origin := state_pos
+	if path_cells.is_empty():
+		var raw_origin: Variant = intent.get("range_origin", INVALID_CELL)
+		if raw_origin is Vector2i and raw_origin != INVALID_CELL:
+			route_origin = raw_origin
+	var movement_path: Array[Vector2i] = [route_origin]
+	for raw_cell: Variant in path_cells:
+		var cell := Vector2i(raw_cell)
+		if movement_path.back() != cell:
+			movement_path.append(cell)
+	var routes: Array = []
+	for raw_target: Variant in impact_cells:
+		var route: Array[Vector2i] = movement_path.duplicate()
+		var target := Vector2i(raw_target)
+		if route.back() != target:
+			route.append(target)
+		routes.append(route)
+	return routes
+
+
+func _add_battle_intent_arrow(source: Vector2i, target: Vector2i, color: Color, suffix: String) -> void:
+	_add_battle_intent_path_arrow([source, target], color, suffix)
+
+
+func _add_battle_intent_path_arrow(raw_path: Array, color: Color, suffix: String) -> void:
+	if raw_path.size() < 2:
+		return
+	var points: Array[Vector2i] = []
+	for raw_cell: Variant in raw_path:
+		var cell := Vector2i(raw_cell)
+		if cell == INVALID_CELL:
+			return
+		if points.is_empty() or points.back() != cell:
+			points.append(cell)
+	if points.size() < 2:
+		return
+	var world_points: Array[Vector3] = []
+	var arrow_y := -INF
+	for cell: Vector2i in points:
+		var world := _battle_world(cell)
+		world_points.append(world)
+		arrow_y = maxf(arrow_y, _battle_cell_top_y(cell) + 0.20)
+	var head_width := 0.22
+	var shaft_half_width := 0.055
+	var mesh := ImmediateMesh.new()
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for index in range(world_points.size() - 1):
+		var start := Vector2(world_points[index].x, world_points[index].z)
+		var end := Vector2(world_points[index + 1].x, world_points[index + 1].z)
+		var direction := end - start
+		var length := direction.length()
+		if length < 0.05:
+			continue
+		direction /= length
+		var side := Vector2(-direction.y, direction.x)
+		var is_last_segment := index == world_points.size() - 2
+		var shaft_start := start + direction * (0.12 if index == 0 else 0.0)
+		var shaft_end := end
+		if is_last_segment:
+			var head_length := minf(0.55, length * 0.38)
+			var head_base := end - direction * head_length
+			shaft_end = head_base + direction * 0.04
+		var shaft_start_left := shaft_start + side * shaft_half_width
+		var shaft_start_right := shaft_start - side * shaft_half_width
+		var shaft_end_left := shaft_end + side * shaft_half_width
+		var shaft_end_right := shaft_end - side * shaft_half_width
+		if shaft_start.distance_to(shaft_end) >= 0.02:
+			mesh.surface_add_vertex(Vector3(shaft_start_left.x, arrow_y, shaft_start_left.y))
+			mesh.surface_add_vertex(Vector3(shaft_start_right.x, arrow_y, shaft_start_right.y))
+			mesh.surface_add_vertex(Vector3(shaft_end_left.x, arrow_y, shaft_end_left.y))
+			mesh.surface_add_vertex(Vector3(shaft_start_right.x, arrow_y, shaft_start_right.y))
+			mesh.surface_add_vertex(Vector3(shaft_end_right.x, arrow_y, shaft_end_right.y))
+			mesh.surface_add_vertex(Vector3(shaft_end_left.x, arrow_y, shaft_end_left.y))
+		if is_last_segment:
+			var head_base := end - direction * minf(0.55, length * 0.38)
+			var head_left := head_base + side * head_width
+			var head_right := head_base - side * head_width
+			mesh.surface_add_vertex(Vector3(end.x, arrow_y, end.y))
+			mesh.surface_add_vertex(Vector3(head_left.x, arrow_y, head_left.y))
+			mesh.surface_add_vertex(Vector3(head_right.x, arrow_y, head_right.y))
+	# A small diamond at every turn keeps adjacent segment quads visually joined.
+	for index in range(1, world_points.size() - 1):
+		var joint := Vector2(world_points[index].x, world_points[index].z)
+		var radius := shaft_half_width * 1.35
+		var joint_top := joint + Vector2(0, -radius)
+		var joint_right := joint + Vector2(radius, 0)
+		var joint_bottom := joint + Vector2(0, radius)
+		var joint_left := joint + Vector2(-radius, 0)
+		mesh.surface_add_vertex(Vector3(joint_top.x, arrow_y, joint_top.y))
+		mesh.surface_add_vertex(Vector3(joint_right.x, arrow_y, joint_right.y))
+		mesh.surface_add_vertex(Vector3(joint_bottom.x, arrow_y, joint_bottom.y))
+		mesh.surface_add_vertex(Vector3(joint_top.x, arrow_y, joint_top.y))
+		mesh.surface_add_vertex(Vector3(joint_bottom.x, arrow_y, joint_bottom.y))
+		mesh.surface_add_vertex(Vector3(joint_left.x, arrow_y, joint_left.y))
+	mesh.surface_end()
+	var arrow := MeshInstance3D.new()
+	arrow.name = "EnemyIntentArrow_%s" % suffix.replace(":", "_").replace("/", "_")
+	arrow.mesh = mesh
+	var material := _material(Color(color, 0.94), true, 0.18)
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.no_depth_test = true
+	arrow.material_override = material
+	arrow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	battle_intent_line_root.add_child(arrow)
+
+
+func _add_battle_cell_fill(parent: Node3D, node_name: String, top_y: float, color: Color, alpha: float) -> MeshInstance3D:
+	return _add_box(
+		parent,
+		node_name,
+		Vector3(0, top_y + 0.026, 0),
+		Vector3(BATTLE_CELL - 0.16, 0.035, BATTLE_CELL - 0.16),
+		_material(Color(color, alpha), true, 0.10)
+	)
+
+
+func _add_trap_visual(cell_node: Node3D, trap: Dictionary, top_y: float) -> void:
+	var card_id := str(trap.get("card_id", ""))
+	if card_id in ["salt", "guard"]:
+		var charges := int(trap.get("charges", 3))
+		if charges <= 0:
+			return
+		var salt_texture: Texture2D = SALT_RING_TEXTURE
+		if charges == 2:
+			salt_texture = SALT_RING_TEXTURE_CHARGES_2
+		elif charges == 1:
+			salt_texture = SALT_RING_TEXTURE_CHARGES_1
+		var salt_material := ShaderMaterial.new()
+		salt_material.shader = SALT_RING_SMOKE_SHADER
+		salt_material.set_shader_parameter("salt_texture", salt_texture)
+		salt_material.set_shader_parameter("salt_tint", Color("fff3d1"))
+		salt_material.set_shader_parameter("opacity", 0.94)
+		salt_material.set_shader_parameter("rotation_speed", 0.08)
+		salt_material.set_shader_parameter("shimmer", 0.008)
+		var salt_ring := MeshInstance3D.new()
+		salt_ring.name = "Trap"
+		var salt_mesh := QuadMesh.new()
+		salt_mesh.size = Vector2(1.98, 1.98)
+		salt_ring.mesh = salt_mesh
+		salt_ring.material_override = salt_material
+		salt_ring.position = Vector3(0, top_y + 0.07, 0)
+		salt_ring.rotation.x = -PI * 0.5
+		salt_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		salt_ring.set_meta("collision_free", true)
+		cell_node.add_child(salt_ring)
+		return
+	_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
+	_add_trap_item_sprite(cell_node, card_id, top_y)
+	_add_label(cell_node, "TrapGlyph", str(trap.get("glyph", "✦")), Vector3(0, top_y + 0.62, 0), COL_GOLD, 21)
 
 
 func _sync_battle_actors() -> void:
@@ -506,39 +964,185 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 	var presenter := node.get_node_or_null("Presenter")
 	if presenter != null and presenter.has_method("set_obscured"):
 		presenter.set_obscured(not state.revealed)
+	_refresh_enemy_selection_outline(node, state)
 	for child: Node in node.get_children():
-		if child.name == "EnemyIntentBadge" or child.name == "EnemyIntent":
+		if child.name == "EnemyIntentBadge" or child.name == "EnemyIntent" or child.name == "EnemyIntentValue":
 			child.free()
-	if not state.revealed or combat.outcome != "":
+
+
+func update_battle_feedback_overlay() -> void:
+	if battle_feedback_root == null:
+		return
+	var combat_feedback_enabled: bool = host.phase == "combat" and combat != null and combat.outcome == ""
+	var intent_visible: bool = combat_feedback_enabled and _battle_debug_visible()
+	var has_feedback_popups: bool = false
+	for child: Node in battle_feedback_root.get_children():
+		if child.name == "DamageFeedback" or child.name == "ActionCallout":
+			has_feedback_popups = true
+			break
+	var has_queued_feedback := battle_feedback_playing or not battle_feedback_queue.is_empty()
+	battle_feedback_root.visible = combat_feedback_enabled or has_feedback_popups or has_queued_feedback
+	if not intent_visible:
+		for overlay_value: Variant in battle_intent_overlay_nodes.values():
+			var hidden_overlay := overlay_value as Control
+			if hidden_overlay != null:
+				hidden_overlay.visible = false
+		return
+	var active_ids: Dictionary = {}
+	for raw_enemy_id in enemy_nodes.keys():
+		var enemy_id := str(raw_enemy_id)
+		var state = combat.enemy_by_id(enemy_id)
+		var enemy_node := enemy_nodes[raw_enemy_id] as Node3D
+		if state == null or enemy_node == null or int(state.hp) <= 0:
+			continue
+		active_ids[enemy_id] = true
+		var overlay := battle_intent_overlay_nodes.get(enemy_id) as Control
+		if overlay == null or not is_instance_valid(overlay):
+			overlay = _create_battle_intent_overlay(enemy_id)
+			battle_intent_overlay_nodes[enemy_id] = overlay
+		overlay.visible = true
+		_refresh_battle_intent_overlay(overlay, enemy_node, state)
+	for raw_enemy_id in battle_intent_overlay_nodes.keys().duplicate():
+		var stale_enemy_id := str(raw_enemy_id)
+		if active_ids.has(stale_enemy_id):
+			continue
+		var stale_overlay := battle_intent_overlay_nodes[raw_enemy_id] as Control
+		if stale_overlay != null and is_instance_valid(stale_overlay):
+			stale_overlay.visible = false
+
+
+func _create_battle_intent_overlay(enemy_id: String) -> Control:
+	var overlay := Control.new()
+	overlay.name = "EnemyIntentOverlay_%s" % enemy_id.replace("/", "_").replace(":", "_").replace(" ", "_")
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.z_index = 100
+	battle_feedback_root.add_child(overlay)
+	var badge := Panel.new()
+	badge.name = "Badge"
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("ff9c4add")
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_left = 4
+	style.corner_radius_bottom_right = 4
+	badge.add_theme_stylebox_override("panel", style)
+	badge.set_meta("style_box", style)
+	overlay.add_child(badge)
+	var icon := TextureRect.new()
+	icon.name = "Icon"
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	badge.add_child(icon)
+	var value := Label.new()
+	value.name = "Value"
+	value.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	value.add_theme_font_override("font", APP_FONT)
+	value.add_theme_color_override("font_color", Color.WHITE)
+	value.add_theme_color_override("font_outline_color", Color("14151d"))
+	value.add_theme_constant_override("outline_size", 5)
+	badge.add_child(value)
+	return overlay
+
+
+func _refresh_battle_intent_overlay(overlay: Control, enemy_node: Node3D, state) -> void:
+	var intent_known: bool = state.revealed or _battle_enemy_intel_visible()
+	var intent: Dictionary = battle_intent_snapshot.get(str(state.id), {})
+	if intent.is_empty() and intent_known:
+		intent = combat.preview_intent(state.id)
+	if not intent_known:
+		# 正式模式仍保留敌人的头顶提示位置，但不泄露攻击/移动类型、数值或方向。
+		intent = {"type": "stall", "attack_kind": "", "intent_value": "？？"}
+	var attack_kind := str(intent.get("attack_kind", ""))
+	var intent_value := str(intent.get("intent_value", ""))
+	var intent_color: Color = Color("77838c") if not intent_known else COL_RANGED_INTENT if attack_kind == "ranged" else _battle_intent_color(str(intent.get("type", "stall")))
+	var pixels_per_world: float = host.world_view_rect.size.y / maxf(0.01, host.camera.size)
+	var badge_size: Vector2 = Vector2(1.36, 0.86) * pixels_per_world if not intent_value.is_empty() else Vector2(0.86, 0.86) * pixels_per_world
+	var floor_y := 0.39 + float(combat.heights.get(state.pos, 0)) * 0.64
+	var anchor := enemy_node.global_position + Vector3.UP * (floor_y + 2.44)
+	var screen_position := _battle_feedback_screen_position(anchor)
+	if screen_position.x < -5000.0:
+		overlay.visible = false
+		return
+	overlay.size = badge_size
+	overlay.position = screen_position - badge_size * 0.5
+	var badge := overlay.get_node("Badge") as Panel
+	badge.size = badge_size
+	var style := badge.get_meta("style_box") as StyleBoxFlat
+	if style != null:
+		style.bg_color = Color(intent_color, 0.87)
+		var radius := maxi(3, roundi(pixels_per_world * 0.08))
+		style.corner_radius_top_left = radius
+		style.corner_radius_top_right = radius
+		style.corner_radius_bottom_left = radius
+		style.corner_radius_bottom_right = radius
+	var icon := badge.get_node("Icon") as TextureRect
+	icon.texture = _battle_intent_icon_texture(str(intent.get("type", "stall")), attack_kind) if intent_known else null
+	icon.visible = intent_known and icon.texture != null
+	var icon_span: float = 0.70 * pixels_per_world
+	icon.position = Vector2(0.08, 0.08) * pixels_per_world
+	icon.size = Vector2(icon_span, icon_span)
+	var value := badge.get_node("Value") as Label
+	value.text = intent_value
+	value.visible = not intent_value.is_empty()
+	value.position = Vector2(0.72, 0.08) * pixels_per_world if intent_known else Vector2(0.08, 0.08) * pixels_per_world
+	value.size = Vector2(0.54, 0.70) * pixels_per_world if intent_known else Vector2(0.84, 0.70) * pixels_per_world
+	value.add_theme_font_size_override("font_size", maxi(12, roundi(40.0 * pixels_per_world * 0.012)))
+
+
+func _refresh_enemy_selection_outline(node: Node3D, state) -> void:
+	var existing: Node3D = node.get_node_or_null("EnemySelectionOutline") as Node3D
+	var selected_enemy_id: String = _selected_battle_enemy_id()
+	var should_show: bool = state != null and state.revealed and combat.outcome == "" and str(state.id) == selected_enemy_id
+	if not should_show:
+		if existing != null:
+			existing.free()
+		return
+	if existing != null:
 		return
 	var floor_y := 0.39 + float(combat.heights.get(state.pos, 0)) * 0.64
-	var intent: Dictionary = combat.preview_intent(state.id)
-	var intent_color := _battle_intent_color(str(intent.get("type", "stall")))
-	var intent_badge := MeshInstance3D.new()
-	intent_badge.name = "EnemyIntentBadge"
-	var intent_quad := QuadMesh.new()
-	intent_quad.size = Vector2(0.72, 0.72)
-	intent_badge.mesh = intent_quad
-	intent_badge.position = Vector3(0, floor_y + 2.44, 0)
-	var badge_material := _material(Color(intent_color, 0.88), true, 0.08)
-	badge_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	badge_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	intent_badge.material_override = badge_material
-	node.add_child(intent_badge)
-	var intent_label := Label3D.new()
-	intent_label.font = APP_FONT
-	intent_label.name = "EnemyIntent"
-	intent_label.position = Vector3(0, floor_y + 2.44, 0.02)
-	intent_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	intent_label.no_depth_test = true
-	intent_label.font_size = 38
-	intent_label.pixel_size = 0.010
-	intent_label.outline_size = 7
-	intent_label.outline_modulate = Color("10151c")
-	intent_label.modulate = Color.WHITE
-	intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	intent_label.text = _battle_intent_glyph(str(intent.get("type", "stall")))
-	node.add_child(intent_label)
+	var outline := MeshInstance3D.new()
+	outline.name = "EnemySelectionOutline"
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.48
+	ring.outer_radius = 0.58
+	ring.rings = 32
+	ring.ring_segments = 10
+	outline.mesh = ring
+	outline.position = Vector3(0, floor_y + 0.08, 0)
+	outline.material_override = _material(Color(COL_GOLD, 0.96), true, 0.22)
+	outline.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.add_child(outline)
+
+
+func _selected_battle_enemy_id() -> String:
+	if host.test_combat_active and not str(host.test_focused_enemy_id).is_empty():
+		return str(host.test_focused_enemy_id)
+	if not str(host.battle_focused_enemy_id).is_empty():
+		return str(host.battle_focused_enemy_id)
+	return str(host.test_focused_enemy_id)
+
+
+func _focused_battle_enemy_id() -> String:
+	if combat == null:
+		return ""
+	var focused_enemy_id := str(host.test_focused_enemy_id) if host.test_combat_active else str(host.battle_focused_enemy_id)
+	if focused_enemy_id.is_empty():
+		focused_enemy_id = str(host.battle_focused_enemy_id) if host.test_combat_active else str(host.test_focused_enemy_id)
+	if not focused_enemy_id.is_empty() and battle_intent_snapshot.has(focused_enemy_id):
+		return focused_enemy_id
+	var hovered_enemy = combat.enemy_at(hovered_battle_cell)
+	if hovered_enemy != null and battle_intent_snapshot.has(hovered_enemy.id):
+		return hovered_enemy.id
+	var visible_ranged: Array[String] = []
+	for enemy_id in combat.living_enemy_ids():
+		var intent: Dictionary = battle_intent_snapshot.get(enemy_id, {})
+		if bool(intent.get("enemy_revealed", false)) and int(intent.get("attack_range", 0)) > 1:
+			visible_ranged.append(enemy_id)
+	return visible_ranged[0] if visible_ranged.size() == 1 else ""
 
 
 func _is_valid_battle_target(pos: Vector2i) -> bool:
@@ -839,7 +1443,7 @@ func _nearest_battle_layout_cell(preferred: Vector2i, used_cells: Dictionary) ->
 			var candidate := Vector2i(x, y)
 			if used_cells.has(candidate) or combat.walls.has(candidate) or combat.portals.has(candidate):
 				continue
-			if candidate == combat.player_pos or candidate == combat.enemy_pos:
+			if candidate == combat.player_pos or combat.enemy_at(candidate) != null:
 				continue
 			var footprint_penalty := 1000.0 if not _battle_cell_in_room_footprint(candidate) else 0.0
 			var score := float(abs(candidate.x - preferred.x) + abs(candidate.y - preferred.y)) + footprint_penalty
@@ -1071,7 +1675,8 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool, enemy_id: 
 	var floor_y := 0.39 + float(combat.heights.get(pos, 0)) * 0.64
 	var enemy_state = combat.enemy_by_id(enemy_id) if not is_player else null
 	var is_ranged_enemy: bool = enemy_state != null and enemy_state.has_trait("ranged")
-	var visible_enemy_color: Color = COL_RANGED_ENEMY if is_ranged_enemy else COL_RED
+	var is_backstab_enemy: bool = enemy_state != null and enemy_state.has_trait("backstab")
+	var visible_enemy_color: Color = COL_BACKSTAB_ENEMY if is_backstab_enemy else COL_RANGED_ENEMY if is_ranged_enemy else COL_RED
 	var base_color: Color = COL_TEAL if is_player else visible_enemy_color if revealed else Color("1f2930")
 	_add_cylinder(node, "PawnBase", Vector3(0, floor_y + 0.026, 0), 0.46, 0.052, _material(Color(base_color, 0.58), true, 0.035))
 	var presenter := CharacterPresenter.new()
@@ -1098,14 +1703,27 @@ func _battle_intent_color(intent_type: String) -> Color:
 	return Color("c8d4d8")
 
 
-func _battle_intent_glyph(intent_type: String) -> String:
+func _battle_intent_glyph(intent_type: String, attack_kind: String = "") -> String:
 	match intent_type:
-		"attack": return "攻"
+		"attack":
+			if attack_kind == "ranged":
+				return "远"
+			if attack_kind == "beam":
+				return "束"
+			return "攻"
 		"chase": return "追"
 		"search": return "搜"
 		"patrol": return "巡"
 		"ambush": return "伏"
 	return "待"
+
+
+func _battle_intent_icon_texture(intent_type: String, attack_kind: String = "") -> Texture2D:
+	if attack_kind == "ranged":
+		return INTENT_RANGED_ICON
+	if attack_kind in ["beam", "melee", "lunge", "guardBreak", "slam", "faceShock", "decoy"] or intent_type in ["attack", "ambush"]:
+		return INTENT_ATTACK_ICON
+	return INTENT_MOVE_ICON
 
 
 func _battle_actor_presentation(actor_key: String, enemy_id: String = "") -> Dictionary:
@@ -1118,7 +1736,11 @@ func _battle_actor_presentation(actor_key: String, enemy_id: String = "") -> Dic
 	var archetype: String = str(state.archetype) if state != null else combat.enemy_archetype
 	var variant: Dictionary = archetypes.get(archetype, {})
 	config.merge(variant, true)
-	if state != null and state.has_trait("ranged"):
+	if state != null and state.has_trait("backstab"):
+		# 背刺敌人用黑色 tint 与黑色底座区分，仍复用已验证的动画模型。
+		config["model_tint"] = COL_BACKSTAB_ENEMY
+		config["model_tint_strength"] = 0.78
+	elif state != null and state.has_trait("ranged"):
 		# 远程敌人沿用原模型和贴图，只通过材质 tint 与底座颜色做识别。
 		config["model_tint"] = COL_RANGED_ENEMY
 		config["model_tint_strength"] = 0.55
@@ -1172,6 +1794,89 @@ func _show_enemy_damage_feedback(enemy_id: String, damage: int) -> void:
 	_show_actor_damage_feedback(_enemy_node_name(enemy_id), damage)
 
 
+func _show_enemy_callout_feedback(enemy_id: String, text: String) -> void:
+	_show_actor_callout_feedback(_enemy_node_name(enemy_id), text)
+
+
+func _is_salt_ring_event(event: Dictionary) -> bool:
+	var trap_value: Variant = event.get("trap", {})
+	var trap: Dictionary = trap_value if trap_value is Dictionary else {}
+	var card_id := str(trap.get("card_id", event.get("card_id", "")))
+	return card_id == "salt" or card_id == "guard"
+
+
+func _salt_ring_hit_frames() -> SpriteFrames:
+	if salt_ring_hit_frames != null:
+		return salt_ring_hit_frames
+	var frames := SpriteFrames.new()
+	frames.add_animation("salt_ring")
+	frames.set_animation_speed("salt_ring", 12.0)
+	frames.set_animation_loop("salt_ring", false)
+	var sheet := SALT_RING_HIT_SHEET.get_image()
+	var sheet_width := sheet.get_width()
+	var sheet_height := sheet.get_height()
+	for frame_index in range(9):
+		var column := frame_index % 3
+		var row := frame_index / 3
+		var left := column * sheet_width / 3
+		var top := row * sheet_height / 3
+		var right := (column + 1) * sheet_width / 3
+		var bottom := (row + 1) * sheet_height / 3
+		var frame := sheet.get_region(Rect2i(left, top, right - left, bottom - top))
+		frame.convert(Image.FORMAT_RGBA8)
+		var edge_band := 4
+		for y in range(frame.get_height()):
+			for x in range(frame.get_width()):
+				var color := frame.get_pixel(x, y)
+				# The imported sheet keeps a visible separator on each cell edge;
+				# discard a small safety band so no vertical/horizontal bar survives
+				# when the frame is displayed with alpha blending.
+				if x < edge_band or y < edge_band or x >= frame.get_width() - edge_band or y >= frame.get_height() - edge_band:
+					frame.set_pixel(x, y, Color(color.r, color.g, color.b, 0.0))
+					continue
+				var luminance := color.r * 0.299 + color.g * 0.587 + color.b * 0.114
+				# The source sheet contains gray cell separators in addition to its
+				# black background. A higher threshold removes both, while keeping
+				# the cream-colored drawing and its soft antialiased edge.
+				var ink_alpha := smoothstep(0.24, 0.34, luminance)
+				frame.set_pixel(x, y, Color(color.r, color.g, color.b, color.a * ink_alpha))
+		frames.add_frame("salt_ring", ImageTexture.create_from_image(frame))
+	salt_ring_hit_frames = frames
+	return salt_ring_hit_frames
+
+
+func _show_enemy_salt_ring_effect(enemy_id: String) -> void:
+	var actor := _enemy_node_for_id(enemy_id)
+	if actor == null:
+		return
+	var state = combat.enemy_by_id(enemy_id) if combat != null else null
+	if state != null and not state.revealed:
+		return
+	var existing := actor.get_node_or_null("SaltRingHitEffect")
+	if existing != null:
+		existing.queue_free()
+	var effect := AnimatedSprite3D.new()
+	effect.name = "SaltRingHitEffect"
+	effect.sprite_frames = _salt_ring_hit_frames()
+	effect.animation = "salt_ring"
+	effect.position = Vector3(0, 2.22, 0.08)
+	effect.pixel_size = 0.00425
+	effect.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	effect.shaded = false
+	effect.no_depth_test = true
+	effect.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	# SpriteBase3D 的合法优先级上限是 127；使用上限保证序列帧
+	# 在无深度测试时仍稳定位于战斗反馈层，而不是触发渲染器警告。
+	effect.render_priority = 127
+	effect.modulate = Color("fff0c9")
+	actor.add_child(effect)
+	effect.animation_finished.connect(func() -> void:
+		if is_instance_valid(effect):
+			effect.queue_free()
+	)
+	effect.play("salt_ring")
+
+
 func _add_decoy_pawn(pos: Vector2i) -> void:
 	var node := Node3D.new()
 	node.name = "PaperDecoy"
@@ -1192,23 +1897,80 @@ func _play_actor_state(actor_node_name: String, state: String, callout: String =
 
 
 func _show_actor_damage_feedback(actor_node_name: String, damage: int) -> void:
-	var actor := battle_actor_root.get_node_or_null(actor_node_name) as Node3D
-	if actor == null or damage <= 0:
+	if damage <= 0:
 		return
-	var popup := Label3D.new()
-	popup.font = APP_FONT
+	_enqueue_actor_feedback(actor_node_name, "damage", damage)
+
+
+func _show_actor_callout_feedback(actor_node_name: String, text: String) -> void:
+	if text.is_empty():
+		return
+	_enqueue_actor_feedback(actor_node_name, "callout", text)
+
+
+func _enqueue_actor_feedback(actor_node_name: String, feedback_kind: String, value: Variant) -> void:
+	if battle_feedback_root == null:
+		return
+	battle_feedback_queue.append({
+		"actor": actor_node_name,
+		"kind": feedback_kind,
+		"value": value,
+	})
+	_drain_actor_feedback_queue()
+
+
+func _drain_actor_feedback_queue() -> void:
+	if battle_feedback_playing or battle_feedback_queue.is_empty():
+		return
+	battle_feedback_playing = true
+	var entry: Dictionary = battle_feedback_queue.pop_front()
+	var generation: int = battle_feedback_generation
+	var feedback_tween: Tween = _play_actor_feedback_entry(entry)
+	if feedback_tween == null:
+		_finish_actor_feedback(generation)
+		return
+	feedback_tween.finished.connect(_finish_actor_feedback.bind(generation), CONNECT_ONE_SHOT)
+
+
+func _finish_actor_feedback(generation: int) -> void:
+	if generation != battle_feedback_generation:
+		return
+	battle_feedback_playing = false
+	_drain_actor_feedback_queue()
+
+
+func _play_actor_feedback_entry(entry: Dictionary) -> Tween:
+	var actor_node_name := str(entry.get("actor", ""))
+	var feedback_kind := str(entry.get("kind", ""))
+	if feedback_kind == "damage":
+		return _play_actor_damage_feedback(actor_node_name, int(entry.get("value", 0)))
+	elif feedback_kind == "callout":
+		return _play_actor_callout_feedback(actor_node_name, str(entry.get("value", "")))
+	return null
+
+
+func _play_actor_damage_feedback(actor_node_name: String, damage: int) -> Tween:
+	var actor := battle_actor_root.get_node_or_null(actor_node_name) as Node3D
+	if actor == null or damage <= 0 or battle_feedback_root == null:
+		return
+	var popup := Label.new()
 	popup.name = "DamageFeedback"
 	popup.text = "✦  -%d  ✦" % damage
-	popup.position = Vector3(0, 1.28, 0.12)
-	popup.font_size = 58
-	popup.pixel_size = 0.014
+	popup.size = Vector2(170, 54)
+	popup.position = _battle_feedback_screen_position(actor.global_position + Vector3.UP * 1.28) - popup.size * 0.5
+	popup.pivot_offset = popup.size * 0.5
+	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	popup.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	popup.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	popup.add_theme_font_override("font", APP_FONT)
+	popup.add_theme_font_size_override("font_size", 26)
+	popup.add_theme_color_override("font_color", Color("ff4e61"))
+	popup.add_theme_color_override("font_outline_color", Color("fff2d2"))
+	popup.add_theme_constant_override("outline_size", 6)
 	popup.modulate = Color("ff4e61")
-	popup.outline_modulate = Color("fff2d2")
-	popup.outline_size = 12
-	popup.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	popup.no_depth_test = true
-	popup.scale = Vector3(0.35, 0.35, 0.35)
-	actor.add_child(popup)
+	popup.z_index = 200
+	popup.scale = Vector2(0.35, 0.35)
+	battle_feedback_root.add_child(popup)
 	var base_actor_position := actor.position
 	var feedback := actor.create_tween()
 	feedback.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -1219,10 +1981,47 @@ func _show_actor_damage_feedback(actor_node_name: String, damage: int) -> void:
 	feedback.tween_property(actor, "scale", Vector3.ONE, 0.13)
 	var popup_tween := popup.create_tween()
 	popup_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	popup_tween.tween_property(popup, "scale", Vector3.ONE, 0.11)
-	popup_tween.parallel().tween_property(popup, "position:y", 1.72, 0.34)
+	popup_tween.tween_property(popup, "scale", Vector2.ONE, 0.11)
+	popup_tween.parallel().tween_property(popup, "position:y", popup.position.y - 34.0, 0.34)
 	popup_tween.tween_property(popup, "modulate:a", 0.0, 0.20)
-	popup_tween.tween_callback(popup.queue_free)
+	popup_tween.finished.connect(func() -> void:
+		if is_instance_valid(popup):
+			popup.free()
+	, CONNECT_ONE_SHOT)
+	return popup_tween
+
+
+func _play_actor_callout_feedback(actor_node_name: String, text: String) -> Tween:
+	var actor := battle_actor_root.get_node_or_null(actor_node_name) as Node3D
+	if actor == null or text.is_empty() or battle_feedback_root == null:
+		return
+	var popup := Label.new()
+	popup.name = "ActionCallout"
+	popup.text = text
+	popup.size = Vector2(190, 62)
+	popup.position = _battle_feedback_screen_position(actor.global_position + Vector3.UP * 2.30) - popup.size * 0.5
+	popup.pivot_offset = popup.size * 0.5
+	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	popup.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	popup.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	popup.add_theme_font_override("font", APP_FONT)
+	popup.add_theme_font_size_override("font_size", 30)
+	popup.add_theme_color_override("font_color", Color("ffd166"))
+	popup.add_theme_color_override("font_outline_color", Color("3b2026"))
+	popup.add_theme_constant_override("outline_size", 7)
+	popup.z_index = 300
+	popup.scale = Vector2(0.30, 0.30)
+	battle_feedback_root.add_child(popup)
+	var popup_tween := popup.create_tween()
+	popup_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	popup_tween.tween_property(popup, "scale", Vector2.ONE, 0.11)
+	popup_tween.parallel().tween_property(popup, "position:y", popup.position.y - 40.0, 0.34)
+	popup_tween.tween_property(popup, "modulate:a", 0.0, 0.20)
+	popup_tween.finished.connect(func() -> void:
+		if is_instance_valid(popup):
+			popup.free()
+	, CONNECT_ONE_SHOT)
+	return popup_tween
 
 
 func _on_presenter_state_changed(_state: String) -> void:
@@ -1264,7 +2063,12 @@ func _add_battle_stage_decor() -> void:
 	var far_direction: Vector2i = far_edge["direction"]
 	entrance_position -= Vector3(float(entrance_direction.x), 0.0, float(entrance_direction.y)) * 0.08
 	far_position -= Vector3(float(far_direction.x), 0.0, float(far_direction.y)) * 0.08
-	_add_decor_sprite("StageDoor", str(decor.get("door", "")), entrance_position + Vector3.UP * 0.92, 0.0036)
+	# The Web door belongs to the formal room presentation. The combat test
+	# arena intentionally stays open and must not grow a decorative door.
+	if not host.test_combat_active and not host.combat_presentation_lab:
+		# Align it to the entrance wall; the old billboard always faced the
+		# camera and produced the broken door orientation/black bar.
+		_add_decor_sprite("StageDoor", str(decor.get("door", "")), entrance_position + Vector3.UP * 0.92, 0.0036, false, _battle_shell_direction_yaw(entrance_direction))
 	_add_decor_sprite("StageWindow", str(decor.get("window", "")), far_position + Vector3.UP * 1.05, 0.0035)
 	var lamp_position := active_center + Vector3.UP * 2.55
 	_add_box(battle_board_root, "OverheadRigCable", active_center + Vector3.UP * 3.22, Vector3(0.028, 1.34, 0.028), _material(Color("39555b")))

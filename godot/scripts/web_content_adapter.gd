@@ -94,6 +94,19 @@ func build_content(run_seed: int) -> Dictionary:
 	}
 	RoomFootprintCatalog.apply_to_room(start_room, start_id)
 
+	var altar_source: Dictionary = room_records.get("altar", {})
+	var boss_room := {
+		"id": "altar",
+		"name": str(altar_source.get("name", "祭坛房")),
+		"description": str(altar_source.get("desc", "频道核心。整间屋子都是舞台。")),
+		"kind": "combat",
+		"boss_room": true,
+		"doors": [false, false, false, false],
+		"arena": _normalize_arena(altar_source.get("arena", rooms_json.get("defaultArena", {}))),
+		"enemies": [],
+	}
+	RoomFootprintCatalog.apply_to_room(boss_room, "altar")
+
 	var relic_pool: Array = relics_json.get("pool", [])
 	var active_relics: Array = []
 	if not relic_pool.is_empty():
@@ -106,6 +119,7 @@ func build_content(run_seed: int) -> Dictionary:
 		"run_seed": run_seed,
 		"run_length": int(rooms_json.get("runLength", 12)),
 		"start_room": start_room,
+		"boss_room": boss_room,
 		"rooms": room_catalog,
 		"cards": cards_json.get("cards", {}),
 		"starter_deck": cards_json.get("starter", []),
@@ -147,6 +161,10 @@ func _normalize_arena(raw_value: Variant) -> Dictionary:
 		if pair is Array and pair.size() >= 2:
 			portals.append([_flip_key(str(pair[0])), _flip_key(str(pair[1]))])
 	result["portals"] = portals
+	var anchors: Array = []
+	for raw_anchor in raw.get("anchors", []):
+		anchors.append(_flip_key(str(raw_anchor)))
+	result["anchors"] = anchors
 	return result
 
 
@@ -166,9 +184,23 @@ func _scale_enemy(enemy: Dictionary, room_id: String, combat_index: int, pressur
 	result["archetype"] = archetype_id
 	result["archetype_label"] = str(archetype.get("label", archetype_id))
 	result["archetype_desc"] = str(archetype.get("desc", ""))
+	# 普通敌人不能因为房间标签就自动获得远程/激光攻击。
+	# 这类攻击能力属于敌人自身配置；房间标签仍可提供抓取、突脸等环境特性。
+	var authored_traits: Array = []
+	var raw_authored_traits: Variant = result.get("traits", [])
+	if raw_authored_traits is Array:
+		authored_traits = raw_authored_traits
 	var traits: Array[String] = []
+	for raw_trait in authored_traits:
+		var trait_id := str(raw_trait)
+		if not traits.has(trait_id):
+			traits.append(trait_id)
 	for raw_trait in pressure.get("roomTraits", {}).get(room_id, []):
-		traits.append(str(raw_trait))
+		var trait_id := str(raw_trait)
+		if trait_id in ["beam", "ranged"] and not traits.has(trait_id):
+			continue
+		if not traits.has(trait_id):
+			traits.append(trait_id)
 	result["traits"] = traits
 	result["trait_labels"] = pressure.get("traitLabels", {}).duplicate(true)
 	return result

@@ -1,6 +1,6 @@
 extends Control
 
-const PLAYER_PROFILE = preload("res://assets/web_show/characters/lili/bust.png")
+const PLAYER_PROFILE = preload("res://assets/latest_web/SP_Lili_Profile.png")
 const ENEMY_PROFILE = preload("res://assets/web_show/characters/enemy/bust.png")
 const OMEN_ICON = preload("res://assets/latest_web/OmenIcon.png")
 const COMBAT_UI_LAYOUT = preload("res://scenes/combat_ui_layout.tscn")
@@ -12,6 +12,7 @@ const CARD_FRAME_BLUE = preload("res://assets/ui/cards/Front_Blue.png")
 const CARD_FRAME_RED = preload("res://assets/ui/cards/Front_Red.png")
 const EVENT_PANEL_TEXTURE = preload("res://assets/ui/channel_concept/UI_HUD_Panel_EventProgram_Normal.png")
 const ACTION_PANEL_TEXTURE = preload("res://assets/ui/channel_concept/UI_HUD_Panel_ActionPanel_Normal.png")
+const CombatStatus = preload("res://scripts/combat_status.gd")
 const BTN_START_TEXTURE = preload("res://assets/ui/unity_buttons/SP_StartGame.png")
 const BTN_END_TEXTURE = preload("res://assets/ui/unity_buttons/SP_EndGame.png")
 const BTN_MENU_TEXTURE = preload("res://assets/ui/unity_buttons/SP_Menu.png")
@@ -33,6 +34,7 @@ const MAGENTA := Color("ee3e91")
 const GREEN := Color("8ccd42")
 const RED := Color("ef493f")
 const BLUE := Color("269dca")
+const CARD_TEXT_OUTLINE := Color("05070a")
 
 const DESIGN_SIZE := Vector2(1280, 800)
 const HOUSE_VIEW_RECT := Rect2(20, 88, 968, 586)
@@ -42,6 +44,13 @@ const TURN_ORDER_RECT := Rect2(404, 8, 386, 56)
 
 const RESET_RECT := Rect2(1142, 17, 110, 38)
 const CAMERA_RESET_RECT := Rect2(1040, 19, 94, 34)
+const TAA_TOGGLE_RECT := Rect2(920, 18, 110, 34)
+const SETTINGS_TOGGLE_RECT := TAA_TOGGLE_RECT
+const SETTINGS_PANEL_RECT := Rect2(330, 170, 620, 430)
+const SETTINGS_TAA_RECT := Rect2(690, 260, 190, 48)
+const SETTINGS_DOF_RECT := Rect2(690, 360, 190, 48)
+const SETTINGS_PIXEL_RECT := Rect2(690, 420, 190, 48)
+const SETTINGS_CLOSE_RECT := Rect2(690, 500, 190, 48)
 const OMEN_A_RECT := Rect2(300, 570, 260, 46)
 const OMEN_B_RECT := Rect2(720, 570, 260, 46)
 const BUILD_CARD_RECTS := [Rect2(44, 526, 210, 150), Rect2(270, 526, 210, 150), Rect2(496, 526, 210, 150)]
@@ -57,8 +66,11 @@ const MOVE_LEFT_RECT := Rect2(1010, 534, 46, 30)
 const MOVE_RIGHT_RECT := Rect2(1114, 534, 46, 30)
 const MOVE_DOWN_RECT := Rect2(1062, 570, 46, 30)
 const CARD_CANCEL_RECT := Rect2(976, 654, 164, 28)
+const BATTLE_TILE_INSPECTION_RECT := Rect2(948, 214, 300, 132)
+const BOSS_ANCHOR_ACTION_RECT := Rect2(1080, 410, 156, 36)
 const PORTAL_USE_RECT := Rect2(960, 366, 120, 44)
 const PORTAL_STAY_RECT := Rect2(1100, 366, 120, 44)
+const ENEMY_INTEL_RECT := Rect2(948, 214, 300, 58)
 const HOME_START_RECT := Rect2(76, 610, 300, 58)
 const HOME_TUTORIAL_RECT := Rect2(390, 610, 148, 48)
 const HOME_CONTINUE_RECT := Rect2(550, 610, 174, 48)
@@ -81,13 +93,17 @@ const TEST_MENU_OBSERVER_RECT := Rect2(1064, 548, 132, 48)
 const TEST_MENU_BACK_RECT := Rect2(1040, 704, 192, 40)
 const TEST_COMBAT_RETURN_RECT := Rect2(1040, 18, 192, 34)
 const TEST_AI_PANEL_RECT := Rect2(24, 214, 360, 390)
+const SHOW_TEST_AI_PANEL := false
 const TEST_AI_STEP_RECT := Rect2(36, 556, 104, 34)
 const TEST_AI_PAUSE_RECT := Rect2(148, 556, 104, 34)
 const TEST_AI_RESTART_RECT := Rect2(260, 556, 104, 34)
-const TEST_AI_ROW_RECT := Rect2(36, 328, 336, 25)
+const TEST_AI_ROW_RECT := Rect2(36, 394, 336, 18)
+const TEST_AI_ROW_STEP := 18.0
 const HOME_RESOLUTION_RECT := Rect2(76, 714, 180, 36)
 const HOME_WINDOW_MODE_RECT := Rect2(270, 714, 102, 36)
-const HOME_TILT_SHIFT_RECT := Rect2(386, 714, 112, 36)
+const HOME_DOF_RECT := Rect2(386, 714, 112, 36)
+const HOME_TILT_SHIFT_RECT := HOME_DOF_RECT
+const HOME_TAA_RECT := Rect2(510, 714, 112, 36)
 const HOME_QUIT_RECT := Rect2(1110, 714, 102, 36)
 const CHARACTER_IDLE_RECT := Rect2(32, 222, 130, 38)
 const CHARACTER_STEP_RECT := Rect2(166, 222, 130, 38)
@@ -102,6 +118,7 @@ const CHASE_START_RECT := Rect2(480, 590, 190, 48)
 const CHASE_FORFEIT_RECT := Rect2(690, 590, 190, 48)
 const REWARD_CARD_RECTS := [Rect2(205, 230, 260, 330), Rect2(510, 230, 260, 330), Rect2(815, 230, 260, 330)]
 const REWARD_SKIP_RECT := Rect2(520, 590, 240, 44)
+const ENDING_CONTINUE_RECT := Rect2(510, 650, 260, 48)
 
 var game = null
 var combat_card_rects: Array[Rect2] = []
@@ -124,12 +141,17 @@ var card_flight_tweens: Dictionary = {}
 var card_exit_alphas: Dictionary = {}
 var card_icon_cache: Dictionary = {}
 var exiting_cards: Array[Dictionary] = []
+var status_hover_regions: Array[Dictionary] = []
+var hovered_status_key := ""
+var hovered_status: Dictionary = {}
+var hovered_status_point := Vector2.ZERO
 var last_hand_key := ""
 var deck_flight_origin := Vector2(78, 710)
 var discard_flight_origin := Vector2(930, 710)
 var board_left_pressed := false
 var board_left_dragged := false
 var board_left_distance := 0.0
+var settings_panel_open := false
 
 
 func _ready() -> void:
@@ -409,31 +431,36 @@ func _draw() -> void:
 		return
 	if not last_layout_size.is_equal_approx(size):
 		sync_layout()
+	status_hover_regions.clear()
 	draw_set_transform(ui_offset, 0.0, Vector2(ui_scale, ui_scale))
 	if game.phase == "home":
 		_draw_home()
-		return
-	if game.phase == "test_combat_menu":
+	elif game.phase == "test_combat_menu":
 		_draw_top_bar()
 		_draw_test_combat_menu()
-		return
-	if game.phase == "reward":
+	elif game.phase == "reward":
 		_draw_top_bar()
 		_draw_reward_modal()
-		return
-	var board_design := _design_world_rect(game.phase)
-	if game.phase != "lab_puzzle" and game.phase != "combat":
-		draw_rect(board_design.grow(4.0), Color("091116"), false, 8.0)
-		draw_rect(board_design, TEAL, false, 2.0)
-	_draw_top_bar()
-	if game.phase == "combat":
-		_draw_combat_hud()
-	elif game.phase.begins_with("lab_"):
-		_draw_lab_hud()
+	elif game.phase == "ending":
+		_draw_ending_screen()
 	else:
-		_draw_house_hud()
-	if game.phase == "omen":
-		_draw_omen_modal()
+		var board_design := _design_world_rect(game.phase)
+		if game.phase != "lab_puzzle" and game.phase != "combat":
+			draw_rect(board_design.grow(4.0), Color("091116"), false, 8.0)
+			draw_rect(board_design, TEAL, false, 2.0)
+		_draw_top_bar()
+		if game.phase == "combat":
+			_draw_combat_hud()
+		elif game.phase.begins_with("lab_"):
+			_draw_lab_hud()
+		else:
+			_draw_house_hud()
+		if game.phase == "omen":
+			_draw_omen_modal()
+	if settings_panel_open:
+		_draw_settings_panel()
+	if game.phase == "combat" and not settings_panel_open:
+		_draw_status_tooltip()
 
 
 func _draw_top_bar() -> void:
@@ -457,6 +484,8 @@ func _draw_top_bar() -> void:
 		_draw_chip(Rect2(800, 18, 112, 32), _phase_label(), BLUE, TEXT, 11)
 	if game.phase == "combat" or game.phase in ["explore", "build", "room_ready"]:
 		_draw_button(CAMERA_RESET_RECT, "镜头复位" if game.phase == "combat" else "地图复位", TEAL, TEXT)
+	if not game.phase.begins_with("lab_"):
+		_draw_button(SETTINGS_TOGGLE_RECT, "设置", BLUE, TEXT)
 	if not game.phase.begins_with("lab_"):
 		_draw_button(RESET_RECT, "返回测试台" if game.test_combat_active else "回到标题", MAGENTA if not game.test_combat_active else TEAL, TEXT)
 
@@ -495,6 +524,11 @@ func _draw_combat_turn_order() -> void:
 func _turn_order_enemy_label(state, index: int) -> String:
 	if state == null:
 		return "敌方"
+	# 正式战斗的行动顺序可以展示“有一个敌人即将行动”，但不能借
+	# 芯片名称或 AI 角色提前泄露尚未揭示的敌人。测试模式和敌情情报
+	# 道具明确允许查看这类信息，因此沿用完整标签。
+	if not state.revealed and not _enemy_intel_visible():
+		return "??"
 	var role_labels := {"hunter": "猎手", "flanker": "侧翼", "controller": "控场"}
 	var role := str(state.ai_role)
 	var label := str(role_labels.get(role, state.name))
@@ -536,10 +570,29 @@ func _draw_home() -> void:
 	_label("画面", Vector2(76, 706), 10, MUTED)
 	_draw_button(HOME_RESOLUTION_RECT, game.display_resolution_label(), TEAL, TEXT)
 	_draw_button(HOME_WINDOW_MODE_RECT, game.display_mode_label(), BLUE, TEXT)
-	_draw_button(HOME_TILT_SHIFT_RECT, game.tilt_shift_label(), GOLD, INK)
+	_draw_button(HOME_DOF_RECT, game.depth_of_field_label(), GOLD, INK)
+	_draw_button(HOME_TAA_RECT, "画面设置", BLUE, TEXT)
 	_draw_button(HOME_QUIT_RECT, "退出", RED, TEXT)
 	draw_texture_rect(TV_MASCOT, Rect2(1068, 594, 92, 92), false)
 	_label("纸盒布景 · 黏土演员 · 每次开播都是不同的一集", Vector2(530, 742), 11, MUTED)
+
+
+func _draw_settings_panel() -> void:
+	draw_rect(Rect2(Vector2.ZERO, DESIGN_SIZE), Color("05070acc"), true)
+	_draw_ticket_panel(SETTINGS_PANEL_RECT, Color("17252ef7"), TEAL)
+	_display_label("设置", SETTINGS_PANEL_RECT.position + Vector2(28, 50), 28, GOLD)
+	_label("画面控制", SETTINGS_PANEL_RECT.position + Vector2(30, 82), 13, MUTED)
+	_label("修改会立即生效，并保存到本机。", SETTINGS_PANEL_RECT.position + Vector2(30, 112), 11, Color("b7d2d0"))
+	_label("时间抗锯齿", SETTINGS_PANEL_RECT.position + Vector2(34, 148), 16, TEXT)
+	_label("减少 3D 场景边缘闪烁；HUD 不受影响。", SETTINGS_PANEL_RECT.position + Vector2(34, 174), 11, MUTED)
+	_draw_button(SETTINGS_TAA_RECT, game.taa_label(), BLUE, TEXT)
+	_label("景深", SETTINGS_PANEL_RECT.position + Vector2(34, 248), 16, TEXT)
+	_label("当前由移轴后处理实现，用于突出画面焦点。", SETTINGS_PANEL_RECT.position + Vector2(34, 274), 11, MUTED)
+	_draw_button(SETTINGS_DOF_RECT, game.depth_of_field_label(), GOLD, INK)
+	_label("像素滤镜", SETTINGS_PANEL_RECT.position + Vector2(34, 326), 16, TEXT)
+	_label("对 3D 世界做像素化与调色，HUD 保持清晰。", SETTINGS_PANEL_RECT.position + Vector2(34, 352), 11, MUTED)
+	_draw_button(SETTINGS_PIXEL_RECT, game.pixel_filter_label(), MAGENTA, TEXT)
+	_draw_button(SETTINGS_CLOSE_RECT, "关闭", TEAL, TEXT)
 
 
 func _draw_test_combat_menu() -> void:
@@ -694,6 +747,24 @@ func _draw_reward_modal() -> void:
 	_draw_button(REWARD_SKIP_RECT, "什么也不拿", Color("4f5960"), TEXT)
 
 
+func _draw_ending_screen() -> void:
+	var ending: Dictionary = game.current_ending()
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, DESIGN_SIZE.y), Color("091116"), true)
+	draw_rect(Rect2(0, 0, DESIGN_SIZE.x, 6), MAGENTA, true)
+	draw_rect(Rect2(0, 794, DESIGN_SIZE.x, 6), BLUE, true)
+	_display_label("织梦频道", Vector2(500, 96), 30, BLUE)
+	_label("本集播出完毕", Vector2(552, 140), 13, MUTED)
+	var accent := GREEN if bool(ending.get("success", false)) else RED
+	draw_rect(Rect2(310, 190, 660, 390), Color("171d26f5"), true)
+	draw_rect(Rect2(310, 190, 660, 390), accent, false, 3.0)
+	_draw_chip(Rect2(354, 226, 130, 28), "成功" if bool(ending.get("success", false)) else "信号中断", accent, TEXT, 11)
+	_display_label(str(ending.get("title", "结局")), Vector2(354, 314), 34, GOLD)
+	_label("对手：%s" % str(ending.get("boss_name", "未知")), Vector2(356, 356), 14, PAPER)
+	_draw_wrapped(str(ending.get("boss_message", "节目结束。")), Vector2(356, 398), 568, 15, MUTED)
+	_draw_wrapped(str(ending.get("text", "电视熄灭。")), Vector2(356, 470), 568, 14, PAPER_2)
+	_draw_button(ENDING_CONTINUE_RECT, "回到标题", TEAL, TEXT)
+
+
 func _draw_house_hud() -> void:
 	var room: Dictionary = game.current_room()
 	var revealed := bool(room.get("revealed", false)) or bool(room.get("completed", false))
@@ -707,26 +778,43 @@ func _draw_house_hud() -> void:
 	_draw_ticket_panel(side, Color("fff3dff5"), TEAL)
 	draw_texture_rect(TV_MASCOT, Rect2(1194, 102, 48, 48), false)
 	_label("正在播出", Vector2(1024, 120), 11, Color("806448"))
-	_label(str(room.get("name", "玄关")) if revealed else "未知布景", Vector2(1024, 154), 23, INK)
-	_draw_chip(Rect2(1024, 170, 116, 30), _room_kind_label(room) if revealed else "信号未解码", _room_kind_color(room) if revealed else Color("4f5960"), TEXT, 11)
+	var room_title := str(room.get("name", "玄关")) if revealed else "未知布景"
+	var room_kind := _room_kind_label(room) if revealed else "信号未解码"
+	var room_accent := _room_kind_color(room) if revealed else Color("4f5960")
+	if game.phase == "boss_ready":
+		var boss: Dictionary = game.content.get("bosses", {}).get("bosses", {}).get(game.boss_id, {})
+		room_title = "祭坛 · %s" % str(boss.get("name", game.boss_id))
+		room_kind = "最终敌人"
+		room_accent = RED
+	_label(room_title, Vector2(1024, 154), 20 if game.phase == "boss_ready" else 23, INK)
+	_draw_chip(Rect2(1024, 170, 116, 30), room_kind, room_accent, TEXT, 11)
 	draw_rect(Rect2(1024, 218, 216, 1), Color("bda981"), true)
 	_label("本集进度", Vector2(1024, 248), 11, Color("806448"))
 	_draw_bar(Rect2(1024, 261, 216, 13), game.run_progress, int(game.content.get("run_length", 12)), GOLD, Color("bba781"))
 	_label("%d / %d 个布景" % [game.run_progress, int(game.content.get("run_length", 12))], Vector2(1024, 296), 13, INK)
+	if game.phase == "boss_ready":
+		var boss: Dictionary = game.content.get("bosses", {}).get("bosses", {}).get(game.boss_id, {})
+		draw_rect(Rect2(1024, 318, 216, 92), Color("f2c9bd"), true)
+		draw_rect(Rect2(1024, 318, 216, 92), RED, false, 2.0)
+		_label("祭坛已开启", Vector2(1038, 342), 12, RED)
+		_draw_wrapped(_shorten(str(boss.get("intro", "最终敌人已经醒来。")), 82), Vector2(1038, 368), 188, 10, INK)
 
-	_label("随身预兆", Vector2(1024, 338), 11, Color("806448"))
+	var omen_y := 430.0 if game.phase == "boss_ready" else 338.0
+	_label("随身预兆", Vector2(1024, omen_y), 11, Color("806448"))
 	var omen: Dictionary = game.current_omen()
 	if omen.is_empty():
-		_label("尚未选择", Vector2(1024, 364), 14, Color("8b6b56"))
+		_label("尚未选择", Vector2(1024, omen_y + 26.0), 14, Color("8b6b56"))
 	else:
-		draw_texture_rect(OMEN_ICON, Rect2(1022, 350, 36, 36), false)
-		_label(_shorten(str(omen.get("name", "预兆")), 12), Vector2(1066, 373), 14, Color("834b21"))
-		_draw_wrapped(_shorten(str(omen.get("desc", "")), 48), Vector2(1024, 404), 216, 11, Color("594f45"))
+		draw_texture_rect(OMEN_ICON, Rect2(1022, omen_y + 12.0, 36, 36), false)
+		_label(_shorten(str(omen.get("name", "预兆")), 12), Vector2(1066, omen_y + 35.0), 14, Color("834b21"))
+		_draw_wrapped(_shorten(str(omen.get("desc", "")), 48), Vector2(1024, omen_y + 66.0), 216, 11, Color("594f45"))
 
-	draw_rect(Rect2(1024, 448, 216, 1), Color("bda981"), true)
-	_label("导播记录", Vector2(1024, 478), 11, Color("806448"))
-	var log_start := maxi(0, game.event_log.size() - 3)
-	var y := 503.0
+	var divider_y := 548.0 if game.phase == "boss_ready" else 448.0
+	draw_rect(Rect2(1024, divider_y, 216, 1), Color("bda981"), true)
+	_label("导播记录", Vector2(1024, divider_y + 30.0), 11, Color("806448"))
+	var log_count := 2 if game.phase == "boss_ready" else 3
+	var log_start := maxi(0, game.event_log.size() - log_count)
+	var y := divider_y + 55.0
 	for i in range(log_start, game.event_log.size()):
 		_draw_wrapped("• " + _shorten(str(game.event_log[i]), 30), Vector2(1024, y), 216, 10, Color("554e48"))
 		y += 42.0
@@ -734,6 +822,8 @@ func _draw_house_hud() -> void:
 	if game.phase == "room_ready":
 		var action_text := "打开惊吓时间" if str(room.get("kind", "")) == "combat" else "接受考验" if str(room.get("kind", "")) == "event" else "搜查房间"
 		_draw_button(ROOM_ACTION_RECT, action_text, MAGENTA if str(room.get("kind", "")) == "combat" else GOLD, INK if str(room.get("kind", "")) != "combat" else TEXT)
+	elif game.phase == "boss_ready":
+		_draw_button(ROOM_ACTION_RECT, "进入祭坛决战", RED, TEXT)
 	elif game.phase == "explore" and game.pending_room_pos != game.current_room_pos and game._rooms_connected(game.current_room_pos, game.pending_room_pos):
 		_draw_button(ENTER_PENDING_RECT, "走进新房间", MAGENTA, TEXT)
 
@@ -795,11 +885,34 @@ func _draw_combat_hud() -> void:
 	var hand_rect := _combat_layout_rect("HandArea", Rect2(170, 470, 940, 290))
 	var deck_rect := _combat_layout_rect("DeckArea", Rect2(24, 640, 104, 150))
 	var discard_rect := _combat_layout_rect("DiscardArea", Rect2(1152, 640, 104, 150))
-	_draw_actor_strip(Rect2(24, 92, 300, 108), PLAYER_PROFILE, "莉莉", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_block, 4, "预备 %s" % ("—" if combat.ready_effect.is_empty() else "已挂载"), _actor_presentation_state("Player"))
-	_draw_actor_strip(Rect2(948, 92, 300, 108), ENEMY_PROFILE, combat.enemy_name if combat.enemy_revealed else "怪家伙", MAGENTA, combat.enemy_hp if combat.enemy_revealed else -1, combat.enemy_max_hp, "韧性", combat.enemy_toughness if combat.enemy_revealed else 0, combat.enemy_max_toughness, "T%d · %s" % [combat.enemy_tier, combat.enemy_archetype_label], _actor_presentation_state("Enemy"))
-	if combat.enemy_order.size() > 1:
-		_draw_enemy_roster(Rect2(948, 214, 300, 136))
-	if game.test_combat_active:
+	var focused_enemy: Variant = _focused_enemy_state()
+	var enemy_display := _enemy_panel_display_data(combat, focused_enemy)
+	var enemy_panel_rect := Rect2(948, 92, 300, 118)
+	var enemy_title: String = str(enemy_display.get("title", "怪家伙"))
+	var enemy_hp: int = int(enemy_display.get("hp", -1))
+	var enemy_max_hp: int = int(enemy_display.get("max_hp", 0))
+	var enemy_toughness: int = int(enemy_display.get("toughness", 0))
+	var enemy_max_toughness: int = int(enemy_display.get("max_toughness", 0))
+	var enemy_footer: String = str(enemy_display.get("footer", "未知威胁"))
+	var player_statuses: Array[Dictionary] = combat.statuses_for_player()
+	var enemy_statuses: Array[Dictionary] = []
+	var enemy_info_visible: bool = focused_enemy != null and (focused_enemy.revealed or _enemy_intel_visible()) and focused_enemy.hp > 0
+	if enemy_info_visible:
+		enemy_statuses = combat.statuses_for_enemy(focused_enemy)
+	_draw_actor_strip(Rect2(24, 92, 300, 108), PLAYER_PROFILE, "莉莉", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_shield, 4, "", _actor_presentation_state("Player"), player_statuses, "player")
+	_draw_actor_strip(enemy_panel_rect, ENEMY_PROFILE, enemy_title, MAGENTA, enemy_hp, enemy_max_hp, "韧性", enemy_toughness, enemy_max_toughness, enemy_footer, _actor_presentation_state("Enemy"), enemy_statuses, "enemy")
+	if enemy_info_visible:
+		_draw_enemy_intent_summary(enemy_panel_rect, focused_enemy)
+		if _enemy_intel_visible():
+			_draw_enemy_intel_panel(_enemy_intel_rect(), focused_enemy)
+	else:
+		_label("??", enemy_panel_rect.position + Vector2(88, 113), 9, MUTED)
+	var tile_inspection: Dictionary = game.battle_tile_inspection()
+	if not tile_inspection.is_empty():
+		_draw_battle_tile_inspection(tile_inspection)
+	if game.combat_is_boss:
+		_draw_boss_control_panel()
+	if game.test_combat_active and SHOW_TEST_AI_PANEL:
 		_draw_test_ai_panel()
 	_draw_move_controls()
 
@@ -878,7 +991,72 @@ func _draw_combat_hud() -> void:
 			_draw_button(CARD_CANCEL_RECT, "取消选牌", Color("4f5960"), TEXT)
 		_draw_button(END_TURN_RECT, "回合结束", GOLD, INK)
 	else:
-		_draw_button(RETURN_RECT, "返回节目布景" if combat.outcome == "victory" else "重开本集", GREEN if combat.outcome == "victory" else RED, TEXT)
+		var result_label := "返回测试台" if game.test_combat_active else "返回节目布景" if combat.outcome == "victory" else "重开本集"
+		var result_color := TEAL if game.test_combat_active else GREEN if combat.outcome == "victory" else RED
+		_draw_button(RETURN_RECT, result_label, result_color, TEXT)
+
+
+func _draw_battle_tile_inspection(info: Dictionary) -> void:
+	var rect := _battle_tile_inspection_rect()
+	_draw_ticket_panel(rect, Color("142832f5"), BLUE)
+	_label("查看地块", rect.position + Vector2(20, 25), 12, GOLD)
+	var statuses: Array[Dictionary] = info.get("statuses", [])
+	var primary_status := _tile_preview_status(statuses)
+	_draw_tile_status_preview(Rect2(rect.position + Vector2(16, 36), Vector2(62, 62)), primary_status)
+	_display_label(str(info.get("title", "地块")), rect.position + Vector2(92, 57), 19, TEXT)
+	_label("高度 %d · %s" % [int(info.get("height", 0)), str(info.get("detail", "普通地面"))], rect.position + Vector2(92, 82), 10, MUTED)
+	_label("环境状态", rect.position + Vector2(92, 108), 9, GOLD)
+	_draw_status_footer_line(Vector2(rect.position.x + 92, rect.position.y + 120), rect.size.x - 108.0, "无特殊状态", statuses, "tile:%s" % str(info.get("cell", Vector2i.ZERO)))
+	if not statuses.is_empty():
+		# The complete tile card is hoverable, not only the small badge.
+		var tile_key := str(info.get("cell", Vector2i.ZERO))
+		_register_status_hover(Rect2(rect.position + Vector2(16, 36), Vector2(62, 62)), statuses[0], "tile-preview:%s" % tile_key)
+		_register_status_hover(Rect2(rect.position + Vector2(84, 64), Vector2(rect.size.x - 100.0, 24.0)), statuses[0], "tile-detail:%s" % tile_key)
+		_register_status_hover(Rect2(rect.position + Vector2(84, 101), Vector2(rect.size.x - 100.0, 27.0)), statuses[0], "tile-status:%s" % tile_key)
+
+
+func _draw_boss_control_panel() -> void:
+	var rect := Rect2(948, 352, 300, 112)
+	var info: Dictionary = game.boss_anchor_summary()
+	_draw_ticket_panel(rect, Color("261c27f5"), GOLD)
+	_label("最终战 · 信号锚", rect.position + Vector2(16, 23), 12, GOLD)
+	_label("锚点 %d/%d" % [int(info.get("cleared", 0)), int(info.get("total", 0))], rect.position + Vector2(16, 50), 11, TEXT)
+	_label("阶段：%s" % str(info.get("phase", "开场")), rect.position + Vector2(112, 50), 11, MUTED)
+	_label("播出进度", rect.position + Vector2(16, 76), 9, MUTED)
+	_draw_bar(Rect2(rect.position + Vector2(82, 67), Vector2(128, 11)), int(info.get("broadcast", 0)), int(info.get("broadcast_max", 1)), RED, Color("5b4045"))
+	var directive_labels := {"closeup": "导播要特写", "spotlight": "点亮舞台", "mute": "静音", "extra": "加播"}
+	_label("指令：%s" % str(directive_labels.get(str(info.get("directive", "")), "无")), rect.position + Vector2(16, 97), 9, Color("d8c8d2"))
+	if game.can_dismantle_boss_anchor():
+		_draw_button(BOSS_ANCHOR_ACTION_RECT, "拆除信号锚", GOLD, INK)
+	else:
+		_label("站上锚点后可拆除", rect.position + Vector2(218, 76), 9, Color("9a8e95"))
+
+
+func _draw_tile_status_preview(rect: Rect2, status: Dictionary) -> void:
+	var accent := _status_category_color(status) if not status.is_empty() else BLUE
+	draw_rect(Rect2(rect.position + Vector2(3, 4), rect.size), Color("03070acc"), true)
+	draw_rect(rect, Color(accent, 0.16), true)
+	draw_rect(rect, Color(accent, 0.86), false, 2.0)
+	var texture: Texture2D = null
+	var presentation_kind := str(status.get("presentation_kind", ""))
+	if presentation_kind == CombatStatus.PRESENTATION_CARD_ICON:
+		texture = _card_icon(str(status.get("presentation_id", "")))
+	elif presentation_kind == CombatStatus.PRESENTATION_TEXTURE:
+		var texture_path := str(status.get("presentation_id", ""))
+		if texture_path.begins_with("res://"):
+			texture = load(texture_path) as Texture2D
+	if texture != null:
+		_draw_texture_contained(texture, rect.grow(-7.0), Color.WHITE)
+	else:
+		_draw_centered(_status_icon_glyph(status) if not status.is_empty() else "·", rect, 26, TEXT)
+
+
+func _tile_preview_status(statuses: Array[Dictionary]) -> Dictionary:
+	for status: Dictionary in statuses:
+		var presentation_kind := str(status.get("presentation_kind", ""))
+		if presentation_kind in [CombatStatus.PRESENTATION_CARD_ICON, CombatStatus.PRESENTATION_TEXTURE, CombatStatus.PRESENTATION_MODEL]:
+			return status
+	return statuses[0] if not statuses.is_empty() else {}
 
 
 func _draw_test_ai_panel() -> void:
@@ -888,19 +1066,21 @@ func _draw_test_ai_panel() -> void:
 	draw_rect(TEST_AI_PANEL_RECT, TEAL, false, 2.0)
 	_label("AI 调试 · %s" % str(game.test_session.scenario_id), TEST_AI_PANEL_RECT.position + Vector2(12, 23), 13, GOLD)
 	_label("模式：%s    回合：%d/%d" % [_test_mode_label(), game.test_session.round_count, game.test_session.max_rounds], TEST_AI_PANEL_RECT.position + Vector2(12, 45), 10, MUTED)
+	_label("范围：敌方·%s（1）  玩家可达·%s（2）" % [game.battle_world_renderer.enemy_range_display_mode_label(), game.battle_world_renderer.player_range_display_label()], TEST_AI_PANEL_RECT.position + Vector2(12, 60), 10, GOLD)
 	var focused = combat.enemy_by_id(game.test_focused_enemy_id)
 	if focused != null:
-		_label("关注：%s · %s/%s" % [focused.id, focused.ai_role, focused.ai_state], TEST_AI_PANEL_RECT.position + Vector2(12, 68), 11, TEXT)
-		_label("视线：%s  最后目击：%s" % ["有" if focused.sees_player else "无", str(focused.last_seen)], TEST_AI_PANEL_RECT.position + Vector2(12, 88), 10, MUTED)
-		_label("目标：%s  攻击位：%s" % [str(focused.tactical_goal), str(focused.tactical_reserved_cell)], TEST_AI_PANEL_RECT.position + Vector2(12, 106), 10, MUTED)
-		_draw_wrapped(str(focused.ai_reason), TEST_AI_PANEL_RECT.position + Vector2(12, 114), 332, 10, Color("d9ede5"))
+		_label("关注：%s · %s/%s" % [focused.id, focused.ai_role, focused.ai_state], TEST_AI_PANEL_RECT.position + Vector2(12, 82), 11, TEXT)
+		_label("视线：%s  最后目击：%s" % ["有" if focused.sees_player else "无", str(focused.last_seen)], TEST_AI_PANEL_RECT.position + Vector2(12, 102), 10, MUTED)
+		_label("目标：%s  攻击位：%s" % [str(focused.tactical_goal), str(focused.tactical_reserved_cell)], TEST_AI_PANEL_RECT.position + Vector2(12, 120), 10, MUTED)
+		# 理由区限制行数，给下方敌人列表留出稳定的独立空间。
+		_draw_wrapped_lines(str(focused.ai_reason), TEST_AI_PANEL_RECT.position + Vector2(12, 128), 332, 10, Color("d9ede5"), 4)
 	var plans: Dictionary = combat.preview_all_tactical_plans()
 	for index in range(combat.enemy_order.size()):
 		var enemy_id := str(combat.enemy_order[index])
 		var state = combat.enemy_by_id(enemy_id)
 		if state == null:
 			continue
-		var row := Rect2(TEST_AI_ROW_RECT.position + Vector2(0, float(index) * 25.0), TEST_AI_ROW_RECT.size)
+		var row := Rect2(TEST_AI_ROW_RECT.position + Vector2(0, float(index) * TEST_AI_ROW_STEP), TEST_AI_ROW_RECT.size)
 		if row.position.y + row.size.y > 548.0:
 			break
 		var selected: bool = enemy_id == game.test_focused_enemy_id
@@ -933,35 +1113,141 @@ func _draw_move_controls() -> void:
 	_draw_button(MOVE_DOWN_RECT, "下", TEAL if enabled and combat.can_move_player(combat.player_pos + Vector2i.DOWN) else Color("394852"), TEXT)
 
 
-func _draw_enemy_roster(rect: Rect2) -> void:
-	var combat = game.combat
+func _enemy_intel_visible() -> bool:
+	return game != null and game.has_method("enemy_intel_visible") and game.enemy_intel_visible()
+
+
+func _enemy_intel_rect() -> Rect2:
+	return ENEMY_INTEL_RECT
+
+
+func _battle_tile_inspection_rect() -> Rect2:
+	var rect := BATTLE_TILE_INSPECTION_RECT
+	if _enemy_intel_visible():
+		rect.position.y = ENEMY_INTEL_RECT.end.y + 6.0
+	return rect
+
+
+func _draw_enemy_intel_panel(rect: Rect2, state) -> void:
 	draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), Color("03070a"), true)
-	draw_rect(rect, Color("17151cf4"), true)
-	draw_rect(rect, MAGENTA, false, 2.0)
-	_label("敌方编组 · %d 名" % combat.enemy_order.size(), rect.position + Vector2(12, 22), 12, Color("ffd1e6"))
-	var columns := 4
-	var cell_width := (rect.size.x - 20.0) / float(columns)
-	var cell_height := 45.0
-	for index in range(combat.enemy_order.size()):
-		var enemy_id := str(combat.enemy_order[index])
-		var state = combat.enemy_by_id(enemy_id)
-		if state == null:
+	draw_rect(rect, Color("182632f5"), true)
+	draw_rect(rect, Color("8bd7c7"), false, 1.0)
+	_label("状态", rect.position + Vector2(10, 19), 9, GOLD)
+	var statuses: Array[Dictionary] = game.combat.statuses_for_enemy(state)
+	_draw_status_footer_line(rect.position + Vector2(48, 19), rect.size.x - 58.0, "无异常状态", statuses, "enemy-intel:%s" % str(state.id))
+	_label("意图", rect.position + Vector2(10, 42), 9, GOLD)
+	_label(_shorten(_enemy_intent_sentence(state), 28), rect.position + Vector2(48, 42), 9, MUTED)
+
+
+func _enemy_status_text(state) -> String:
+	var statuses: Array[Dictionary] = game.combat.statuses_for_enemy(state)
+	if statuses.is_empty():
+		return "无异常状态"
+	var labels: Array[String] = []
+	for status: Dictionary in statuses:
+		labels.append(str(status.get("text", status.get("label", "状态"))))
+	return "、".join(labels)
+
+
+func _player_status_text() -> String:
+	var statuses: Array[Dictionary] = game.combat.statuses_for_player()
+	var labels: Array[String] = []
+	for status: Dictionary in statuses:
+		if str(status.get("id", "")) == "shield":
 			continue
-		var row := index / columns
-		var column := index % columns
-		var cell := Rect2(rect.position + Vector2(10.0 + float(column) * cell_width, 32.0 + float(row) * cell_height), Vector2(cell_width - 4.0, cell_height - 5.0))
-		var alive: bool = state.hp > 0
-		var revealed: bool = state.revealed
-		var accent := MAGENTA if alive and revealed else Color("68757a") if alive else Color("4a4448")
-		draw_rect(cell, Color("fff3df1c") if alive else Color("11151a88"), true)
-		draw_rect(cell, accent, false, 1.0)
-		var title := str(state.name) if revealed else "未知敌人"
-		_label(_shorten(title, 8), cell.position + Vector2(6, 14), 9, TEXT if alive else Color("9b8d93"))
-		if revealed:
-			var hp_text := "%d/%d" % [state.hp, state.max_hp]
-			_label(hp_text, cell.position + Vector2(6, 29), 8, Color("ffb3b0") if alive else Color("9b8d93"))
-		else:
-			_label("未现身", cell.position + Vector2(6, 29), 8, Color("a9b8bb"))
+		labels.append(str(status.get("text", status.get("label", "状态"))))
+	return "、".join(labels) if not labels.is_empty() else "无状态"
+
+
+func _enemy_intent_sentence(state) -> String:
+	if state != null and not state.revealed and not _enemy_intel_visible():
+		return "？？"
+	var intent: Dictionary = game.battle_world_renderer.battle_intent_snapshot.get(str(state.id), {})
+	var intent_type := str(intent.get("type", "stall"))
+	var attack_kind := str(intent.get("attack_kind", ""))
+	if state.has_trait("backstab"):
+		if intent_type == "attack":
+			return "背刺者已到达你的后方，准备发动背刺。"
+		if intent_type == "retreat":
+			return "背刺者暂时无法绕后，准备拉开距离。"
+		return "背刺者想前往你的后方。"
+	if attack_kind == "ranged":
+		return "远程敌人想保持距离并瞄准你。" if intent_type != "attack" else "远程敌人准备在本回合射击你。"
+	if intent_type == "attack":
+		return "敌人准备在本回合攻击你。"
+	if intent_type == "retreat":
+		return "敌人准备拉开距离，重新寻找攻击位置。"
+	if intent_type == "search":
+		return "敌人正在前往你最后出现的位置。"
+	if intent_type == "patrol":
+		return "敌人暂未锁定你，正在巡逻。"
+	return "敌人正在重新选择行动位置。"
+
+
+func _focused_enemy_id() -> String:
+	var active_enemy_id: String = _active_enemy_turn_id()
+	if not active_enemy_id.is_empty():
+		return active_enemy_id
+	var focused_enemy_id := str(game.test_focused_enemy_id) if game.test_combat_active else str(game.battle_focused_enemy_id)
+	if focused_enemy_id.is_empty():
+		focused_enemy_id = str(game.battle_focused_enemy_id) if game.test_combat_active else str(game.test_focused_enemy_id)
+	return focused_enemy_id
+
+
+func _active_enemy_turn_id() -> String:
+	var actor_id: String = str(game.battle_turn_actor_id)
+	if actor_id.is_empty() or actor_id in ["player", "enemy_phase"]:
+		return ""
+	var state = game.combat.enemy_by_id(actor_id)
+	if state == null or not state.revealed or state.hp <= 0:
+		return ""
+	return actor_id
+
+
+func _focused_enemy_state():
+	var focused_enemy_id := _focused_enemy_id()
+	var intel_visible: bool = _enemy_intel_visible()
+	if not focused_enemy_id.is_empty():
+		var focused = game.combat.enemy_by_id(focused_enemy_id)
+		if focused != null and (focused.revealed or intel_visible) and focused.hp > 0:
+			return focused
+	for enemy_id in game.combat.enemy_order:
+		var state = game.combat.enemy_by_id(str(enemy_id))
+		if state != null and (state.revealed or intel_visible) and state.hp > 0:
+			return state
+	return null
+
+
+func _enemy_panel_display_data(combat, focused_enemy: Variant) -> Dictionary:
+	# 只有揭示后的敌人才能把真实数值和 archetype 写进 HUD；未知敌人
+	# 仍保留面板位置，但所有可反推战斗力的信息都使用占位值。
+	if focused_enemy == null or (not focused_enemy.revealed and not _enemy_intel_visible()) or focused_enemy.hp <= 0:
+		return {
+			"title": "??",
+			"hp": -1,
+			"max_hp": 0,
+			"toughness": 0,
+			"max_toughness": 0,
+			"footer": "未知威胁",
+		}
+	return {
+		"title": str(focused_enemy.name),
+		"hp": int(focused_enemy.hp),
+		"max_hp": int(focused_enemy.max_hp),
+		"toughness": int(focused_enemy.toughness),
+		"max_toughness": int(focused_enemy.max_toughness),
+		"footer": "T%d · %s" % [focused_enemy.tier, focused_enemy.archetype_label],
+	}
+
+
+func _draw_enemy_intent_summary(rect: Rect2, state) -> void:
+	var intent: Dictionary = game.battle_world_renderer.battle_intent_snapshot.get(str(state.id), {})
+	var attack_kind := str(intent.get("attack_kind", ""))
+	var intent_type := str(intent.get("type", "stall"))
+	var marker := "弓" if attack_kind == "ranged" else "刀" if intent_type in ["attack", "ambush"] else "脚"
+	var intent_color := BLUE if attack_kind == "ranged" else RED if intent_type in ["attack", "ambush"] else TEAL
+	var summary := "%s %s · 伤%d 距%d AP%d" % [marker, str(intent.get("label", "观望")), state.damage, state.attack_range, state.action_points]
+	_label(_shorten(summary, 25), rect.position + Vector2(88, 113), 9, intent_color)
 
 
 func _draw_card_target_arrow(start: Vector2, target: Vector2) -> void:
@@ -984,7 +1270,7 @@ func _draw_card_target_arrow(start: Vector2, target: Vector2) -> void:
 	draw_circle(target, 12.0, Color("fff0cf"), false, 2.0)
 
 
-func _draw_actor_strip(rect: Rect2, portrait: Texture2D, title: String, accent: Color, hp: int, max_hp: int, secondary_label: String, secondary_value: int, secondary_max: int, footer: String, action_state: String = "idle") -> void:
+func _draw_actor_strip(rect: Rect2, portrait: Texture2D, title: String, accent: Color, hp: int, max_hp: int, secondary_label: String, secondary_value: int, secondary_max: int, footer: String, action_state: String = "idle", statuses: Array = [], status_owner: String = "") -> void:
 	draw_rect(Rect2(rect.position + Vector2(0, 4), rect.size), Color("03070a"), true)
 	draw_rect(rect, Color("f6e7c4ee"), true)
 	if action_state != "idle":
@@ -992,14 +1278,211 @@ func _draw_actor_strip(rect: Rect2, portrait: Texture2D, title: String, accent: 
 		draw_rect(rect.grow(-3.0), Color(action_color, 0.20), true)
 	draw_rect(Rect2(rect.position, Vector2(8, rect.size.y)), accent, true)
 	draw_rect(rect, accent, false, 2.0)
-	draw_texture_rect(portrait, Rect2(rect.position + Vector2(14, 12), Vector2(62, 88)), false)
+	# 头像按比例容纳，避免方形头像被拉伸，也避免原图边缘被裁掉。
+	_draw_texture_contained(portrait, Rect2(rect.position + Vector2(14, 12), Vector2(62, 88)))
 	_label(_shorten(title, 14), rect.position + Vector2(88, 25), 16, INK)
 	_draw_health_bar(Rect2(rect.position + Vector2(88, 34), Vector2(rect.size.x - 102, 20)), hp, max_hp)
 	_label(secondary_label, rect.position + Vector2(88, 72), 10, Color("43535b"))
 	_draw_stat_pips(Vector2(rect.position.x + 132, rect.position.y + 66), secondary_value, secondary_max, Color("3f91ad") if secondary_label == "护盾" else MAGENTA)
-	_label(_shorten(footer, 24), rect.position + Vector2(88, 96), 10, Color("4a634a"))
+	_draw_status_footer_line(rect.position + Vector2(88, 96), rect.size.x - 102.0, footer, statuses, status_owner)
 	if action_state != "idle":
 		_draw_chip(Rect2(rect.end.x - 68, rect.position.y + 8, 58, 24), _presentation_state_label(action_state), _presentation_state_color(action_state), TEXT, 10)
+
+
+func _status_compact_text(status: Dictionary) -> String:
+	var text := str(status.get("label", status.get("id", "状态")))
+	var stacks := int(status.get("stacks", 0))
+	var duration := int(status.get("duration", CombatStatus.NO_DURATION))
+	if stacks > 1:
+		text += "×%d" % stacks
+	if duration > 0:
+		text += "·%d回合" % duration
+	return text
+
+
+func _status_category_color(status: Dictionary) -> Color:
+	match str(status.get("category", "")):
+		CombatStatus.CATEGORY_BUFF:
+			return GREEN
+		CombatStatus.CATEGORY_DEBUFF:
+			return RED
+		CombatStatus.CATEGORY_CONTROL:
+			return GOLD
+		CombatStatus.CATEGORY_RESOURCE:
+			return BLUE
+		CombatStatus.CATEGORY_HAZARD:
+			return RED
+		_:
+			return TEAL
+
+
+func _status_category_label(status: Dictionary) -> String:
+	match str(status.get("category", "")):
+		CombatStatus.CATEGORY_BUFF:
+			return "增益"
+		CombatStatus.CATEGORY_DEBUFF:
+			return "减益"
+		CombatStatus.CATEGORY_CONTROL:
+			return "控制"
+		CombatStatus.CATEGORY_RESOURCE:
+			return "资源"
+		CombatStatus.CATEGORY_HAZARD:
+			return "环境危险"
+		CombatStatus.CATEGORY_PASSIVE:
+			return "被动"
+		_:
+			return "状态"
+
+
+func _status_icon_glyph(status: Dictionary) -> String:
+	var icon_id := str(status.get("icon", ""))
+	if icon_id in ["shield", "blind", "broken", "salt", "bleed"]:
+		match icon_id:
+			"shield":
+				return "盾"
+			"blind":
+				return "目"
+			"broken":
+				return "裂"
+			"salt":
+				return "盐"
+			"bleed":
+				return "血"
+	if not icon_id.is_empty() and not icon_id.begins_with("res://"):
+		return icon_id.left(1)
+	match str(status.get("id", "")):
+		"shield":
+			return "盾"
+		"blind":
+			return "目"
+		"broken":
+			return "裂"
+		"salt_bind", "trap:salt", "trap:guard":
+			return "盐"
+		"bleed":
+			return "血"
+		_:
+			match str(status.get("category", "")):
+				CombatStatus.CATEGORY_BUFF:
+					return "+"
+				CombatStatus.CATEGORY_DEBUFF:
+					return "!"
+				CombatStatus.CATEGORY_CONTROL:
+					return "控"
+				CombatStatus.CATEGORY_RESOURCE:
+					return "◆"
+				CombatStatus.CATEGORY_HAZARD:
+					return "!"
+				_:
+					return "·"
+
+
+func _draw_status_badge(origin: Vector2, width: float, status: Dictionary, owner_key: String, index: int) -> void:
+	var text := _status_compact_text(status)
+	var text_size := APP_FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 9)
+	var badge_width := minf(width, text_size.x + 27.0)
+	if badge_width < 28.0:
+		return
+	var status_color := _status_category_color(status)
+	var badge_rect := Rect2(origin, Vector2(badge_width, 18.0))
+	draw_rect(Rect2(badge_rect.position + Vector2(2, 3), badge_rect.size), Color("05070acc"), true)
+	draw_rect(badge_rect, Color(status_color, 0.18), true)
+	draw_rect(badge_rect, Color(status_color, 0.90), false, 1.0)
+	var icon_slot := Rect2(badge_rect.position + Vector2(3, 2), Vector2(14, 14))
+	draw_rect(icon_slot, Color(status_color, 0.42), true)
+	var icon_texture: Texture2D = status.get("icon_texture", null) as Texture2D
+	if icon_texture != null:
+		draw_texture_rect(icon_texture, icon_slot.grow(-2.0), false, Color.WHITE)
+	else:
+		_draw_centered(_status_icon_glyph(status), icon_slot, 8, TEXT)
+	_label(text, badge_rect.position + Vector2(20, 13), 9, TEXT)
+	_register_status_hover(badge_rect, status, "%s:%d" % [owner_key, index])
+
+
+func _draw_status_footer_line(origin: Vector2, width: float, footer: String, statuses: Array, owner_key: String) -> void:
+	var cursor := origin
+	var remaining := maxf(0.0, width)
+	var drawn_status := false
+	for index in range(statuses.size()):
+		var status: Dictionary = statuses[index]
+		var text := _status_compact_text(status)
+		var text_size := APP_FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 9)
+		var gap := 4.0 if drawn_status else 0.0
+		var badge_width := text_size.x + 27.0
+		if badge_width + gap > remaining:
+			break
+		cursor.x += gap
+		_draw_status_badge(cursor - Vector2(0, 13), badge_width, status, owner_key, index)
+		cursor.x += badge_width
+		remaining = width - (cursor.x - origin.x)
+		drawn_status = true
+	if not drawn_status:
+		_label(_shorten(footer, 24), origin, 10, Color("4a634a"))
+	elif not footer.is_empty() and remaining > 30.0:
+		var footer_text := " · " + _shorten(footer, 12)
+		var footer_size := APP_FONT.get_string_size(footer_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8)
+		if footer_size.x <= remaining:
+			draw_string(APP_FONT, cursor, footer_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("4a634a"))
+
+
+func _register_status_hover(rect: Rect2, status: Dictionary, key: String) -> void:
+	status_hover_regions.append({"rect": rect, "status": status.duplicate(true), "key": key})
+
+
+func _update_status_hover(point: Vector2) -> void:
+	var next_key := ""
+	var next_status: Dictionary = {}
+	for entry: Dictionary in status_hover_regions:
+		var entry_rect: Rect2 = entry.get("rect", Rect2())
+		if entry_rect.has_point(point):
+			next_key = str(entry.get("key", ""))
+			next_status = entry.get("status", {})
+			break
+	if next_key != hovered_status_key:
+		hovered_status_key = next_key
+		hovered_status = next_status
+		queue_redraw()
+	if not next_key.is_empty():
+		hovered_status_point = point
+
+
+func _draw_status_tooltip() -> void:
+	if hovered_status_key.is_empty() or hovered_status.is_empty():
+		return
+	var title := str(hovered_status.get("label", hovered_status.get("id", "状态")))
+	var detail := str(hovered_status.get("detail", ""))
+	var lines: Array[String] = []
+	lines.append("类型：%s" % _status_category_label(hovered_status))
+	var stacks := int(hovered_status.get("stacks", 0))
+	if stacks > 0:
+		lines.append("层数：%d" % stacks)
+	var duration := int(hovered_status.get("duration", CombatStatus.NO_DURATION))
+	var duration_type := str(hovered_status.get("duration_type", ""))
+	if duration > 0:
+		lines.append("剩余：%d回合" % duration)
+	elif duration_type == CombatStatus.DURATION_NEXT_ACTION:
+		lines.append("持续：下一次行动")
+	elif duration_type == CombatStatus.DURATION_UNTIL_TRIGGERED:
+		lines.append("持续：触发前")
+	if not str(hovered_status.get("source", "")).is_empty():
+		lines.append("来源：%s" % str(hovered_status.get("source", "")))
+	if not detail.is_empty():
+		lines.append(detail)
+	var tooltip_size := Vector2(292, 44.0 + float(lines.size()) * 17.0)
+	var tooltip_pos := hovered_status_point + Vector2(12, 14)
+	if tooltip_pos.x + tooltip_size.x > DESIGN_SIZE.x - 8.0:
+		tooltip_pos.x = hovered_status_point.x - tooltip_size.x - 12.0
+	if tooltip_pos.y + tooltip_size.y > DESIGN_SIZE.y - 8.0:
+		tooltip_pos.y = hovered_status_point.y - tooltip_size.y - 12.0
+	var rect := Rect2(tooltip_pos, tooltip_size)
+	draw_rect(Rect2(rect.position + Vector2(4, 5), rect.size), Color("03070acc"), true)
+	draw_rect(rect, Color("142832f7"), true)
+	draw_rect(rect, _status_category_color(hovered_status), false, 2.0)
+	_label(title, rect.position + Vector2(12, 22), 12, TEXT)
+	var line_y := rect.position.y + 42.0
+	for line in lines:
+		_draw_wrapped(_shorten(line, 42), Vector2(rect.position.x + 12, line_y), rect.size.x - 24.0, 9, MUTED)
+		line_y += 17.0
 
 
 func _draw_health_bar(rect: Rect2, value: int, maximum: int) -> void:
@@ -1014,6 +1497,8 @@ func _draw_health_bar(rect: Rect2, value: int, maximum: int) -> void:
 
 
 func _draw_stat_pips(origin: Vector2, value: int, maximum: int, color: Color) -> void:
+	if maximum <= 0:
+		return
 	var shown_max := clampi(maximum, 1, 8)
 	for index in range(shown_max):
 		var center := origin + Vector2(float(index) * 17.0, 0)
@@ -1118,27 +1603,31 @@ func _draw_combat_card(rect: Rect2, card_id: String, card: Dictionary, cost: int
 		var pivot := rect.get_center()
 		draw_set_transform(pivot, deg_to_rad(tilt_deg), Vector2.ONE)
 		rect = Rect2(rect.position - pivot, rect.size)
-	draw_rect(Rect2(rect.position + Vector2(0, scaled.call(4.0)), rect.size), Color(0.012, 0.027, 0.039, 0.92) * fade, true)
 	if frame != null:
 		_draw_card_frame_contained(frame, rect, fade)
 	else:
 		draw_rect(rect, Color(accent.darkened(0.32), 1.0) * fade, true)
-	draw_rect(rect, Color(GOLD if selected else accent.darkened(0.30), fade.a), false, scaled.call(4.0 if selected else 1.5))
 	var cost_center := rect.position + Vector2(scaled.call(22.0), scaled.call(23.0))
 	draw_circle(cost_center, scaled.call(15.0), Color(accent, fade.a))
 	draw_circle(cost_center, scaled.call(15.0), Color(INK, fade.a), false, scaled.call(1.5))
-	_draw_centered(str(cost), Rect2(cost_center - Vector2.ONE * scaled.call(15.0), Vector2.ONE * scaled.call(30.0)), maxi(9, roundi(scaled.call(14.0))), Color(INK if accent.get_luminance() > 0.55 else TEXT, fade.a))
-	_label(_shorten(str(card.get("name", card_id)), 7), rect.position + Vector2(scaled.call(42.0), scaled.call(24.0)), maxi(9, roundi(scaled.call(12.0))), Color(INK, fade.a))
-	_label(_card_kind_label(kind), rect.position + Vector2(scaled.call(42.0), scaled.call(42.0)), maxi(7, roundi(scaled.call(8.0))), Color(accent.darkened(0.28), fade.a))
+	var cost_font_size: int = mini(14, maxi(9, roundi(scaled.call(14.0))))
+	var title_font_size: int = mini(11, maxi(9, roundi(scaled.call(11.0))))
+	var kind_font_size: int = mini(8, maxi(7, roundi(scaled.call(8.0))))
+	var body_font_size: int = mini(8, maxi(7, roundi(scaled.call(8.0))))
+	_draw_card_centered(str(cost), Rect2(cost_center - Vector2.ONE * scaled.call(15.0), Vector2.ONE * scaled.call(30.0)), cost_font_size, Color(TEXT, fade.a))
+	_draw_card_text(_shorten(str(card.get("name", card_id)), 7), rect.position + Vector2(scaled.call(42.0), scaled.call(24.0)), title_font_size, Color(TEXT, fade.a))
+	_draw_card_text(_card_kind_label(kind), rect.position + Vector2(scaled.call(42.0), scaled.call(42.0)), kind_font_size, Color(TEXT, fade.a))
 	var art_rect := Rect2(rect.position + Vector2(scaled.call(12.0), scaled.call(52.0)), Vector2(rect.size.x - scaled.call(24.0), scaled.call(78.0)))
 	var icon := _card_icon(card_id)
 	if icon != null:
 		_draw_texture_contained(icon, art_rect, Color(1, 1, 1, 0.98) * fade)
-	draw_rect(art_rect, Color(accent.darkened(0.25), fade.a), false, scaled.call(1.3))
-	_draw_wrapped_lines(_shorten(str(card.get("text", "")), 36), Vector2(rect.position.x + scaled.call(12.0), art_rect.end.y + scaled.call(12.0)), rect.size.x - scaled.call(24.0), maxi(7, roundi(scaled.call(9.0))), Color("514940", fade.a), 3)
+	_draw_card_wrapped_lines(_shorten(str(card.get("text", "")), 36), Vector2(rect.position.x + scaled.call(12.0), art_rect.end.y + scaled.call(12.0)), rect.size.x - scaled.call(24.0), body_font_size, Color(TEXT, fade.a), 3)
 	if unaffordable:
 		draw_rect(rect.grow(-scaled.call(4.0)), Color("10182078"), true)
 		_draw_chip(Rect2(rect.position + Vector2(scaled.call(18.0), rect.size.y - scaled.call(28.0)), Vector2(rect.size.x - scaled.call(36.0), scaled.call(20.0))), "行动力不足", Color("4d3940"), TEXT, maxi(7, roundi(scaled.call(8.0))))
+	if selected:
+		# 卡面资源已经自带外框，选中时只在外侧加高亮，避免重复描边。
+		draw_rect(rect.grow(scaled.call(3.0)), Color(GOLD, fade.a), false, scaled.call(2.0))
 	if not is_zero_approx(tilt_deg):
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
@@ -1238,6 +1727,14 @@ func _input(event: InputEvent) -> void:
 		game.set_sideview_input(float(int(side_right) - int(side_left)), jump)
 		get_viewport().set_input_as_handled()
 		return
+	if key_event.pressed and not key_event.echo and game.phase == "combat" and key_event.keycode == KEY_1:
+		game.cycle_battle_enemy_range_display()
+		get_viewport().set_input_as_handled()
+		return
+	if key_event.pressed and not key_event.echo and game.phase == "combat" and key_event.keycode == KEY_2:
+		game.toggle_battle_player_range_display()
+		get_viewport().set_input_as_handled()
+		return
 	if key_event.pressed and not key_event.echo and game.phase == "combat" and game.selected_card < 0:
 		var move_direction := Vector2i(-999, -999)
 		match key_event.keycode:
@@ -1275,7 +1772,7 @@ func _combat_overlay_has_point(point: Vector2) -> bool:
 
 
 func _test_combat_overlay_has_point(point: Vector2) -> bool:
-	if game == null or not game.test_combat_active:
+	if game == null or not game.test_combat_active or not SHOW_TEST_AI_PANEL:
 		return false
 	return TEST_AI_PANEL_RECT.has_point(point)
 
@@ -1309,7 +1806,7 @@ func _handle_test_combat_click(point: Vector2) -> void:
 		game.restart_test_combat()
 		return
 	for index in range(game.combat.enemy_order.size()):
-		var row := Rect2(TEST_AI_ROW_RECT.position + Vector2(0, float(index) * 25.0), TEST_AI_ROW_RECT.size)
+		var row := Rect2(TEST_AI_ROW_RECT.position + Vector2(0, float(index) * TEST_AI_ROW_STEP), TEST_AI_ROW_RECT.size)
 		if row.position.y + row.size.y > 548.0:
 			break
 		if row.has_point(point):
@@ -1339,6 +1836,11 @@ func _gui_input(event: InputEvent) -> void:
 	_ensure_input_layout()
 	if event is InputEventMouseMotion:
 		var design_point := _to_design(event.position)
+		if game.phase == "combat":
+			_update_status_hover(design_point)
+		else:
+			hovered_status_key = ""
+			hovered_status = {}
 		if dragged_combat_card >= 0 and game.phase == "combat":
 			dragged_card_position = design_point
 			if world_view_rect_screen.has_point(event.position):
@@ -1394,8 +1896,27 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	var mouse_event: InputEventMouseButton = event
 	var point: Vector2 = _to_design(mouse_event.position)
+	if settings_panel_open:
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			if SETTINGS_TAA_RECT.has_point(point):
+				game.toggle_taa()
+			elif SETTINGS_DOF_RECT.has_point(point):
+				game.toggle_depth_of_field()
+			elif SETTINGS_PIXEL_RECT.has_point(point):
+				game.toggle_pixel_filter()
+			elif SETTINGS_CLOSE_RECT.has_point(point):
+				settings_panel_open = false
+				queue_redraw()
+		accept_event()
+		return
 	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed and game.phase == "combat" and game.selected_card >= 0:
 		game.cancel_selected_card()
+		accept_event()
+		return
+	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed and game.phase == "combat" and world_view_rect_screen.has_point(mouse_event.position):
+		var inspected_cell: Vector2i = game.battle_cell_from_viewport(mouse_event.position - world_view_rect_screen.position)
+		if inspected_cell != game.INVALID_CELL:
+			game.inspect_battle_cell(inspected_cell)
 		accept_event()
 		return
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase == "combat":
@@ -1545,8 +2066,11 @@ func _gui_input(event: InputEvent) -> void:
 			game.cycle_display_resolution()
 		elif HOME_WINDOW_MODE_RECT.has_point(point):
 			game.toggle_display_mode()
-		elif HOME_TILT_SHIFT_RECT.has_point(point):
-			game.toggle_tilt_shift()
+		elif HOME_DOF_RECT.has_point(point):
+			game.toggle_depth_of_field()
+		elif HOME_TAA_RECT.has_point(point):
+			settings_panel_open = true
+			queue_redraw()
 		elif HOME_QUIT_RECT.has_point(point):
 			game.quit_game()
 		return
@@ -1557,43 +2081,48 @@ func _gui_input(event: InputEvent) -> void:
 			else:
 				game.go_home()
 			return
-		if game.phase == "lab_diorama" and LAB_SWITCH_RECT.has_point(point):
+	if not game.phase.begins_with("lab_") and SETTINGS_TOGGLE_RECT.has_point(point):
+		settings_panel_open = true
+		queue_redraw()
+		accept_event()
+		return
+	if game.phase == "lab_diorama" and LAB_SWITCH_RECT.has_point(point):
+		game.start_pcg_diorama_lab()
+		return
+	if game.phase == "lab_pcg_diorama":
+		if LAB_REROLL_RECT.has_point(point):
+			game.reroll_pcg_diorama()
+		elif LAB_HAND_RECT.has_point(point):
+			game.start_pcg_hand_layout_lab()
+		elif LAB_SWITCH_RECT.has_point(point):
+			game.start_diorama_art_lab()
+		return
+	if game.phase == "lab_hand_diorama":
+		if LAB_REROLL_RECT.has_point(point):
 			game.start_pcg_diorama_lab()
-			return
-		if game.phase == "lab_pcg_diorama":
-			if LAB_REROLL_RECT.has_point(point):
-				game.reroll_pcg_diorama()
-			elif LAB_HAND_RECT.has_point(point):
-				game.start_pcg_hand_layout_lab()
-			elif LAB_SWITCH_RECT.has_point(point):
-				game.start_diorama_art_lab()
-			return
-		if game.phase == "lab_hand_diorama":
-			if LAB_REROLL_RECT.has_point(point):
-				game.start_pcg_diorama_lab()
-			elif LAB_SWITCH_RECT.has_point(point):
-				game.start_diorama_art_lab()
-			return
-		if game.phase == "lab_puzzle":
-			var origin := Vector2(385, 245)
-			var tile_size := 118.0
-			for i in range(game.puzzle_board.size()):
-				var rect := Rect2(origin + Vector2(i % 3, i / 3) * (tile_size + 8.0), Vector2(tile_size, tile_size))
-				if rect.has_point(point):
-					game.puzzle_slide(i)
-					return
-			if PUZZLE_REFRESH_RECT.has_point(point):
-				game.puzzle_refresh()
-			return
-		if game.phase == "lab_search" and world_view_rect_screen.has_point(mouse_event.position):
-			game.search_pick_from_view(mouse_event.position - world_view_rect_screen.position)
-			return
-		if game.phase == "lab_chase":
-			if CHASE_START_RECT.has_point(point):
-				game.begin_chase()
-			elif CHASE_FORFEIT_RECT.has_point(point):
-				game.forfeit_chase()
-			return
+		elif LAB_SWITCH_RECT.has_point(point):
+			game.start_diorama_art_lab()
+		return
+	if game.phase == "lab_puzzle":
+		var origin := Vector2(385, 245)
+		var tile_size := 118.0
+		for i in range(game.puzzle_board.size()):
+			var rect := Rect2(origin + Vector2(i % 3, i / 3) * (tile_size + 8.0), Vector2(tile_size, tile_size))
+			if rect.has_point(point):
+				game.puzzle_slide(i)
+				return
+		if PUZZLE_REFRESH_RECT.has_point(point):
+			game.puzzle_refresh()
+		return
+	if game.phase == "lab_search" and world_view_rect_screen.has_point(mouse_event.position):
+		game.search_pick_from_view(mouse_event.position - world_view_rect_screen.position)
+		return
+	if game.phase == "lab_chase":
+		if CHASE_START_RECT.has_point(point):
+			game.begin_chase()
+		elif CHASE_FORFEIT_RECT.has_point(point):
+			game.forfeit_chase()
+		return
 	if game.phase == "reward":
 		for i in range(mini(REWARD_CARD_RECTS.size(), game.reward_options.size())):
 			if REWARD_CARD_RECTS[i].has_point(point):
@@ -1601,6 +2130,10 @@ func _gui_input(event: InputEvent) -> void:
 				return
 		if REWARD_SKIP_RECT.has_point(point):
 			game.skip_reward()
+		return
+	if game.phase == "ending":
+		if ENDING_CONTINUE_RECT.has_point(point):
+			game.finish_ending()
 		return
 	if RESET_RECT.has_point(point):
 		if game.test_combat_active:
@@ -1653,10 +2186,16 @@ func _gui_input(event: InputEvent) -> void:
 	if game.phase == "room_ready" and ROOM_ACTION_RECT.has_point(point):
 		game.resolve_current_room()
 		return
+	if game.phase == "boss_ready" and ROOM_ACTION_RECT.has_point(point):
+		game.begin_boss_combat()
+		return
 	if game.phase == "explore" and ENTER_PENDING_RECT.has_point(point) and game._rooms_connected(game.current_room_pos, game.pending_room_pos):
 		game.enter_room(game.pending_room_pos)
 		return
 	if game.phase == "combat":
+		if game.combat_is_boss and BOSS_ANCHOR_ACTION_RECT.has_point(point):
+			game.dismantle_boss_anchor()
+			return
 		if game.character_animation_demo_mode:
 			if CHARACTER_IDLE_RECT.has_point(point):
 				game.demo_character_idle()
@@ -1677,7 +2216,10 @@ func _gui_input(event: InputEvent) -> void:
 			game.cancel_selected_card()
 			return
 		if game.combat.outcome != "" and RETURN_RECT.has_point(point):
-			game.return_from_combat()
+			if game.test_combat_active:
+				game.return_to_combat_test_menu()
+			else:
+				game.return_from_combat()
 			return
 		if game.combat.outcome == "" and END_TURN_RECT.has_point(point):
 			game.end_combat_turn()
@@ -1745,6 +2287,26 @@ func _label(value: String, pos: Vector2, font_size: int, color: Color) -> void:
 	draw_string(APP_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 
+func _draw_card_text(value: String, pos: Vector2, font_size: int, color: Color) -> void:
+	var outline := Color(CARD_TEXT_OUTLINE, color.a)
+	for offset in [Vector2(-1, -1), Vector2(0, -1), Vector2(1, -1), Vector2(-1, 0), Vector2(1, 0), Vector2(-1, 1), Vector2(0, 1), Vector2(1, 1)]:
+		draw_string(APP_FONT, pos + offset, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, outline)
+	draw_string(APP_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+
+
+func _draw_card_centered(value: String, rect: Rect2, font_size: int, color: Color) -> void:
+	var bounds := APP_FONT.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	var pos := rect.position + Vector2((rect.size.x - bounds.x) * 0.5, (rect.size.y + bounds.y) * 0.5 - 2.0)
+	_draw_card_text(value, pos, font_size, color)
+
+
+func _draw_card_wrapped_lines(value: String, pos: Vector2, width: float, font_size: int, color: Color, max_lines: int) -> void:
+	var outline := Color(CARD_TEXT_OUTLINE, color.a)
+	for offset in [Vector2(-1, -1), Vector2(0, -1), Vector2(1, -1), Vector2(-1, 0), Vector2(1, 0), Vector2(-1, 1), Vector2(0, 1), Vector2(1, 1)]:
+		draw_multiline_string(APP_FONT, pos + offset, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, max_lines, outline)
+	draw_multiline_string(APP_FONT, pos, value, HORIZONTAL_ALIGNMENT_LEFT, width, font_size, max_lines, color)
+
+
 func _display_label(value: String, pos: Vector2, font_size: int, color: Color, with_shadow: bool = true) -> void:
 	if with_shadow:
 		draw_string(DISPLAY_FONT, pos + Vector2(2, 2), value, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, INK)
@@ -1784,10 +2346,14 @@ func _phase_label() -> String:
 		return "三选一扩建"
 	if game.phase == "room_ready":
 		return "房间揭示"
+	if game.phase == "boss_ready":
+		return "祭坛决战"
 	if game.phase == "reward":
 		return "节目奖励"
 	if game.phase == "combat":
 		return "惊吓时间"
+	if game.phase == "ending":
+		return "最终结局"
 	return "布景探索"
 
 

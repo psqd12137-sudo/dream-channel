@@ -36,7 +36,10 @@ func _run() -> void:
 	_check(game.battle_turn_actor_id == "player", "combat must begin with the player highlighted in turn order")
 	_check(game.combat.enemy_order.size() == 3, "squad roles test combat must create three enemies")
 	_check(game.combat.player_hp == 60, "test combat must use the scenario player HP")
-	game.return_to_combat_test_menu()
+	game.combat.outcome = "victory"
+	_click(hud, hud.RETURN_RECT)
+	_check(game.phase == "test_combat_menu", "test victory must return to the test desk instead of the formal game")
+	_check(game.combat == null and not game.test_combat_active, "test victory exit must discard the isolated combat session")
 	_check(game.phase == "test_combat_menu", "test combat must return to the test desk")
 	_check(game.combat == null and not game.test_combat_active, "returning must discard the test combat session")
 	_check(game.run_seed == initial_seed and game.player_hp == initial_hp and game.run_progress == initial_progress, "test combat must restore formal run scalars")

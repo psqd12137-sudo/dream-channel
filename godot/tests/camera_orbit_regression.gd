@@ -35,6 +35,10 @@ func _run() -> void:
 	_check(composer.generation_fingerprint() == house_fingerprint, "house orbit must not change the PCG generation fingerprint")
 	_check(composer.connection_edges.size() == house_connections and composer.visual_edge_records.size() == house_visual_edges, "house orbit must preserve connection and visual edge ledgers")
 	_check(composer.wall_bound_props_match_cutaway(), "house orbit must keep wall-bound props synchronized with cutaway walls")
+	var house_zoom_target_before: Vector3 = game.house_camera_target
+	game.zoom_house_camera(Vector2(120.0, 90.0), 0.8)
+	_check(game.house_camera_target.is_equal_approx(house_zoom_target_before), "house zoom must not translate the camera target")
+	_check(not game.house_camera_following, "house zoom must pause automatic camera following")
 
 	var hud = game.hud
 	var screen_center: Vector2 = game.world_view_rect.position + game.world_view_rect.size * 0.5
@@ -78,10 +82,12 @@ func _run() -> void:
 
 	game.reset_battle_camera()
 	game.pan_battle_camera(Vector2(84.0, -42.0))
+	var battle_zoom_target_before: Vector3 = game.battle_camera_target
 	game.zoom_battle_camera(Vector2(game.world_viewport.size) * 0.5, 0.8)
 	var adjusted_target: Vector3 = game.battle_camera_target
 	var adjusted_size: float = camera.size
 	var adjusted_ratio: float = game.battle_camera_zoom_ratio
+	_check(game.battle_camera_target.is_equal_approx(battle_zoom_target_before), "battle zoom must not translate the camera target")
 	game.orbit_battle_camera(Vector2(160.0, 0.0))
 	_check(game.battle_camera_target.is_equal_approx(adjusted_target), "battle orbit must not discard user pan")
 	_check(is_equal_approx(camera.size, adjusted_size) and is_equal_approx(game.battle_camera_zoom_ratio, adjusted_ratio), "battle orbit must preserve user zoom")

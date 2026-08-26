@@ -13,6 +13,8 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 	await process_frame
+	# 测试使用项目目录内的隔离存档，避免清理/改写用户真实 user:// 存档。
+	game.run_save_repository = ChannelRunSaveRepository.new("res://.test_channel_run_v1.json", game.EXE_SOURCE_ID)
 	game._clear_run_save()
 	game.go_home()
 	game.start_new_run(false)

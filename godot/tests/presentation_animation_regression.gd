@@ -30,6 +30,36 @@ func _run() -> void:
 	if enemy_presenter != null:
 		_check(enemy_presenter.has_3d_model(), "enemy presenter must instantiate the temporary Quaternius model and animation player")
 		_check(enemy_presenter.current_model_animation().to_lower().contains("idle"), "enemy model must begin in its skeletal Idle loop")
+	var attack_intent_icon: Texture2D = game.battle_world_renderer._battle_intent_icon_texture("attack")
+	var ranged_intent_icon: Texture2D = game.battle_world_renderer._battle_intent_icon_texture("attack", "ranged")
+	var move_intent_icon: Texture2D = game.battle_world_renderer._battle_intent_icon_texture("chase")
+	_check(attack_intent_icon != null and ranged_intent_icon != null and move_intent_icon != null, "enemy attack, ranged, and movement intent icons must load")
+	_check(attack_intent_icon != move_intent_icon and attack_intent_icon != ranged_intent_icon and move_intent_icon != ranged_intent_icon, "enemy attack, ranged, and movement intent icons must be distinct")
+	# 长廊测试默认让敌人埋伏；演示测试关注选中后的信息框与单体威胁预览，先明确揭示敌人。
+	game.combat.enemy_revealed = true
+	var selectable_enemy_id: String = ""
+	for enemy_id in game.combat.enemy_order:
+		var enemy_state = game.combat.enemy_by_id(str(enemy_id))
+		if enemy_state != null and enemy_state.revealed:
+			selectable_enemy_id = str(enemy_id)
+			break
+	_check(not selectable_enemy_id.is_empty(), "presentation combat must expose at least one selectable enemy")
+	if not selectable_enemy_id.is_empty():
+		game.select_battle_enemy(selectable_enemy_id)
+		_check(game.battle_focused_enemy_id == selectable_enemy_id, "clicking an enemy must preserve the selected enemy for the top information panel")
+		_check(game.battle_world_renderer._focused_battle_enemy_id() == selectable_enemy_id, "selected enemy must drive the individual threat preview")
+	var ranged_target := Vector2i(2, 1)
+	var expected_ranged_yaw: float = game._battle_move_facing_yaw(game.combat.enemy_pos, ranged_target)
+	_check(
+		is_equal_approx(game._battle_enemy_attack_facing_yaw(game.battle_actor_root.get_node_or_null("Enemy"), {"target": ranged_target}), expected_ranged_yaw),
+		"remote attack facing must turn toward the player target before the attack pose"
+	)
+	var projectile_start := Vector3(-2.0, 0.84, 0.0)
+	var projectile_target := Vector3(2.0, 0.36, 0.0)
+	var projectile_middle: Vector3 = game._battle_enemy_projectile_position(0.5, projectile_start, projectile_target)
+	_check(projectile_middle.y > maxf(projectile_start.y, projectile_target.y), "remote projectile must rise above both endpoints on its parabolic flight")
+	_check(game._battle_enemy_projectile_position(0.0, projectile_start, projectile_target).distance_to(projectile_start) < 0.001, "remote projectile arc must begin at the enemy hand position")
+	_check(game._battle_enemy_projectile_position(1.0, projectile_start, projectile_target).distance_to(projectile_target) < 0.001, "remote projectile arc must land at the target position")
 
 	game.combat.player_pos = Vector2i(2, 1)
 	game.combat.enemy_pos = Vector2i(7, 1)
@@ -66,7 +96,6 @@ func _run() -> void:
 	game.combat.enemy_pos = Vector2i(4, 1)
 	game.combat.walls.clear()
 	game.combat.heights.clear()
-	game.combat.enemy_revealed = true
 	game.combat.enemy_sees_player = true
 	game.combat.player_sees_enemy = true
 	game.combat.hand.assign(["jab", "guard", "brace", "fling"])
@@ -91,7 +120,7 @@ func _run() -> void:
 	_check(game.battle_world_renderer.full_board_build_count == full_builds_before_card, "card resolution must not rebuild the static battle board")
 	_check(game.battle_board_root == board_before_card, "card resolution must preserve the battle board node")
 
-	_check(_count_named_prefix(game.battle_root, "StageDoor") == 1, "battle stage must include the imported Web door decoration")
+	_check(_count_named_prefix(game.battle_root, "StageDoor") == 0, "combat test arena must not include the formal Web door decoration")
 	_check(_count_named_prefix(game.battle_root, "StageLamp") == 1, "battle stage must include the imported Web lamp decoration")
 	_check(_count_named_prefix(game.battle_root, "StageAnchor") == 1, "battle stage must include the imported Web signal anchor")
 

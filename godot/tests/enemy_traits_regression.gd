@@ -28,13 +28,19 @@ func _init() -> void:
 
 
 func _test_adapter_traits() -> void:
-	var content: Dictionary = WebContentAdapter.new().build_content(20260820)
+	var adapter := WebContentAdapter.new()
+	var content: Dictionary = adapter.build_content(20260820)
 	var rooms: Array = content.get("rooms", [])
 	var living := _room_by_id(rooms, "living")
 	var hall := _room_by_id(rooms, "hall")
 	_check("faceShock" in living.get("enemy", {}).get("traits", []), "adapter must attach living room faceShock")
 	_check("cornerCut" in living.get("enemy", {}).get("traits", []), "adapter must attach living room cornerCut")
-	_check("beam" in hall.get("enemy", {}).get("traits", []), "adapter must attach hall beam")
+	_check("beam" in hall.get("enemy", {}).get("traits", []), "hall's explicitly configured enemy must keep beam")
+	var pressure: Dictionary = adapter._load_json("pressure.json")
+	var ordinary := adapter._scale_enemy({"name": "普通敌人", "traits": []}, "hall", 1, pressure)
+	_check("beam" not in ordinary.get("traits", []), "room beam must not turn an ordinary enemy into a ranged attacker")
+	var authored_ranged := adapter._scale_enemy({"name": "远射敌人", "traits": ["ranged"]}, "living", 1, pressure)
+	_check("ranged" in authored_ranged.get("traits", []), "an explicitly configured ranged enemy must keep ranged")
 
 
 func _test_face_shock_and_corner_cut() -> void:

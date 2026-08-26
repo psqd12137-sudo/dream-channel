@@ -3,6 +3,8 @@ extends RefCounted
 const CombatEnemyRoster = preload("res://scripts/combat_enemy_roster.gd")
 const EnemyTurnScheduler = preload("res://scripts/enemy_turn_scheduler.gd")
 const EnemyAISquadBlackboard = preload("res://scripts/enemy_ai_blackboard.gd")
+const CombatCardExecutor = preload("res://scripts/combat_card_executor.gd")
+const CombatStatus = preload("res://scripts/combat_status.gd")
 
 const DIRS := [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 const INVALID_CELL := Vector2i(-999, -999)
@@ -16,8 +18,14 @@ var portals: Dictionary = {}
 var traps: Dictionary = {}
 
 var player_pos := Vector2i.ZERO
+var player_facing := Vector2i.DOWN
 var player_hp := 6
-var player_block := 0
+var player_shield := 0
+var player_block: int:
+	## Compatibility alias; shield is the authoritative player defense resource.
+	get: return player_shield
+	set(value): player_shield = maxi(0, value)
+var player_statuses: Dictionary = {}
 var energy := 3
 var energy_roll := 1
 var energy_rolls: Array[int] = []
@@ -39,6 +47,8 @@ var free_draw_used := false
 var pending_player_turn := false
 var first_smash_bonus := 0
 var first_smash_used := false
+var enemy_death_allowed := true
+var enemy_vision_suppressed := false
 var decoy_pos := Vector2i(-1, -1)
 var player_exposed := false
 
@@ -58,6 +68,7 @@ var deck: Array[String] = []
 var discard: Array[String] = []
 var hand: Array[String] = []
 var last_card_events: Array[Dictionary] = []
+var card_executor: CombatCardExecutor
 var rng := RandomNumberGenerator.new()
 var round_number := 1
 var outcome := ""
@@ -97,6 +108,201 @@ func occupied_enemy_cells(except_enemy_id := "") -> Dictionary:
 			continue
 		result[state.pos] = enemy_id
 	return result
+
+
+func reserved_enemy_cells(except_enemy_id := "") -> Dictionary:
+	var result := {}
+	for enemy_id in enemy_order:
+		if str(enemy_id) == except_enemy_id:
+			continue
+		var state: CombatEnemyState = enemies.get(enemy_id)
+		if state == null or not state.alive() or state.tactical_plan_round != round_number:
+			continue
+		if state.tactical_reserved_cell != INVALID_CELL:
+			result[state.tactical_reserved_cell] = enemy_id
+	return result
+
+
+## Canonical presentation entry point for enemy statuses.
+## Keep enemy_statuses() below as a compatibility alias for older HUD/tests.
+func statuses_for_enemy(state: CombatEnemyState) -> Array[Dictionary]:
+	var statuses: Array[Dictionary] = []
+	if state == null or not state.alive():
+		return statuses
+	var trap_value: Variant = traps.get(state.pos, {})
+	var trap: Dictionary = trap_value if trap_value is Dictionary else {}
+	var trap_id := str(trap.get("card_id", ""))
+	var slow := int(trap.get("slow", 0))
+	if slow > 0:
+		var salt_bound := trap_id in ["guard", "salt"]
+		var detail := "移动额外消耗%d行动力" % slow
+		if salt_bound:
+			detail += "；剩余触发%d次" % maxi(0, int(trap.get("charges", 3)))
+		statuses.append(CombatStatus.make(
+			"salt_bind" if salt_bound else "slow",
+			CombatStatus.CATEGORY_CONTROL,
+			"盐圈束缚" if salt_bound else "行动迟滞",
+			1,
+			CombatStatus.NO_DURATION,
+			CombatStatus.DURATION_SOURCE,
+			trap_id,
+			detail))
+	if state.broken:
+		statuses.append(CombatStatus.make(
+			"broken",
+			CombatStatus.CATEGORY_DEBUFF,
+			"破韧",
+			1,
+			CombatStatus.NO_DURATION,
+			CombatStatus.DURATION_PERMANENT,
+			"toughness",
+			"韧性已归零"))
+	for raw_status_id: Variant in state.status_effects.keys():
+		var status_id := str(raw_status_id)
+		var status := CombatStatus.normalize(status_id, state.status_effects[raw_status_id])
+		var status_label := str(status.get("label", ""))
+		if status_label.is_empty() or status_label == status_id:
+			status_label = _enemy_status_label(status_id)
+		status["label"] = status_label
+		status["text"] = CombatStatus.display_text(status)
+		statuses.append(status)
+	return statuses
+
+
+func enemy_statuses(state: CombatEnemyState) -> Array[Dictionary]:
+	return statuses_for_enemy(state)
+
+
+## Canonical presentation entry point for player statuses and resources.
+func statuses_for_player() -> Array[Dictionary]:
+	var statuses: Array[Dictionary] = []
+	if player_shield > 0:
+		statuses.append(CombatStatus.make(
+			"shield",
+			CombatStatus.CATEGORY_RESOURCE,
+			"护盾",
+			player_shield,
+			CombatStatus.NO_DURATION,
+			CombatStatus.DURATION_TURNS,
+			"player",
+			"吸收即将受到的生命伤害"))
+	for raw_status_id in player_statuses.keys():
+		var status_id := str(raw_status_id)
+		var status := CombatStatus.normalize(status_id, player_statuses[raw_status_id])
+		status["text"] = CombatStatus.display_text(status)
+		statuses.append(status)
+	return statuses
+
+
+func player_statuses_view() -> Array[Dictionary]:
+	return statuses_for_player()
+
+
+## Canonical presentation entry point for a room block / battle tile.
+## Tile states are derived from the tile contents, not mixed into actor buffs.
+func statuses_for_tile(cell: Vector2i) -> Array[Dictionary]:
+	var statuses: Array[Dictionary] = []
+	if walls.has(cell):
+		statuses.append(CombatStatus.make(
+			"wall",
+			CombatStatus.CATEGORY_PASSIVE,
+			"阻挡",
+			1,
+			CombatStatus.NO_DURATION,
+			CombatStatus.DURATION_SOURCE,
+			"room",
+			"不可通行；会阻断移动和攻击线"))
+	var trap_value: Variant = traps.get(cell, {})
+	var trap: Dictionary = trap_value if trap_value is Dictionary else {}
+	if not trap.is_empty():
+		var trap_id := str(trap.get("card_id", ""))
+		var trap_card: Dictionary = cards.get(trap_id, {})
+		var trap_label := str(trap_card.get("name", trap_id if not trap_id.is_empty() else "陷阱"))
+		var slow := int(trap.get("slow", 0))
+		if trap_id in ["guard", "salt"] or slow > 0:
+			trap_label = "盐圈"
+		var trap_detail := "踩入后触发"
+		if slow > 0:
+			trap_detail = "敌人移动额外消耗%d行动力" % slow
+			if trap_id in ["guard", "salt"]:
+				trap_detail += "；剩余触发%d次" % maxi(0, int(trap.get("charges", 3)))
+		elif int(trap.get("damage", 0)) > 0:
+			trap_detail = "踩入造成%d点伤害" % int(trap.get("damage", 0))
+		var tile_status := CombatStatus.make(
+			"trap:%s" % trap_id,
+			CombatStatus.CATEGORY_HAZARD,
+			trap_label,
+			1,
+			CombatStatus.NO_DURATION,
+			CombatStatus.DURATION_SOURCE,
+			trap_id,
+			trap_detail)
+		tile_status["presentation_kind"] = CombatStatus.PRESENTATION_CARD_ICON
+		tile_status["presentation_id"] = trap_id
+		tile_status["icon"] = str(trap.get("glyph", ""))
+		statuses.append(tile_status)
+	if portals.has(cell):
+		statuses.append(CombatStatus.make(
+			"portal",
+			CombatStatus.CATEGORY_PASSIVE,
+			"传送门",
+			1,
+			CombatStatus.NO_DURATION,
+			CombatStatus.DURATION_SOURCE,
+			"room",
+			"可将角色传送到对应出口"))
+	return statuses
+
+
+func set_player_status(status_id: String, category: String, label: String, stacks: int = 1, duration: int = CombatStatus.NO_DURATION, duration_type: String = CombatStatus.DURATION_PERMANENT, source: String = "", detail: String = "") -> void:
+	CombatStatus.put(player_statuses, CombatStatus.make(status_id, category, label, stacks, duration, duration_type, source, detail))
+
+
+func clear_player_status(status_id: String) -> void:
+	CombatStatus.remove(player_statuses, status_id)
+
+
+func gain_player_shield(amount: int, source: String = "") -> int:
+	var gained := maxi(0, amount)
+	player_shield += gained
+	return gained
+
+
+func consume_player_shield(amount: int) -> int:
+	var consumed := mini(player_shield, maxi(0, amount))
+	player_shield -= consumed
+	return consumed
+
+
+func clear_player_shield() -> void:
+	player_shield = 0
+
+
+func apply_enemy_toughness_damage(state: CombatEnemyState, amount: int, source: String) -> int:
+	if state == null or amount <= 0 or state.toughness <= 0:
+		return 0
+	var before := state.toughness
+	state.toughness = maxi(0, state.toughness - amount)
+	var dealt := before - state.toughness
+	if state.toughness <= 0:
+		state.broken = true
+		if state.archetype == "execute":
+			state.execute_bonus_pending = true
+		elif state.archetype == "stagger":
+			state.stagger_pending = true
+		elif state.archetype == "crush":
+			state.crush_bonus_pending = true
+		event_log.append("EnemyBroken source=%s archetype=%s" % [source, state.archetype])
+	return dealt
+
+
+func _enemy_status_label(status_id: String) -> String:
+	match status_id:
+		"bleed": return "流血"
+		"poison": return "中毒"
+		"burn": return "灼烧"
+		"root": return "束缚"
+	return status_id
 
 
 func all_enemies_defeated() -> bool:
@@ -273,8 +479,10 @@ func setup(arena: Dictionary, enemy: Variant, card_defs: Dictionary, starter: Ar
 			portals[a] = b
 			portals[b] = a
 	player_pos = _array_pos(arena.get("player", [0, 1]))
+	player_facing = _cardinal_direction(_array_pos(arena.get("player_facing", [0, 1])))
 	player_hp = int(run_rules.get("player_hp", 6))
-	player_block = 0
+	player_shield = 0
+	player_statuses.clear()
 	base_speed = int(run_rules.get("base_speed", 3))
 	base_energy = maxi(1, int(run_rules.get("base_energy", base_speed + 2)))
 	hand_size = int(run_rules.get("hand_size", 4))
@@ -296,6 +504,8 @@ func setup(arena: Dictionary, enemy: Variant, card_defs: Dictionary, starter: Ar
 	retain_this_turn = 0
 	free_draw_used = false
 	first_smash_used = false
+	enemy_death_allowed = bool(run_rules.get("enemy_death_allowed", true))
+	enemy_vision_suppressed = false
 	decoy_pos = Vector2i(-1, -1)
 	# 敌人集合：接受标准数组或旧单敌人字典，统一在加载边界标准化。
 	enemies.clear()
@@ -347,12 +557,22 @@ func setup(arena: Dictionary, enemy: Variant, card_defs: Dictionary, starter: Ar
 func move_player(target: Vector2i) -> bool:
 	if not can_move_player(target):
 		return false
+	var direction := target - player_pos
 	var cost := player_move_cost(target)
 	player_pos = target
+	set_player_facing(direction)
 	energy -= cost
 	_refresh_enemy_visibility()
 	event_log.append("PlayerMoved pos=%s cost=%d shared=%s energy=%d" % [player_pos, cost, str(enemy_at(target, false) != null), energy])
 	return true
+
+
+func set_player_facing(direction: Vector2i) -> void:
+	player_facing = _cardinal_direction(direction)
+
+
+func player_back_cell() -> Vector2i:
+	return player_pos - player_facing
 
 
 func can_move_player(target: Vector2i) -> bool:
@@ -360,14 +580,17 @@ func can_move_player(target: Vector2i) -> bool:
 
 
 func player_path_to(target: Vector2i) -> Array[Vector2i]:
+	var empty_path: Array[Vector2i] = []
 	if outcome != "" or target == player_pos or not is_walkable(target) or target == decoy_pos:
-		return [player_pos] if target == player_pos else []
+		if target == player_pos:
+			empty_path.append(player_pos)
+		return empty_path
 	var blocked := occupied_enemy_cells()
 	# 允许把目标本身作为终点，避免“点敌人格”永远被自己的阻挡集合拒绝。
 	blocked.erase(target)
 	var path := _find_path(player_pos, target, blocked, false)
 	if path.size() < 2 or path.back() != target:
-		return []
+		return empty_path
 	return path
 
 
@@ -376,6 +599,19 @@ func player_path_cost(path: Array[Vector2i]) -> int:
 	for index in range(1, path.size()):
 		total += player_move_cost(path[index])
 	return total
+
+
+func player_reachable_cells() -> Array:
+	var cells: Array = []
+	if outcome != "":
+		return cells
+	for y in range(rows):
+		for x in range(cols):
+			var target := Vector2i(x, y)
+			var path := player_path_to(target)
+			if path.size() >= 2 and player_path_cost(path) <= energy:
+				cells.append(target)
+	return cells
 
 
 func player_move_cost(target: Vector2i) -> int:
@@ -416,7 +652,11 @@ func can_target_place_card(hand_index: int, target: Vector2i) -> bool:
 		return false
 	var adjacent := manhattan(player_pos, target) == 1
 	var smash_state := enemy_at(target)
-	var smash := smash_state != null and _has_line_of_sight(player_pos, smash_state.pos)
+	var smash := false
+	if smash_state != null:
+		if not _can_smash_place_card(card) or not _has_line_of_sight(player_pos, smash_state.pos):
+			return false
+		smash = true
 	if not adjacent and not smash:
 		return false
 	var place_data: Dictionary = card.get("place", {})
@@ -428,77 +668,20 @@ func can_target_place_card(hand_index: int, target: Vector2i) -> bool:
 
 
 func play_card(hand_index: int, target: Vector2i, enemy_id: String = "") -> bool:
-	if outcome != "" or hand_index < 0 or hand_index >= hand.size():
-		return false
-	var card_id := hand[hand_index]
-	if not cards.has(card_id):
-		return false
-	var card: Dictionary = cards[card_id]
-	var cost := card_cost(card)
-	if energy < cost:
-		return false
-	var card_type := str(card.get("type", ""))
-	var target_state := _resolve_single_enemy(card, enemy_id)
-	if card_target_type(card) == "single_enemy" and target_state == null:
-		# 多敌人时单体牌必须显式选中合法敌人，否则不消耗。
-		return false
-	last_card_events.clear()
-	var accepted := false
-	if card_type == "place":
-		accepted = _play_place(card, target)
-	elif card.has("allEnemies"):
-		accepted = _play_all_enemies(card_id, card)
-	elif card.has("area"):
-		accepted = _play_area(card_id, card, target)
-	elif card.has("randomEnemy"):
-		accepted = _play_random_enemy(card_id, card)
-	elif bool(card.get("shove", false)):
-		accepted = _play_shove(bool(card.get("preferPortal", false)), int(card.get("drawOnPortal", 0)), target_state)
-	elif bool(card.get("climbToHigher", false)):
-		accepted = _play_climb()
-	elif bool(card.get("topple", false)):
-		accepted = _play_topple(target_state)
-	elif card.has("puppetBang"):
-		accepted = _play_puppet_bang(card.get("puppetBang", {}), target_state)
-	elif card.has("saltLash"):
-		accepted = _play_salt_lash(card.get("saltLash", {}), target_state)
-	elif card.has("ifBlinded") or card.has("elseBlind"):
-		accepted = _play_blind_followup(card, target_state)
-	elif card.has("drainTough"):
-		accepted = _play_rupture(card, target_state)
-	elif card.has("gain_block"):
-		player_block += int(card.get("gain_block", 0))
-		accepted = true
-	elif card.has("gainBlock"):
-		player_block += int(card.get("gainBlock", 0))
-		accepted = true
-	elif card_type == "medicine" or card.has("gainEnergy"):
-		energy += int(card.get("gainEnergy", 0))
-		turn_energy_max = maxi(turn_energy_max, energy)
-		player_hp -= int(card.get("selfDamage", 0))
-		accepted = true
-	elif card_type == "ready":
-		ready_effect = (card.get("ready", {}) as Dictionary).duplicate(true)
-		ready_effect["card_id"] = card_id
-		ready_effect["name"] = str(card.get("name", card_id))
-		accepted = true
-	elif card.has("grantRetain"):
-		retain_slots = maxi(retain_slots, int(card.get("grantRetain", 0)))
-		accepted = true
-	elif card.has("retainThisTurn"):
-		retain_this_turn += int(card.get("retainThisTurn", 0))
-		accepted = true
-	elif card.has("discountNext"):
-		placement_discount += int(card.get("discountNext", 0))
-		accepted = true
-	if not accepted:
-		return false
+	if card_executor == null:
+		card_executor = CombatCardExecutor.new(self)
+	return card_executor.execute(hand_index, target, enemy_id)
+
+
+func _commit_card_play(card_id: String, card: Dictionary, cost: int, target: Vector2i, hand_index: int) -> void:
+	# 结算资源和牌堆统一放在执行器的最后一步，避免失败的牌改变状态。
 	for enemy_state in _iter_enemy_states():
 		if target == enemy_state.pos or _has_line_of_sight(player_pos, enemy_state.pos):
 			reveal_enemy("card", enemy_state)
 	energy -= cost
-	if card_type == "place" and placement_discount > 0:
+	if str(card.get("type", "")) == "place" and placement_discount > 0:
 		placement_discount = 0
+		clear_player_status("place_discount")
 	hand.remove_at(hand_index)
 	if not bool(card.get("exhaust", false)):
 		discard.append(card_id)
@@ -509,7 +692,6 @@ func play_card(hand_index: int, target: Vector2i, enemy_id: String = "") -> bool
 	if player_hp <= 0:
 		outcome = "defeat"
 		event_log.append("CombatEnded outcome=defeat")
-	return true
 
 
 func card_cost(card: Dictionary) -> int:
@@ -561,7 +743,7 @@ func _play_all_enemies(card_id: String, card: Dictionary) -> bool:
 	var source := "card:%s" % card_id
 	for enemy_id in living_enemy_ids().duplicate():
 		var state: CombatEnemyState = enemies[enemy_id]
-		var dealt := _apply_enemy_damage(state, int(effect.get("damage", 0)), int(effect.get("tough", 0)), source)
+		var dealt := _apply_enemy_damage(state, int(effect.get("damage", 0)), _effect_toughness_damage(effect), source)
 		if bool(effect.get("blind", false)):
 			_apply_blind(state, {"blind": true, "blind_turns": int(effect.get("blindTurns", 1))})
 		last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": enemy_id, "damage": dealt, "source": source})
@@ -575,7 +757,7 @@ func _play_area(card_id: String, card: Dictionary, center: Vector2i) -> bool:
 	for enemy_id in living_enemy_ids().duplicate():
 		var state: CombatEnemyState = enemies[enemy_id]
 		if absi(state.pos.x - center.x) <= radius and absi(state.pos.y - center.y) <= radius:
-			var dealt := _apply_enemy_damage(state, int(effect.get("damage", 0)), int(effect.get("tough", 0)), source)
+			var dealt := _apply_enemy_damage(state, int(effect.get("damage", 0)), _effect_toughness_damage(effect), source)
 			if bool(effect.get("blind", false)):
 				_apply_blind(state, {"blind": true, "blind_turns": int(effect.get("blindTurns", 1))})
 			last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": enemy_id, "damage": dealt, "source": source})
@@ -589,38 +771,98 @@ func _play_random_enemy(card_id: String, card: Dictionary) -> bool:
 		return false
 	var picked: String = living[rng.randi_range(0, living.size() - 1)]
 	var source := "card:%s" % card_id
-	var dealt := _apply_enemy_damage(enemies[picked], int(effect.get("damage", 0)), int(effect.get("tough", 0)), source)
+	var dealt := _apply_enemy_damage(enemies[picked], int(effect.get("damage", 0)), _effect_toughness_damage(effect), source)
 	last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": picked, "damage": dealt, "source": source})
 	return true
 
 
 func preview_intent(enemy_id := "") -> Dictionary:
-	var state: CombatEnemyState = enemy_by_id(str(enemy_id)) if str(enemy_id) != "" else _focus_enemy_state()
-	if state == null:
-		return {"path": [], "hurt": [], "label": "观望", "detail": "", "type": "stall", "enemy_revealed": false, "sees_player": false, "attack_kind": "", "hits": 0, "pending": false, "enemy_id": ""}
-	# 意图预览与真正的敌方回合共享同一轮战术计划，避免 HUD 显示
-	# “追击”而实际回合却按另一攻击位行动。预览只重建计划，不执行动作。
+	# 保留单敌人接口，调用方迁移期间仍可继续读取旧契约。
+	var intents := preview_all_intents()
+	var requested_id := str(enemy_id)
+	if requested_id.is_empty():
+		var focused := _focus_enemy_state()
+		requested_id = focused.id if focused != null else ""
+	return intents.get(requested_id, _empty_enemy_intent(requested_id))
+
+
+func preview_all_intents() -> Dictionary:
+	# 意图快照必须在同一轮黑板规划中生成；渲染层不应逐敌调用
+	# preview_intent，否则会重复规划全体敌人并反复改写 AI 调试字段。
+	var intents: Dictionary = {}
 	var blackboard := EnemyAISquadBlackboard.new()
 	blackboard.begin_turn(self)
-	var result := _preview_intent_for(state)
-	result["ai_role"] = state.ai_role
-	result["ai_state"] = state.ai_state
-	result["ai_reason"] = state.ai_reason
-	result["tactical_goal"] = state.tactical_goal
-	return result
+	for enemy_id in living_enemy_ids():
+		var state: CombatEnemyState = enemy_by_id(enemy_id)
+		if state == null:
+			continue
+		var result := _preview_intent_for(state)
+		result["ai_role"] = state.ai_role
+		result["ai_state"] = state.ai_state
+		result["ai_reason"] = state.ai_reason
+		result["tactical_goal"] = state.tactical_goal
+		result["tactical_plan"] = blackboard.plan_for(enemy_id).duplicate(true)
+		intents[enemy_id] = result
+	return intents
+
+
+func _empty_enemy_intent(enemy_id := "") -> Dictionary:
+	return {
+		"path": [],
+		"move_cells": [],
+		"threat_cells": [],
+		"hurt": [],
+		"impact_cells": [],
+		"coverage_cells": [],
+		"line_cells": [],
+		"range_origin": INVALID_CELL,
+		"attack_range": 0,
+		"label": "观望",
+		"detail": "",
+		"type": "stall",
+		"enemy_revealed": false,
+		"sees_player": false,
+		"attack_kind": "",
+		"hits": 0,
+		"intent_value": "",
+		"movement_steps": 0,
+		"movement_delta": 0,
+		"pending": false,
+		"enemy_id": enemy_id,
+	}
 
 
 func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
-	var result := {"path": [], "hurt": [], "label": "观望", "detail": "", "type": "stall", "enemy_revealed": state.revealed, "sees_player": state.sees_player, "attack_kind": "", "hits": 0, "pending": false, "enemy_id": state.id}
+	var result := _empty_enemy_intent(state.id)
+	result["enemy_revealed"] = state.revealed
+	result["sees_player"] = state.sees_player
+	result["attack_range"] = state.attack_range
+	if state.revealed:
+		var move_cells := enemy_reachable_cells(state)
+		result["move_cells"] = move_cells
+		var turn_budget := _enemy_turn_budget(state)
+		var attack_cost := _effective_attack_cost(state)
+		var attack_move_cells: Array = []
+		if turn_budget >= attack_cost:
+			# 红色威胁区必须为攻击保留行动力，不能把完整移动力再叠一遍攻击距离。
+			attack_move_cells = enemy_reachable_cells(state, turn_budget - attack_cost)
+			result["threat_cells"] = enemy_threat_cells(state, attack_move_cells)
+	if state.revealed and state.sees_player:
+		result["range_origin"] = state.pos
+		result["coverage_cells"] = _enemy_attack_coverage(state, state.pos, state.sees_player)
 	if outcome != "":
 		return result
 	if not state.beam_pending_cells.is_empty():
 		result["hurt"] = state.beam_pending_cells.duplicate()
+		result["impact_cells"] = state.beam_pending_cells.duplicate()
+		result["line_cells"] = state.beam_pending_cells.duplicate()
+		result["range_origin"] = state.pos
 		result["label"] = "激光即将发射 %d" % state.beam_pending_damage
 		result["detail"] = "上一拍锁定的红色射线将在敌方回合落下；离开红格即可躲避。"
 		result["type"] = "attack"
 		result["attack_kind"] = "beam"
 		result["hits"] = 1
+		result["intent_value"] = str(state.beam_pending_damage)
 		result["pending"] = true
 		return result
 	if state.blind_turns > 0:
@@ -637,11 +879,13 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 		var exposed_plan := _enemy_attack_plan(state, state.pos, _enemy_turn_budget(state), true)
 		if exposed_plan.is_empty():
 			result["hurt"] = [player_pos]
+			result["impact_cells"] = [player_pos]
 			result["label"] = "突脸惊吓 1"
 			result["detail"] = "你重新暴露在视线中；即使它够不着也会造成 1 点惊吓。"
 			result["type"] = "attack"
 			result["attack_kind"] = "faceShock"
 			result["hits"] = 1
+			result["intent_value"] = "1"
 			return result
 	var goal := _enemy_goal(state)
 	if goal == INVALID_CELL:
@@ -651,30 +895,32 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 	var remaining := _enemy_turn_budget(state)
 	if has_decoy() and manhattan(state.pos, decoy_pos) == 1 and remaining >= _effective_attack_cost(state):
 		result["hurt"] = [decoy_pos]
+		result["impact_cells"] = [decoy_pos]
 		result["label"] = "撕碎纸影"
 		result["detail"] = "纸影会替你承受这一击；敌人若仍有行动力会继续行动。"
 		result["type"] = "attack"
 		result["attack_kind"] = "decoy"
 		return result
-	if state.sees_player and manhattan(state.pos, player_pos) <= 1 and remaining < _effective_attack_cost(state):
+	if not state.has_trait("backstab") and state.sees_player and manhattan(state.pos, player_pos) <= 1 and remaining < _effective_attack_cost(state):
 		result["label"] = "等待攻击窗口"
 		result["detail"] = "已经贴近目标，但剩余行动力不足以发动攻击。"
 		result["type"] = "stall"
 		return result
-	var plan := _enemy_attack_plan(state, state.pos, remaining, state.sees_player)
+	var sequence: Dictionary = _preview_enemy_action_sequence(state, goal, remaining)
+	var preview_path: Array[Vector2i] = []
+	preview_path.assign(sequence.get("path", []))
+	result["path"] = preview_path
+	var plan: Dictionary = sequence.get("attack_plan", {})
 	if not plan.is_empty():
-		return _intent_from_attack_plan(state, plan, result)
-	var step := _choose_enemy_step(state, state.pos, goal)
-	if step != INVALID_CELL and step != goal and remaining > 0:
-		result["path"] = [step]
-		var after_remaining := remaining - 1 - int((traps.get(step, {}) as Dictionary).get("slow", 0))
-		var sees_after := _has_line_of_sight(step, player_pos) and state.blind_turns <= 0
-		var after_plan := _enemy_attack_plan(state, step, after_remaining, sees_after)
-		if not after_plan.is_empty():
-			result = _intent_from_attack_plan(state, after_plan, result)
-			result["path"] = [step]
+		result = _intent_from_attack_plan(state, plan, result)
+		result["path"] = preview_path
+	_apply_movement_intent_value(result, state.pos, preview_path)
 	if result["type"] != "attack":
-		if state.sees_player:
+		if bool(sequence.get("retreat", false)):
+			result["type"] = "retreat"
+			result["label"] = "拉开距离 %d步" % preview_path.size()
+			result["detail"] = "本回合无法绕到背后，先远离玩家，绝不从正面攻击。"
+		elif state.sees_player:
 			result["type"] = "chase"
 			result["label"] = "追击 %d步" % result["path"].size()
 			result["detail"] = "已建立视野；蓝色编号是本回合移动顺序。"
@@ -690,6 +936,76 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 		result["label"] = "重新选点"
 		result["detail"] = "当前巡逻点已到达，下回合会选择新的搜查方向。"
 	return result
+
+
+func _preview_enemy_action_sequence(state: CombatEnemyState, goal: Vector2i, remaining: int) -> Dictionary:
+	var path: Array[Vector2i] = []
+	var origin: Vector2i = state.pos
+	var retreating: bool = false
+	var allow_attack: bool = state.revealed
+	var guard: int = 20
+	while remaining > 0 and guard > 0:
+		guard -= 1
+		# 起点必须沿用当前状态；只有模拟移动到新格后，才重新用几何视线判断。
+		# 否则测试台或事件快照中的“尚未发现”会被预览层直接改写成攻击意图。
+		var sees_player_from_origin: bool = (state.sees_player if origin == state.pos else _has_line_of_sight(origin, player_pos)) and state.blind_turns <= 0
+		var attack_plan: Dictionary = _enemy_attack_plan(state, origin, remaining, sees_player_from_origin)
+		if not allow_attack:
+			attack_plan.clear()
+		if not attack_plan.is_empty():
+			attack_plan["origin"] = origin
+			return {"path": path, "attack_plan": attack_plan, "retreat": retreating}
+		if has_decoy() and manhattan(origin, decoy_pos) == 1:
+			break
+		var step: Vector2i = INVALID_CELL
+		if state.has_trait("backstab"):
+			var back_cell: Vector2i = player_back_cell()
+			if origin == back_cell:
+				break
+			var back_path: Array[Vector2i] = _backstab_path_from(state, origin)
+			var required_cost: int = _enemy_path_cost(back_path) + _effective_attack_cost(state) if not back_path.is_empty() else 999
+			var must_reposition: bool = back_path.is_empty() or required_cost > remaining
+			if must_reposition and (not state.backstab_reengaging or back_path.is_empty()):
+				step = _choose_backstab_retreat_step_from(state, origin)
+				retreating = true
+				if step != INVALID_CELL:
+					path.append(step)
+					return {"path": path, "attack_plan": {}, "retreat": retreating}
+			else:
+				step = _choose_backstab_step_from(state, origin) if state.has_trait("backstab") else _choose_enemy_step(state, origin, goal)
+		elif sees_player_from_origin and manhattan(origin, player_pos) <= 1 and remaining < _effective_attack_cost(state):
+			break
+		elif origin == goal:
+			break
+		else:
+			step = _choose_enemy_step(state, origin, goal)
+		if step == INVALID_CELL or step == player_pos or (has_decoy() and step == decoy_pos):
+			break
+		path.append(step)
+		remaining -= 1 + int((traps.get(step, {}) as Dictionary).get("slow", 0))
+		origin = step
+	return {"path": path, "attack_plan": {}, "retreat": retreating}
+
+
+func _apply_movement_intent_value(result: Dictionary, origin: Vector2i, path: Array[Vector2i]) -> void:
+	result["movement_steps"] = path.size()
+	result["movement_delta"] = 0
+	if path.is_empty():
+		return
+	var show_movement_value: bool = str(result.get("type", "stall")) != "attack"
+	var final_cell: Vector2i = path[path.size() - 1]
+	var start_distance: int = manhattan(origin, player_pos)
+	var final_distance: int = manhattan(final_cell, player_pos)
+	if final_distance < start_distance:
+		result["movement_delta"] = path.size()
+		if show_movement_value:
+			result["intent_value"] = "+%d" % path.size()
+	elif final_distance > start_distance:
+		result["movement_delta"] = -path.size()
+		if show_movement_value:
+			result["intent_value"] = "-%d" % path.size()
+	elif show_movement_value:
+		result["intent_value"] = "=%d" % path.size()
 
 
 func enemy_turn() -> Array[Dictionary]:
@@ -716,6 +1032,7 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 	var turn_events: Array[Dictionary] = []
 	if outcome != "":
 		return turn_events
+	var hidden_at_turn_start: bool = not state.revealed
 	_refresh_enemy_vision(state, false)
 	if _ai_blackboard != null:
 		_ai_blackboard.plan_enemy(state.id)
@@ -752,12 +1069,13 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 	while remaining > 0 and outcome == "" and guard > 0:
 		guard -= 1
 		_refresh_enemy_vision(state, false)
-		if player_exposed and state.sees_player:
+		if player_exposed and state.sees_player and not hidden_at_turn_start:
 			player_exposed = false
 			if state.has_trait("cornerCut"):
 				var free_step := _choose_enemy_step(state, state.pos, player_pos)
 				if free_step != INVALID_CELL and free_step != player_pos:
-					_move_enemy_to(state, free_step, "抄近路", turn_events, true)
+					if _move_enemy_to(state, free_step, "抄近路", turn_events, true):
+						break
 					if outcome != "":
 						break
 			if state.has_trait("faceShock"):
@@ -780,11 +1098,36 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 			turn_events.append(_resolve_decoy_attack(state))
 			remaining -= _effective_attack_cost(state)
 			continue
+		if state.has_trait("backstab"):
+			var back_cell := player_back_cell()
+			if state.pos == back_cell and remaining < _effective_attack_cost(state):
+				turn_events.append({"kind": "wait", "actor_id": state.id, "label": "等待背刺窗口"})
+				break
+			var back_path := _backstab_path(state)
+			var required_cost: int = _enemy_path_cost(back_path) + _effective_attack_cost(state) if not back_path.is_empty() else 999
+			var must_reposition: bool = back_path.is_empty() or required_cost > remaining
+			if state.pos != back_cell and must_reposition and (not state.backstab_reengaging or back_path.is_empty()):
+				var retreat_step := _choose_backstab_retreat_step(state)
+				if retreat_step != INVALID_CELL:
+					if _move_enemy_to(state, retreat_step, "拉开距离", turn_events):
+						break
+					if not state.alive():
+						break
+					state.backstab_reengaging = true
+					remaining -= 1
+					if traps.has(state.pos):
+						remaining -= int((traps[state.pos] as Dictionary).get("slow", 0))
+						remaining = maxi(0, remaining)
+					break
+				turn_events.append({"kind": "wait", "actor_id": state.id, "label": "等待背后攻击位"})
+				break
 		if state.sees_player and manhattan(state.pos, player_pos) <= 1 and remaining < _effective_attack_cost(state):
 			turn_events.append({"kind": "wait", "actor_id": state.id, "label": "等待攻击窗口"})
 			break
-		var attack_plan := _enemy_attack_plan(state, state.pos, remaining, state.sees_player)
+		var attack_plan := _enemy_attack_plan(state, state.pos, remaining, state.sees_player and not hidden_at_turn_start)
 		if not attack_plan.is_empty():
+			if state.has_trait("backstab"):
+				state.backstab_reengaging = false
 			var execution := _execute_enemy_attack_plan(state, attack_plan, remaining)
 			turn_events.append_array(execution.get("events", []))
 			remaining -= int(execution.get("cost", 0))
@@ -793,7 +1136,10 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 		if goal == INVALID_CELL:
 			turn_events.append({"kind": "wait", "actor_id": state.id, "label": "没有可达的搜查点"})
 			break
-		var raw_step := _choose_enemy_step(state, state.pos, goal)
+		if state.pos == goal:
+			turn_events.append({"kind": "wait", "actor_id": state.id, "label": "已到达战术位置"})
+			break
+		var raw_step := _choose_backstab_step(state) if state.has_trait("backstab") else _choose_enemy_step(state, state.pos, goal)
 		if raw_step == INVALID_CELL:
 			if not state.sees_player and state.last_seen == INVALID_CELL:
 				state.patrol_goal = INVALID_CELL
@@ -806,7 +1152,10 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 			turn_events.append({"kind": "wait", "actor_id": state.id, "label": "等待攻击窗口"})
 			break
 		var verb := "追击" if state.sees_player else "搜索" if state.last_seen != INVALID_CELL else "巡逻"
-		_move_enemy_to(state, raw_step, verb, turn_events)
+		if _move_enemy_to(state, raw_step, verb, turn_events):
+			break
+		if not state.alive():
+			break
 		remaining -= 1
 		if traps.has(state.pos):
 			remaining -= int((traps[state.pos] as Dictionary).get("slow", 0))
@@ -835,6 +1184,10 @@ func _enemy_attack_plan(state: CombatEnemyState, origin: Vector2i, remaining: in
 		return {}
 	var distance := manhattan(origin, player_pos)
 	var attack_cost := 1 if state.has_trait("relentless") else state.attack_cost
+	if state.has_trait("backstab"):
+		if origin == player_back_cell() and distance == 1 and remaining >= attack_cost:
+			return {"kind": "backstab", "cost": attack_cost, "cells": [player_pos]}
+		return {}
 	if state.has_trait("slam") and distance <= 1 and remaining >= attack_cost:
 		return {"kind": "slam", "cost": attack_cost, "cells": _slam_cells(origin, player_pos)}
 	if state.has_trait("beam") and distance >= 2 and distance <= 3 and (origin.x == player_pos.x or origin.y == player_pos.y) and remaining >= attack_cost:
@@ -843,6 +1196,8 @@ func _enemy_attack_plan(state: CombatEnemyState, origin: Vector2i, remaining: in
 			return {"kind": "beam_charge", "cost": attack_cost, "cells": beam_cells}
 	if state.has_trait("ranged") and distance >= 2 and distance <= state.attack_range and _has_line_of_sight(origin, player_pos) and remaining >= attack_cost:
 		return {"kind": "ranged", "cost": attack_cost, "cells": [player_pos]}
+	if state.has_trait("ranged") and distance <= 1:
+		return {}
 	if distance <= 1 and remaining >= attack_cost:
 		if state.has_trait("guardBreak") and _player_defense_total(origin) > 0 and remaining >= attack_cost + 1:
 			return {"kind": "guardBreak", "cost": attack_cost + 1, "cells": [player_pos]}
@@ -854,19 +1209,113 @@ func _enemy_attack_plan(state: CombatEnemyState, origin: Vector2i, remaining: in
 	return {}
 
 
+func _enemy_attack_coverage(state: CombatEnemyState, origin: Vector2i, can_see: bool = true) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if not can_see:
+		return cells
+	for y in range(rows):
+		for x in range(cols):
+			var target := Vector2i(x, y)
+			if target == origin or not is_walkable(target):
+				continue
+			var distance := manhattan(origin, target)
+			var valid := false
+			if state.has_trait("backstab"):
+				valid = target == player_pos and origin == player_back_cell() and distance == 1
+			elif state.has_trait("ranged"):
+				valid = distance >= 2 and distance <= state.attack_range and _has_line_of_sight(origin, target)
+			elif state.has_trait("beam"):
+				valid = distance >= 2 and distance <= 3 and (origin.x == target.x or origin.y == target.y) and _has_line_of_sight(origin, target)
+			elif state.has_trait("slam") or state.has_trait("guardBreak"):
+				valid = distance <= 1
+			elif state.has_trait("lunge"):
+				valid = distance <= 2
+			else:
+				valid = distance <= 1
+			if valid:
+				cells.append(target)
+	return cells
+
+
+func enemy_reachable_cells(state: CombatEnemyState, budget: int = -1) -> Array:
+	var cells: Array = []
+	if state == null or not state.alive():
+		return cells
+	var movement_budget := _enemy_turn_budget(state) if budget < 0 else budget
+	var blocked := occupied_enemy_cells(state.id)
+	for y in range(rows):
+		for x in range(cols):
+			var target := Vector2i(x, y)
+			if target == state.pos or target == player_pos or target == decoy_pos:
+				continue
+			if not is_walkable(target) or blocked.has(target):
+				continue
+			var path := _find_path(state.pos, target, blocked, false)
+			if path.size() < 2 or path.back() != target:
+				continue
+			if _enemy_path_cost(path) <= movement_budget:
+				cells.append(target)
+	return cells
+
+
+func enemy_threat_cells(state: CombatEnemyState, move_cells: Array) -> Array:
+	var cells: Array = []
+	if state == null or not state.alive() or state.blind_turns > 0:
+		return cells
+	var origins: Array = []
+	origins.append(state.pos)
+	for cell in move_cells:
+		if cell not in origins:
+			origins.append(cell)
+	for origin in origins:
+		for target in _enemy_attack_coverage(state, origin, true):
+			if target not in cells:
+				cells.append(target)
+	return cells
+
+
+func _enemy_path_cost(path: Array[Vector2i]) -> int:
+	var total := 0
+	for index in range(1, path.size()):
+		var cell: Vector2i = path[index]
+		total += 1 + int((traps.get(cell, {}) as Dictionary).get("slow", 0))
+	return total
+
+
+func _attack_line_cells(origin: Vector2i, target: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var samples := maxi(absi(target.x - origin.x), absi(target.y - origin.y))
+	for i in range(1, samples):
+		var t := float(i) / float(samples)
+		var cell := Vector2i(roundi(lerpf(float(origin.x), float(target.x), t)), roundi(lerpf(float(origin.y), float(target.y), t)))
+		if cell != origin and cell != target and cell not in cells:
+			cells.append(cell)
+	return cells
+
+
 func _intent_from_attack_plan(state: CombatEnemyState, plan: Dictionary, base: Dictionary) -> Dictionary:
 	var result := base.duplicate(true)
 	var kind := str(plan.get("kind", "melee"))
 	var display_kind := "beam" if kind == "beam_charge" else kind
+	var attack_origin: Vector2i = plan.get("origin", state.pos)
 	var hits := _planned_attack_hits(state, plan, _enemy_turn_budget(state))
-	var damage := _raw_enemy_damage(state, state.pos)
+	var damage := _raw_enemy_damage(state, attack_origin)
 	result["hurt"] = (plan.get("cells", [player_pos]) as Array).duplicate()
+	result["impact_cells"] = result["hurt"].duplicate()
+	result["range_origin"] = attack_origin
+	result["coverage_cells"] = _enemy_attack_coverage(state, attack_origin, true)
+	if kind == "beam_charge":
+		result["line_cells"] = result["impact_cells"].duplicate()
+	elif kind == "ranged":
+		result["line_cells"] = _attack_line_cells(attack_origin, player_pos)
 	result["type"] = "attack"
 	result["attack_kind"] = display_kind
 	result["hits"] = hits
+	result["intent_value"] = str(damage)
 	result["pending"] = kind == "beam_charge"
 	var labels := {
 		"melee": "挥击",
+		"backstab": "背刺",
 		"ranged": "远射",
 		"lunge": "突进",
 		"guardBreak": "破防",
@@ -879,6 +1328,8 @@ func _intent_from_attack_plan(state: CombatEnemyState, plan: Dictionary, base: D
 		result["detail"] = "本回合锁定红色射线，下一敌方回合落下；期间可以离开红格。"
 	elif kind == "guardBreak":
 		result["detail"] = "无视格挡、掩体与高差防护；额外消耗 1 点敌方行动力。"
+	elif kind == "backstab":
+		result["detail"] = "只从玩家背后相邻格攻击；无法抵达背后时会拉开距离。"
 	elif hits > 1:
 		result["detail"] = "连击 %d 段，每段 %d 点；格挡池会逐段消耗。" % [hits, damage]
 	else:
@@ -908,7 +1359,8 @@ func _execute_enemy_attack_plan(state: CombatEnemyState, plan: Dictionary, remai
 	if kind == "lunge":
 		var landing: Vector2i = plan.get("landing", INVALID_CELL)
 		if landing != INVALID_CELL:
-			_move_enemy_to(state, landing, "突进", events)
+			if _move_enemy_to(state, landing, "突进", events):
+				return {"events": events, "cost": cost}
 			if outcome != "":
 				return {"events": events, "cost": cost}
 	var hits := _planned_attack_hits(state, plan, remaining)
@@ -936,30 +1388,36 @@ func _execute_enemy_attack_plan(state: CombatEnemyState, plan: Dictionary, remai
 
 func _apply_player_hit(state: CombatEnemyState, kind: String, damage_override: int = -1) -> Dictionary:
 	var raw_damage := damage_override if damage_override >= 0 else _raw_enemy_damage(state, state.pos)
-	var blocked := 0
+	var shield_blocked := 0
+	var terrain_blocked := 0
 	var damage := raw_damage
 	if kind == "guardBreak":
-		player_block = 0
+		clear_player_shield()
 	else:
 		var cover := int((traps.get(player_pos, {}) as Dictionary).get("cover_block", 0)) if traps.has(player_pos) else 0
 		var height_cover := 1 if _tile_height(player_pos) > _tile_height(state.pos) else 0
-		var innate_block := mini(cover + height_cover, damage)
-		damage -= innate_block
-		var card_block := mini(player_block, damage)
-		player_block -= card_block
-		damage -= card_block
-		blocked = innate_block + card_block
+		terrain_blocked = mini(cover + height_cover, damage)
+		damage -= terrain_blocked
+		shield_blocked = consume_player_shield(damage)
+		damage -= shield_blocked
 	player_hp -= damage
 	var stolen_id := ""
 	if damage > 0 and state.has_trait("grab"):
 		stolen_id = _steal_player_card()
-	event_log.append("EnemyAttack kind=%s damage=%d blocked=%d hp=%d" % [kind, damage, blocked, player_hp])
+	event_log.append("EnemyAttack kind=%s damage=%d shield=%d terrain=%d hp=%d" % [kind, damage, shield_blocked, terrain_blocked, player_hp])
 	if not stolen_id.is_empty():
 		event_log.append("EnemyGrab card=%s" % stolen_id)
 	if player_hp <= 0:
 		outcome = "defeat"
 		event_log.append("CombatEnded outcome=defeat")
-	return {"damage": damage, "blocked": blocked, "raw_damage": raw_damage, "stolen_card": stolen_id}
+	return {
+		"damage": damage,
+		"blocked": shield_blocked + terrain_blocked,
+		"shield_blocked": shield_blocked,
+		"terrain_blocked": terrain_blocked,
+		"raw_damage": raw_damage,
+		"stolen_card": stolen_id,
+	}
 
 
 func _steal_player_card() -> String:
@@ -976,7 +1434,7 @@ func _steal_player_card() -> String:
 
 
 func _attack_label(kind: String, hit_index: int, hits: int) -> String:
-	var labels := {"melee": "攻击", "faceShock": "突脸惊吓", "lunge": "突进", "guardBreak": "破防", "slam": "砸地", "beam": "激光"}
+	var labels := {"melee": "攻击", "backstab": "背刺", "faceShock": "突脸惊吓", "lunge": "突进", "guardBreak": "破防", "slam": "砸地", "beam": "激光"}
 	var label := str(labels.get(kind, "攻击"))
 	return "%s %d/%d" % [label, hit_index, hits] if hits > 1 else label
 
@@ -987,7 +1445,7 @@ func _raw_enemy_damage(state: CombatEnemyState, origin: Vector2i) -> int:
 
 func _player_defense_total(origin: Vector2i) -> int:
 	var cover := int((traps.get(player_pos, {}) as Dictionary).get("cover_block", 0)) if traps.has(player_pos) else 0
-	return player_block + cover + (1 if _tile_height(player_pos) > _tile_height(origin) else 0)
+	return player_shield + cover + (1 if _tile_height(player_pos) > _tile_height(origin) else 0)
 
 
 func _slam_cells(origin: Vector2i, target: Vector2i) -> Array[Vector2i]:
@@ -1043,12 +1501,19 @@ func _choose_enemy_step(state: CombatEnemyState, origin: Vector2i, goal: Vector2
 		return INVALID_CELL
 	# 动态阻挡：其他存活敌人所在格不可作为落点，也不可穿越。
 	var blocked := occupied_enemy_cells(state.id)
+	for raw_reserved in reserved_enemy_cells(state.id).keys():
+		var reserved: Vector2i = raw_reserved
+		blocked[reserved] = true
+	var navigation_blocked: Dictionary = blocked.duplicate()
+	# 玩家格只能作为直接攻击目标，不能被寻路当成“穿堂门”。
+	if goal != player_pos:
+		navigation_blocked[player_pos] = true
 	var candidates: Array[Dictionary] = []
 	for direction in DIRS:
 		var cell: Vector2i = origin + direction
 		if not is_walkable(cell) or cell == player_pos or cell == decoy_pos or blocked.has(cell):
 			continue
-		var path := _find_path(cell, goal, blocked)
+		var path := _find_path(cell, goal, navigation_blocked)
 		if path.size() < 2 and cell != goal:
 			continue
 		var trap: Dictionary = traps.get(cell, {})
@@ -1057,23 +1522,24 @@ func _choose_enemy_step(state: CombatEnemyState, origin: Vector2i, goal: Vector2
 	if portals.has(origin):
 		var portal_cell: Vector2i = portals[origin]
 		if is_walkable(portal_cell) and portal_cell != player_pos and portal_cell != decoy_pos and not blocked.has(portal_cell):
-			var portal_path := _find_path(portal_cell, goal, blocked)
+			var portal_path := _find_path(portal_cell, goal, navigation_blocked)
 			candidates.append({"cell": portal_cell, "distance": portal_path.size(), "hazard": 0, "height": _tile_height(portal_cell)})
 	if candidates.is_empty():
 		return INVALID_CELL
 	if state.has_trait("vault"):
-		var current_distance := manhattan(origin, goal)
+		var climb_target: Vector2i = player_pos if state.sees_player else goal
+		var current_distance := manhattan(origin, climb_target)
 		var climb_options := candidates.filter(func(option: Dictionary) -> bool:
-			return int(option["height"]) > _tile_height(origin) and manhattan(option["cell"], goal) <= current_distance
+			return int(option["height"]) > _tile_height(origin) and manhattan(option["cell"], climb_target) <= current_distance
 		)
 		if not climb_options.is_empty():
 			climb_options.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["height"]) > int(b["height"]))
 			return climb_options[0]["cell"]
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		if int(a["distance"]) != int(b["distance"]):
-			return int(a["distance"]) < int(b["distance"])
 		if state.has_trait("trapAware") and int(a["hazard"]) != int(b["hazard"]):
 			return int(a["hazard"]) < int(b["hazard"])
+		if int(a["distance"]) != int(b["distance"]):
+			return int(a["distance"]) < int(b["distance"])
 		if state.has_trait("vault") and int(a["height"]) != int(b["height"]):
 			return int(a["height"]) > int(b["height"])
 		return str(a["cell"]) < str(b["cell"])
@@ -1081,17 +1547,114 @@ func _choose_enemy_step(state: CombatEnemyState, origin: Vector2i, goal: Vector2
 	return candidates[0]["cell"]
 
 
-func _move_enemy_to(state: CombatEnemyState, target: Vector2i, verb: String, events: Array[Dictionary], free_step: bool = false) -> void:
+func _backstab_path(state: CombatEnemyState) -> Array[Vector2i]:
+	return _backstab_path_from(state, state.pos)
+
+
+func _backstab_path_from(state: CombatEnemyState, origin: Vector2i) -> Array[Vector2i]:
+	var empty_path: Array[Vector2i] = []
+	var goal := player_back_cell()
+	if not is_walkable(goal) or goal == player_pos:
+		return empty_path
+	var blocked := occupied_enemy_cells(state.id)
+	for raw_reserved in reserved_enemy_cells(state.id).keys():
+		var reserved: Vector2i = raw_reserved
+		blocked[reserved] = true
+	blocked[player_pos] = true
+	var path := _find_path(origin, goal, blocked)
+	if path.size() < 2 and origin != goal:
+		return empty_path
+	return path
+
+
+func _choose_backstab_step(state: CombatEnemyState) -> Vector2i:
+	return _choose_backstab_step_from(state, state.pos)
+
+
+func _choose_backstab_step_from(state: CombatEnemyState, origin: Vector2i) -> Vector2i:
+	var path := _backstab_path_from(state, origin)
+	if path.size() < 2:
+		return INVALID_CELL
+	var step: Vector2i = path[1]
+	if step == player_pos or step == decoy_pos or occupied_enemy_cells(state.id).has(step) or reserved_enemy_cells(state.id).has(step):
+		return INVALID_CELL
+	return step
+
+
+func _choose_backstab_retreat_step(state: CombatEnemyState) -> Vector2i:
+	return _choose_backstab_retreat_step_from(state, state.pos)
+
+
+func _choose_backstab_retreat_step_from(state: CombatEnemyState, origin: Vector2i) -> Vector2i:
+	var blocked := occupied_enemy_cells(state.id)
+	for raw_reserved in reserved_enemy_cells(state.id).keys():
+		var reserved: Vector2i = raw_reserved
+		blocked[reserved] = true
+	var candidates: Array[Dictionary] = []
+	var current_distance: int = manhattan(origin, player_pos)
+	for direction: Vector2i in DIRS:
+		var cell: Vector2i = origin + direction
+		if not is_walkable(cell) or cell == player_pos or cell == decoy_pos or blocked.has(cell):
+			continue
+		if manhattan(cell, player_pos) <= current_distance:
+			continue
+		var trap: Dictionary = traps.get(cell, {})
+		candidates.append({
+			"cell": cell,
+			"distance": manhattan(cell, player_pos),
+			"hazard": 2 if int(trap.get("damage", 0)) > 0 else 1 if int(trap.get("slow", 0)) > 0 else 0,
+		})
+	if candidates.is_empty():
+		return INVALID_CELL
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if int(a["distance"]) != int(b["distance"]):
+			return int(a["distance"]) > int(b["distance"])
+		if int(a["hazard"]) != int(b["hazard"]):
+			return int(a["hazard"]) < int(b["hazard"])
+		return str(a["cell"]) < str(b["cell"])
+	)
+	return candidates[0]["cell"]
+
+
+func _move_enemy_to(state: CombatEnemyState, target: Vector2i, verb: String, events: Array[Dictionary], free_step: bool = false) -> bool:
 	var was_adjacent := manhattan(state.pos, player_pos) == 1
 	var from := state.pos
 	state.just_portaled = portals.get(from, INVALID_CELL) == target
 	state.pos = target
 	events.append({"kind": "move", "actor_id": state.id, "from": from, "to": state.pos, "via_portal": state.just_portaled, "free": free_step, "label": verb})
 	event_log.append("Enemy%s from=%s to=%s free=%s" % [verb, from, state.pos, str(free_step)])
-	_trigger_trap(state, state.pos, has_decoy() and _enemy_goal(state) == decoy_pos)
+	var trap_result: Dictionary = _trigger_trap(state, state.pos, has_decoy() and _enemy_goal(state) == decoy_pos)
+	var trap_damage := int(trap_result.get("damage", 0))
+	if trap_damage > 0:
+		# 把踩陷阱单独发布为敌方事件，演出层才能在移动后显示实际伤害。
+		events.append({
+			"kind": "enemy_damaged",
+			"actor_id": state.id,
+			"target_enemy_id": state.id,
+			"target": state.pos,
+			"damage": trap_damage,
+			"source": trap_result.get("source", "trap"),
+			"trap": trap_result.get("trap", {}),
+			"label": "踩中%s" % str(trap_result.get("label", "陷阱")),
+		})
+	elif not trap_result.is_empty():
+		# 盐圈不造成伤害，但仍需要一个事件让演出层表现“踩中/眩晕”。
+		events.append({
+			"kind": "enemy_trap_triggered",
+			"actor_id": state.id,
+			"target_enemy_id": state.id,
+			"target": state.pos,
+			"damage": 0,
+			"source": trap_result.get("source", "trap"),
+			"label": "踩中%s" % str(trap_result.get("label", "陷阱")),
+			"trap": trap_result.get("trap", {}),
+		})
 	_refresh_vision(true)
+	if not state.alive():
+		return false
 	if not was_adjacent and manhattan(state.pos, player_pos) == 1:
-		_trigger_ready(state)
+		return _trigger_ready(state, events)
+	return false
 
 
 func _finish_enemy_turn() -> void:
@@ -1109,9 +1672,10 @@ func _finish_enemy_turn() -> void:
 	if outcome == "":
 		for enemy_id in enemy_order:
 			var state: CombatEnemyState = enemies[enemy_id]
-			state.stagger_pending = false
-			if state.blind_turns > 0:
-				state.blind_turns -= 1
+			# All turn-limited enemy statuses expire through the same ledger.
+			# This keeps blind/stagger and future control effects from acquiring
+			# separate, silently divergent countdown rules.
+			CombatStatus.tick_turns(state.status_effects)
 		round_number += 1
 		# 杀戮尖塔式回合：怪物回合结束后不立即抽牌；
 		# 由 channel_3d 在敌方动画播完后调用 start_player_turn() 才发新牌。
@@ -1131,12 +1695,24 @@ func manhattan(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)
 
 
+func _can_smash_place_card(card: Dictionary) -> bool:
+	var place_data: Dictionary = card.get("place", {})
+	if place_data.has("smash"):
+		return bool(place_data.get("smash", false))
+	var on_step_variant = place_data.get("onStep", {})
+	return place_data.has("smashRoll") or (on_step_variant is Dictionary and int((on_step_variant as Dictionary).get("damage", 0)) > 0)
+
+
 func _play_place(card: Dictionary, target: Vector2i) -> bool:
 	if not is_walkable(target) or target == player_pos:
 		return false
 	var adjacent := manhattan(player_pos, target) == 1
 	var smash_state := enemy_at(target)
-	var smash := smash_state != null and _has_line_of_sight(player_pos, smash_state.pos)
+	var smash := false
+	if smash_state != null:
+		if not _can_smash_place_card(card) or not _has_line_of_sight(player_pos, smash_state.pos):
+			return false
+		smash = true
 	if not adjacent and not smash:
 		return false
 	var place_data: Dictionary = card.get("place", {})
@@ -1159,6 +1735,8 @@ func _play_place(card: Dictionary, target: Vector2i) -> bool:
 	effect["persistent"] = bool(effect.get("persistent", false)) or place_data.has("enterTax") or place_data.has("coverBlock")
 	effect["glyph"] = str(place_data.get("glyph", "?"))
 	effect["card_id"] = str(card.get("id", "unknown"))
+	if str(effect["card_id"]) in ["guard", "salt"]:
+		effect["charges"] = maxi(1, int(place_data.get("charges", 3)))
 	if smash and smash_state != null:
 		var damage := int(effect.get("damage", 0))
 		var smash_roll: Dictionary = place_data.get("smashRoll", {})
@@ -1173,7 +1751,13 @@ func _play_place(card: Dictionary, target: Vector2i) -> bool:
 			first_smash_used = true
 		var smash_tough := int(place_data.get("smashTough", 1 if damage > 0 else 0))
 		var dealt := _apply_enemy_damage(smash_state, damage, smash_tough, "smash")
-		last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": smash_state.id, "damage": dealt, "source": "smash"})
+		last_card_events.append({
+			"kind": "enemy_damaged",
+			"target_enemy_id": smash_state.id,
+			"damage": dealt,
+			"source": "smash",
+			"trap": effect.duplicate(true),
+		})
 		_apply_blind(smash_state, effect)
 	else:
 		traps[target] = effect
@@ -1232,10 +1816,11 @@ func _shove_enemy(state: CombatEnemyState, prefer_portal: bool) -> bool:
 	return state.just_portaled
 
 
-func _trigger_trap(state: CombatEnemyState, pos: Vector2i, chasing_decoy: bool = false) -> void:
+func _trigger_trap(state: CombatEnemyState, pos: Vector2i, chasing_decoy: bool = false) -> Dictionary:
 	if not traps.has(pos):
-		return
+		return {}
 	var trap: Dictionary = traps[pos]
+	var trap_id := str(trap.get("card_id", "trap"))
 	var damage := int(trap.get("damage", 0))
 	if chasing_decoy and damage > 0:
 		damage += 1
@@ -1243,10 +1828,21 @@ func _trigger_trap(state: CombatEnemyState, pos: Vector2i, chasing_decoy: bool =
 	if state.just_portaled:
 		damage += int(trap.get("portalBonus", 0))
 	var default_tough := 2 if damage > 0 else 1 if int(trap.get("slow", 0)) > 0 else 0
-	_apply_enemy_damage(state, damage, int(trap.get("tough", trap.get("toughness", default_tough))), "trap:%s" % str(trap.get("card_id", "trap")))
+	var source := "trap:%s" % trap_id
+	var dealt := _apply_enemy_damage(state, damage, _effect_toughness_damage(trap, default_tough), source)
 	_apply_blind(state, trap)
-	if not bool(trap.get("persistent", false)):
+	var triggered_trap := trap.duplicate(true)
+	if trap_id in ["guard", "salt"]:
+		var remaining_charges := int(trap.get("charges", 3)) - 1
+		triggered_trap["charges"] = remaining_charges
+		triggered_trap["depleted"] = remaining_charges <= 0
+		if remaining_charges <= 0:
+			traps.erase(pos)
+		else:
+			traps[pos] = triggered_trap
+	elif not bool(trap.get("persistent", false)):
 		traps.erase(pos)
+	return {"damage": dealt, "source": source, "label": "地刺" if trap_id in ["spike", "jab"] else "陷阱", "trap": triggered_trap}
 
 
 func _apply_enemy_damage(state: CombatEnemyState, damage: int, toughness_damage: int, source: String) -> int:
@@ -1254,7 +1850,7 @@ func _apply_enemy_damage(state: CombatEnemyState, damage: int, toughness_damage:
 		return 0
 	var execute_before := state.execute_bonus_pending
 	var crush_before := state.crush_bonus_pending
-	_drain_toughness(state, toughness_damage, source)
+	apply_enemy_toughness_damage(state, toughness_damage, source)
 	var dealt := maxi(0, damage)
 	if dealt > 0:
 		dealt += damage_bonus
@@ -1262,13 +1858,16 @@ func _apply_enemy_damage(state: CombatEnemyState, damage: int, toughness_damage:
 		dealt = maxi(0, dealt - 1)
 	if not state.broken and state.archetype == "wire" and source == "smash":
 		dealt = int(ceil(float(dealt) * 0.5))
-	if execute_before and (source == "smash" or source.begins_with("trap:")):
+	if execute_before and damage > 0 and (source == "smash" or source.begins_with("trap:")):
 		dealt += 2
 		state.execute_bonus_pending = false
 	if crush_before and dealt > 0:
 		dealt += mini(dealt, 4)
 		state.crush_bonus_pending = false
 	state.hp -= dealt
+	if state.hp <= 0 and not enemy_death_allowed:
+		state.hp = 1
+		event_log.append("EnemyDeathPrevented enemy=%s source=%s" % [state.id, source])
 	event_log.append("EnemyDamaged source=%s damage=%d hp=%d tough=%d enemy=%s" % [source, dealt, state.hp, state.toughness, state.id])
 	if state.hp <= 0 and all_enemies_defeated():
 		outcome = "victory"
@@ -1276,21 +1875,16 @@ func _apply_enemy_damage(state: CombatEnemyState, damage: int, toughness_damage:
 	return dealt
 
 
+func _effect_toughness_damage(effect: Dictionary, default_value: int = 0) -> int:
+	return int(effect.get("toughness_damage", effect.get("tough", effect.get("toughness", default_value))))
+
+
 func _drain_toughness(state: CombatEnemyState, amount: int, source: String) -> bool:
-	if state == null or amount <= 0 or state.toughness <= 0:
+	if state == null:
 		return false
-	state.toughness = maxi(0, state.toughness - amount)
-	if state.toughness > 0:
-		return false
-	state.broken = true
-	if state.archetype == "execute":
-		state.execute_bonus_pending = true
-	elif state.archetype == "stagger":
-		state.stagger_pending = true
-	elif state.archetype == "crush":
-		state.crush_bonus_pending = true
-	event_log.append("EnemyBroken source=%s archetype=%s" % [source, state.archetype])
-	return true
+	var was_broken := state.broken
+	var dealt := apply_enemy_toughness_damage(state, amount, source)
+	return dealt > 0 and not was_broken and state.broken
 
 
 func _start_player_turn() -> void:
@@ -1298,7 +1892,7 @@ func _start_player_turn() -> void:
 	energy_roll = base_energy
 	energy = energy_roll + energy_bonus
 	turn_energy_max = energy
-	player_block = 0
+	clear_player_shield()
 	free_draw_used = false
 	_draw_to(hand_size)
 	event_log.append("PlayerTurn round=%d fixed_energy=%d bonus=%d energy=%d" % [round_number, base_energy, energy_bonus, energy])
@@ -1330,14 +1924,19 @@ func _discard_unretained_hand() -> void:
 				discard.append(card_id)
 	hand.assign(retained)
 	retain_this_turn = 0
+	CombatStatus.tick_turns(player_statuses)
+	# Compatibility cleanup for saves created before the canonical duration
+	# field was introduced.
+	clear_player_status("retain_this_turn")
 
 
-func _trigger_ready(state: CombatEnemyState) -> void:
+func _trigger_ready(state: CombatEnemyState, events: Array[Dictionary] = []) -> bool:
 	if ready_effect.is_empty():
-		return
-	player_block += int(ready_effect.get("gainBlock", 0))
+		return false
+	var shove_ready := bool(ready_effect.get("shove", false))
+	gain_player_shield(int(ready_effect.get("gainBlock", 0)), "ready")
 	var ready_damage := int(ready_effect.get("damage", 0))
-	var ready_tough := int(ready_effect.get("tough", 0))
+	var ready_tough := _effect_toughness_damage(ready_effect)
 	if ready_damage > 0 or ready_tough > 0:
 		var dealt := _apply_enemy_damage(state, ready_damage, ready_tough, "ready")
 		last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": state.id, "damage": dealt, "source": "ready"})
@@ -1345,7 +1944,18 @@ func _trigger_ready(state: CombatEnemyState) -> void:
 	if bool(ready_effect.get("shove", false)) and outcome == "":
 		var hp_before := state.hp
 		var tough_before := state.toughness
+		var shove_from := state.pos
 		var ported := _shove_enemy(state, bool(ready_effect.get("preferPortal", false)))
+		if state.pos != shove_from:
+			events.append({
+				"kind": "enemy_shove",
+				"actor_id": state.id,
+				"from": shove_from,
+				"to": state.pos,
+				"via_portal": state.just_portaled,
+				"free": false,
+				"label": str(ready_effect.get("name", "甩开")),
+			})
 		if hp_before == state.hp and tough_before == state.toughness:
 			var wall_dealt := _apply_enemy_damage(state, 1, 1, "ready")
 			last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": state.id, "damage": wall_dealt, "source": "ready"})
@@ -1353,6 +1963,8 @@ func _trigger_ready(state: CombatEnemyState) -> void:
 			_draw_cards(int(ready_effect.get("drawOnPortal", 0)))
 	event_log.append("ReadyTriggered id=%s" % str(ready_effect.get("card_id", "ready")))
 	ready_effect.clear()
+	clear_player_status("ready")
+	return shove_ready
 
 
 func _apply_blind(state: CombatEnemyState, effect: Dictionary) -> void:
@@ -1406,7 +2018,7 @@ func _play_salt_lash(effect_value: Variant, state: CombatEnemyState) -> bool:
 	if not traps.has(state.pos) or int((traps[state.pos] as Dictionary).get("slow", 0)) <= 0:
 		return false
 	var effect: Dictionary = effect_value if effect_value is Dictionary else {}
-	var dealt := _apply_enemy_damage(state, int(effect.get("damage", 2)), int(effect.get("tough", 1)), "skill:salt_lash")
+	var dealt := _apply_enemy_damage(state, int(effect.get("damage", 2)), _effect_toughness_damage(effect, 1), "skill:salt_lash")
 	last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": state.id, "damage": dealt, "source": "skill:salt_lash"})
 	return true
 
@@ -1416,7 +2028,7 @@ func _play_blind_followup(card: Dictionary, state: CombatEnemyState) -> bool:
 		return false
 	if state.blind_turns > 0 and card.has("ifBlinded"):
 		var effect: Dictionary = card.get("ifBlinded", {})
-		var dealt := _apply_enemy_damage(state, int(effect.get("damage", 0)), int(effect.get("tough", 0)), "skill:blind_followup")
+		var dealt := _apply_enemy_damage(state, int(effect.get("damage", 0)), _effect_toughness_damage(effect), "skill:blind_followup")
 		last_card_events.append({"kind": "enemy_damaged", "target_enemy_id": state.id, "damage": dealt, "source": "skill:blind_followup"})
 	else:
 		state.blind_turns = maxi(state.blind_turns, int(card.get("elseBlind", 1)))
@@ -1477,6 +2089,8 @@ func _enemy_goal(state: CombatEnemyState) -> Vector2i:
 	if has_decoy():
 		return decoy_pos
 	if state.sees_player:
+		if state.has_trait("backstab"):
+			return player_back_cell()
 		return player_pos
 	if state.last_seen != INVALID_CELL:
 		return state.last_seen
@@ -1505,6 +2119,9 @@ func _refresh_vision(emit_events: bool = true) -> void:
 func _refresh_enemy_vision(state: CombatEnemyState, emit_events: bool = true) -> void:
 	state.player_sees_enemy = _has_line_of_sight(player_pos, state.pos)
 	var had_enemy_los := state.sees_player
+	if enemy_vision_suppressed:
+		state.sees_player = false
+		return
 	state.sees_player = _has_line_of_sight(state.pos, player_pos) and state.blind_turns <= 0
 	if state.player_sees_enemy:
 		reveal_enemy("player_sight", state)
@@ -1562,7 +2179,8 @@ func _tile_height(pos: Vector2i) -> int:
 
 
 func _find_path(start: Vector2i, goal: Vector2i, blocked_cells: Dictionary = {}, allow_portals: bool = true) -> Array[Vector2i]:
-	var queue: Array[Vector2i] = [start]
+	var queue: Array[Vector2i] = []
+	queue.append(start)
 	var came_from: Dictionary = {start: start}
 	while not queue.is_empty():
 		var current: Vector2i = queue.pop_front()
@@ -1580,8 +2198,11 @@ func _find_path(start: Vector2i, goal: Vector2i, blocked_cells: Dictionary = {},
 				came_from[portal_next] = current
 				queue.append(portal_next)
 	if not came_from.has(goal):
-		return [start]
-	var reversed: Array[Vector2i] = [goal]
+		var fallback: Array[Vector2i] = []
+		fallback.append(start)
+		return fallback
+	var reversed: Array[Vector2i] = []
+	reversed.append(goal)
 	var cursor := goal
 	while cursor != start:
 		cursor = came_from[cursor]
@@ -1635,6 +2256,14 @@ func _array_pos(raw: Array) -> Vector2i:
 func _parse_pos(raw: String) -> Vector2i:
 	var parts := raw.split(",")
 	return Vector2i(int(parts[0]), int(parts[1]))
+
+
+func _cardinal_direction(direction: Vector2i) -> Vector2i:
+	if direction == Vector2i.ZERO:
+		return Vector2i.DOWN
+	if absi(direction.x) >= absi(direction.y):
+		return Vector2i(signi(direction.x), 0)
+	return Vector2i(0, signi(direction.y))
 var _smb_tail_padding := """
 [i] = items[j]
 		items[j] = temp

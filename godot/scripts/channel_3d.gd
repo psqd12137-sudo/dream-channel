@@ -13,6 +13,7 @@ const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 const BattleRoomArtContext = preload("res://scripts/battle_room_art_context.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const RunSaveRepository = preload("res://scripts/run_save_repository.gd")
+const BossProgression = preload("res://scripts/boss_progression.gd")
 const PresentationSettings = preload("res://scripts/presentation_settings.gd")
 const HouseWorldRenderer = preload("res://scripts/channel_house_world_renderer.gd")
 const BattleWorldRenderer = preload("res://scripts/channel_battle_world_renderer.gd")
@@ -104,6 +105,7 @@ const ENEMY_STEP_DURATION := 0.48
 const ENEMY_TURN_DURATION := 0.22
 const ENEMY_ATTACK_DURATION := 0.62
 const ENEMY_EVENT_PAUSE_DURATION := 0.16
+const ENEMY_PROJECTILE_DURATION := 0.42
 const BATTLE_STAGE_BUILD_DURATION := 0.34
 const BATTLE_ACTOR_ENTRY_DURATION := 0.30
 const CHASE_TRACK_LENGTH := 14.0
@@ -154,6 +156,7 @@ const LARGE_ROOM_TEST_SHAPE_OVERRIDES := {
 @onready var house_root: Node3D = $WorldLayer/WorldContainer/WorldViewport/WorldRoot/HouseRoot
 @onready var battle_root: Node3D = $WorldLayer/WorldContainer/WorldViewport/WorldRoot/BattleRoot
 @onready var hud: Control = $HUD/HUDRoot
+@onready var battle_feedback_root: Control = $BattleFeedbackLayer/FeedbackRoot
 @onready var home_video: VideoStreamPlayer = $WorldLayer/HomeVideo
 
 @export_range(0.0, 4.0, 0.05) var animation_duration_scale := 1.0
@@ -184,12 +187,24 @@ var display_fullscreen:
 	set(value):
 		if presentation_settings != null:
 			presentation_settings.fullscreen = bool(value)
-var tilt_shift_enabled:
-	get: return presentation_settings.tilt_shift_enabled if presentation_settings != null else true
+var depth_of_field_enabled:
+	get: return presentation_settings.depth_of_field_enabled if presentation_settings != null else true
 	set(value):
 		if presentation_settings != null:
-			presentation_settings.tilt_shift_enabled = bool(value)
-
+			presentation_settings.depth_of_field_enabled = bool(value)
+var tilt_shift_enabled:
+	get: return depth_of_field_enabled
+	set(value): depth_of_field_enabled = bool(value)
+var taa_enabled:
+	get: return presentation_settings.taa_enabled if presentation_settings != null else true
+	set(value):
+		if presentation_settings != null:
+			presentation_settings.taa_enabled = bool(value)
+var pixel_filter_enabled:
+	get: return presentation_settings.pixel_filter_enabled if presentation_settings != null else false
+	set(value):
+		if presentation_settings != null:
+			presentation_settings.pixel_filter_enabled = bool(value)
 var active_test_visual_filter_id:
 	get: return presentation_settings.active_test_visual_filter_id if presentation_settings != null else ""
 
@@ -212,6 +227,7 @@ var offer_rotation := 0
 var current_room_pos := Vector2i.ZERO
 var pending_room_pos := Vector2i.ZERO
 var selected_card := -1
+var battle_inspected_cell := INVALID_CELL
 var run_progress := 1
 var player_hp := 6
 var player_max_hp := 6
@@ -253,6 +269,18 @@ var battle_camera_returning := false
 var battle_camera_return_tween: Tween = null
 var battle_room_title := "房间"
 var battle_room_context: Dictionary = {}
+var combat_is_boss := false
+var boss_id := ""
+var boss_anchor_cells: Array[Vector2i] = []
+var boss_anchor_hp: Dictionary = {}
+var boss_anchors_cleared := 0
+var boss_broadcast_progress := 0
+var boss_broadcast_max := 0
+var boss_phase_name := "开场"
+var boss_directive_id := ""
+var boss_round_moved := false
+var ending_id := ""
+var ending_success := false
 var enemy_nodes: Dictionary = {}
 var battle_board_root: Node3D = null
 var battle_actor_root: Node3D = null
@@ -271,15 +299,21 @@ var hovered_house_cell := INVALID_CELL
 var animation_busy := false
 var active_animation_kind := ""
 var active_motion_tween: Tween = null
+var battle_projectile_nodes: Array[Node3D] = []
+var battle_active_projectile: Node3D = null
+var battle_projectile_start := Vector3.ZERO
+var battle_projectile_target := Vector3.ZERO
 var build_preview_tween: Tween = null
 var lab_root: Node3D = null
 var home_tests_open := false
 var test_combat_active := false
+var combat_presentation_lab := false
 var test_mode_selected_id := ""
 var test_saved_state: Dictionary = {}
 var test_auto_accumulator := 0.0
 var test_last_events: Array[Dictionary] = []
 var test_focused_enemy_id := ""
+var battle_focused_enemy_id := ""
 var test_enemy_phase_pending := false
 var battle_turn_actor_id := "player"
 var battle_turn_events: Array[Dictionary] = []
@@ -322,7 +356,7 @@ var lab_camera_pitch := 0.24
 var lab_camera_distance := 14.0
 var pcg_diorama_seed := 20260816
 func _ready() -> void:
-	presentation_settings = PresentationSettings.new(self, world_container, hud, home_video)
+	presentation_settings = PresentationSettings.new(self, world_container, world_viewport, hud, home_video)
 	presentation_settings.load_settings()
 	_configure_environment()
 	presentation_settings.configure_home_video()
@@ -350,7 +384,19 @@ func display_mode_label() -> String:
 
 
 func tilt_shift_label() -> String:
-	return presentation_settings.tilt_shift_label()
+	return depth_of_field_label()
+
+
+func depth_of_field_label() -> String:
+	return presentation_settings.depth_of_field_label()
+
+
+func taa_label() -> String:
+	return presentation_settings.taa_label()
+
+
+func pixel_filter_label() -> String:
+	return presentation_settings.pixel_filter_label()
 
 
 func cycle_display_resolution() -> void:
@@ -362,17 +408,27 @@ func toggle_display_mode() -> void:
 
 
 func toggle_tilt_shift() -> void:
-	presentation_settings.toggle_tilt_shift()
+	toggle_depth_of_field()
+
+
+func toggle_depth_of_field() -> void:
+	presentation_settings.toggle_depth_of_field()
+
+
+func toggle_taa() -> void:
+	presentation_settings.toggle_taa()
+
+
+func toggle_pixel_filter() -> void:
+	presentation_settings.toggle_pixel_filter()
 
 
 func apply_test_visual_filter(visual: Dictionary) -> void:
-	if presentation_settings != null:
-		presentation_settings.apply_test_visual_filter(visual)
+	presentation_settings.apply_test_visual_filter(visual)
 
 
 func clear_test_visual_filter() -> void:
-	if presentation_settings != null:
-		presentation_settings.clear_test_visual_filter()
+	presentation_settings.clear_test_visual_filter()
 
 
 func _apply_display_settings(save_settings: bool) -> void:
@@ -407,6 +463,9 @@ func _process(delta: float) -> void:
 	elif phase == "lab_chase":
 		_update_chase(delta)
 	_update_camera_follow(delta)
+	if battle_world_renderer != null:
+		battle_world_renderer.update_battle_debug_visibility()
+		battle_world_renderer.update_battle_feedback_overlay()
 
 
 ## 相机系统分区：
@@ -517,7 +576,9 @@ func _battle_follow_target_position() -> Vector3:
 	var points: Array[Vector3] = [_battle_pawn_world(combat.player_pos, true)]
 	for enemy_id in combat.living_enemy_ids():
 		var state = combat.enemy_by_id(enemy_id)
-		if state != null:
+		# 镜头只能框选玩家和已经揭示的敌人；把隐藏敌人的坐标纳入
+		# 中点会通过镜头移动泄露其位置。
+		if state != null and state.revealed:
 			points.append(_battle_pawn_world(state.pos, false, enemy_id))
 	if points.is_empty():
 		return Vector3.ZERO
@@ -599,6 +660,18 @@ func set_world_view_rect(rect: Rect2) -> void:
 		_set_house_camera()
 
 
+func _battle_feedback_screen_position(world_position: Vector3) -> Vector2:
+	if camera == null or world_viewport == null or world_view_rect.size.x < 1.0 or world_view_rect.size.y < 1.0:
+		return Vector2(-10000.0, -10000.0)
+	if camera.is_position_behind(world_position):
+		return Vector2(-10000.0, -10000.0)
+	var viewport_size := Vector2(world_viewport.size)
+	if viewport_size.x < 1.0 or viewport_size.y < 1.0:
+		return Vector2(-10000.0, -10000.0)
+	var projected := camera.unproject_position(world_position)
+	return world_view_rect.position + Vector2(projected.x / viewport_size.x, projected.y / viewport_size.y) * world_view_rect.size
+
+
 func screen_to_world_view(screen_pos: Vector2) -> Vector2:
 	return screen_pos - world_view_rect.position
 
@@ -672,6 +745,18 @@ func reset_run(seed_value: int = 0) -> void:
 	house_actor_slot_assignments.clear()
 	battle_player_facing_yaw = 0.0
 	battle_enemy_facing_yaw = PI
+	combat_is_boss = false
+	boss_id = ""
+	boss_anchor_cells.clear()
+	boss_anchor_hp.clear()
+	boss_anchors_cleared = 0
+	boss_broadcast_progress = 0
+	boss_broadcast_max = 0
+	boss_phase_name = "开场"
+	boss_directive_id = ""
+	boss_round_moved = false
+	ending_id = ""
+	ending_success = false
 	run_progress = 1
 	player_hp = 6
 	player_max_hp = 6
@@ -724,9 +809,9 @@ func copy_current_seed() -> void:
 
 
 func go_home() -> void:
+	clear_test_visual_filter()
 	if test_combat_active:
 		_restore_test_state()
-	clear_test_visual_filter()
 	test_combat_active = false
 	test_session.clear()
 	test_saved_state.clear()
@@ -734,7 +819,20 @@ func go_home() -> void:
 	test_auto_accumulator = 0.0
 	test_last_events.clear()
 	test_focused_enemy_id = ""
+	battle_focused_enemy_id = ""
 	test_enemy_phase_pending = false
+	combat_is_boss = false
+	boss_id = ""
+	boss_anchor_cells.clear()
+	boss_anchor_hp.clear()
+	boss_anchors_cleared = 0
+	boss_broadcast_progress = 0
+	boss_broadcast_max = 0
+	boss_phase_name = "开场"
+	boss_directive_id = ""
+	boss_round_moved = false
+	ending_id = ""
+	ending_success = false
 	_cancel_dynamic_effect()
 	character_animation_demo_mode = false
 	camera.environment = null
@@ -780,6 +878,7 @@ func continue_saved_run() -> bool:
 	active_relics.assign(save.get("active_relics", []))
 	reward_options.assign(save.get("reward_options", []))
 	reward_origin = str(save.get("reward_origin", ""))
+	boss_id = str(save.get("boss_id", ""))
 	room_rules.placed.clear()
 	for raw_entry in save.get("placed", []):
 		var entry: Dictionary = raw_entry
@@ -797,9 +896,9 @@ func continue_saved_run() -> bool:
 	pending_room_pos = _array_to_pos(save.get("pending_room", [0, 0]))
 	house_player_facing_yaw = float(save.get("house_player_facing_yaw", 0.0))
 	phase = str(save.get("phase", "explore"))
-	if phase not in ["omen", "explore", "room_ready", "reward"]:
+	if phase not in ["omen", "explore", "room_ready", "reward", "boss_ready"]:
 		phase = "room_ready" if not bool(current_room().get("completed", false)) else "explore"
-	house_camera_closeup = phase == "reward" and reward_origin in ["combat", "event"]
+	house_camera_closeup = phase == "reward" and reward_origin in ["combat", "event", "boss_access"]
 	house_camera_following = house_camera_closeup
 	world_container.visible = true
 	house_root.visible = true
@@ -1341,20 +1440,245 @@ func resolve_current_room() -> void:
 		return
 	var room: Dictionary = current_room()
 	if str(room.get("kind", "quiet")) == "combat":
+		combat_presentation_lab = false
 		start_combat(room, true)
 	elif str(room.get("kind", "quiet")) == "event":
 		start_event_trial(room)
 	else:
-		_complete_current_room()
-		_start_quiet_reward()
+		var reaches_finale := _complete_current_room()
+		_start_quiet_reward("boss_access" if reaches_finale else "quiet")
 
 
-func _complete_current_room() -> void:
+func _complete_current_room() -> bool:
 	var room: Dictionary = current_room()
-	if not bool(room.get("completed", false)):
+	var was_completed := bool(room.get("completed", false))
+	if not was_completed:
+		var completion_order := run_progress
 		run_progress += 1
+		room_rules.set_instance_flag(current_room_pos, "completion_order", completion_order)
 	room_rules.set_instance_flag(current_room_pos, "completed", true)
 	room_rules.set_instance_flag(current_room_pos, "visited", true)
+	return not was_completed and run_progress >= int(content.get("run_length", 12))
+
+
+func _completed_combat_counts() -> Dictionary:
+	var normal_room_count := maxi(1, int(content.get("run_length", 12)) - 1)
+	var early_limit := maxi(1, int(ceil(float(normal_room_count) * 0.5)))
+	var early_combat := 0
+	var late_combat := 0
+	var seen_instances: Dictionary = {}
+	for raw_pos in room_rules.placed.keys():
+		var pos: Vector2i = raw_pos
+		var room: Dictionary = room_rules.placed[pos]
+		var instance_id := str(room.get("instance_id", ""))
+		if instance_id.is_empty() or seen_instances.has(instance_id) or not bool(room.get("completed", false)):
+			continue
+		seen_instances[instance_id] = true
+		if str(room.get("kind", "quiet")) != "combat":
+			continue
+		var order := int(room.get("completion_order", 0))
+		if order > 0 and order <= early_limit:
+			early_combat += 1
+		else:
+			late_combat += 1
+	return {"early": early_combat, "late": late_combat}
+
+
+func _prepare_boss_ready() -> void:
+	var counts := _completed_combat_counts()
+	boss_id = BossProgression.select_boss_id(content.get("bosses", {}), int(counts.get("early", 0)), int(counts.get("late", 0)))
+	if boss_id.is_empty():
+		status_message = "频道核心数据缺失，无法打开祭坛。"
+		phase = "explore"
+		return
+	phase = "boss_ready"
+	house_camera_closeup = true
+	house_camera_following = true
+	status_message = "最后一张布景已经落幕。祭坛开启：%s 正在等你。" % str(content.get("bosses", {}).get("bosses", {}).get(boss_id, {}).get("name", boss_id))
+	event_log.append("祭坛开启：%s" % str(content.get("bosses", {}).get("bosses", {}).get(boss_id, {}).get("name", boss_id)))
+	build_house_world()
+	_set_house_camera()
+	_save_run()
+	_refresh_hud()
+
+
+func begin_boss_combat() -> void:
+	if animation_busy or phase != "boss_ready":
+		return
+	var boss_room: Dictionary = BossProgression.build_boss_room(content.get("bosses", {}), content.get("pressure", {}), content.get("boss_room", {}), boss_id)
+	if boss_room.is_empty():
+		status_message = "祭坛数据不完整，无法开始决战。"
+		_refresh_hud()
+		return
+	start_combat(boss_room, true)
+
+
+func _configure_boss_combat(room: Dictionary) -> void:
+	boss_anchor_cells.clear()
+	boss_anchor_hp.clear()
+	boss_anchors_cleared = 0
+	boss_broadcast_progress = 0
+	boss_broadcast_max = 0
+	boss_phase_name = "开场"
+	boss_directive_id = ""
+	boss_round_moved = false
+	if not combat_is_boss:
+		return
+	var profile: Dictionary = room.get("boss_profile", {})
+	var fight_rules: Dictionary = content.get("pressure", {}).get("bossFight", {})
+	var raw_anchor_cells: Array = room.get("arena", {}).get("anchors", [])
+	var anchor_limit := int(profile.get("anchorCount", raw_anchor_cells.size()))
+	var anchor_health := maxi(1, int(profile.get("anchorHp", fight_rules.get("anchorHp", 2))))
+	for raw_cell in raw_anchor_cells:
+		if boss_anchor_cells.size() >= anchor_limit:
+			break
+		var cell := _array_to_pos(raw_cell) if raw_cell is Array else _parse_battle_cell(raw_cell)
+		if cell == INVALID_CELL or not combat.is_walkable(cell) or cell in boss_anchor_cells:
+			continue
+		boss_anchor_cells.append(cell)
+		boss_anchor_hp[cell] = anchor_health
+	boss_broadcast_max = maxi(1, int(profile.get("broadcastMax", fight_rules.get("broadcastMax", 14))))
+	_update_boss_phase()
+
+
+func _parse_battle_cell(raw_cell: Variant) -> Vector2i:
+	if raw_cell is Vector2i:
+		return raw_cell
+	if raw_cell is String:
+		var parts := (raw_cell as String).split(",", false)
+		if parts.size() >= 2:
+			return Vector2i(int(parts[0].strip_edges()), int(parts[1].strip_edges()))
+	return INVALID_CELL
+
+
+func _boss_profile() -> Dictionary:
+	return content.get("pressure", {}).get("bossProfiles", {}).get(boss_id, {})
+
+
+func _boss_fight_rules() -> Dictionary:
+	return content.get("pressure", {}).get("bossFight", {})
+
+
+func _boss_dismantle_cost() -> int:
+	return maxi(1, int(_boss_profile().get("dismantleCost", _boss_fight_rules().get("dismantleCost", 1))))
+
+
+func can_dismantle_boss_anchor() -> bool:
+	if not combat_is_boss or combat == null or combat.outcome != "" or animation_busy:
+		return false
+	if not boss_anchor_hp.has(combat.player_pos) or int(boss_anchor_hp.get(combat.player_pos, 0)) <= 0:
+		return false
+	return combat.energy >= _boss_dismantle_cost()
+
+
+func dismantle_boss_anchor() -> void:
+	if not can_dismantle_boss_anchor():
+		status_message = "需要站在仍在播出的信号锚上，并保留 %d 点行动力。" % _boss_dismantle_cost()
+		_refresh_hud()
+		return
+	var cell: Vector2i = combat.player_pos
+	combat.energy -= _boss_dismantle_cost()
+	var remaining := int(boss_anchor_hp.get(cell, 0)) - 1
+	boss_anchor_hp[cell] = remaining
+	if remaining <= 0:
+		boss_anchors_cleared += 1
+		var relief := int(_boss_profile().get("anchorClockRelief", _boss_fight_rules().get("anchorClockRelief", 2)))
+		boss_broadcast_progress = maxi(0, boss_broadcast_progress - relief)
+		status_message = "信号锚已拆除（%d/%d），播出进度 -%d。" % [boss_anchors_cleared, boss_anchor_cells.size(), relief]
+		combat.event_log.append("BossAnchorCleared cell=%s count=%d" % [cell, boss_anchors_cleared])
+		if boss_anchors_cleared >= boss_anchor_cells.size() and str(_boss_profile().get("victoryMode", "kill")) in ["ritual", "mixed"]:
+			combat.outcome = "victory"
+			status_message = "所有信号锚熄灭，祭坛失去播出权。"
+			combat.event_log.append("BossRitualComplete")
+	else:
+		status_message = "信号锚受损（剩余 %d）。" % remaining
+	combat.event_log.append("BossAnchorHit cell=%s remaining=%d" % [cell, remaining])
+	_show_actor_callout_feedback("Player", "拆锚")
+	_after_combat_action()
+	_refresh_hud()
+
+
+func _update_boss_phase() -> void:
+	if not combat_is_boss:
+		return
+	var phases: Array = _boss_fight_rules().get("phases", [])
+	var selected_phase: Dictionary = {}
+	for raw_phase in phases:
+		if raw_phase is Dictionary and boss_anchors_cleared >= int((raw_phase as Dictionary).get("cleared", 0)):
+			selected_phase = raw_phase
+	if not selected_phase.is_empty():
+		boss_phase_name = str(selected_phase.get("name", "开场"))
+	var directives: Array = _boss_profile().get("directives", _boss_fight_rules().get("directives", []))
+	if not directives.is_empty():
+		boss_directive_id = str(directives[posmod(maxi(0, combat.round_number - 1), directives.size())]) if not (directives[0] is Dictionary) else str((directives[posmod(maxi(0, combat.round_number - 1), directives.size())] as Dictionary).get("id", ""))
+
+
+func _advance_boss_broadcast() -> void:
+	if not combat_is_boss or combat == null or combat.outcome != "":
+		return
+	var increment := 1
+	if boss_directive_id == "extra" and boss_anchors_cleared >= 2:
+		increment += 1
+	boss_broadcast_progress += increment
+	_update_boss_phase()
+	if boss_broadcast_progress >= boss_broadcast_max:
+		combat.outcome = "defeat"
+		combat.event_log.append("BossBroadcastOverflow progress=%d" % boss_broadcast_progress)
+		status_message = "播出进度已满，频道把你编进了片尾。"
+
+
+func boss_anchor_summary() -> Dictionary:
+	return {
+		"cleared": boss_anchors_cleared,
+		"total": boss_anchor_cells.size(),
+		"broadcast": boss_broadcast_progress,
+		"broadcast_max": boss_broadcast_max,
+		"phase": boss_phase_name,
+		"directive": boss_directive_id,
+		"dismantle_cost": _boss_dismantle_cost(),
+	}
+
+
+func _boss_closeup_blocks_card(card: Dictionary) -> bool:
+	if not combat_is_boss or boss_directive_id != "closeup" or boss_round_moved:
+		return false
+	return combat.card_target_type(card) != "self"
+
+
+func _boss_closeup_message(card: Dictionary) -> String:
+	return "导播要求特写：本回合先移动至少1格，才能使用%s。" % str(card.get("name", "这张牌"))
+
+
+func _finish_boss_combat(success: bool) -> void:
+	if combat == null:
+		return
+	player_hp = combat.player_hp
+	if success:
+		_collect_combat_deck()
+	var result := BossProgression.ending(content.get("bosses", {}), boss_id, success)
+	ending_id = str(result.get("id", "end_fail"))
+	ending_success = success
+	combat = null
+	combat_is_boss = false
+	phase = "ending"
+	world_container.visible = false
+	house_root.visible = false
+	battle_root.visible = false
+	if lab_root != null:
+		lab_root.visible = false
+	_clear_run_save()
+	status_message = str(result.get("boss_message", "节目结束。"))
+	_refresh_hud()
+
+
+func current_ending() -> Dictionary:
+	return BossProgression.ending(content.get("bosses", {}), boss_id, ending_success)
+
+
+func finish_ending() -> void:
+	if phase != "ending":
+		return
+	go_home()
 
 
 func _collect_combat_deck() -> void:
@@ -1380,11 +1704,13 @@ func _start_card_reward(origin: String) -> void:
 	reward_origin = origin
 	phase = "reward"
 	status_message = "惊吓解除：从三张新道具里选一张加入本局牌库，也可以跳过。"
+	if origin == "boss_access":
+		status_message = "普通篇章已结束。先从三张牌里选一张，再前往祭坛。"
 	_save_run()
 	_refresh_hud()
 
 
-func _start_quiet_reward() -> void:
+func _start_quiet_reward(origin: String = "quiet") -> void:
 	var healed := 0
 	if player_hp < player_max_hp:
 		healed = 1
@@ -1398,9 +1724,11 @@ func _start_quiet_reward() -> void:
 		var available: Array = content.get("relic_pool", []).filter(func(id: Variant) -> bool: return str(id) not in active_relics)
 		if not available.is_empty():
 			reward_options[2] = {"kind": "relic", "id": str(available[rng.randi_range(0, available.size() - 1)])}
-	reward_origin = "quiet"
+	reward_origin = origin
 	phase = "reward"
 	status_message = "静室喘息恢复了 %d 生命；再选择一项成长，或空手离开。" % healed
+	if origin == "boss_access":
+		status_message = "最终普通房间已完成。先领取这一项成长，然后前往祭坛。"
 	_save_run()
 	_refresh_hud()
 
@@ -1440,9 +1768,12 @@ func skip_reward() -> void:
 
 func _finish_reward() -> void:
 	var origin := reward_origin
-	phase = "explore"
 	reward_options.clear()
 	reward_origin = ""
+	if origin == "boss_access":
+		_prepare_boss_ready()
+		return
+	phase = "explore"
 	house_camera_closeup = origin in ["combat", "event"]
 	house_camera_following = house_camera_closeup
 	build_house_world()
@@ -1472,7 +1803,7 @@ func finish_event_trial(success: bool) -> void:
 	var context := event_context
 	event_context = ""
 	current_room_pos = event_room_pos
-	_complete_current_room()
+	var reaches_finale := _complete_current_room()
 	lab_root.visible = false
 	house_root.visible = true
 	house_camera_closeup = true
@@ -1480,8 +1811,7 @@ func finish_event_trial(success: bool) -> void:
 	if success:
 		if context == "chase":
 			player_speed += 1
-		_start_quiet_reward()
-		reward_origin = "event"
+		_start_quiet_reward("boss_access" if reaches_finale else "event")
 		_save_run()
 		status_message = "考验成功；奖励已经翻开。"
 	else:
@@ -1496,6 +1826,9 @@ func finish_event_trial(success: bool) -> void:
 			status_message = "考验失败：警察搜走了%s。" % str(content.get("cards", {}).get(stolen_id, {}).get("name", stolen_id))
 		else:
 			status_message = "考验失败：房间奖励消失了。"
+		if reaches_finale:
+			_prepare_boss_ready()
+			return
 		phase = "explore"
 		build_house_world()
 		_save_run()
@@ -1504,6 +1837,9 @@ func finish_event_trial(success: bool) -> void:
 
 func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	combat = CombatRules.new()
+	combat_is_boss = bool(room.get("boss_room", false))
+	if combat_is_boss:
+		boss_id = str(room.get("boss_id", boss_id))
 	battle_room_title = str(room.get("name", "房间"))
 	battle_player_facing_yaw = house_player_facing_yaw
 	battle_enemy_facing_yaw = PI
@@ -1516,7 +1852,10 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	run_rules["player_hp"] = player_hp
 	run_rules["base_speed"] = player_speed
 	run_rules["base_speed"] = player_speed
+	if combat_is_boss:
+		run_rules["enemy_death_allowed"] = bool(room.get("boss", {}).get("killable", room.get("boss_profile", {}).get("killable", true)))
 	combat.setup(room.get("arena", {}), enemy_specs, content.get("cards", {}), run_deck, run_seed + room_rules.instance_count() * 17, run_rules, active_relics)
+	_configure_boss_combat(room)
 	battle_entry_cell = combat.player_pos
 	battle_entry_side = _resolve_battle_entry_side(room)
 	battle_room_context = BattleRoomArtContext.build(room, combat.cols, combat.rows, BATTLE_CELL, run_seed + str(room.get("instance_id", room.get("id", "room"))).hash())
@@ -1524,7 +1863,10 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	_align_battle_terrain_to_room_context()
 	_prepare_battle_prop_assignments()
 	selected_card = -1
+	battle_inspected_cell = INVALID_CELL
 	hovered_battle_cell = INVALID_CELL
+	battle_focused_enemy_id = _default_battle_enemy_id()
+	battle_world_renderer.reset_battle_display_preferences()
 	phase = "combat"
 	world_container.visible = true
 	house_root.visible = false
@@ -1626,16 +1968,22 @@ func select_or_play_card(index: int) -> void:
 	if animation_busy or phase != "combat" or combat == null or index < 0 or index >= combat.hand.size():
 		return
 	var card: Dictionary = combat.cards.get(combat.hand[index], {})
+	if _boss_closeup_blocks_card(card):
+		status_message = _boss_closeup_message(card)
+		_refresh_hud()
+		return
 	if str(card.get("type", "")) == "place":
 		if selected_card == index:
 			cancel_selected_card("已取消%s；绿色角标恢复为移动目标。" % str(card.get("name", combat.hand[index])))
 			return
 		selected_card = index
-		status_message = "已选%s：金色角标可放置；点敌人格可直接砸击。再次点牌、右键或 Esc 可取消。" % str(card.get("name", combat.hand[index]))
+		var smash_hint := "；点敌人格可直接砸击" if combat._can_smash_place_card(card) else ""
+		status_message = "已选%s：金色角标可放置%s。再次点牌、右键或 Esc 可取消。" % [str(card.get("name", combat.hand[index])), smash_hint]
 		update_battle_overlays()
 		_play_actor_state("Player", "ready", "准备·%s" % str(card.get("name", combat.hand[index])))
 	else:
-		var enemy_hp_before: int = combat.enemy_hp
+		var primary_enemy_before = _primary_living_enemy_state()
+		var primary_enemy_hp_before: int = int(primary_enemy_before.hp) if primary_enemy_before != null else -1
 		if str(combat.card_target_type(card)) == "single_enemy" and combat.living_enemy_ids().size() > 1:
 			# 多敌人时单体牌必须先点选目标敌人，不能默认打第一个。
 			if selected_card == index:
@@ -1647,28 +1995,27 @@ func select_or_play_card(index: int) -> void:
 			_play_actor_state("Player", "ready", "瞄准·%s" % str(card.get("name", combat.hand[index])))
 			_refresh_hud()
 			return
-		var played: bool = combat.play_card(index, combat.enemy_pos)
+		var primary_target = _primary_living_enemy_state()
+		var primary_target_cell: Vector2i = primary_target.pos if primary_target != null else INVALID_CELL
+		var played: bool = combat.play_card(index, primary_target_cell)
 		selected_card = -1
 		if played:
 			status_message = "已打出%s。" % str(card.get("name", "卡牌"))
+			var damage_feedback_shown := _queue_card_enemy_feedback_before_refresh(combat.last_card_events)
+			if not damage_feedback_shown and primary_enemy_before != null:
+				var current_primary = combat.enemy_by_id(str(primary_enemy_before.id))
+				if current_primary != null and current_primary.hp < primary_enemy_hp_before:
+					var damage_dealt: int = primary_enemy_hp_before - int(current_primary.hp)
+					_play_enemy_state(str(primary_enemy_before.id), "hurt", "-%d" % damage_dealt)
+					_show_enemy_damage_feedback(str(primary_enemy_before.id), damage_dealt)
+					if not current_primary.alive():
+						_show_enemy_callout_feedback(str(primary_enemy_before.id), "死亡")
 			_after_combat_action()
-			_play_actor_state("Player", "ready" if str(card.get("type", "")) == "ready" else "attack", str(card.get("name", "出手")))
-			var damage_feedback_shown := false
-			for raw_event in combat.last_card_events:
-				var damage_event: Dictionary = raw_event
-				if str(damage_event.get("kind", "")) != "enemy_damaged" or int(damage_event.get("damage", 0)) <= 0:
-					continue
-				var damage_enemy_id := str(damage_event.get("target_enemy_id", ""))
-				if damage_enemy_id.is_empty():
-					continue
-				_play_enemy_state(damage_enemy_id, "hurt", "-%d" % int(damage_event["damage"]))
-				_show_enemy_damage_feedback(damage_enemy_id, int(damage_event["damage"]))
-				damage_feedback_shown = true
-			if not damage_feedback_shown and combat.enemy_hp < enemy_hp_before:
-				var damage_dealt: int = enemy_hp_before - combat.enemy_hp
-				if not combat.enemy_order.is_empty():
-					_play_enemy_state(combat.enemy_order[0], "hurt", "-%d" % damage_dealt)
-					_show_enemy_damage_feedback(combat.enemy_order[0], damage_dealt)
+			var card_type := str(card.get("type", ""))
+			var card_name := str(card.get("name", "出手"))
+			_play_actor_state("Player", "ready" if card_type == "ready" else "attack", card_name)
+			if card_type == "ready":
+				_show_actor_callout_feedback("Player", card_name)
 		else:
 			status_message = "%s当前条件不满足，卡牌没有消耗。" % str(card.get("name", "这张牌"))
 	_refresh_hud()
@@ -1688,8 +2035,14 @@ func end_combat_turn() -> void:
 		return
 	selected_card = -1
 	hovered_battle_cell = INVALID_CELL
+	if combat_is_boss and boss_directive_id == "mute":
+		combat.enemy_vision_suppressed = true
+		combat.player_exposed = false
 	var turn_events: Array[Dictionary] = combat.enemy_turn()
+	if combat_is_boss:
+		_advance_boss_broadcast()
 	battle_turn_events = turn_events.duplicate(true)
+	battle_world_renderer.set_battle_triggered_traps(turn_events)
 	battle_turn_actor_id = "enemy_phase"
 	for event: Dictionary in turn_events:
 		var actor_id := str(event.get("actor_id", ""))
@@ -1743,11 +2096,15 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 		if kind == "move":
 			if enemy_node == null:
 				continue
-			var source: Vector2i = event.get("from", combat.enemy_pos)
-			var target: Vector2i = event.get("to", combat.enemy_pos)
+			var source: Vector2i = event.get("from", _primary_enemy_position())
+			var target: Vector2i = event.get("to", _primary_enemy_position())
 			var facing_yaw := _battle_move_facing_yaw(source, target)
+			var move_label := str(event.get("label", ""))
+			var move_callout := "穿门" if bool(event.get("via_portal", false)) else move_label if move_label in ["甩开", "穿堂", "推撞"] else ""
 			battle_enemy_facing_yaw = facing_yaw
-			tween.tween_callback(_play_enemy_state.bind(actor_id, "move", "穿门" if bool(event.get("via_portal", false)) else ""))
+			if move_label in ["甩开", "穿堂", "推撞"]:
+				tween.tween_callback(_show_enemy_callout_feedback.bind(actor_id, move_label))
+			tween.tween_callback(_play_enemy_state.bind(actor_id, "move", move_callout))
 			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			tween.tween_property(enemy_node, "rotation:y", facing_yaw, ENEMY_TURN_DURATION * animation_duration_scale)
 			if bool(event.get("via_portal", false)):
@@ -1762,10 +2119,22 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			if enemy_node == null:
 				continue
 			var attack_kind := str(event.get("attack_kind", "attack"))
-			var attack_callouts := {"lunge": "突进!", "faceShock": "突脸!", "guardBreak": "破防!", "slam": "砸地!", "beam": "激光!"}
+			var attack_callouts := {"backstab": "背刺!", "lunge": "突进!", "faceShock": "突脸!", "guardBreak": "破防!", "slam": "砸地!", "beam": "激光!"}
+			var is_ranged_attack := attack_kind == "ranged"
+			if is_ranged_attack or attack_kind == "backstab":
+				_queue_enemy_attack_facing(tween, enemy_node, event)
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", str(attack_callouts.get(attack_kind, "袭击!"))))
+			if is_ranged_attack:
+				tween.tween_callback(_show_enemy_callout_feedback.bind(actor_id, "远程攻击"))
+				# 远程攻击先抛出石块，石块落地后再播放玩家受击反馈。
+				tween.tween_callback(_launch_enemy_projectile.bind(enemy_node, event))
+				tween.tween_method(_set_enemy_projectile_arc, 0.0, 1.0, ENEMY_PROJECTILE_DURATION * animation_duration_scale)
+				tween.tween_callback(_finish_enemy_projectile)
 			if event.get("target", INVALID_CELL) == combat.player_pos and int(event.get("damage", 0)) > 0:
+				tween.tween_callback(_show_actor_damage_feedback.bind("Player", int(event.get("damage", 0))))
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "受击!"))
+			if int(event.get("blocked", 0)) > 0:
+				tween.tween_callback(_show_actor_callout_feedback.bind("Player", "格挡"))
 			tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			tween.tween_property(enemy_node, "scale", Vector3(1.22, 0.82, 1.22), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -1776,13 +2145,17 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 				continue
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", "突脸!"))
 			if int(event.get("damage", 0)) > 0:
+				tween.tween_callback(_show_actor_damage_feedback.bind("Player", int(event.get("damage", 0))))
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "惊吓!"))
+			if int(event.get("blocked", 0)) > 0:
+				tween.tween_callback(_show_actor_callout_feedback.bind("Player", "格挡"))
 			tween.tween_property(enemy_node, "scale", Vector3(1.18, 1.18, 1.18), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
 			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 		elif kind == "beam_charge":
 			if enemy_node == null:
 				continue
+			_queue_enemy_attack_facing(tween, enemy_node, event)
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "ready", "蓄力!"))
 			tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			tween.tween_property(enemy_node, "scale", Vector3(0.86, 1.28, 0.86), 0.24 * animation_duration_scale)
@@ -1791,11 +2164,63 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 		elif kind == "beam_fire":
 			if enemy_node == null:
 				continue
+			_queue_enemy_attack_facing(tween, enemy_node, event)
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", "激光!"))
+			tween.tween_callback(_show_enemy_callout_feedback.bind(actor_id, "远程攻击"))
 			if int(event.get("damage", 0)) > 0:
+				tween.tween_callback(_show_actor_damage_feedback.bind("Player", int(event.get("damage", 0))))
 				tween.tween_callback(_play_actor_state.bind("Player", "hurt", "命中!"))
+			if int(event.get("blocked", 0)) > 0:
+				tween.tween_callback(_show_actor_callout_feedback.bind("Player", "格挡"))
 			tween.tween_property(enemy_node, "scale", Vector3(1.30, 0.76, 1.30), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
 			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
+		elif kind == "enemy_shove":
+			if enemy_node == null:
+				continue
+			var shove_source: Vector2i = event.get("from", _primary_enemy_position())
+			var shove_target: Vector2i = event.get("to", _primary_enemy_position())
+			var shove_facing_yaw := _battle_move_facing_yaw(shove_source, shove_target)
+			var shove_label := str(event.get("label", "甩开"))
+			tween.tween_callback(_show_enemy_callout_feedback.bind(actor_id, shove_label))
+			tween.tween_callback(_play_enemy_state.bind(actor_id, "move", shove_label))
+			tween.tween_property(enemy_node, "scale", Vector3(1.22, 0.76, 1.22), 0.08 * animation_duration_scale)
+			tween.tween_property(enemy_node, "rotation:y", shove_facing_yaw, ENEMY_TURN_DURATION * animation_duration_scale)
+			if bool(event.get("via_portal", false)):
+				tween.tween_property(enemy_node, "scale", Vector3(0.08, 1.35, 0.08), ENEMY_STEP_DURATION * 0.34 * animation_duration_scale)
+				tween.tween_callback(func() -> void: enemy_node.position = _battle_pawn_world(shove_target, false, actor_id))
+				tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_STEP_DURATION * 0.66 * animation_duration_scale)
+			else:
+				tween.tween_method(_set_enemy_step_motion.bind(enemy_node, _battle_pawn_world(shove_source, false, actor_id), _battle_pawn_world(shove_target, false, actor_id)), 0.0, 1.0, ENEMY_STEP_DURATION * 1.18 * animation_duration_scale)
+				tween.tween_property(enemy_node, "scale", Vector3.ONE, 0.14 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
+		elif kind == "enemy_damaged":
+			if enemy_node == null:
+				continue
+			var trap_damage := int(event.get("damage", 0))
+			if str(event.get("source", "")).begins_with("trap:"):
+				tween.tween_callback(_show_enemy_callout_feedback.bind(actor_id, "陷阱"))
+			if _is_salt_ring_event(event):
+				tween.tween_callback(_show_enemy_salt_ring_effect.bind(actor_id))
+			if trap_damage <= 0:
+				continue
+			var trap_target: Vector2i = event.get("target", INVALID_CELL)
+			tween.tween_callback(battle_world_renderer.consume_battle_triggered_trap.bind(trap_target))
+			tween.tween_callback(_play_enemy_state.bind(actor_id, "hurt", "-%d" % trap_damage))
+			tween.tween_callback(_show_enemy_damage_feedback.bind(actor_id, trap_damage))
+			var defeated_state = combat.enemy_by_id(actor_id)
+			if defeated_state != null and not defeated_state.alive():
+				tween.tween_callback(_show_enemy_callout_feedback.bind(actor_id, "死亡"))
+			tween.tween_property(enemy_node, "scale", Vector3(1.16, 0.86, 1.16), ENEMY_ATTACK_DURATION * 0.42 * animation_duration_scale)
+			tween.tween_property(enemy_node, "scale", Vector3.ONE, ENEMY_ATTACK_DURATION * 0.58 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
+		elif kind == "enemy_trap_triggered":
+			if enemy_node == null:
+				continue
+			if str(event.get("source", "")).begins_with("trap:"):
+				tween.tween_callback(_show_enemy_callout_feedback.bind(actor_id, "陷阱"))
+			if _is_salt_ring_event(event):
+				tween.tween_callback(_show_enemy_salt_ring_effect.bind(actor_id))
 			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 		else:
 			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
@@ -1809,7 +2234,7 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 func _position_enemy_turn_starts(turn_events: Array[Dictionary]) -> void:
 	var positioned_actor_ids: Dictionary = {}
 	for event: Dictionary in turn_events:
-		if str(event.get("kind", "")) != "move":
+		if str(event.get("kind", "")) not in ["move", "enemy_shove"]:
 			continue
 		var actor_id := str(event.get("actor_id", ""))
 		if actor_id.is_empty() or positioned_actor_ids.has(actor_id):
@@ -1818,11 +2243,68 @@ func _position_enemy_turn_starts(turn_events: Array[Dictionary]) -> void:
 		var move_node := _enemy_node_for_id(actor_id)
 		if move_node != null:
 			# 同一敌人一回合可能走多格；首帧只能采用第一段移动的起点。
-			move_node.position = _battle_pawn_world(event.get("from", combat.enemy_pos), false, actor_id)
+			move_node.position = _battle_pawn_world(event.get("from", _primary_enemy_position()), false, actor_id)
 
 
 func _set_enemy_step_motion(weight: float, enemy_node: Node3D, start_position: Vector3, target_position: Vector3) -> void:
 	_set_battle_actor_step_motion(weight, enemy_node, start_position, target_position)
+
+
+func _battle_enemy_projectile_position(weight: float, start_position: Vector3, target_position: Vector3) -> Vector3:
+	var smooth_weight := clampf(weight, 0.0, 1.0)
+	var position := start_position.lerp(target_position, smooth_weight)
+	position.y += sin(PI * smooth_weight) * maxf(0.72, start_position.distance_to(target_position) * 0.18)
+	return position
+
+
+func _launch_enemy_projectile(enemy_node: Node3D, event: Dictionary) -> void:
+	_finish_enemy_projectile()
+	if battle_actor_root == null or enemy_node == null:
+		return
+	var target_cell: Vector2i = event.get("target", combat.player_pos)
+	if target_cell == INVALID_CELL:
+		return
+	var player_node := battle_actor_root.get_node_or_null("Player") as Node3D
+	battle_projectile_start = enemy_node.position + Vector3(0.0, 0.84, 0.0)
+	battle_projectile_target = _battle_pawn_world(target_cell, true) + Vector3(0.0, 0.36, 0.0)
+	if player_node != null:
+		battle_projectile_target = player_node.position + Vector3(0.0, 0.36, 0.0)
+	var projectile := MeshInstance3D.new()
+	projectile.name = "EnemyProjectile_Rock"
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.12
+	mesh.height = 0.20
+	mesh.radial_segments = 8
+	mesh.rings = 4
+	projectile.mesh = mesh
+	projectile.position = battle_projectile_start
+	projectile.rotation = Vector3(-0.22, 0.35, 0.18)
+	projectile.material_override = _material(Color("66707a"), false, 0.05)
+	battle_actor_root.add_child(projectile)
+	battle_projectile_nodes.append(projectile)
+	battle_active_projectile = projectile
+
+
+func _set_enemy_projectile_arc(weight: float) -> void:
+	if battle_active_projectile == null or not is_instance_valid(battle_active_projectile):
+		return
+	battle_active_projectile.position = _battle_enemy_projectile_position(weight, battle_projectile_start, battle_projectile_target)
+	var smooth_weight := clampf(weight, 0.0, 1.0)
+	battle_active_projectile.rotation = Vector3(-0.22 + smooth_weight * 3.2, 0.35 + smooth_weight * 5.8, 0.18 + smooth_weight * 2.4)
+
+
+func _finish_enemy_projectile() -> void:
+	if battle_active_projectile != null and is_instance_valid(battle_active_projectile):
+		battle_active_projectile.queue_free()
+	battle_active_projectile = null
+
+
+func _clear_battle_projectiles() -> void:
+	_finish_enemy_projectile()
+	for projectile in battle_projectile_nodes:
+		if projectile != null and is_instance_valid(projectile):
+			projectile.queue_free()
+	battle_projectile_nodes.clear()
 
 
 func _set_battle_actor_step_motion(weight: float, actor_node: Node3D, start_position: Vector3, target_position: Vector3) -> void:
@@ -1835,6 +2317,23 @@ func _set_battle_actor_step_motion(weight: float, actor_node: Node3D, start_posi
 
 func _battle_move_facing_yaw(source: Vector2i, target: Vector2i) -> float:
 	return atan2(float(target.x - source.x), float(target.y - source.y))
+
+
+func _battle_enemy_attack_facing_yaw(enemy_node: Node3D, event: Dictionary) -> float:
+	var enemy_state = _enemy_state_for_node(enemy_node)
+	var attack_origin: Vector2i = enemy_state.pos if enemy_state != null else _primary_enemy_position()
+	var attack_target: Vector2i = event.get("target", combat.player_pos)
+	if attack_origin == attack_target:
+		return enemy_node.rotation.y
+	return _battle_move_facing_yaw(attack_origin, attack_target)
+
+
+func _queue_enemy_attack_facing(tween: Tween, enemy_node: Node3D, event: Dictionary) -> void:
+	var attack_facing_yaw := _battle_enemy_attack_facing_yaw(enemy_node, event)
+	battle_enemy_facing_yaw = attack_facing_yaw
+	# 远程攻击先用短转身对准玩家，再进入攻击姿态，避免敌人朝侧面开火。
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(enemy_node, "rotation:y", attack_facing_yaw, ENEMY_TURN_DURATION * animation_duration_scale)
 
 
 func _handle_battle_world_click(screen_pos: Vector2) -> void:
@@ -1858,14 +2357,27 @@ func move_player_direction(direction: Vector2i) -> bool:
 func handle_battle_cell(target: Vector2i) -> void:
 	if animation_busy or combat == null or combat.outcome != "" or target == INVALID_CELL:
 		return
+	if selected_card < 0:
+		var clicked_enemy: Variant = combat.enemy_at(target)
+		if clicked_enemy != null:
+			select_battle_enemy(str(clicked_enemy.get("id")))
+			return
 	if selected_card < 0 and combat.player_on_portal() and target == combat.player_portal_destination():
 		use_player_portal()
 		return
 	if selected_card >= 0:
 		var card_name := "所选卡牌"
+		var selected_card_type := ""
 		if selected_card < combat.hand.size():
-			card_name = str(combat.cards.get(combat.hand[selected_card], {}).get("name", combat.hand[selected_card]))
-		var enemy_hp_before: int = combat.enemy_hp
+			var selected_card_data: Dictionary = combat.cards.get(combat.hand[selected_card], {})
+			card_name = str(selected_card_data.get("name", combat.hand[selected_card]))
+			selected_card_type = str(selected_card_data.get("type", ""))
+			if _boss_closeup_blocks_card(selected_card_data):
+				status_message = _boss_closeup_message(selected_card_data)
+				_refresh_hud()
+				return
+		var primary_enemy_before = _primary_living_enemy_state()
+		var primary_enemy_hp_before: int = int(primary_enemy_before.hp) if primary_enemy_before != null else -1
 		var clicked_enemy: Variant = combat.enemy_at(target)
 		var clicked_enemy_id: String = ""
 		if clicked_enemy != null:
@@ -1873,20 +2385,19 @@ func handle_battle_cell(target: Vector2i) -> void:
 		if combat.play_card(selected_card, target, clicked_enemy_id):
 			selected_card = -1
 			status_message = "%s已生效。继续移动、出牌，或结束回合让敌人行动。" % card_name
+			var damage_feedback_shown := _queue_card_enemy_feedback_before_refresh(combat.last_card_events)
+			if not damage_feedback_shown and primary_enemy_before != null and combat.last_card_events.is_empty():
+				var current_primary = combat.enemy_by_id(str(primary_enemy_before.id))
+				if current_primary != null and current_primary.hp < primary_enemy_hp_before:
+					var damage_dealt: int = primary_enemy_hp_before - int(current_primary.hp)
+					_play_enemy_state(str(primary_enemy_before.id), "hurt", "-%d" % damage_dealt)
+					_show_enemy_damage_feedback(str(primary_enemy_before.id), damage_dealt)
+					if not current_primary.alive():
+						_show_enemy_callout_feedback(str(primary_enemy_before.id), "死亡")
 			_after_combat_action()
-			_play_actor_state("Player", "attack", card_name)
-			for raw_event in combat.last_card_events:
-				var damage_event: Dictionary = raw_event
-				if int(damage_event.get("damage", 0)) > 0 and str(damage_event.get("kind", "")) == "enemy_damaged":
-					var damage_enemy_id := str(damage_event.get("target_enemy_id", ""))
-					if not damage_enemy_id.is_empty():
-						_play_enemy_state(damage_enemy_id, "hurt", "-%d" % int(damage_event["damage"]))
-						_show_enemy_damage_feedback(damage_enemy_id, int(damage_event["damage"]))
-			if combat.enemy_hp < enemy_hp_before and combat.last_card_events.is_empty():
-				var damage_dealt: int = enemy_hp_before - combat.enemy_hp
-				if not combat.enemy_order.is_empty():
-					_play_enemy_state(combat.enemy_order[0], "hurt", "-%d" % damage_dealt)
-					_show_enemy_damage_feedback(combat.enemy_order[0], damage_dealt)
+			_play_actor_state("Player", "ready" if selected_card_type == "ready" else "attack", card_name)
+			if selected_card_type == "ready":
+				_show_actor_callout_feedback("Player", card_name)
 			return
 		else:
 			selected_card = -1
@@ -1896,6 +2407,84 @@ func handle_battle_cell(target: Vector2i) -> void:
 			return
 		status_message = "这个格子无法到达，或当前行动力不足。"
 		_refresh_hud()
+
+
+func inspect_battle_cell(target: Vector2i) -> void:
+	if phase != "combat" or combat == null or not _battle_cell_inside(target):
+		return
+	battle_inspected_cell = target
+	_refresh_hud()
+
+
+func _battle_cell_inside(cell: Vector2i) -> bool:
+	return combat != null and cell.x >= 0 and cell.y >= 0 and cell.x < combat.cols and cell.y < combat.rows
+
+
+func battle_tile_inspection() -> Dictionary:
+	var result: Dictionary = {}
+	if phase != "combat" or combat == null or not _battle_cell_inside(battle_inspected_cell):
+		return result
+	var cell: Vector2i = battle_inspected_cell
+	var tags: Array[String] = []
+	if combat.walls.has(cell):
+		tags.append("阻挡")
+	elif combat.is_walkable(cell):
+		tags.append("可通行")
+	else:
+		tags.append("边界")
+	if cell == combat.player_pos:
+		tags.append("莉莉")
+	var enemy: Variant = combat.enemy_at(cell)
+	if enemy != null:
+		tags.append("敌人")
+	var trap: Dictionary = combat.traps.get(cell, {})
+	if combat.portals.has(cell):
+		tags.append("传送门")
+	var height: int = int(combat.heights.get(cell, 0))
+	result["title"] = "地块 (%d, %d)" % [cell.x + 1, cell.y + 1]
+	result["detail"] = " · ".join(tags) if not tags.is_empty() else "普通地面"
+	result["height"] = height
+	result["statuses"] = combat.statuses_for_tile(cell)
+	result["cell"] = cell
+	return result
+
+
+func select_battle_enemy(enemy_id: String) -> void:
+	if combat == null:
+		return
+	var state = combat.enemy_by_id(enemy_id)
+	if state == null or not state.revealed:
+		return
+	battle_focused_enemy_id = enemy_id
+	if test_combat_active:
+		test_focused_enemy_id = enemy_id
+	battle_world_renderer.refresh_battle_state(false, false)
+	battle_world_renderer.refresh_battle_selection_visuals()
+	_refresh_hud()
+
+
+func _default_battle_enemy_id() -> String:
+	if combat == null:
+		return ""
+	for enemy_id in combat.enemy_order:
+		var state = combat.enemy_by_id(str(enemy_id))
+		if state != null and state.revealed and state.hp > 0:
+			return str(enemy_id)
+	return ""
+
+
+func _primary_living_enemy_state():
+	if combat == null:
+		return null
+	var living_ids: Array[String] = combat.living_enemy_ids()
+	if living_ids.is_empty():
+		return null
+	return combat.enemy_by_id(str(living_ids[0]))
+
+
+func _primary_enemy_position() -> Vector2i:
+	var state = _primary_living_enemy_state()
+	return state.pos if state != null else INVALID_CELL
 
 
 func move_player_to(target: Vector2i) -> bool:
@@ -1915,6 +2504,7 @@ func move_player_to(target: Vector2i) -> bool:
 		for index in range(1, path.size()):
 			if not combat.move_player(path[index]):
 				return false
+		boss_round_moved = boss_round_moved or combat_is_boss
 		_after_combat_action(true)
 		return true
 	animation_busy = true
@@ -1934,6 +2524,7 @@ func _animate_player_path(path: Array[Vector2i], index: int) -> void:
 		_complete_dynamic_effect()
 		_refresh_hud()
 		return
+	boss_round_moved = boss_round_moved or combat_is_boss
 	# 移动过程中只移动演员节点；棋盘、家具和房间外壳保持复用。
 	# 路径结束后由 _after_combat_action() 统一刷新一次敌人意图和状态。
 	var player_node := battle_actor_root.get_node_or_null("Player") as Node3D
@@ -2006,6 +2597,7 @@ func use_player_portal() -> void:
 	var target: Vector2i = combat.player_portal_destination()
 	if not combat.use_player_portal():
 		return
+	boss_round_moved = boss_round_moved or combat_is_boss
 	status_message = "你花费 %d 行动力穿过传送门。" % combat.move_cost
 	_after_combat_action(animation_duration_scale <= 0.0)
 	_animate_player_portal(source, target)
@@ -2129,6 +2721,10 @@ func _refit_battle_camera(preserve_zoom: bool) -> void:
 	var half_z := (float(combat.rows - 1) * 0.5 + 0.65) * BATTLE_CELL
 	var max_y := maxf(max_height * 0.64 + 2.25, BATTLE_SHELL_WALL_HEIGHT + 1.0)
 	var horizontal_radius := Vector2(half_x, half_z).length()
+	# 取景焦点现在只来自玩家与已揭示敌人；当焦点偏离棋盘中心时，
+	# 旋转适配半径也必须包含这段已知偏移，否则边缘会在某些角度出框。
+	var known_focus := _battle_follow_target_position()
+	horizontal_radius += Vector2(known_focus.x, known_focus.z).length()
 	# 镜头始终偏上构图（对准点向屏幕上方平移约 size*FRAME_OFFSET），fit 需把该偏移量计入半径，
 	# 保证全棋盘在偏上对准下仍然可见
 	# Reserve only the actual framing offset. The previous doubled-radius plus
@@ -2166,24 +2762,15 @@ func orbit_battle_camera(pixel_delta: Vector2) -> void:
 	_apply_battle_camera()
 
 
-func zoom_battle_camera(view_pos: Vector2, zoom_factor: float) -> void:
+func zoom_battle_camera(_view_pos: Vector2, zoom_factor: float) -> void:
 	if phase != "combat" or combat == null:
 		return
 	battle_camera_following = false
 	_cancel_battle_camera_return()
-	var before: Variant = _screen_to_plane(view_pos, 0.0)
 	var next_ratio := clampf(battle_camera_zoom_ratio * zoom_factor, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX)
 	battle_camera_zoom_ratio = next_ratio
-	# 先用目标尺寸计算鼠标锚点，但不立即改变实际尺寸；实际缩放交给每帧平滑追赶。
-	var current_size := camera.size
-	camera.size = battle_camera_fit_size * next_ratio
-	var after: Variant = _screen_to_plane(view_pos, 0.0)
-	camera.size = current_size
-	if before is Vector3 and after is Vector3:
-		var anchor_shift: Vector3 = before - after
-		battle_camera_target += Vector3(anchor_shift.x, 0.0, anchor_shift.z)
-		_clamp_battle_camera_target()
-		_apply_battle_camera()
+	# 缩放围绕镜头中心进行；鼠标锚点补偿会在平滑缩放期间造成一次性横移。
+	_apply_battle_camera()
 
 
 func _clamp_battle_camera_target() -> void:
@@ -2219,11 +2806,14 @@ func _after_combat_action(sync_actor_positions: bool = false) -> void:
 		test_enemy_phase_pending = false
 	# 杀戮尖塔式回合：敌方动画播完后才给玩家发新牌
 	if combat != null and combat.pending_player_turn and combat.outcome == "":
+		combat.enemy_vision_suppressed = false
 		combat.start_player_turn()
+		boss_round_moved = false
 		battle_turn_actor_id = "player"
 		battle_turn_events.clear()
 	# 移动、出牌和敌方事件的静态棋盘都已存在；这里只更新危险标记、陷阱
 	# 与演员编队，避免玩家落到新格子的收尾帧同步重建整套房间资产。
+	battle_world_renderer.clear_battle_triggered_traps()
 	battle_world_renderer.refresh_battle_state(true, sync_actor_positions)
 	if combat.outcome != "":
 		status_message = "战斗胜利。" if combat.outcome == "victory" else "本集信号中断。"
@@ -2233,12 +2823,18 @@ func _after_combat_action(sync_actor_positions: bool = false) -> void:
 func return_from_combat() -> void:
 	if animation_busy or phase != "combat" or combat == null or combat.outcome == "":
 		return
+	if test_combat_active:
+		return_to_combat_test_menu()
+		return
+	if combat_is_boss:
+		_finish_boss_combat(combat.outcome == "victory")
+		return
 	if combat.outcome == "victory":
 		house_camera_closeup = true
 		house_camera_following = true
 		_collect_combat_deck()
-		_complete_current_room()
-		_start_card_reward("combat")
+		var reaches_finale := _complete_current_room()
+		_start_card_reward("boss_access" if reaches_finale else "combat")
 		house_root.visible = true
 		battle_root.visible = false
 		build_house_world()
@@ -2261,6 +2857,17 @@ func current_omen() -> Dictionary:
 	if active_relics.is_empty():
 		return {}
 	return content.get("relics", {}).get(active_relics[0], {})
+
+
+func enemy_intel_visible() -> bool:
+	if test_combat_active or combat_presentation_lab:
+		return true
+	for raw_relic_id in active_relics:
+		var relic: Dictionary = content.get("relics", {}).get(str(raw_relic_id), {})
+		var effect_value: Variant = relic.get("effect", {})
+		if effect_value is Dictionary and bool((effect_value as Dictionary).get("enemyIntel", false)):
+			return true
+	return false
 
 
 func reward_title(reward: Dictionary) -> String:
@@ -2303,6 +2910,7 @@ func _save_run() -> void:
 		"player_max_hp": player_max_hp,
 		"player_speed": player_speed,
 		"run_progress": run_progress,
+		"boss_id": boss_id,
 		"run_deck": run_deck,
 		"active_relics": active_relics,
 		"reward_options": reward_options,
@@ -2447,7 +3055,7 @@ func frontier_markers_are_compact() -> bool:
 	return entrance_count == 1 and battle_shell_culled_count > 0 and battle_shell_visible_count > 0
 
 
-func _add_decor_sprite(node_name: String, texture_path: String, local_position: Vector3, pixel_size: float) -> void:
+func _add_decor_sprite(node_name: String, texture_path: String, local_position: Vector3, pixel_size: float, billboard: bool = true, rotation_y: float = 0.0) -> void:
 	if texture_path.is_empty():
 		return
 	var texture := load(texture_path) as Texture2D
@@ -2458,7 +3066,8 @@ func _add_decor_sprite(node_name: String, texture_path: String, local_position: 
 	sprite.texture = texture
 	sprite.position = local_position
 	sprite.pixel_size = pixel_size
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED if billboard else BaseMaterial3D.BILLBOARD_DISABLED
+	sprite.rotation.y = rotation_y
 	sprite.shaded = false
 	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
 	battle_board_root.add_child(sprite)
@@ -2544,27 +3153,20 @@ func orbit_house_camera(pixel_delta: Vector2) -> void:
 	_apply_house_camera()
 
 
-func zoom_house_camera(view_pos: Vector2, zoom_factor: float) -> void:
+func zoom_house_camera(_view_pos: Vector2, zoom_factor: float) -> void:
 	if phase not in ["explore", "build", "room_ready"]:
 		return
+	# 缩放属于手动镜头操作，暂停自动跟随，避免跟随目标和缩放同时改写 target。
+	house_camera_following = false
 	_cancel_house_camera_return()
-	var before: Variant = _screen_to_plane(view_pos, 0.0)
 	var base_size := HOUSE_CAMERA_CLOSEUP_SIZE if house_camera_closeup else house_camera_fit_size
 	var current_target := _house_camera_size_target()
 	var next_size := clampf(current_target * zoom_factor, base_size * CAMERA_ZOOM_MIN, base_size * CAMERA_ZOOM_MAX)
 	house_camera_size_target = next_size
 	house_camera_zoom_ratio = next_size / maxf(0.001, base_size)
 	house_camera_user_adjusted = true
-	# 只临时使用目标尺寸计算鼠标锚点，实际镜头尺寸由每帧平滑逻辑推进。
-	var current_actual_size := camera.size
-	camera.size = next_size * lerpf(CAMERA_INTRO_FAR_SCALE, 1.0, house_camera_intro_weight)
-	var after: Variant = _screen_to_plane(view_pos, 0.0)
-	camera.size = current_actual_size
-	if before is Vector3 and after is Vector3:
-		var anchor_shift: Vector3 = before - after
-		house_camera_target += Vector3(anchor_shift.x, 0.0, anchor_shift.z)
-		_clamp_house_camera_target()
-		_apply_house_camera()
+	# 同样围绕镜头中心缩放；不再按鼠标位置额外平移 camera target。
+	_apply_house_camera()
 
 
 func reset_house_camera() -> void:
@@ -2966,12 +3568,14 @@ func _find_room_node(pos: Vector2i) -> Node3D:
 func _cancel_dynamic_effect() -> void:
 	if active_motion_tween != null and active_motion_tween.is_valid():
 		active_motion_tween.kill()
+	_clear_battle_projectiles()
 	active_motion_tween = null
 	animation_busy = false
 	active_animation_kind = ""
 
 
 func _complete_dynamic_effect() -> void:
+	_clear_battle_projectiles()
 	active_motion_tween = null
 	animation_busy = false
 	active_animation_kind = ""
@@ -2994,7 +3598,7 @@ func _add_box(parent: Node3D, node_name: String, local_position: Vector3, box_si
 	return instance
 
 
-func _add_cylinder(parent: Node3D, node_name: String, local_position: Vector3, radius: float, height: float, material: StandardMaterial3D) -> MeshInstance3D:
+func _add_cylinder(parent: Node3D, node_name: String, local_position: Vector3, radius: float, height: float, material: Material) -> MeshInstance3D:
 	var instance := MeshInstance3D.new()
 	instance.name = node_name
 	var mesh := CylinderMesh.new()
@@ -3085,6 +3689,23 @@ func refresh_battle_state(sync_actors := true, sync_actor_positions := false) ->
 
 func update_battle_overlays() -> void:
 	battle_world_renderer.update_battle_overlays()
+
+func cycle_battle_enemy_range_display() -> void:
+	if phase != "combat" or combat == null:
+		return
+	var mode_label: String = battle_world_renderer.cycle_enemy_range_display()
+	if test_combat_active:
+		status_message = "敌方范围：%s（按 1 切换）" % mode_label
+		_refresh_hud()
+
+
+func toggle_battle_player_range_display() -> void:
+	if phase != "combat" or combat == null:
+		return
+	var enabled: bool = battle_world_renderer.toggle_player_range_display()
+	if test_combat_active:
+		status_message = "玩家可达范围：%s（按 2 切换）" % ("显示" if enabled else "隐藏")
+		_refresh_hud()
 
 func update_battle_hover() -> void:
 	battle_world_renderer.update_battle_hover()
@@ -3188,6 +3809,45 @@ func _play_enemy_state(enemy_id: String, state: String, callout: String = "") ->
 func _show_enemy_damage_feedback(enemy_id: String, damage: int) -> void:
 	battle_world_renderer._show_enemy_damage_feedback(enemy_id, damage)
 
+
+func _show_enemy_callout_feedback(enemy_id: String, text: String) -> void:
+	battle_world_renderer._show_enemy_callout_feedback(enemy_id, text)
+
+
+func _queue_card_enemy_feedback_before_refresh(events: Array) -> bool:
+	if combat == null:
+		return false
+	var damage_feedback_shown := false
+	for event: Dictionary in events:
+		if _is_salt_ring_event(event):
+			_show_enemy_salt_ring_effect(str(event.get("target_enemy_id", "")))
+		if str(event.get("kind", "")) != "enemy_damaged":
+			continue
+		var enemy_id := str(event.get("target_enemy_id", ""))
+		if enemy_id.is_empty():
+			continue
+		var damage := int(event.get("damage", 0))
+		if str(event.get("source", "")) == "smash":
+			_show_enemy_callout_feedback(enemy_id, "砸击")
+		_play_enemy_state(enemy_id, "hurt", "-%d" % damage)
+		if damage > 0:
+			_show_enemy_damage_feedback(enemy_id, damage)
+			damage_feedback_shown = true
+		var state = combat.enemy_by_id(enemy_id)
+		var defeated: bool = state != null and not state.alive()
+		if defeated:
+			# 事件是顺序入队的，所以死亡紧跟在该敌人的伤害之后；
+			# 不再把整批死亡提示提前到所有伤害之前。
+			_show_enemy_callout_feedback(enemy_id, "死亡")
+	return damage_feedback_shown
+
+
+func _is_salt_ring_event(event: Dictionary) -> bool:
+	return battle_world_renderer._is_salt_ring_event(event)
+
+func _show_enemy_salt_ring_effect(enemy_id: String) -> void:
+	battle_world_renderer._show_enemy_salt_ring_effect(enemy_id)
+
 func _add_decoy_pawn(pos: Vector2i) -> void:
 	battle_world_renderer._add_decoy_pawn(pos)
 
@@ -3196,6 +3856,10 @@ func _play_actor_state(actor_node_name: String, state: String, callout: String =
 
 func _show_actor_damage_feedback(actor_node_name: String, damage: int) -> void:
 	battle_world_renderer._show_actor_damage_feedback(actor_node_name, damage)
+
+
+func _show_actor_callout_feedback(actor_node_name: String, text: String) -> void:
+	battle_world_renderer._show_actor_callout_feedback(actor_node_name, text)
 
 func _on_presenter_state_changed(_state: String) -> void:
 	battle_world_renderer._on_presenter_state_changed(_state)

@@ -143,7 +143,7 @@
 
 - 战斗棋盘占顶栏下全幅场景（`COMBAT_VIEW_RECT` 20,88,1244,540），**无边框、无蒙层**，与手牌无硬分隔
 - 手牌沉到画布底部，静止只露出上半（约 104px），**鼠标悬停升起完整显示并放大**；卡牌固定宽度 120px、均匀重叠错落排布
-- 敌人意图显示在 3D 敌人头顶 `Label3D`（billboard，类型配色：攻击红 / 追击橙 / 搜索蓝 / 巡逻青 / 埋伏品红；攻击含伤害数字）
+- 敌人意图显示在 3D 敌人头顶 `Label3D`（billboard，类型配色：攻击红 / 追击橙 / 搜索蓝 / 巡逻青 / 埋伏品红；攻击含伤害数字）；未侦察敌人只显示“？？”，不泄露具体意图
 - 玩家/敌人状态条悬浮棋盘顶角，ActionArea（速度/行动力）在右下，抽/弃牌堆在底部两角
 - 卡牌使用约 `120 × 199` 的固定比例；悬浮牌最后绘制并上浮放大，边框、字体、内边距和插画使用同一倍率，插画采用等比例 `contain` 显示而不会被拉伸
 
@@ -215,18 +215,20 @@
 ```powershell
 $g = "<godot>"; $p = "<repo>\godot"
 $tests = @(
-  "smoke_test", "latest_3d_smoke", "web_snapshot_smoke", "combat_mechanics_smoke",
-  "battle_view_smoke", "camera_orbit_regression", "camera_dolly_follow_regression",
+	"smoke_test", "latest_3d_smoke", "web_snapshot_smoke", "boss_progression_regression", "combat_mechanics_smoke",
+  "battle_view_smoke", "camera_orbit_regression", "camera_dolly_follow_regression", "display_mode_regression", "presentation_settings_regression",
   "ui_hit_regression", "combat_input_regression", "input_intent_regression",
-  "card_system_regression", "dynamic_effects_smoke", "quaternius_room_art_smoke",
+  "card_system_regression", "intent_arrow_path_regression", "dynamic_effects_smoke", "quaternius_room_art_smoke",
   "room_footprint_regression", "multi_room_build_regression", "large_room_mix_lab_regression",
-  "enemy_patrol_intent_regression", "enemy_vision_state_regression",
-  "enemy_turn_animation_regression", "enemy_traits_regression", "ranged_enemy_regression", "shared_cell_regression",
+  "enemy_patrol_intent_regression", "enemy_vision_state_regression", "enemy_intent_snapshot_regression",
+  "enemy_ai_tactical_regression", "enemy_ai_cycle_regression",
+  "player_movement_range_regression",
+  "enemy_turn_animation_regression", "enemy_traits_regression", "ranged_enemy_regression", "backstab_enemy_regression", "salt_ring_effect_regression", "shared_cell_regression",
   "enemy_archetype_presentation_regression", "turn_timing_regression",
   "multi_enemy_roster_regression", "multi_enemy_legacy_compat_regression",
   "multi_enemy_state_regression", "multi_enemy_turn_regression",
   "multi_enemy_pathing_regression", "multi_enemy_targeting_regression",
-  "multi_enemy_presentation_regression",
+  "multi_enemy_presentation_regression", "multi_enemy_visibility_regression", "multi_enemy_stress_regression",
   "combat_test_catalog_regression", "pixel_filter_regression", "combat_test_entry_regression",
   "combat_test_isolation_regression", "combat_test_observer_regression",
   "combat_test_ai_overlay_regression",
@@ -234,13 +236,24 @@ $tests = @(
   "pcg_hand_layout_lab_smoke", "portal_height_build_preview_regression",
   "presentation_animation_regression", "home_video_regression",
   "run_progression_save_regression", "kenney_formal_build_flow_regression",
-  "formal_build_promoted_regression", "kaykit_asset_bounds_probe", "character_animation_lab_smoke"
+  "formal_build_promoted_regression", "formal_override_integration_smoke", "kaykit_asset_bounds_probe",
+  "character_animation_lab_smoke", "house_camera_closeup_smoke", "v7_scale_camera_roomselect_smoke",
+  "asset_editor_backend_entry_smoke"
 )
+$failed = @()
 foreach ($t in $tests) {
-  & $g --headless --path $p --script "res://tests/$t.gd"
-  if ($LASTEXITCODE -ne 0) { Write-Host "FAILED: $t" }
+  $proc = Start-Process -FilePath $g -ArgumentList @("--headless", "--path", $p, "--script", "res://tests/$t.gd") -Wait -PassThru -NoNewWindow
+  if ($proc.ExitCode -ne 0) {
+    $failed += $t
+    Write-Host "FAILED: $t (exit $($proc.ExitCode))"
+  }
+}
+if ($failed.Count -gt 0) {
+  throw "回归失败：$($failed -join ', ')"
 }
 ```
+
+这里使用 `Start-Process -Wait -PassThru` 读取 Godot 的真实进程退出码；Windows 图形版可执行文件直接用 `&` 时，`$LASTEXITCODE` 可能为空，导致脚本把 `push_error` 后的失败误报成成功。
 
 - `latest_3d_smoke.gd` 覆盖二选一预兆、三张票根、摆下后隐藏、进入后揭示、3D 房屋网格与 3D 战斗网格；`dynamic_effects_smoke.gd` 额外覆盖房间翻转悬落、角色移动、未知揭示与输入锁。
 - `camera_dolly_follow_regression.gd` 覆盖开局由远至近运镜、普通进房保持全景、手动特写跟随（只平移不旋转）、松手延迟回位（保持玩家选择的旋转）、战斗镜头对准玩家-怪物中点偏上。

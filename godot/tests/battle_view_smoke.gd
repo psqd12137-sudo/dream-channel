@@ -45,6 +45,19 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	_check(game.combat.cols == 9 and game.combat.rows == 4, "hall must exercise the 9x4 arena")
+	for raw_overlay: Variant in game.battle_world_renderer.battle_intent_overlay_nodes.values():
+		var intent_overlay := raw_overlay as Control
+		var intent_badge: Panel = null
+		if intent_overlay != null:
+			intent_badge = intent_overlay.get_node_or_null("Badge") as Panel
+		var intent_icon: TextureRect = null
+		var intent_value: Label = null
+		if intent_badge != null:
+			intent_icon = intent_badge.get_node_or_null("Icon") as TextureRect
+			intent_value = intent_badge.get_node_or_null("Value") as Label
+		if intent_icon != null and intent_value != null:
+			_check(intent_icon.get_parent() == intent_value.get_parent(), "enemy intent icon and value must share one overlay layer")
+			_check(intent_icon.z_index == intent_value.z_index, "enemy intent icon and value must share one z layer")
 	var battle_root: Node = game.battle_board_root
 	var camera: Camera3D = game.get_node(WORLD_ROOT + "/CameraRig/Camera3D")
 	var world_viewport: SubViewport = game.get_node("WorldLayer/WorldContainer/WorldViewport")
@@ -124,14 +137,16 @@ func _run() -> void:
 	_check(game.battle_cell_from_viewport(projected) == target_cell, "picking must survive pan and zoom")
 	game.set_battle_hover(projected)
 	await process_frame
-	var hovered_node: Node = game.battle_board_root.get_node_or_null("Cell_%d_%d/Hover_0" % [target_cell.x, target_cell.y])
-	_check(hovered_node is MeshInstance3D, "hovered cells must render corner markers")
+	var hovered_node: Node = game.battle_board_root.get_node_or_null("Cell_%d_%d/HoverValidFill" % [target_cell.x, target_cell.y])
+	if hovered_node == null:
+		hovered_node = game.battle_board_root.get_node_or_null("Cell_%d_%d/HoverInvalidFill" % [target_cell.x, target_cell.y])
+	_check(hovered_node is MeshInstance3D, "悬停格必须渲染整格覆层")
 	_check(game.battle_board_root.get_node("Cell_%d_%d" % [target_cell.x, target_cell.y]) == stable_cell, "hovering must not rebuild the battle board")
 	var valid_hover_cell := _first_valid_battle_target(game)
 	var valid_projected: Vector2 = camera.unproject_position(game._battle_world(valid_hover_cell))
 	game.set_battle_hover(valid_projected)
 	await process_frame
-	_check(_count_named_prefix(battle_root, "Valid_") > 0, "reachable cells must render green markers")
+	_check(_count_named_prefix(battle_root, "HoverValidFill") > 0, "可用悬停格必须渲染绿色覆层")
 	var entrance_key := str(shell_state.get("entrance_key", ""))
 	var original_player_pos: Vector2i = game.combat.player_pos
 	game.combat.player_pos = Vector2i(game.combat.cols - 1, 0)

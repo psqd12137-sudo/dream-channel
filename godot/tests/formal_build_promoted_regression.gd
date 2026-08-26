@@ -13,6 +13,10 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 	await process_frame
+	# 使用隔离存档验证恢复流程，避免测试清理用户真实 user:// 存档。
+	var test_save_path := "res://.test_formal_build_run_v1.json"
+	game.run_save_repository = ChannelRunSaveRepository.new(test_save_path, game.EXE_SOURCE_ID)
+	game._clear_run_save()
 
 	# 1. 正式开局（打开电视机）必须默认走 Kenney 桌模建造，而不是旧几何路线。
 	game.go_home()
@@ -56,12 +60,13 @@ func _run() -> void:
 		_check(composer.doorway_count >= composer.connection_edges.size(), "formal reciprocal doors must become Kenney wall openings")
 
 	# 4. 存档恢复后必须仍然走桌模建造。
-	if game._save_run() == null or FileAccess.file_exists(game.RUN_SAVE_PATH):
+	if game._save_run() == null or game.run_save_repository.exists():
 		var fresh := (load("res://channel_3d.tscn") as PackedScene).instantiate() as Node3D
 		fresh.animation_duration_scale = 0.0
 		root.add_child(fresh)
 		await process_frame
 		await process_frame
+		fresh.run_save_repository = ChannelRunSaveRepository.new(test_save_path, fresh.EXE_SOURCE_ID)
 		fresh.go_home()
 		_check(fresh.continue_saved_run(), "a promoted run must be saveable and resumable")
 		_check(fresh.kenney_build_lab_mode, "resumed promoted run must keep the Kaykit table-model build")
@@ -69,6 +74,7 @@ func _run() -> void:
 		fresh.queue_free()
 		await process_frame
 
+	game._clear_run_save()
 	game.queue_free()
 	await process_frame
 	_finish()

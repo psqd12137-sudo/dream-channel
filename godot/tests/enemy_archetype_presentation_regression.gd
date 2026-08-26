@@ -20,6 +20,9 @@ func _run() -> void:
 	var manifest: Dictionary = JSON.parse_string(file.get_as_text())
 	var base_enemy: Dictionary = manifest.get("actors", {}).get("enemy", {})
 	var variants: Dictionary = manifest.get("enemy_archetypes", {})
+	var assassin: Dictionary = variants.get("assassin", {})
+	_check(str(assassin.get("model_path", "")).contains("BlueDemon.gltf"), "assassin must reuse the verified animated enemy silhouette")
+	_check(str(assassin.get("animation_map", {}).get("attack", "")).to_lower() == "punch", "assassin must have an attack animation mapping")
 	var model_paths: Dictionary = {}
 	for archetype: String in ARCHETYPES:
 		var variant: Dictionary = variants.get(archetype, {})
@@ -62,12 +65,13 @@ func _run() -> void:
 	var rendered_enemy = game.combat.enemy_by_id(game.combat.enemy_order[0])
 	var ranged_traits: Array[String] = ["ranged"]
 	rendered_enemy.traits = ranged_traits
+	rendered_enemy.revealed = true
 	game.build_battle_world()
 	var ranged_presenter = game.battle_actor_root.get_node_or_null("Enemy/Presenter")
 	_check(ranged_presenter != null and float(ranged_presenter.config.get("model_tint_strength", 0.0)) > 0.0, "ranged enemy presentation must carry a visible model tint")
 	var ranged_base := game.battle_actor_root.get_node_or_null("Enemy/PawnBase") as MeshInstance3D
 	var ranged_base_material := ranged_base.material_override as StandardMaterial3D if ranged_base != null else null
-	_check(ranged_base_material != null and ranged_base_material.albedo_color.b > ranged_base_material.albedo_color.r, "ranged enemy base must use the ranged color")
+	_check(ranged_base_material != null and ranged_base_material.albedo_color.r > ranged_base_material.albedo_color.b, "ranged enemy base must use the red ranged color")
 	game.queue_free()
 	await process_frame
 	_finish()

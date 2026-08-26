@@ -19,6 +19,7 @@ func _run() -> void:
 	var house_fit: float = game.camera.size
 	for i in range(3):
 		game.hud._gui_input(_wheel_event(game.world_view_rect.position + house_center, MOUSE_BUTTON_WHEEL_UP))
+	await process_frame
 	_check(game.camera.size < house_fit, "house map wheel-up must zoom during exploration")
 	var house_zoomed: float = game.camera.size
 	var frontier: Vector2i = game.room_rules.frontiers()[0]
@@ -34,10 +35,12 @@ func _run() -> void:
 	var fit: float = game.camera.size
 	for i in range(4):
 		game.hud._gui_input(_wheel_event(game.world_view_rect.position + center, MOUSE_BUTTON_WHEEL_UP))
+	await process_frame
 	_check(game.camera.size < fit * 0.8, "four wheel-up events must continue zooming instead of stopping after one")
 	var zoomed: float = game.camera.size
 	for i in range(3):
 		game.hud._gui_input(_wheel_event(game.world_view_rect.position + center, MOUSE_BUTTON_WHEEL_DOWN))
+	await process_frame
 	_check(game.camera.size > zoomed, "wheel-down must remain routed to combat after repeated zoom-in")
 
 	game.combat.ambush_active = false
@@ -46,9 +49,15 @@ func _run() -> void:
 	game.combat.enemy_sees_player = false
 	game.combat.last_seen = game.combat.INVALID_CELL
 	game.combat.patrol_goal = game.combat.INVALID_CELL
+	game.cycle_battle_enemy_range_display()
 	game.build_battle_world()
+	_check(game.battle_world_renderer.enemy_range_display_mode_label() == "全体敌人", "按 1 选择的敌方范围模式必须跨完整棋盘重绘保留")
 	_check(_count_named_prefix(game.battle_root, "IntentMoveOverlay") > 0, "patrol movement intent must be rendered as colored map overlays")
 	_check(_count_named_prefix(game.battle_root, "IntentMoveGlyph") > 0, "patrol movement cells must carry ordered map glyphs")
+	_check(_count_named_prefix(game.battle_root, "PlayerReachableFill") > 0, "player movement range must cover reachable cells")
+	game.toggle_battle_player_range_display()
+	game.build_battle_world()
+	_check(not game.battle_world_renderer.player_range_display_enabled, "玩家可达范围关闭后必须跨完整棋盘重绘保留")
 
 	game.combat.enemy_pos = game.combat.player_pos + Vector2i.RIGHT
 	game.combat.enemy_sees_player = true

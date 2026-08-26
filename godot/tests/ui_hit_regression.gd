@@ -23,13 +23,33 @@ func _run() -> void:
 	var resolution_before: int = game.display_resolution_index
 	_click(hud, _to_screen(hud, _design_center(hud.HOME_RESOLUTION_RECT)))
 	_check(game.display_resolution_index != resolution_before, "resolution button must cycle the display resolution")
-	var tilt_shift_before: bool = game.tilt_shift_enabled
+	var dof_before: bool = game.depth_of_field_enabled
 	_click(hud, _to_screen(hud, _design_center(hud.HOME_TILT_SHIFT_RECT)))
-	_check(game.tilt_shift_enabled != tilt_shift_before, "tilt-shift button must toggle the game-world effect")
+	_check(game.depth_of_field_enabled != dof_before, "home depth-of-field button must toggle the game-world effect")
 	var world_material := game.world_container.material as ShaderMaterial
-	_check(world_material != null, "formal game world must own a tilt-shift shader material")
+	_check(world_material != null, "formal game world must own a depth-of-field shader material")
 	if world_material != null:
-		_check(bool(world_material.get_shader_parameter("effect_enabled")) == game.tilt_shift_enabled, "tilt-shift shader parameter must follow the setting")
+		_check(bool(world_material.get_shader_parameter("effect_enabled")) == game.depth_of_field_enabled, "depth-of-field shader parameter must follow the setting")
+	var taa_before: bool = game.taa_enabled
+	_click(hud, _to_screen(hud, _design_center(hud.HOME_TAA_RECT)))
+	_check(hud.settings_panel_open, "home settings button must open the settings panel")
+	_click(hud, _to_screen(hud, _design_center(hud.SETTINGS_TAA_RECT)))
+	_check(game.taa_enabled != taa_before, "settings panel TAA button must toggle the game-world effect")
+	var taa_supported := DisplayServer.get_name() != "headless" and RenderingServer.get_current_rendering_method() != "gl_compatibility"
+	if taa_supported:
+		_check(game.world_viewport.use_taa == game.taa_enabled, "TAA viewport state must follow the setting")
+	var settings_dof_before: bool = game.depth_of_field_enabled
+	_click(hud, _to_screen(hud, _design_center(hud.SETTINGS_DOF_RECT)))
+	_check(game.depth_of_field_enabled != settings_dof_before, "settings panel depth-of-field button must toggle the world effect")
+	if game.depth_of_field_enabled != settings_dof_before:
+		game.toggle_depth_of_field()
+	var settings_pixel_before: bool = game.pixel_filter_enabled
+	_click(hud, _to_screen(hud, _design_center(hud.SETTINGS_PIXEL_RECT)))
+	_check(game.pixel_filter_enabled != settings_pixel_before, "settings panel pixel filter button must toggle the world effect")
+	_click(hud, _to_screen(hud, _design_center(hud.SETTINGS_PIXEL_RECT)))
+	_check(game.pixel_filter_enabled == settings_pixel_before, "settings panel pixel filter button must toggle back")
+	_click(hud, _to_screen(hud, _design_center(hud.SETTINGS_CLOSE_RECT)))
+	_check(not hud.settings_panel_open, "settings panel close button must close the panel")
 
 	_click(hud, _to_screen(hud, _design_center(hud.HOME_START_RECT)))
 	await process_frame
@@ -48,6 +68,14 @@ func _run() -> void:
 	var neighbor: Vector2i = _neighbor_of(game)
 	game.enter_room(neighbor)
 	await process_frame
+	var taa_explore_before: bool = game.taa_enabled
+	_click(hud, _to_screen(hud, _design_center(hud.TAA_TOGGLE_RECT)))
+	_check(hud.settings_panel_open, "top-bar settings button must open outside the home screen")
+	_click(hud, _to_screen(hud, _design_center(hud.SETTINGS_TAA_RECT)))
+	_check(game.taa_enabled != taa_explore_before, "settings panel TAA button must toggle outside the home screen")
+	_click(hud, _to_screen(hud, _design_center(hud.SETTINGS_CLOSE_RECT)))
+	if game.taa_enabled != taa_explore_before:
+		game.toggle_taa()
 	var yaw_before: float = game.house_camera_yaw
 	_click(hud, _to_screen(hud, _design_center(hud.CAMERA_RESET_RECT)))
 	_check(is_equal_approx(game.house_camera_yaw, atan2(game.HOUSE_CAMERA_DIRECTION.x, game.HOUSE_CAMERA_DIRECTION.z)), "camera reset button must restore the default angle")
@@ -76,8 +104,10 @@ func _run() -> void:
 	var resolution_after: int = game.display_resolution_index
 	_click(hud, _to_screen(hud, _design_center(hud.HOME_RESOLUTION_RECT)))
 	_check(game.display_resolution_index != resolution_after, "resolution button must remain clickable after display switches")
-	if game.tilt_shift_enabled != tilt_shift_before:
-		game.toggle_tilt_shift()
+	if game.depth_of_field_enabled != dof_before:
+		game.toggle_depth_of_field()
+	if game.taa_enabled != taa_before:
+		game.toggle_taa()
 
 	game.queue_free()
 	await process_frame
@@ -119,7 +149,7 @@ func _check(condition: bool, message: String) -> void:
 
 func _finish() -> void:
 	if failures.is_empty():
-		print("CHANNEL_UI_HIT: PASS buttons hit display switch tilt-shift world isolation")
+		print("CHANNEL_UI_HIT: PASS buttons hit display switch post-process world isolation")
 		quit(0)
 	else:
 		for failure: String in failures:
