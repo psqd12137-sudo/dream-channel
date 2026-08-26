@@ -342,7 +342,8 @@
       "enemy": {
         "name": "先到的影子",
         "hp": 7,
-        "damage": 2
+        "damage": 2,
+        "traits": ["beam"]
       },
       "exits": [
         "living",
@@ -552,7 +553,8 @@
       "enemy": {
         "name": "画中瞳",
         "hp": 7,
-        "damage": 2
+        "damage": 2,
+        "traits": ["beam"]
       },
       "exits": [
         "kitchen",

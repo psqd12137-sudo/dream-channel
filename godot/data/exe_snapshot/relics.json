@@ -45,8 +45,8 @@
     "omen_bell": {
       "id": "omen_bell",
       "name": "预兆·铃铛",
-      "desc": "埋伏房开场立刻揭开埋伏（怪不会弹簧扑出）。不可被偷。",
-      "effect": { "revealAmbush": true }
+      "desc": "埋伏房开场立刻揭开埋伏（怪不会弹簧扑出）；并可查看敌人的状态与下一步意图。不可被偷。",
+      "effect": { "revealAmbush": true, "enemyIntel": true }
     }
   },
   "pool": [

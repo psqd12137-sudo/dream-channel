@@ -65,12 +65,13 @@ func _run() -> void:
 	var rendered_enemy = game.combat.enemy_by_id(game.combat.enemy_order[0])
 	var ranged_traits: Array[String] = ["ranged"]
 	rendered_enemy.traits = ranged_traits
+	rendered_enemy.revealed = true
 	game.build_battle_world()
 	var ranged_presenter = game.battle_actor_root.get_node_or_null("Enemy/Presenter")
 	_check(ranged_presenter != null and float(ranged_presenter.config.get("model_tint_strength", 0.0)) > 0.0, "ranged enemy presentation must carry a visible model tint")
 	var ranged_base := game.battle_actor_root.get_node_or_null("Enemy/PawnBase") as MeshInstance3D
 	var ranged_base_material := ranged_base.material_override as StandardMaterial3D if ranged_base != null else null
-	_check(ranged_base_material != null and ranged_base_material.albedo_color.b > ranged_base_material.albedo_color.r, "ranged enemy base must use the ranged color")
+	_check(ranged_base_material != null and ranged_base_material.albedo_color.r > ranged_base_material.albedo_color.b, "ranged enemy base must use the red ranged color")
 	game.queue_free()
 	await process_frame
 	_finish()

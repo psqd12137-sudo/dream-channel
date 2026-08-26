@@ -24,7 +24,7 @@ func _run() -> void:
 	_check(int(mixed_enemies[2].get("hp", 0)) == 1 and int(mixed_enemies[2].get("damage", 0)) >= 8, "mixed_assault must configure the high-damage one-health backstab enemy")
 	_check("backstab" in (mixed_enemies[2].get("traits", []) as Array) and str(mixed_enemies[2].get("archetype", "")) == "assassin", "mixed_assault must configure the black backstab archetype")
 	_check(catalog.get_scenario("hud_eight").get("room", {}).get("enemies", []).size() == 8, "hud_eight must contain eight enemies")
-	_check(catalog.get_scenario("pixel_art_showcase").get("visual", {}).get("filter", "") == "pixel_art_3d", "pixel_art_showcase must declare the pixel filter")
+	_check(str(catalog.get_scenario("pixel_art_showcase").get("visual", {}).get("filter", "")) == "pixel_art_3d", "pixel_art_showcase must declare the pixel filter")
 	_check(catalog.get_scenario("missing").is_empty(), "unknown scenario must resolve to an empty dictionary")
 	if failures.is_empty():
 		print("CHANNEL_COMBAT_TEST_CATALOG: PASS load-nine-scenarios-validation")

@@ -55,10 +55,10 @@ func _dispatch(card_id: String, card: Dictionary, target: Vector2i, target_state
 	if card.has("drainTough"):
 		return combat._play_rupture(card, target_state)
 	if card.has("gain_block"):
-		combat.player_block += int(card.get("gain_block", 0))
+		combat.gain_player_shield(int(card.get("gain_block", 0)), card_id)
 		return true
 	if card.has("gainBlock"):
-		combat.player_block += int(card.get("gainBlock", 0))
+		combat.gain_player_shield(int(card.get("gainBlock", 0)), card_id)
 		return true
 	if card_type == "medicine" or card.has("gainEnergy"):
 		combat.energy += int(card.get("gainEnergy", 0))
@@ -69,15 +69,27 @@ func _dispatch(card_id: String, card: Dictionary, target: Vector2i, target_state
 		combat.ready_effect = (card.get("ready", {}) as Dictionary).duplicate(true)
 		combat.ready_effect["card_id"] = card_id
 		combat.ready_effect["name"] = str(card.get("name", card_id))
+		combat.set_player_status(
+			"ready",
+			"buff",
+			str(card.get("name", "预备")),
+			1,
+			-1,
+			"until_triggered",
+			card_id,
+			"触发后消失")
 		return true
 	if card.has("grantRetain"):
 		combat.retain_slots = maxi(combat.retain_slots, int(card.get("grantRetain", 0)))
+		combat.set_player_status("retain", "buff", "预案", combat.retain_slots, -1, "permanent", card_id, "每回合可额外保留牌")
 		return true
 	if card.has("retainThisTurn"):
 		combat.retain_this_turn += int(card.get("retainThisTurn", 0))
+		combat.set_player_status("retain_this_turn", "buff", "本回合保留", combat.retain_this_turn, 1, "turns", card_id, "回合结束时生效")
 		return true
 	if card.has("discountNext"):
 		combat.placement_discount += int(card.get("discountNext", 0))
+		combat.set_player_status("place_discount", "buff", "放置减费", combat.placement_discount, 1, "next_action", card_id, "下一张放置牌")
 		return true
 	return false
 

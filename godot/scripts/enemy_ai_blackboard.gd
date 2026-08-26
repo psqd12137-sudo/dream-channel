@@ -23,11 +23,25 @@ func begin_turn(target_rules: RefCounted) -> void:
 	decoy_target = rules.get("decoy_pos") if rules.call("has_decoy") else INVALID_CELL
 	assignments.clear()
 	reservations.clear()
+	var live_enemy_ids: Array[String] = []
 	for raw_enemy_id in (rules.get("enemy_order") as Array).duplicate():
-		var state = rules.call("enemy_by_id", str(raw_enemy_id))
+		var enemy_id := str(raw_enemy_id)
+		var state = rules.call("enemy_by_id", enemy_id)
 		if state != null and state.call("alive"):
 			rules.call("_refresh_enemy_vision", state, false)
-		plan_enemy(str(raw_enemy_id))
+			live_enemy_ids.append(enemy_id)
+	# 背刺者的唯一合法攻击位必须先被编队黑板保留；否则普通近战
+	# 会先抢走玩家背后一格，导致背刺者的预览和实际行动永远无法汇合。
+	var planning_order: Array[String] = []
+	for enemy_id in live_enemy_ids:
+		var planning_state = rules.call("enemy_by_id", enemy_id)
+		if planning_state != null and planning_state.has_trait("backstab"):
+			planning_order.append(enemy_id)
+	for enemy_id in live_enemy_ids:
+		if enemy_id not in planning_order:
+			planning_order.append(enemy_id)
+	for enemy_id in planning_order:
+		plan_enemy(enemy_id)
 
 
 func plan_enemy(enemy_id: String) -> Dictionary:

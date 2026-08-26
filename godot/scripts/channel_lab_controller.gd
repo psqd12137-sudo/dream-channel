@@ -72,6 +72,9 @@ var test_focused_enemy_id:
 var test_combat_active:
 	get: return host.test_combat_active
 	set(value): host.test_combat_active = value
+var combat_presentation_lab:
+	get: return host.combat_presentation_lab
+	set(value): host.combat_presentation_lab = value
 var phase:
 	get: return host.phase
 	set(value): host.phase = value
@@ -517,6 +520,7 @@ func start_combat_lab(room_id: String = "hall") -> void:
 	var room := _find_catalog_room(room_id)
 	if room.is_empty():
 		return
+	combat_presentation_lab = true
 	_set_home_video(false)
 	world_container.visible = true
 	house_root.visible = false

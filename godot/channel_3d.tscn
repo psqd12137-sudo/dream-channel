@@ -44,6 +44,8 @@ stretch = true
 [node name="WorldViewport" type="SubViewport" parent="WorldLayer/WorldContainer"]
 handle_input_locally = false
 size = Vector2i(952, 578)
+# Godot 4.7 内置 TAA：只作用于 3D 世界，HUD 仍保持锐利。
+use_taa = true
 # 仅在视口可见时刷新，标题页和后台菜单不再持续渲染 3D 视口。
 render_target_update_mode = 2
 
@@ -86,6 +88,16 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 theme = ExtResource("3_app_theme")
 script = ExtResource("2_6ggqb")
+
+[node name="BattleFeedbackLayer" type="CanvasLayer" parent="."]
+layer = 30
+
+[node name="FeedbackRoot" type="Control" parent="BattleFeedbackLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
 
 [node name="RuntimeRenderStats" type="CanvasLayer" parent="."]
 script = ExtResource("5_runtime_render_stats")

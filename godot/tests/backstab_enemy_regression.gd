@@ -10,6 +10,7 @@ func _init() -> void:
 	_test_backstab_attacks_from_back()
 	_test_backstab_retreats_when_route_is_unavailable()
 	_test_backstab_reengages_after_retreat()
+	_test_backstab_reserves_target_before_hunters()
 	_test_mixed_assault_backstab_sequence()
 	if failures.is_empty():
 		print("CHANNEL_BACKSTAB_ENEMY: PASS facing-backstab-retreat")
@@ -71,6 +72,27 @@ func _test_backstab_reengages_after_retreat() -> void:
 	_check(str(retreat_intent.get("type", "")) == "retreat", "背刺者第一次无法绕后时应先撤离")
 	_check(str(approach_intent.get("type", "")) != "retreat", "撤离后下一回合必须重新接近背后")
 	_check(str(approach_intent.get("intent_value", "")).begins_with("+"), "重新接近背后时意图必须显示正向步数")
+
+
+func _test_backstab_reserves_target_before_hunters() -> void:
+	var combat: RefCounted = CombatRules.new()
+	combat.setup({
+		"cols": 7, "rows": 5, "player": [3, 2], "player_facing": [0, 1],
+		"walls": [], "heights": {}, "portals": [],
+	}, [
+		{"id": "hunter", "name": "正面猎手", "spawn": [3, 0], "action_points": 3, "traits": []},
+		{"id": "backstabber", "name": "黑影背刺者", "spawn": [0, 1], "action_points": 5, "attack_cost": 2, "attack_range": 1, "damage": 8, "traits": ["backstab"]},
+	], {}, [], 20260825, {"player_hp": 20, "base_energy": 5}, [])
+	var black_plan: Dictionary = combat.preview_tactical_plan("backstabber")
+	var hunter_plan: Dictionary = combat.preview_tactical_plan("hunter")
+	_check(black_plan.get("reserved_cell", Vector2i.ZERO) == Vector2i(3, 1), "背刺者必须优先预留玩家背后一格")
+	_check(hunter_plan.get("reserved_cell", Vector2i.ZERO) != Vector2i(3, 1), "普通猎手不能抢占背刺者的攻击位")
+	var events: Array[Dictionary] = combat.enemy_turn()
+	var backstab_hit := false
+	for event: Dictionary in events:
+		if str(event.get("actor_id", "")) == "backstabber" and str(event.get("attack_kind", "")) == "backstab":
+			backstab_hit = true
+	_check(backstab_hit, "普通猎手先行动时背刺者仍必须能沿预留路线绕后攻击")
 
 
 func _test_mixed_assault_backstab_sequence() -> void:

@@ -45,6 +45,19 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	_check(game.combat.cols == 9 and game.combat.rows == 4, "hall must exercise the 9x4 arena")
+	for raw_overlay: Variant in game.battle_world_renderer.battle_intent_overlay_nodes.values():
+		var intent_overlay := raw_overlay as Control
+		var intent_badge: Panel = null
+		if intent_overlay != null:
+			intent_badge = intent_overlay.get_node_or_null("Badge") as Panel
+		var intent_icon: TextureRect = null
+		var intent_value: Label = null
+		if intent_badge != null:
+			intent_icon = intent_badge.get_node_or_null("Icon") as TextureRect
+			intent_value = intent_badge.get_node_or_null("Value") as Label
+		if intent_icon != null and intent_value != null:
+			_check(intent_icon.get_parent() == intent_value.get_parent(), "enemy intent icon and value must share one overlay layer")
+			_check(intent_icon.z_index == intent_value.z_index, "enemy intent icon and value must share one z layer")
 	var battle_root: Node = game.battle_board_root
 	var camera: Camera3D = game.get_node(WORLD_ROOT + "/CameraRig/Camera3D")
 	var world_viewport: SubViewport = game.get_node("WorldLayer/WorldContainer/WorldViewport")

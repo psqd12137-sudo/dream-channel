@@ -13,24 +13,34 @@ const PIXEL_ART_SHADER_PATH := "res://shaders/pixel_art_3d.gdshader"
 
 var host: Node
 var world_container: SubViewportContainer
+var world_viewport: SubViewport
 var hud: Control
 var home_video: VideoStreamPlayer
 
 var resolution_index := 2
 var fullscreen := false
-var tilt_shift_enabled := true
+var depth_of_field_enabled := true
+var taa_enabled := true
+var pixel_filter_enabled := false
 var change_generation := 0
 var default_world_material: Material
-var test_visual_filter_material: ShaderMaterial
+var pixel_filter_material: ShaderMaterial
 var active_test_visual_filter_id := ""
 
+# Compatibility alias for older callers. The user-facing setting is depth of
+# field; the miniature tilt-shift shader remains an implementation detail.
+var tilt_shift_enabled:
+	get: return depth_of_field_enabled
+	set(value): depth_of_field_enabled = bool(value)
 
-func _init(next_host: Node, next_world_container: SubViewportContainer, next_hud: Control, next_home_video: VideoStreamPlayer) -> void:
+
+func _init(next_host: Node, next_world_container: SubViewportContainer, next_world_viewport: SubViewport, next_hud: Control, next_home_video: VideoStreamPlayer) -> void:
 	host = next_host
 	world_container = next_world_container
+	world_viewport = next_world_viewport
 	hud = next_hud
 	home_video = next_home_video
-	default_world_material = world_container.material
+	default_world_material = world_container.material if world_container != null else null
 
 
 func resolution_label() -> String:
@@ -43,7 +53,19 @@ func mode_label() -> String:
 
 
 func tilt_shift_label() -> String:
-	return "移轴 开" if tilt_shift_enabled else "移轴 关"
+	return depth_of_field_label()
+
+
+func depth_of_field_label() -> String:
+	return "景深 开" if depth_of_field_enabled else "景深 关"
+
+
+func taa_label() -> String:
+	return "TAA 开" if taa_enabled else "TAA 关"
+
+
+func pixel_filter_label() -> String:
+	return "像素滤镜 开" if pixel_filter_enabled else "像素滤镜 关"
 
 
 func cycle_resolution() -> void:
@@ -56,38 +78,59 @@ func toggle_mode() -> void:
 	_apply_display_settings(true)
 
 
+func toggle_depth_of_field() -> void:
+	depth_of_field_enabled = not depth_of_field_enabled
+	_apply_depth_of_field_state()
+	_save_display_settings()
+	host._refresh_hud()
+
+
 func toggle_tilt_shift() -> void:
-	tilt_shift_enabled = not tilt_shift_enabled
-	_apply_tilt_shift_state()
+	# Legacy API alias; keep old integrations working while the setting uses
+	# the stable depth_of_field name everywhere new code is added.
+	toggle_depth_of_field()
+
+
+func toggle_taa() -> void:
+	taa_enabled = not taa_enabled
+	_apply_taa_state()
+	_save_display_settings()
+	host._refresh_hud()
+
+
+func toggle_pixel_filter() -> void:
+	pixel_filter_enabled = not pixel_filter_enabled
+	_apply_user_visual_filter()
 	_save_display_settings()
 	host._refresh_hud()
 
 
 func apply_test_visual_filter(visual: Dictionary) -> void:
 	clear_test_visual_filter()
-	var filter_id := str(visual.get("filter", "")).strip_edges()
+	var filter_id: String = str(visual.get("filter", "")).strip_edges()
 	if filter_id != "pixel_art_3d":
 		return
-	var shader := load(PIXEL_ART_SHADER_PATH) as Shader
-	if shader == null:
+	var shader: Shader = load(PIXEL_ART_SHADER_PATH) as Shader
+	if shader == null or world_container == null:
 		return
-	test_visual_filter_material = ShaderMaterial.new()
-	test_visual_filter_material.shader = shader
-	test_visual_filter_material.set_shader_parameter("effect_enabled", true)
-	test_visual_filter_material.set_shader_parameter("pixel_size", maxf(1.0, float(visual.get("pixel_size", 3.0))))
-	test_visual_filter_material.set_shader_parameter("palette_steps", maxf(2.0, float(visual.get("palette_steps", 5.0))))
-	test_visual_filter_material.set_shader_parameter("saturation", maxf(0.5, float(visual.get("saturation", 1.12))))
-	test_visual_filter_material.set_shader_parameter("contrast", maxf(0.5, float(visual.get("contrast", 1.08))))
-	test_visual_filter_material.set_shader_parameter("dither_strength", maxf(0.0, float(visual.get("dither_strength", 0.045))))
-	world_container.material = test_visual_filter_material
+	pixel_filter_material = ShaderMaterial.new()
+	pixel_filter_material.shader = shader
+	pixel_filter_material.set_shader_parameter("effect_enabled", true)
+	pixel_filter_material.set_shader_parameter("pixel_size", maxf(1.0, float(visual.get("pixel_size", 3.0))))
+	pixel_filter_material.set_shader_parameter("palette_steps", maxf(2.0, float(visual.get("palette_steps", 5.0))))
+	pixel_filter_material.set_shader_parameter("saturation", maxf(0.5, float(visual.get("saturation", 1.12))))
+	pixel_filter_material.set_shader_parameter("contrast", maxf(0.5, float(visual.get("contrast", 1.08))))
+	pixel_filter_material.set_shader_parameter("dither_strength", maxf(0.0, float(visual.get("dither_strength", 0.045))))
+	world_container.material = pixel_filter_material
 	active_test_visual_filter_id = filter_id
 
 
 func clear_test_visual_filter() -> void:
+	active_test_visual_filter_id = ""
 	if world_container != null:
 		world_container.material = default_world_material
-	test_visual_filter_material = null
-	active_test_visual_filter_id = ""
+	pixel_filter_material = null
+	_apply_user_visual_filter()
 
 
 func load_settings() -> void:
@@ -95,7 +138,12 @@ func load_settings() -> void:
 	if settings.load(DISPLAY_SETTINGS_PATH) == OK:
 		resolution_index = clampi(int(settings.get_value("display", "resolution_index", 2)), 0, DISPLAY_RESOLUTIONS.size() - 1)
 		fullscreen = bool(settings.get_value("display", "fullscreen", false))
-		tilt_shift_enabled = bool(settings.get_value("visual", "tilt_shift", true))
+		depth_of_field_enabled = bool(settings.get_value("visual", "depth_of_field", settings.get_value("visual", "tilt_shift", true)))
+		taa_enabled = bool(settings.get_value("visual", "taa", true))
+		pixel_filter_enabled = bool(settings.get_value("visual", "pixel_filter", false))
+	_apply_depth_of_field_state()
+	_apply_taa_state()
+	_apply_user_visual_filter()
 	_apply_display_settings(false)
 
 
@@ -153,17 +201,51 @@ func _save_display_settings() -> void:
 	settings.load(DISPLAY_SETTINGS_PATH)
 	settings.set_value("display", "resolution_index", resolution_index)
 	settings.set_value("display", "fullscreen", fullscreen)
-	settings.set_value("visual", "tilt_shift", tilt_shift_enabled)
+	settings.set_value("visual", "depth_of_field", depth_of_field_enabled)
+	# Keep writing the legacy key so older builds can still read the setting.
+	settings.set_value("visual", "tilt_shift", depth_of_field_enabled)
+	settings.set_value("visual", "taa", taa_enabled)
+	settings.set_value("visual", "pixel_filter", pixel_filter_enabled)
 	settings.save(DISPLAY_SETTINGS_PATH)
 
 
-func _apply_tilt_shift_state() -> void:
-	if default_world_material == null:
-		return
-	var shader_material := default_world_material as ShaderMaterial
+func _apply_depth_of_field_state() -> void:
+	var shader_material: ShaderMaterial = default_world_material as ShaderMaterial
 	if shader_material == null:
 		return
-	shader_material.set_shader_parameter("effect_enabled", tilt_shift_enabled)
+	shader_material.set_shader_parameter("effect_enabled", depth_of_field_enabled)
+
+
+func _apply_user_visual_filter() -> void:
+	if world_container == null or active_test_visual_filter_id != "":
+		return
+	if not pixel_filter_enabled:
+		world_container.material = default_world_material
+		pixel_filter_material = null
+		return
+	var shader: Shader = load(PIXEL_ART_SHADER_PATH) as Shader
+	if shader == null:
+		return
+	pixel_filter_material = ShaderMaterial.new()
+	pixel_filter_material.shader = shader
+	pixel_filter_material.set_shader_parameter("effect_enabled", true)
+	pixel_filter_material.set_shader_parameter("pixel_size", 3.0)
+	pixel_filter_material.set_shader_parameter("palette_steps", 5.0)
+	pixel_filter_material.set_shader_parameter("saturation", 1.12)
+	pixel_filter_material.set_shader_parameter("contrast", 1.08)
+	pixel_filter_material.set_shader_parameter("dither_strength", 0.045)
+	world_container.material = pixel_filter_material
+
+
+func _apply_tilt_shift_state() -> void:
+	# Legacy API alias for callers that still explicitly refresh the old effect.
+	_apply_depth_of_field_state()
+
+
+func _apply_taa_state() -> void:
+	if world_viewport == null:
+		return
+	world_viewport.use_taa = taa_enabled
 
 
 func _fit_windowed_resolution(requested: Vector2i, usable_size: Vector2i) -> Vector2i:

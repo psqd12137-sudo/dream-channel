@@ -5,6 +5,7 @@ extends RefCounted
 # 阶段 B 仅建立数据容器与工厂；规则层迁移在阶段 C 进行。
 
 const INVALID_CELL := Vector2i(-999, -999)
+const CombatStatus = preload("res://scripts/combat_status.gd")
 
 var id := ""
 var spawn_order := 0
@@ -34,7 +35,23 @@ var trait_labels: Dictionary = {}
 var revealed := true
 var player_sees_enemy := true
 var sees_player := true
-var blind_turns := 0
+var status_effects: Dictionary = {}
+var blind_turns: int:
+	get:
+		var status: Dictionary = status_effects.get("blind", {})
+		return int(status.get("duration", status.get("turns", 0)))
+	set(value):
+		if value <= 0:
+			status_effects.erase("blind")
+			return
+		status_effects["blind"] = CombatStatus.make(
+			"blind",
+			CombatStatus.CATEGORY_CONTROL,
+			"致盲",
+			1,
+			value,
+			CombatStatus.DURATION_TURNS,
+			"effect")
 var last_seen := INVALID_CELL
 var last_seen_age := 0
 var patrol_goal := INVALID_CELL
@@ -45,7 +62,21 @@ var backstab_reengaging := false
 var broken := false
 var execute_bonus_pending := false
 var crush_bonus_pending := false
-var stagger_pending := false
+var stagger_pending: bool:
+	get:
+		return status_effects.has("stagger")
+	set(value):
+		if value:
+			status_effects["stagger"] = CombatStatus.make(
+				"stagger",
+				CombatStatus.CATEGORY_CONTROL,
+				"踉跄",
+				1,
+				1,
+				CombatStatus.DURATION_TURNS,
+				"toughness")
+		else:
+			status_effects.erase("stagger")
 var just_portaled := false
 var beam_pending_cells: Array[Vector2i] = []
 var beam_pending_damage := 0
@@ -103,6 +134,7 @@ func debug_snapshot() -> Dictionary:
 		"ambush_idle_turns": ambush_idle_turns,
 		"ambush_note": ambush_note,
 		"backstab_reengaging": backstab_reengaging,
+		"status_effects": status_effects.duplicate(true),
 		"broken": broken,
 		"execute_bonus_pending": execute_bonus_pending,
 		"crush_bonus_pending": crush_bonus_pending,

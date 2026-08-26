@@ -1,5 +1,7 @@
 extends SceneTree
 
+const CombatStatus = preload("res://scripts/combat_status.gd")
+
 var failures: Array[String] = []
 
 
@@ -28,6 +30,50 @@ func _run() -> void:
 	var camera_pitch_before: float = game.battle_camera_pitch
 	var target_before: Vector3 = game.battle_camera_target
 	_check(target_before.distance_to(game._battle_follow_target_position() + game._battle_camera_frame_offset()) < 0.5, "battle camera must start on the framed player-enemy midpoint")
+	var hud: Control = game.get_node("HUD/HUDRoot")
+	var player_screen_position: Vector2 = game._battle_feedback_screen_position(game._battle_world(game.combat.player_pos))
+	var inspect_click := InputEventMouseButton.new()
+	inspect_click.button_index = MOUSE_BUTTON_RIGHT
+	inspect_click.pressed = true
+	inspect_click.position = player_screen_position
+	hud._gui_input(inspect_click)
+	var inspected_tile: Dictionary = game.battle_tile_inspection()
+	_check(inspected_tile.get("cell", Vector2i(-1, -1)) == game.combat.player_pos, "right-clicking the player must inspect the occupied tile")
+	_check(str(inspected_tile.get("detail", "")).contains("莉莉"), "tile inspection must identify the player occupant")
+	game.combat.traps[game.combat.player_pos] = {"card_id": "jab", "damage": 2}
+	game.inspect_battle_cell(game.combat.player_pos)
+	var tile_statuses: Array[Dictionary] = game.battle_tile_inspection().get("statuses", [])
+	_check(tile_statuses.any(func(status: Dictionary) -> bool: return str(status.get("label", "")) == "地刺" and str(status.get("category", "")) == CombatStatus.CATEGORY_HAZARD and str(status.get("presentation_kind", "")) == CombatStatus.PRESENTATION_CARD_ICON), "room block panel data must expose a reusable hazard presentation status")
+	await process_frame
+	var tile_region: Dictionary = {}
+	for region: Dictionary in hud.status_hover_regions:
+		var region_status: Dictionary = region.get("status", {})
+		if str(region.get("key", "")).begins_with("tile-") and str(region_status.get("label", "")) == "地刺":
+			tile_region = region
+			break
+	_check(not tile_region.is_empty(), "room block panel must register a hover target for trap status")
+	if not tile_region.is_empty():
+		var tile_hover := InputEventMouseMotion.new()
+		var tile_rect: Rect2 = tile_region.get("rect", Rect2())
+		tile_hover.position = hud.ui_offset + tile_rect.get_center() * hud.ui_scale
+		hud._gui_input(tile_hover)
+		_check(str(hud.hovered_status.get("label", "")) == "地刺" and str(hud.hovered_status.get("detail", "")).contains("伤害"), "hovering a tile trap should expose its detailed effect")
+	game.combat.traps.erase(game.combat.player_pos)
+	game.combat.gain_player_shield(2, "hover-test")
+	await process_frame
+	var shield_region: Dictionary = {}
+	for region: Dictionary in hud.status_hover_regions:
+		var region_status: Dictionary = region.get("status", {})
+		if str(region_status.get("id", "")) == "shield":
+			shield_region = region
+			break
+	_check(not shield_region.is_empty(), "actor panel must register a hover target for shield status")
+	if not shield_region.is_empty():
+		var status_hover := InputEventMouseMotion.new()
+		var status_rect: Rect2 = shield_region.get("rect", Rect2())
+		status_hover.position = hud.ui_offset + status_rect.get_center() * hud.ui_scale
+		hud._gui_input(status_hover)
+		_check(str(hud.hovered_status.get("id", "")) == "shield", "hovering a status should select its canonical record")
 	game.orbit_battle_camera(Vector2(24, -8))
 	_check(not is_equal_approx(game.battle_camera_yaw, camera_yaw_before), "battle camera must rotate when the empty board drag gesture supplies motion")
 	_check(is_equal_approx(game.battle_camera_pitch, camera_pitch_before), "battle orbit must ignore vertical drag and keep a fixed pitch")
@@ -80,10 +126,13 @@ func _run() -> void:
 	_check(game.combat.can_target_place_card(0, game.combat.enemy_pos), "enemy cell must only be marked when a direct smash is valid")
 	game.handle_battle_cell(game.combat.enemy_pos)
 	_check(game.combat.enemy_hp < hp_before, "clicking a valid enemy target must deal combat damage")
-	_check(game.battle_actor_root.get_node_or_null("Enemy/DamageFeedback") is Label3D, "enemy HP loss must create a model-scale-independent damage popup")
+	var smash_callout := game.battle_feedback_root.get_node_or_null("ActionCallout") as Label
+	_check(smash_callout != null and smash_callout.text == "砸击", "direct trap smash must create a 砸击 callout")
+	_check(smash_callout != null and smash_callout.z_index == 300, "砸击 callout must use the top feedback layer")
+	await create_timer(0.60).timeout
+	_check(game.battle_feedback_root.get_node_or_null("DamageFeedback") is Label, "enemy HP loss must create a model-scale-independent damage popup after the action callout")
 
 	if game.combat.outcome == "":
-		var hud: Control = game.get_node("HUD/HUDRoot")
 		var round_before: int = game.combat.round_number
 		var end_turn_click := InputEventMouseButton.new()
 		end_turn_click.button_index = MOUSE_BUTTON_LEFT

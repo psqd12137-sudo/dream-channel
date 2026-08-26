@@ -120,7 +120,7 @@ func _run() -> void:
 	_check(game.battle_world_renderer.full_board_build_count == full_builds_before_card, "card resolution must not rebuild the static battle board")
 	_check(game.battle_board_root == board_before_card, "card resolution must preserve the battle board node")
 
-	_check(_count_named_prefix(game.battle_root, "StageDoor") == 1, "battle stage must include the imported Web door decoration")
+	_check(_count_named_prefix(game.battle_root, "StageDoor") == 0, "combat test arena must not include the formal Web door decoration")
 	_check(_count_named_prefix(game.battle_root, "StageLamp") == 1, "battle stage must include the imported Web lamp decoration")
 	_check(_count_named_prefix(game.battle_root, "StageAnchor") == 1, "battle stage must include the imported Web signal anchor")
 
