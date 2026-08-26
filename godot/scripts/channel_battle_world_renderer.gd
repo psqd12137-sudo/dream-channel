@@ -363,10 +363,15 @@ func cycle_enemy_range_display() -> String:
 	return enemy_range_display_mode_label()
 
 
-func toggle_enemy_range_scope() -> String:
-	enemy_range_display_mode = EnemyRangeDisplayMode.FOCUSED if enemy_range_display_mode == EnemyRangeDisplayMode.ALL else EnemyRangeDisplayMode.ALL
+func cycle_enemy_range_scope() -> String:
+	enemy_range_display_mode = (enemy_range_display_mode + 1) % EnemyRangeDisplayMode.size()
 	_refresh_battle_dynamic_visuals()
 	return enemy_range_scope_label()
+
+
+func toggle_enemy_range_scope() -> String:
+	# 保留旧接口，避免测试台之外的调用方失效；显示面板使用三态循环。
+	return cycle_enemy_range_scope()
 
 
 func enemy_range_display_mode_label() -> String:
@@ -379,17 +384,31 @@ func enemy_range_display_mode_label() -> String:
 
 
 func enemy_range_scope_label() -> String:
-	return "全体" if enemy_range_display_mode == EnemyRangeDisplayMode.ALL else "仅选中"
+	match enemy_range_display_mode:
+		EnemyRangeDisplayMode.ALL:
+			return "全体"
+		EnemyRangeDisplayMode.HIDDEN:
+			return "关闭"
+	return "仅选中"
 
 
-func toggle_enemy_arrow_scope() -> String:
-	enemy_arrow_display_mode = EnemyRangeDisplayMode.FOCUSED if enemy_arrow_display_mode == EnemyRangeDisplayMode.ALL else EnemyRangeDisplayMode.ALL
+func cycle_enemy_arrow_scope() -> String:
+	enemy_arrow_display_mode = (enemy_arrow_display_mode + 1) % EnemyRangeDisplayMode.size()
 	_refresh_battle_intent_arrows()
 	return enemy_arrow_scope_label()
 
 
+func toggle_enemy_arrow_scope() -> String:
+	return cycle_enemy_arrow_scope()
+
+
 func enemy_arrow_scope_label() -> String:
-	return "全体" if enemy_arrow_display_mode == EnemyRangeDisplayMode.ALL else "仅选中"
+	match enemy_arrow_display_mode:
+		EnemyRangeDisplayMode.ALL:
+			return "全体"
+		EnemyRangeDisplayMode.HIDDEN:
+			return "关闭"
+	return "仅选中"
 
 
 func toggle_player_range_display() -> bool:
@@ -583,7 +602,10 @@ func _battle_intent_cells() -> Dictionary:
 		return intent_cells
 	if not _battle_debug_visible():
 		return intent_cells
-	if selected_card < 0 and player_range_display_enabled:
+	# 测试场景的范围面板是独立的观察工具，不能因为当前选中了卡牌
+	# 就把玩家可达格和步数一起隐藏；正式战斗仍保持卡牌目标优先。
+	var show_player_reach := player_range_display_enabled and (selected_card < 0 or host.test_combat_active)
+	if show_player_reach:
 		for raw_cell in combat.player_reachable_cells():
 			var player_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			(player_entry["player_move"] as Array).append({"intent": {"enemy_id": "player"}})
@@ -699,7 +721,14 @@ func _refresh_battle_dynamic_visuals() -> void:
 					var player_path: Array[Vector2i] = combat.player_path_to(pos)
 					var player_steps := maxi(0, player_path.size() - 1)
 					if player_steps > 0:
-						_add_label(cell_node, "PlayerReachableStep", str(player_steps), Vector3(-0.30, top_y + 0.22, 0), Color("f4ecda", 0.94), 13)
+						var step_label := _add_label(cell_node, "PlayerReachableStep", str(player_steps), Vector3(0, top_y + 0.27, 0), COL_GRID_DARK, 20)
+						# 步数是范围预览的核心信息：置于格子中心、关闭深度测试，
+						# 并用浅色描边保证在红/蓝/木地板上都能读到。
+						step_label.pixel_size = 0.016
+						step_label.modulate = Color(COL_GRID_DARK, 0.98)
+						step_label.outline_modulate = Color("fffaf2", 0.96)
+						step_label.outline_size = 10
+						step_label.render_priority = 24
 				if not paths.is_empty() and impacts.is_empty():
 					if threats.is_empty() and enemy_moves.is_empty():
 						_add_battle_cell_fill(cell_node, "IntentMoveOverlayFill", top_y, COL_ENEMY_MOVE, 0.42)

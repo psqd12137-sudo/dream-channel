@@ -3785,22 +3785,30 @@ func cycle_battle_enemy_range_display() -> void:
 		_refresh_hud()
 
 
-func toggle_battle_enemy_range_scope() -> void:
+func cycle_battle_enemy_range_scope() -> void:
 	if phase != "combat" or combat == null:
 		return
-	var mode_label: String = battle_world_renderer.toggle_enemy_range_scope()
+	var mode_label: String = battle_world_renderer.cycle_enemy_range_scope()
 	if test_combat_active:
 		status_message = "敌方行动范围：%s" % mode_label
 		_refresh_hud()
 
 
-func toggle_battle_enemy_arrow_scope() -> void:
+func toggle_battle_enemy_range_scope() -> void:
+	cycle_battle_enemy_range_scope()
+
+
+func cycle_battle_enemy_arrow_scope() -> void:
 	if phase != "combat" or combat == null:
 		return
-	var mode_label: String = battle_world_renderer.toggle_enemy_arrow_scope()
+	var mode_label: String = battle_world_renderer.cycle_enemy_arrow_scope()
 	if test_combat_active:
 		status_message = "敌人箭头：%s" % mode_label
 		_refresh_hud()
+
+
+func toggle_battle_enemy_arrow_scope() -> void:
+	cycle_battle_enemy_arrow_scope()
 
 
 func toggle_battle_player_range_display() -> void:

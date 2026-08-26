@@ -1901,10 +1901,10 @@ func _handle_test_combat_click(point: Vector2) -> void:
 			game.toggle_battle_player_step_display()
 			return
 		if TEST_RANGE_ENEMY_RANGE_RECT.has_point(point):
-			game.toggle_battle_enemy_range_scope()
+			game.cycle_battle_enemy_range_scope()
 			return
 		if TEST_RANGE_ENEMY_ARROW_RECT.has_point(point):
-			game.toggle_battle_enemy_arrow_scope()
+			game.cycle_battle_enemy_arrow_scope()
 			return
 	if not SHOW_TEST_AI_PANEL:
 		return

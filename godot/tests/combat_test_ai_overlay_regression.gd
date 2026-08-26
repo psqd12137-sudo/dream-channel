@@ -60,7 +60,23 @@ func _run() -> void:
 	renderer.toggle_player_range_display()
 	_check(renderer.player_range_display_enabled, "player reachable range must be restorable")
 	_check(renderer.player_step_display_enabled, "test combat must show player movement steps by default")
-	_check(game.battle_root.find_child("PlayerReachableStep", true, false) != null, "player reachable cells must render step labels when enabled")
+	var step_labels: Array[Node] = game.battle_root.find_children("PlayerReachableStep", "Label3D", true, false)
+	_check(not step_labels.is_empty(), "player reachable cells must render step labels when enabled")
+	if not step_labels.is_empty():
+		var first_step_label := step_labels[0] as Label3D
+		_check(first_step_label != null and first_step_label.visible and not first_step_label.text.is_empty(), "player reachable step labels must contain visible numbers")
+	# 面板中的敌方范围/箭头都必须有独立的三态循环，第三态是真正关闭而不是只切回选中敌人。
+	renderer.enemy_range_display_mode = 0
+	renderer.enemy_arrow_display_mode = 1
+	renderer.refresh_battle_state(false, false)
+	hud._handle_test_combat_click(hud.TEST_RANGE_ENEMY_RANGE_RECT.get_center())
+	_check(renderer.enemy_range_scope_label() == "全体", "enemy range panel must cycle to all enemies")
+	hud._handle_test_combat_click(hud.TEST_RANGE_ENEMY_RANGE_RECT.get_center())
+	_check(renderer.enemy_range_scope_label() == "关闭", "enemy range panel must expose a closed state")
+	_check(not _intent_cells_contain_any_enemy(renderer._battle_intent_cells()), "closed enemy range mode must remove every enemy range cell")
+	hud._handle_test_combat_click(hud.TEST_RANGE_ENEMY_ARROW_RECT.get_center())
+	_check(renderer.enemy_arrow_scope_label() == "关闭", "enemy arrow panel must expose a closed state")
+	_check(renderer.battle_intent_line_root.get_child_count() == 0, "closed enemy arrow mode must remove every enemy arrow")
 	renderer.enemy_range_display_mode = 0
 	renderer.enemy_arrow_display_mode = 1
 	renderer.refresh_battle_state(false, false)
