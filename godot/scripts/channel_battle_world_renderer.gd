@@ -610,6 +610,16 @@ func _battle_intent_cells() -> Dictionary:
 			var player_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			(player_entry["player_move"] as Array).append({"intent": {"enemy_id": "player"}})
 			intent_cells[raw_cell] = player_entry
+	if selected_card < 0 and combat.energy <= 0:
+		for direction: Vector2i in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
+			var facing_cell := combat.player_pos + direction
+			if not _battle_cell_in_bounds(facing_cell):
+				continue
+			var facing_entry: Dictionary = intent_cells.get(facing_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": [], "player_facing": []})
+			var facing_markers: Array = facing_entry.get("player_facing", [])
+			facing_markers.append({"direction": direction})
+			facing_entry["player_facing"] = facing_markers
+			intent_cells[facing_cell] = facing_entry
 	var focused_enemy_id := _focused_battle_enemy_id()
 	for enemy_id in combat.living_enemy_ids():
 		if not _enemy_range_display_allows(enemy_id, focused_enemy_id):
@@ -661,7 +671,7 @@ func _enemy_arrow_display_allows(enemy_id: String, focused_enemy_id: String) -> 
 
 func _clear_battle_cell_dynamic(cell_node: Node3D) -> void:
 	for child: Node in cell_node.get_children():
-		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_") or child.name.begins_with("PlayerReachable") or child.name.begins_with("PlayerPosition") or child.name.begins_with("EnemyReachable") or child.name.begins_with("Hover"):
+		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_") or child.name.begins_with("PlayerReachable") or child.name.begins_with("PlayerFacing") or child.name.begins_with("PlayerPosition") or child.name.begins_with("EnemyReachable") or child.name.begins_with("Hover"):
 			child.free()
 
 
@@ -686,6 +696,7 @@ func _refresh_battle_dynamic_visuals() -> void:
 			var impacts: Array = cell_intent.get("impact", [])
 			var threats: Array = cell_intent.get("threat", [])
 			var player_moves: Array = cell_intent.get("player_move", [])
+			var player_facing: Array = cell_intent.get("player_facing", [])
 			var enemy_moves: Array = cell_intent.get("enemy_move", [])
 			var paths: Array = cell_intent.get("path", [])
 			var lines: Array = cell_intent.get("line", [])
@@ -698,6 +709,8 @@ func _refresh_battle_dynamic_visuals() -> void:
 				rim_color = COL_ENEMY_THREAT
 			elif show_battle_debug and not player_moves.is_empty():
 				rim_color = COL_PLAYER_MOVE
+			elif show_battle_debug and not player_facing.is_empty():
+				rim_color = COL_GOLD
 			elif show_battle_debug and not enemy_moves.is_empty():
 				rim_color = COL_ENEMY_MOVE
 			var rim_node := cell_node.get_node_or_null("Frame") as MeshInstance3D
@@ -715,6 +728,10 @@ func _refresh_battle_dynamic_visuals() -> void:
 					_add_battle_cell_fill(cell_node, "IntentThreatFill", top_y, COL_ENEMY_THREAT, 0.50)
 				elif not player_moves.is_empty():
 					_add_battle_cell_fill(cell_node, "PlayerReachableFill", top_y, COL_PLAYER_MOVE, 0.22)
+				elif not player_facing.is_empty():
+					_add_battle_cell_fill(cell_node, "PlayerFacingFill", top_y, COL_GOLD, 0.28)
+					var facing_direction := Vector2i((player_facing[0] as Dictionary).get("direction", Vector2i.ZERO))
+					_add_label(cell_node, "PlayerFacingGlyph", _battle_facing_glyph(facing_direction), Vector3(0, top_y + 0.30, 0), Color("fffaf2", 0.98), 18)
 				elif not enemy_moves.is_empty():
 					_add_battle_cell_fill(cell_node, "IntentMoveOverlayFill", top_y, COL_ENEMY_MOVE, 0.28)
 				if player_step_display_enabled and not player_moves.is_empty():
@@ -1231,6 +1248,8 @@ func _focused_battle_enemy_id() -> String:
 func _is_valid_battle_target(pos: Vector2i) -> bool:
 	if combat == null or combat.outcome != "":
 		return false
+	if selected_card < 0 and combat.energy <= 0 and combat.manhattan(combat.player_pos, pos) == 1:
+		return true
 	if selected_card >= 0:
 		if selected_card >= combat.hand.size():
 			return false
@@ -1799,6 +1818,18 @@ func _battle_intent_glyph(intent_type: String, attack_kind: String = "") -> Stri
 		"patrol": return "巡"
 		"ambush": return "伏"
 	return "待"
+
+
+func _battle_facing_glyph(direction: Vector2i) -> String:
+	if direction == Vector2i.UP:
+		return "↑"
+	if direction == Vector2i.RIGHT:
+		return "→"
+	if direction == Vector2i.DOWN:
+		return "↓"
+	if direction == Vector2i.LEFT:
+		return "←"
+	return "·"
 
 
 func _battle_intent_icon_texture(intent_type: String, attack_kind: String = "") -> Texture2D:

@@ -2443,6 +2443,8 @@ func move_player_direction(direction: Vector2i) -> bool:
 func handle_battle_cell(target: Vector2i) -> void:
 	if animation_busy or combat == null or combat.outcome != "" or target == INVALID_CELL:
 		return
+	if selected_card < 0 and combat.energy <= 0 and choose_player_facing(target):
+		return
 	if selected_card < 0:
 		var clicked_enemy: Variant = combat.enemy_at(target)
 		if clicked_enemy != null:
@@ -2493,6 +2495,35 @@ func handle_battle_cell(target: Vector2i) -> void:
 			return
 		status_message = "这个格子无法到达，或当前行动力不足。"
 		_refresh_hud()
+
+
+func choose_player_facing(target: Vector2i) -> bool:
+	if animation_busy or phase != "combat" or combat == null or combat.outcome != "" or selected_card >= 0 or combat.energy > 0:
+		return false
+	if not _battle_cell_inside(target) or combat.manhattan(combat.player_pos, target) != 1:
+		return false
+	var direction := target - combat.player_pos
+	combat.set_player_facing(direction)
+	battle_player_facing_yaw = _battle_move_facing_yaw(combat.player_pos, target)
+	var player_node := battle_actor_root.get_node_or_null("Player") as Node3D
+	if player_node != null:
+		player_node.rotation.y = battle_player_facing_yaw
+	status_message = "莉莉朝向%s。可以结束回合。" % _battle_facing_label(direction)
+	battle_world_renderer.refresh_battle_state(false, false)
+	_refresh_hud()
+	return true
+
+
+func _battle_facing_label(direction: Vector2i) -> String:
+	if direction == Vector2i.UP:
+		return "上方"
+	if direction == Vector2i.RIGHT:
+		return "右方"
+	if direction == Vector2i.DOWN:
+		return "下方"
+	if direction == Vector2i.LEFT:
+		return "左方"
+	return "当前方向"
 
 
 func inspect_battle_cell(target: Vector2i) -> void:
@@ -2901,6 +2932,8 @@ func _after_combat_action(sync_actor_positions: bool = false) -> void:
 	# 与演员编队，避免玩家落到新格子的收尾帧同步重建整套房间资产。
 	battle_world_renderer.clear_battle_triggered_traps()
 	battle_world_renderer.refresh_battle_state(true, sync_actor_positions)
+	if combat.outcome == "" and combat.energy <= 0:
+		status_message = "行动力已耗尽：点击相邻格选择朝向，或结束回合。"
 	if combat.outcome != "":
 		status_message = "战斗胜利。" if combat.outcome == "victory" else "本集信号中断。"
 	_refresh_hud()

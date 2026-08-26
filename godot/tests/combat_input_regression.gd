@@ -115,6 +115,22 @@ func _run() -> void:
 			_check(not game.animation_busy, "player path animation must finish without leaving a stale busy state")
 			game.animation_duration_scale = 0.0
 
+	var facing_origin: Vector2i = game.combat.player_pos
+	var facing_direction := Vector2i.ZERO
+	for candidate_direction: Vector2i in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
+		if _inside(facing_origin + candidate_direction, game.combat.cols, game.combat.rows):
+			facing_direction = candidate_direction
+			break
+	_check(facing_direction != Vector2i.ZERO, "combat room must expose an in-board adjacent facing cell")
+	if facing_direction != Vector2i.ZERO:
+		game.combat.energy = 0
+		game.selected_card = -1
+		game.handle_battle_cell(facing_origin + facing_direction)
+		_check(game.combat.player_pos == facing_origin, "choosing facing at zero AP must not move the player")
+		_check(game.combat.player_facing == facing_direction, "clicking an adjacent cell at zero AP must update player facing")
+		_check(str(game.status_message).contains("朝向"), "choosing facing must explain the new direction")
+		_check(not game.battle_root.find_children("PlayerFacingGlyph", "Label3D", true, false).is_empty(), "zero-AP facing choices must be visible on adjacent cells")
+
 	var attack_origin := Vector2i(maxi(0, game.combat.enemy_pos.x - 1), game.combat.enemy_pos.y)
 	if attack_origin == game.combat.enemy_pos or not game.combat.is_walkable(attack_origin):
 		attack_origin = Vector2i(game.combat.enemy_pos.x, maxi(0, game.combat.enemy_pos.y - 1))
