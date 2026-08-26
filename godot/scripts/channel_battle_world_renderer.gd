@@ -973,6 +973,13 @@ func _refresh_enemy_node_visual(node: Node3D, state) -> void:
 func update_battle_feedback_overlay() -> void:
 	if battle_feedback_root == null:
 		return
+	if host.battle_feedback_suppressed:
+		battle_feedback_root.visible = false
+		for overlay_value: Variant in battle_intent_overlay_nodes.values():
+			var hidden_overlay := overlay_value as Control
+			if hidden_overlay != null:
+				hidden_overlay.visible = false
+		return
 	var combat_feedback_enabled: bool = host.phase == "combat" and combat != null and combat.outcome == ""
 	var intent_visible: bool = combat_feedback_enabled and _battle_debug_visible()
 	var has_feedback_popups: bool = false

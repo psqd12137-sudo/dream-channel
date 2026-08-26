@@ -46,11 +46,15 @@ const RESET_RECT := Rect2(1142, 17, 110, 38)
 const CAMERA_RESET_RECT := Rect2(1040, 19, 94, 34)
 const TAA_TOGGLE_RECT := Rect2(920, 18, 110, 34)
 const SETTINGS_TOGGLE_RECT := TAA_TOGGLE_RECT
-const SETTINGS_PANEL_RECT := Rect2(330, 170, 620, 430)
-const SETTINGS_TAA_RECT := Rect2(690, 260, 190, 48)
-const SETTINGS_DOF_RECT := Rect2(690, 360, 190, 48)
-const SETTINGS_PIXEL_RECT := Rect2(690, 420, 190, 48)
-const SETTINGS_CLOSE_RECT := Rect2(690, 500, 190, 48)
+const SETTINGS_PANEL_RECT := Rect2(250, 90, 780, 620)
+const SETTINGS_TAA_RECT := Rect2(720, 202, 240, 46)
+const SETTINGS_DOF_RECT := Rect2(720, 302, 240, 46)
+const SETTINGS_DOF_BLUR_RECT := Rect2(720, 352, 240, 34)
+const SETTINGS_DOF_FOCUS_RECT := Rect2(720, 392, 240, 34)
+const SETTINGS_PIXEL_RECT := Rect2(720, 480, 240, 46)
+const SETTINGS_PIXEL_SIZE_RECT := Rect2(720, 530, 240, 34)
+const SETTINGS_PIXEL_PALETTE_RECT := Rect2(720, 570, 240, 34)
+const SETTINGS_CLOSE_RECT := Rect2(720, 626, 240, 46)
 const OMEN_A_RECT := Rect2(300, 570, 260, 46)
 const OMEN_B_RECT := Rect2(720, 570, 260, 46)
 const BUILD_CARD_RECTS := [Rect2(44, 526, 210, 150), Rect2(270, 526, 210, 150), Rect2(496, 526, 210, 150)]
@@ -598,13 +602,26 @@ func _draw_settings_panel() -> void:
 	_label("时间抗锯齿", SETTINGS_PANEL_RECT.position + Vector2(34, 148), 16, TEXT)
 	_label("减少 3D 场景边缘闪烁；HUD 不受影响。", SETTINGS_PANEL_RECT.position + Vector2(34, 174), 11, MUTED)
 	_draw_button(SETTINGS_TAA_RECT, game.taa_label(), BLUE, TEXT)
-	_label("景深", SETTINGS_PANEL_RECT.position + Vector2(34, 248), 16, TEXT)
-	_label("当前由移轴后处理实现，用于突出画面焦点。", SETTINGS_PANEL_RECT.position + Vector2(34, 274), 11, MUTED)
+	_label("景深", SETTINGS_PANEL_RECT.position + Vector2(34, 236), 16, TEXT)
+	_label("当前由移轴后处理实现，用于突出画面焦点。", SETTINGS_PANEL_RECT.position + Vector2(34, 263), 11, MUTED)
+	_label("模糊强度和焦点带宽可以分别调整。", SETTINGS_PANEL_RECT.position + Vector2(34, 286), 11, MUTED)
 	_draw_button(SETTINGS_DOF_RECT, game.depth_of_field_label(), GOLD, INK)
-	_label("像素滤镜", SETTINGS_PANEL_RECT.position + Vector2(34, 326), 16, TEXT)
-	_label("对 3D 世界做像素化与调色，HUD 保持清晰。", SETTINGS_PANEL_RECT.position + Vector2(34, 352), 11, MUTED)
+	_draw_button(SETTINGS_DOF_BLUR_RECT, game.depth_of_field_blur_label(), Color("b98c35"), INK)
+	_draw_button(SETTINGS_DOF_FOCUS_RECT, game.depth_of_field_focus_label(), Color("b98c35"), INK)
+	_label("像素滤镜", SETTINGS_PANEL_RECT.position + Vector2(34, 388), 16, TEXT)
+	_label("对 3D 世界做像素化与调色，HUD 保持清晰。", SETTINGS_PANEL_RECT.position + Vector2(34, 415), 11, MUTED)
+	_label("像素尺寸越大越粗，色阶越低越复古。", SETTINGS_PANEL_RECT.position + Vector2(34, 438), 11, MUTED)
 	_draw_button(SETTINGS_PIXEL_RECT, game.pixel_filter_label(), MAGENTA, TEXT)
+	_draw_button(SETTINGS_PIXEL_SIZE_RECT, game.pixel_filter_pixel_size_label(), Color("a93570"), TEXT)
+	_draw_button(SETTINGS_PIXEL_PALETTE_RECT, game.pixel_filter_palette_steps_label(), Color("a93570"), TEXT)
 	_draw_button(SETTINGS_CLOSE_RECT, "关闭", TEAL, TEXT)
+
+
+func _set_settings_panel_open(open: bool) -> void:
+	settings_panel_open = open
+	if game != null and game.has_method("set_battle_feedback_suppressed"):
+		game.set_battle_feedback_suppressed(open)
+	queue_redraw()
 
 
 func _draw_test_combat_menu() -> void:
@@ -1914,11 +1931,18 @@ func _gui_input(event: InputEvent) -> void:
 				game.toggle_taa()
 			elif SETTINGS_DOF_RECT.has_point(point):
 				game.toggle_depth_of_field()
+			elif SETTINGS_DOF_BLUR_RECT.has_point(point):
+				game.cycle_depth_of_field_blur()
+			elif SETTINGS_DOF_FOCUS_RECT.has_point(point):
+				game.cycle_depth_of_field_focus()
 			elif SETTINGS_PIXEL_RECT.has_point(point):
 				game.toggle_pixel_filter()
+			elif SETTINGS_PIXEL_SIZE_RECT.has_point(point):
+				game.cycle_pixel_filter_pixel_size()
+			elif SETTINGS_PIXEL_PALETTE_RECT.has_point(point):
+				game.cycle_pixel_filter_palette_steps()
 			elif SETTINGS_CLOSE_RECT.has_point(point):
-				settings_panel_open = false
-				queue_redraw()
+				_set_settings_panel_open(false)
 		accept_event()
 		return
 	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed and game.phase == "combat" and game.selected_card >= 0:
@@ -2081,8 +2105,7 @@ func _gui_input(event: InputEvent) -> void:
 		elif HOME_DOF_RECT.has_point(point):
 			game.toggle_depth_of_field()
 		elif HOME_TAA_RECT.has_point(point):
-			settings_panel_open = true
-			queue_redraw()
+			_set_settings_panel_open(true)
 		elif HOME_QUIT_RECT.has_point(point):
 			game.quit_game()
 		return
@@ -2094,8 +2117,7 @@ func _gui_input(event: InputEvent) -> void:
 				game.go_home()
 			return
 	if not game.phase.begins_with("lab_") and SETTINGS_TOGGLE_RECT.has_point(point):
-		settings_panel_open = true
-		queue_redraw()
+		_set_settings_panel_open(true)
 		accept_event()
 		return
 	if game.phase == "lab_diorama" and LAB_SWITCH_RECT.has_point(point):

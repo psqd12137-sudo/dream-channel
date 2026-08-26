@@ -30,20 +30,51 @@ func _run() -> void:
 	_check(game.depth_of_field_enabled != initial_dof, "settings panel depth-of-field toggle must update the setting")
 	if dof_material != null:
 		_check(bool(dof_material.get_shader_parameter("effect_enabled")) == game.depth_of_field_enabled, "settings panel depth-of-field toggle must update the shader")
+	var initial_dof_blur: float = game.depth_of_field_blur_strength
+	_click(hud, hud.SETTINGS_DOF_BLUR_RECT)
+	_check(not is_equal_approx(game.depth_of_field_blur_strength, initial_dof_blur), "settings panel depth-of-field blur control must cycle the parameter")
+	if dof_material != null:
+		_check(is_equal_approx(float(dof_material.get_shader_parameter("max_blur_pixels")), game.depth_of_field_blur_strength), "depth-of-field blur control must update the shader")
+	var initial_dof_focus: float = game.depth_of_field_focus_width
+	_click(hud, hud.SETTINGS_DOF_FOCUS_RECT)
+	_check(not is_equal_approx(game.depth_of_field_focus_width, initial_dof_focus), "settings panel depth-of-field focus control must cycle the parameter")
+	if dof_material != null:
+		_check(is_equal_approx(float(dof_material.get_shader_parameter("focus_half_width")), game.depth_of_field_focus_width), "depth-of-field focus control must update the shader")
 	var initial_pixel_filter: bool = game.pixel_filter_enabled
 	_click(hud, hud.SETTINGS_PIXEL_RECT)
 	_check(game.pixel_filter_enabled != initial_pixel_filter, "settings panel pixel filter toggle must update the setting")
 	var pixel_material: ShaderMaterial = game.world_container.material as ShaderMaterial
 	_check(pixel_material != null and pixel_material.shader != null and pixel_material.shader.resource_path.ends_with("pixel_art_3d.gdshader"), "settings panel pixel filter toggle must apply the pixel shader")
+	var initial_pixel_size: float = game.pixel_filter_pixel_size
+	_click(hud, hud.SETTINGS_PIXEL_SIZE_RECT)
+	_check(not is_equal_approx(game.pixel_filter_pixel_size, initial_pixel_size), "settings panel pixel-size control must cycle the parameter")
+	var initial_palette_steps: float = game.pixel_filter_palette_steps
+	_click(hud, hud.SETTINGS_PIXEL_PALETTE_RECT)
+	_check(not is_equal_approx(game.pixel_filter_palette_steps, initial_palette_steps), "settings panel palette control must cycle the parameter")
+	pixel_material = game.world_container.material as ShaderMaterial
+	if pixel_material != null:
+		_check(is_equal_approx(float(pixel_material.get_shader_parameter("pixel_size")), game.pixel_filter_pixel_size), "pixel-size control must update the pixel shader")
+		_check(is_equal_approx(float(pixel_material.get_shader_parameter("palette_steps")), game.pixel_filter_palette_steps), "palette control must update the pixel shader")
 	_click(hud, hud.SETTINGS_PIXEL_RECT)
 	_check(game.pixel_filter_enabled == initial_pixel_filter, "settings panel pixel filter toggle must restore the setting")
 	_click(hud, hud.SETTINGS_CLOSE_RECT)
 	_check(not hud.settings_panel_open, "settings panel close button must close the panel")
 
+	_check(game.open_combat_test_mode(), "settings overlay regression must enter the combat test desk")
+	_check(game.start_test_combat("manual"), "settings overlay regression must start a combat test")
+	await process_frame
+	_click(hud, hud.SETTINGS_TOGGLE_RECT)
+	_check(hud.settings_panel_open, "combat top-bar settings button must open the settings panel")
+	await process_frame
+	_check(not game.battle_feedback_root.visible, "settings panel must suppress intent and feedback overlays")
+	_click(hud, hud.SETTINGS_CLOSE_RECT)
+	await process_frame
+	_check(not hud.settings_panel_open and game.battle_feedback_root.visible, "closing settings must restore the combat feedback layer")
+
 	game.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("PRESENTATION_SETTINGS: PASS panel TAA DOF pixel viewport-shader binding")
+		print("PRESENTATION_SETTINGS: PASS panel TAA DOF pixel parameters and feedback suppression")
 		quit(0)
 	else:
 		for failure: String in failures:

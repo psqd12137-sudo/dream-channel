@@ -170,6 +170,7 @@ var test_session = CombatTestSession.new()
 var rng := RandomNumberGenerator.new()
 var run_save_repository = RunSaveRepository.new(RUN_SAVE_PATH, EXE_SOURCE_ID)
 var presentation_settings = null
+var battle_feedback_suppressed := false
 var house_world_renderer = null
 var battle_world_renderer = null
 var lab_controller = null
@@ -192,6 +193,10 @@ var depth_of_field_enabled:
 	set(value):
 		if presentation_settings != null:
 			presentation_settings.depth_of_field_enabled = bool(value)
+var depth_of_field_blur_strength:
+	get: return presentation_settings.depth_of_field_blur_strength if presentation_settings != null else 5.5
+var depth_of_field_focus_width:
+	get: return presentation_settings.depth_of_field_focus_width if presentation_settings != null else 0.18
 var tilt_shift_enabled:
 	get: return depth_of_field_enabled
 	set(value): depth_of_field_enabled = bool(value)
@@ -205,6 +210,10 @@ var pixel_filter_enabled:
 	set(value):
 		if presentation_settings != null:
 			presentation_settings.pixel_filter_enabled = bool(value)
+var pixel_filter_pixel_size:
+	get: return presentation_settings.pixel_filter_pixel_size if presentation_settings != null else 3.0
+var pixel_filter_palette_steps:
+	get: return presentation_settings.pixel_filter_palette_steps if presentation_settings != null else 5.0
 var active_test_visual_filter_id:
 	get: return presentation_settings.active_test_visual_filter_id if presentation_settings != null else ""
 
@@ -391,12 +400,28 @@ func depth_of_field_label() -> String:
 	return presentation_settings.depth_of_field_label()
 
 
+func depth_of_field_blur_label() -> String:
+	return presentation_settings.depth_of_field_blur_label()
+
+
+func depth_of_field_focus_label() -> String:
+	return presentation_settings.depth_of_field_focus_label()
+
+
 func taa_label() -> String:
 	return presentation_settings.taa_label()
 
 
 func pixel_filter_label() -> String:
 	return presentation_settings.pixel_filter_label()
+
+
+func pixel_filter_pixel_size_label() -> String:
+	return presentation_settings.pixel_filter_pixel_size_label()
+
+
+func pixel_filter_palette_steps_label() -> String:
+	return presentation_settings.pixel_filter_palette_steps_label()
 
 
 func cycle_display_resolution() -> void:
@@ -415,12 +440,28 @@ func toggle_depth_of_field() -> void:
 	presentation_settings.toggle_depth_of_field()
 
 
+func cycle_depth_of_field_blur() -> void:
+	presentation_settings.cycle_depth_of_field_blur()
+
+
+func cycle_depth_of_field_focus() -> void:
+	presentation_settings.cycle_depth_of_field_focus()
+
+
 func toggle_taa() -> void:
 	presentation_settings.toggle_taa()
 
 
 func toggle_pixel_filter() -> void:
 	presentation_settings.toggle_pixel_filter()
+
+
+func cycle_pixel_filter_pixel_size() -> void:
+	presentation_settings.cycle_pixel_filter_pixel_size()
+
+
+func cycle_pixel_filter_palette_steps() -> void:
+	presentation_settings.cycle_pixel_filter_palette_steps()
 
 
 func apply_test_visual_filter(visual: Dictionary) -> void:
@@ -443,6 +484,14 @@ func quit_game() -> void:
 func _set_home_video(active: bool) -> void:
 	if presentation_settings != null:
 		presentation_settings.set_home_video(active)
+
+
+func set_battle_feedback_suppressed(suppressed: bool) -> void:
+	battle_feedback_suppressed = suppressed
+	if battle_feedback_root != null:
+		battle_feedback_root.visible = not suppressed
+	if battle_world_renderer != null and not suppressed:
+		battle_world_renderer.update_battle_feedback_overlay()
 
 
 func _process(delta: float) -> void:
