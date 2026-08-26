@@ -1799,6 +1799,7 @@ func _battle_intent_color(intent_type: String) -> Color:
 	match intent_type:
 		"attack": return Color("ff5a4e")
 		"chase": return Color("ff9c4a")
+		"wait": return Color("f2a51e")
 		"search": return Color("6ab7e8")
 		"patrol": return Color("5fd6c6")
 		"ambush": return Color("e06bb4")
@@ -1814,6 +1815,7 @@ func _battle_intent_glyph(intent_type: String, attack_kind: String = "") -> Stri
 				return "束"
 			return "攻"
 		"chase": return "追"
+		"wait": return "待"
 		"search": return "搜"
 		"patrol": return "巡"
 		"ambush": return "伏"
@@ -1833,6 +1835,9 @@ func _battle_facing_glyph(direction: Vector2i) -> String:
 
 
 func _battle_intent_icon_texture(intent_type: String, attack_kind: String = "") -> Texture2D:
+	# “等待”暂时复用移动图标，等专用绕后等待图标制作完成后再替换。
+	if intent_type == "wait":
+		return INTENT_MOVE_ICON
 	if attack_kind == "ranged":
 		return INTENT_RANGED_ICON
 	if attack_kind in ["beam", "melee", "lunge", "guardBreak", "slam", "faceShock", "decoy"] or intent_type in ["attack", "ambush"]:

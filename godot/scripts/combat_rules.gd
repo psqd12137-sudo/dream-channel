@@ -915,7 +915,15 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 		result = _intent_from_attack_plan(state, plan, result)
 		result["path"] = preview_path
 	_apply_movement_intent_value(result, state.pos, preview_path)
-	if result["type"] != "attack":
+	var backstab_waiting := plan.is_empty() and state.has_trait("backstab") and state.sees_player and preview_path.is_empty()
+	if backstab_waiting:
+		# 这是展示层占位状态：不改变背刺者的寻路和回合执行，只明确说明
+		# 它本回合没有移动/攻击，正在等待下一次绕后窗口。
+		result["type"] = "wait"
+		result["label"] = "等待"
+		result["detail"] = "背刺者正在待机，等待下一次绕后机会。"
+		result["intent_value"] = "等待"
+	elif result["type"] != "attack":
 		if bool(sequence.get("retreat", false)):
 			result["type"] = "retreat"
 			result["label"] = "拉开距离 %d步" % preview_path.size()

@@ -8,6 +8,7 @@ var failures: Array[String] = []
 func _init() -> void:
 	_test_backstab_never_attacks_from_front()
 	_test_backstab_attacks_from_back()
+	_test_backstab_waits_for_attack_window()
 	_test_backstab_retreats_when_route_is_unavailable()
 	_test_backstab_reengages_after_retreat()
 	_test_backstab_reserves_target_before_hunters()
@@ -42,6 +43,16 @@ func _test_backstab_attacks_from_back() -> void:
 	_check(str(intent.get("intent_value", "")) == "8", "背刺意图必须直接显示攻击力")
 	_check(backstab_hit, "背后相邻时必须执行背刺事件")
 	_check(combat.player_hp == 4, "背刺者应造成 8 点高额伤害")
+
+
+func _test_backstab_waits_for_attack_window() -> void:
+	var combat = _combat(Vector2i(1, 1), 1, 8)
+	var intent: Dictionary = combat.preview_intent()
+	_check(str(intent.get("type", "")) == "wait", "背刺者行动力不足且已在背后时应显示等待")
+	_check(str(intent.get("label", "")) == "等待", "背刺等待占位意图必须显示等待文案")
+	_check(str(intent.get("detail", "")).contains("绕后"), "等待意图必须说明正在等待绕后机会")
+	var events: Array[Dictionary] = combat.enemy_turn()
+	_check(events.is_empty(), "等待绕后时本回合不应凭空移动或攻击")
 
 
 func _test_backstab_retreats_when_route_is_unavailable() -> void:
