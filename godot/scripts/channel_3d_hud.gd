@@ -513,12 +513,24 @@ func _draw_combat_turn_order() -> void:
 	for index in range(order.size()):
 		var actor_id := order[index]
 		var is_player := actor_id == "player"
-		var is_active := actor_id == current_id
-		var fill := GOLD if is_active else TEAL if is_player else MAGENTA
-		var text_color := INK if is_active else TEXT
+		var palette: Array[Color] = _turn_order_chip_palette(actor_id, current_id)
 		var caption := "%d %s" % [index + 1, "我方" if is_player else _turn_order_enemy_label(combat.enemy_by_id(actor_id), index)]
-		_draw_chip(Rect2(chip_x, chip_y, chip_width, 23), caption, fill.darkened(0.12) if not is_active else fill, text_color, 7)
+		_draw_chip(Rect2(chip_x, chip_y, chip_width, 23), caption, palette[0], palette[1], 7)
 		chip_x += chip_width + chip_gap
+
+
+func _turn_order_chip_palette(actor_id: String, current_id: String) -> Array[Color]:
+	var is_player := actor_id == "player"
+	if not is_player and game.combat != null:
+		var enemy_state = game.combat.enemy_by_id(actor_id)
+		if enemy_state != null and not enemy_state.alive():
+			# 死亡敌人保留在本回合行动顺序中，但不再显示为待行动的洋红色。
+			# 死亡优先级高于当前行动高亮，避免死亡项仍像活着一样发亮。
+			return [Color("5e686e"), Color("c0c8c8")]
+	var is_active := actor_id == current_id
+	var fill: Color = GOLD if is_active else TEAL if is_player else MAGENTA
+	var text_color: Color = INK if is_active else TEXT
+	return [fill if is_active else fill.darkened(0.12), text_color]
 
 
 func _turn_order_enemy_label(state, index: int) -> String:
