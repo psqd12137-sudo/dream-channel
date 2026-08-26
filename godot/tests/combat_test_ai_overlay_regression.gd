@@ -33,6 +33,7 @@ func _run() -> void:
 	_check(next_node != null and next_node.get_node_or_null("EnemySelectionOutline") != null, "selection outline must follow the clicked enemy")
 	var hud = game.get_node("HUD/HUDRoot")
 	_check(not hud.SHOW_TEST_AI_PANEL, "AI debug panel must be hidden by default")
+	_check(hud.TEST_RANGE_PANEL_RECT.size.x > 0.0 and hud.TEST_RANGE_PANEL_COLLAPSED_RECT.size.x > 0.0, "test range panel must expose expanded and collapsed layouts")
 	_check(hud.TEST_AI_PANEL_RECT.size.x > 0.0 and hud.TEST_AI_STEP_RECT.size.x > 0.0, "AI overlay layout constants must remain available for future re-enable")
 	var reason_bottom: float = hud.TEST_AI_PANEL_RECT.position.y + 114.0 + 4.0 * 14.0
 	_check(hud.TEST_AI_ROW_RECT.position.y > reason_bottom, "AI reason text must not overlap the enemy list")
@@ -41,6 +42,7 @@ func _run() -> void:
 	var renderer = game.battle_world_renderer
 	game.animation_busy = false
 	renderer.enemy_range_display_mode = 1
+	renderer.enemy_arrow_display_mode = 1
 	renderer.refresh_battle_state(false, false)
 	_check(renderer.battle_intent_line_root != null, "enemy action preview must have a dedicated line-arrow layer")
 	var intent_arrow_count := 0
@@ -49,6 +51,7 @@ func _run() -> void:
 			intent_arrow_count += 1
 			_check(arrow_node is MeshInstance3D, "enemy action arrows must be rendered as world-space meshes")
 	_check(intent_arrow_count > 0, "enemy action preview must draw at least one continuous line arrow")
+	_check(renderer.enemy_range_scope_label() == "全体" and renderer.enemy_arrow_scope_label() == "全体", "test display scopes must expose independent all-enemy labels")
 	renderer.enemy_range_display_mode = 0
 	renderer.refresh_battle_state(false, false)
 	_check(renderer.player_range_display_enabled, "player reachable range must be enabled by default")
@@ -56,6 +59,20 @@ func _run() -> void:
 	_check(not renderer.player_range_display_enabled, "player reachable range must be toggleable")
 	renderer.toggle_player_range_display()
 	_check(renderer.player_range_display_enabled, "player reachable range must be restorable")
+	_check(renderer.player_step_display_enabled, "test combat must show player movement steps by default")
+	_check(game.battle_root.find_child("PlayerReachableStep", true, false) != null, "player reachable cells must render step labels when enabled")
+	renderer.enemy_range_display_mode = 0
+	renderer.enemy_arrow_display_mode = 1
+	renderer.refresh_battle_state(false, false)
+	_check(renderer.enemy_range_scope_label() == "仅选中" and renderer.enemy_arrow_scope_label() == "全体", "enemy range and arrow scopes must be independent")
+	hud._handle_test_combat_click(hud.TEST_RANGE_PANEL_HEADER_RECT.get_center())
+	_check(not hud.test_range_panel_open, "test range panel header must collapse the panel")
+	hud._handle_test_combat_click(hud.TEST_RANGE_PANEL_COLLAPSED_RECT.get_center())
+	_check(hud.test_range_panel_open, "collapsed test range panel header must expand the panel")
+	hud._handle_test_combat_click(hud.TEST_RANGE_PLAYER_STEPS_RECT.get_center())
+	_check(not renderer.player_step_display_enabled, "test range panel must toggle player step labels")
+	hud._handle_test_combat_click(hud.TEST_RANGE_PLAYER_STEPS_RECT.get_center())
+	_check(renderer.player_step_display_enabled, "test range panel must restore player step labels")
 	renderer.hovered_battle_cell = game.combat.enemy_by_id("eight_07").pos
 	renderer.update_battle_hover()
 	_check(renderer.battle_hover_markers.is_empty(), "hover feedback must not recreate four corner dots")

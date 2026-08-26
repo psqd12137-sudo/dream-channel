@@ -120,7 +120,9 @@ var battle_feedback_generation := 0
 var battle_intent_snapshot: Dictionary = {}
 var battle_debug_hidden := false
 var enemy_range_display_mode := EnemyRangeDisplayMode.FOCUSED
+var enemy_arrow_display_mode := EnemyRangeDisplayMode.FOCUSED
 var player_range_display_enabled := true
+var player_step_display_enabled := false
 var battle_triggered_traps: Dictionary = {}
 var salt_ring_hit_frames: SpriteFrames = null
 var full_board_build_count := 0
@@ -263,7 +265,9 @@ func build_battle_world() -> void:
 func reset_battle_display_preferences() -> void:
 	# 显示偏好属于一场战斗的交互状态；完整重绘不能覆盖玩家刚刚选择的模式。
 	enemy_range_display_mode = EnemyRangeDisplayMode.FOCUSED
+	enemy_arrow_display_mode = EnemyRangeDisplayMode.FOCUSED
 	player_range_display_enabled = true
+	player_step_display_enabled = host.test_combat_active
 
 
 func refresh_battle_board() -> void:
@@ -359,6 +363,12 @@ func cycle_enemy_range_display() -> String:
 	return enemy_range_display_mode_label()
 
 
+func toggle_enemy_range_scope() -> String:
+	enemy_range_display_mode = EnemyRangeDisplayMode.FOCUSED if enemy_range_display_mode == EnemyRangeDisplayMode.ALL else EnemyRangeDisplayMode.ALL
+	_refresh_battle_dynamic_visuals()
+	return enemy_range_scope_label()
+
+
 func enemy_range_display_mode_label() -> String:
 	match enemy_range_display_mode:
 		EnemyRangeDisplayMode.ALL:
@@ -368,14 +378,38 @@ func enemy_range_display_mode_label() -> String:
 	return "单个敌人"
 
 
+func enemy_range_scope_label() -> String:
+	return "全体" if enemy_range_display_mode == EnemyRangeDisplayMode.ALL else "仅选中"
+
+
+func toggle_enemy_arrow_scope() -> String:
+	enemy_arrow_display_mode = EnemyRangeDisplayMode.FOCUSED if enemy_arrow_display_mode == EnemyRangeDisplayMode.ALL else EnemyRangeDisplayMode.ALL
+	_refresh_battle_intent_arrows()
+	return enemy_arrow_scope_label()
+
+
+func enemy_arrow_scope_label() -> String:
+	return "全体" if enemy_arrow_display_mode == EnemyRangeDisplayMode.ALL else "仅选中"
+
+
 func toggle_player_range_display() -> bool:
 	player_range_display_enabled = not player_range_display_enabled
 	_refresh_battle_dynamic_visuals()
 	return player_range_display_enabled
 
 
+func toggle_player_step_display() -> bool:
+	player_step_display_enabled = not player_step_display_enabled
+	_refresh_battle_dynamic_visuals()
+	return player_step_display_enabled
+
+
 func player_range_display_label() -> String:
 	return "显示" if player_range_display_enabled else "隐藏"
+
+
+func player_step_display_label() -> String:
+	return "显示" if player_step_display_enabled else "隐藏"
 
 
 func update_battle_hover() -> void:
@@ -595,6 +629,14 @@ func _enemy_range_display_allows(enemy_id: String, focused_enemy_id: String) -> 
 	return enemy_id == focused_enemy_id
 
 
+func _enemy_arrow_display_allows(enemy_id: String, focused_enemy_id: String) -> bool:
+	if enemy_arrow_display_mode == EnemyRangeDisplayMode.HIDDEN:
+		return false
+	if enemy_arrow_display_mode == EnemyRangeDisplayMode.ALL:
+		return true
+	return enemy_id == focused_enemy_id
+
+
 func _clear_battle_cell_dynamic(cell_node: Node3D) -> void:
 	for child: Node in cell_node.get_children():
 		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_") or child.name.begins_with("PlayerReachable") or child.name.begins_with("PlayerPosition") or child.name.begins_with("EnemyReachable") or child.name.begins_with("Hover"):
@@ -653,6 +695,11 @@ func _refresh_battle_dynamic_visuals() -> void:
 					_add_battle_cell_fill(cell_node, "PlayerReachableFill", top_y, COL_PLAYER_MOVE, 0.22)
 				elif not enemy_moves.is_empty():
 					_add_battle_cell_fill(cell_node, "IntentMoveOverlayFill", top_y, COL_ENEMY_MOVE, 0.28)
+				if player_step_display_enabled and not player_moves.is_empty():
+					var player_path: Array[Vector2i] = combat.player_path_to(pos)
+					var player_steps := maxi(0, player_path.size() - 1)
+					if player_steps > 0:
+						_add_label(cell_node, "PlayerReachableStep", str(player_steps), Vector3(-0.30, top_y + 0.22, 0), Color("f4ecda", 0.94), 13)
 				if not paths.is_empty() and impacts.is_empty():
 					if threats.is_empty() and enemy_moves.is_empty():
 						_add_battle_cell_fill(cell_node, "IntentMoveOverlayFill", top_y, COL_ENEMY_MOVE, 0.42)
@@ -731,7 +778,7 @@ func _refresh_battle_intent_arrows() -> void:
 		return
 	var focused_enemy_id := _focused_battle_enemy_id()
 	for enemy_id in combat.living_enemy_ids():
-		if not _enemy_range_display_allows(enemy_id, focused_enemy_id):
+		if not _enemy_arrow_display_allows(enemy_id, focused_enemy_id):
 			continue
 		var state = combat.enemy_by_id(enemy_id)
 		var intent: Dictionary = battle_intent_snapshot.get(enemy_id, {})

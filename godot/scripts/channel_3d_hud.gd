@@ -105,6 +105,13 @@ const TEST_AI_PAUSE_RECT := Rect2(148, 556, 104, 34)
 const TEST_AI_RESTART_RECT := Rect2(260, 556, 104, 34)
 const TEST_AI_ROW_RECT := Rect2(36, 394, 336, 18)
 const TEST_AI_ROW_STEP := 18.0
+const TEST_RANGE_PANEL_RECT := Rect2(24, 452, 340, 168)
+const TEST_RANGE_PANEL_COLLAPSED_RECT := Rect2(24, 452, 190, 34)
+const TEST_RANGE_PANEL_HEADER_RECT := Rect2(24, 452, 340, 34)
+const TEST_RANGE_PLAYER_REACH_RECT := Rect2(36, 508, 150, 32)
+const TEST_RANGE_PLAYER_STEPS_RECT := Rect2(198, 508, 150, 32)
+const TEST_RANGE_ENEMY_RANGE_RECT := Rect2(36, 574, 150, 32)
+const TEST_RANGE_ENEMY_ARROW_RECT := Rect2(198, 574, 150, 32)
 const HOME_RESOLUTION_RECT := Rect2(76, 714, 180, 36)
 const HOME_WINDOW_MODE_RECT := Rect2(270, 714, 102, 36)
 const HOME_DOF_RECT := Rect2(386, 714, 112, 36)
@@ -159,6 +166,7 @@ var board_left_dragged := false
 var board_left_distance := 0.0
 var settings_panel_open := false
 var settings_slider_dragging := ""
+var test_range_panel_open := true
 
 
 func _ready() -> void:
@@ -978,6 +986,8 @@ func _draw_combat_hud() -> void:
 		_draw_battle_tile_inspection(tile_inspection)
 	if game.combat_is_boss:
 		_draw_boss_control_panel()
+	if game.test_combat_active:
+		_draw_test_range_panel()
 	if game.test_combat_active and SHOW_TEST_AI_PANEL:
 		_draw_test_ai_panel()
 	_draw_move_controls()
@@ -1157,6 +1167,21 @@ func _draw_test_ai_panel() -> void:
 	_draw_button(TEST_AI_STEP_RECT, "单步" if game.test_session.mode == "observer_step" else "手动", GOLD if game.test_session.mode == "observer_step" else Color("394852"), INK if game.test_session.mode == "observer_step" else TEXT)
 	_draw_button(TEST_AI_PAUSE_RECT, "继续" if game.test_session.paused else "暂停", TEAL, TEXT)
 	_draw_button(TEST_AI_RESTART_RECT, "重开", MAGENTA, TEXT)
+
+
+func _draw_test_range_panel() -> void:
+	var rect := TEST_RANGE_PANEL_RECT if test_range_panel_open else TEST_RANGE_PANEL_COLLAPSED_RECT
+	_draw_ticket_panel(rect, Color("14232bf5"), TEAL)
+	_label("测试显示", rect.position + Vector2(12, 23), 12, GOLD)
+	_label("收起" if test_range_panel_open else "展开", rect.position + Vector2(rect.size.x - 48, 23), 10, MUTED)
+	if not test_range_panel_open:
+		return
+	_label("玩家", rect.position + Vector2(12, 49), 10, MUTED)
+	_draw_button(TEST_RANGE_PLAYER_REACH_RECT, "可达：%s" % game.battle_world_renderer.player_range_display_label(), TEAL if game.battle_world_renderer.player_range_display_enabled else Color("394852"), TEXT)
+	_draw_button(TEST_RANGE_PLAYER_STEPS_RECT, "步数：%s" % game.battle_world_renderer.player_step_display_label(), BLUE if game.battle_world_renderer.player_step_display_enabled else Color("394852"), TEXT)
+	_label("敌人", rect.position + Vector2(12, 115), 10, MUTED)
+	_draw_button(TEST_RANGE_ENEMY_RANGE_RECT, "范围：%s" % game.battle_world_renderer.enemy_range_scope_label(), RED, TEXT)
+	_draw_button(TEST_RANGE_ENEMY_ARROW_RECT, "箭头：%s" % game.battle_world_renderer.enemy_arrow_scope_label(), MAGENTA, TEXT)
 
 
 func _test_mode_label() -> String:
@@ -1838,9 +1863,12 @@ func _combat_overlay_has_point(point: Vector2) -> bool:
 
 
 func _test_combat_overlay_has_point(point: Vector2) -> bool:
-	if game == null or not game.test_combat_active or not SHOW_TEST_AI_PANEL:
+	if game == null or not game.test_combat_active:
 		return false
-	return TEST_AI_PANEL_RECT.has_point(point)
+	var range_panel_rect := TEST_RANGE_PANEL_RECT if test_range_panel_open else TEST_RANGE_PANEL_COLLAPSED_RECT
+	if range_panel_rect.has_point(point):
+		return true
+	return SHOW_TEST_AI_PANEL and TEST_AI_PANEL_RECT.has_point(point)
 
 
 func _combat_move_controls_has_point(point: Vector2) -> bool:
@@ -1860,6 +1888,26 @@ func _combat_move_direction_at_point(point: Vector2) -> Vector2i:
 
 
 func _handle_test_combat_click(point: Vector2) -> void:
+	var header_rect := TEST_RANGE_PANEL_HEADER_RECT if test_range_panel_open else TEST_RANGE_PANEL_COLLAPSED_RECT
+	if header_rect.has_point(point):
+		test_range_panel_open = not test_range_panel_open
+		queue_redraw()
+		return
+	if test_range_panel_open:
+		if TEST_RANGE_PLAYER_REACH_RECT.has_point(point):
+			game.toggle_battle_player_range_display()
+			return
+		if TEST_RANGE_PLAYER_STEPS_RECT.has_point(point):
+			game.toggle_battle_player_step_display()
+			return
+		if TEST_RANGE_ENEMY_RANGE_RECT.has_point(point):
+			game.toggle_battle_enemy_range_scope()
+			return
+		if TEST_RANGE_ENEMY_ARROW_RECT.has_point(point):
+			game.toggle_battle_enemy_arrow_scope()
+			return
+	if not SHOW_TEST_AI_PANEL:
+		return
 	if TEST_AI_STEP_RECT.has_point(point):
 		if game.test_session.mode == "observer_step":
 			game.advance_test_observer()
