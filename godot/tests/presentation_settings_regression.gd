@@ -31,13 +31,13 @@ func _run() -> void:
 	if dof_material != null:
 		_check(bool(dof_material.get_shader_parameter("effect_enabled")) == game.depth_of_field_enabled, "settings panel depth-of-field toggle must update the shader")
 	var initial_dof_blur: float = game.depth_of_field_blur_strength
-	_click(hud, hud.SETTINGS_DOF_BLUR_RECT)
-	_check(not is_equal_approx(game.depth_of_field_blur_strength, initial_dof_blur), "settings panel depth-of-field blur control must cycle the parameter")
+	_drag_slider(hud, hud.SETTINGS_DOF_BLUR_RECT, 0.75)
+	_check(not is_equal_approx(game.depth_of_field_blur_strength, initial_dof_blur), "settings panel depth-of-field blur slider must update the parameter")
 	if dof_material != null:
 		_check(is_equal_approx(float(dof_material.get_shader_parameter("max_blur_pixels")), game.depth_of_field_blur_strength), "depth-of-field blur control must update the shader")
 	var initial_dof_focus: float = game.depth_of_field_focus_width
-	_click(hud, hud.SETTINGS_DOF_FOCUS_RECT)
-	_check(not is_equal_approx(game.depth_of_field_focus_width, initial_dof_focus), "settings panel depth-of-field focus control must cycle the parameter")
+	_drag_slider(hud, hud.SETTINGS_DOF_FOCUS_RECT, 0.65)
+	_check(not is_equal_approx(game.depth_of_field_focus_width, initial_dof_focus), "settings panel depth-of-field focus slider must update the parameter")
 	if dof_material != null:
 		_check(is_equal_approx(float(dof_material.get_shader_parameter("focus_half_width")), game.depth_of_field_focus_width), "depth-of-field focus control must update the shader")
 	var initial_pixel_filter: bool = game.pixel_filter_enabled
@@ -46,11 +46,11 @@ func _run() -> void:
 	var pixel_material: ShaderMaterial = game.world_container.material as ShaderMaterial
 	_check(pixel_material != null and pixel_material.shader != null and pixel_material.shader.resource_path.ends_with("pixel_art_3d.gdshader"), "settings panel pixel filter toggle must apply the pixel shader")
 	var initial_pixel_size: float = game.pixel_filter_pixel_size
-	_click(hud, hud.SETTINGS_PIXEL_SIZE_RECT)
-	_check(not is_equal_approx(game.pixel_filter_pixel_size, initial_pixel_size), "settings panel pixel-size control must cycle the parameter")
+	_drag_slider(hud, hud.SETTINGS_PIXEL_SIZE_RECT, 0.55)
+	_check(not is_equal_approx(game.pixel_filter_pixel_size, initial_pixel_size), "settings panel pixel-size slider must update the parameter")
 	var initial_palette_steps: float = game.pixel_filter_palette_steps
-	_click(hud, hud.SETTINGS_PIXEL_PALETTE_RECT)
-	_check(not is_equal_approx(game.pixel_filter_palette_steps, initial_palette_steps), "settings panel palette control must cycle the parameter")
+	_drag_slider(hud, hud.SETTINGS_PIXEL_PALETTE_RECT, 0.35)
+	_check(not is_equal_approx(game.pixel_filter_palette_steps, initial_palette_steps), "settings panel palette slider must update the parameter")
 	pixel_material = game.world_container.material as ShaderMaterial
 	if pixel_material != null:
 		_check(is_equal_approx(float(pixel_material.get_shader_parameter("pixel_size")), game.pixel_filter_pixel_size), "pixel-size control must update the pixel shader")
@@ -88,6 +88,26 @@ func _click(hud: Control, design_rect: Rect2) -> void:
 	press.button_index = MOUSE_BUTTON_LEFT
 	press.pressed = true
 	hud._gui_input(press)
+
+
+func _drag_slider(hud: Control, design_rect: Rect2, ratio: float) -> void:
+	var track_width: float = design_rect.size.x - hud.SETTINGS_SLIDER_TRACK_LEFT - hud.SETTINGS_SLIDER_TRACK_RIGHT
+	var design_start := design_rect.position + Vector2(hud.SETTINGS_SLIDER_TRACK_LEFT, design_rect.size.y * 0.5)
+	var design_end := design_rect.position + Vector2(hud.SETTINGS_SLIDER_TRACK_LEFT + track_width * ratio, design_rect.size.y * 0.5)
+	var press := InputEventMouseButton.new()
+	press.position = hud.ui_offset + design_start * hud.ui_scale
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	hud._gui_input(press)
+	var motion := InputEventMouseMotion.new()
+	motion.position = hud.ui_offset + design_end * hud.ui_scale
+	motion.relative = (design_end - design_start) * hud.ui_scale
+	hud._gui_input(motion)
+	var release := InputEventMouseButton.new()
+	release.position = hud.ui_offset + design_end * hud.ui_scale
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	hud._gui_input(release)
 
 
 func _check(condition: bool, message: String) -> void:

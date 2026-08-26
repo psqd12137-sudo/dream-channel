@@ -404,8 +404,16 @@ func depth_of_field_blur_label() -> String:
 	return presentation_settings.depth_of_field_blur_label()
 
 
+func depth_of_field_blur_ratio() -> float:
+	return presentation_settings.depth_of_field_blur_ratio()
+
+
 func depth_of_field_focus_label() -> String:
 	return presentation_settings.depth_of_field_focus_label()
+
+
+func depth_of_field_focus_ratio() -> float:
+	return presentation_settings.depth_of_field_focus_ratio()
 
 
 func taa_label() -> String:
@@ -420,8 +428,16 @@ func pixel_filter_pixel_size_label() -> String:
 	return presentation_settings.pixel_filter_pixel_size_label()
 
 
+func pixel_filter_pixel_size_ratio() -> float:
+	return presentation_settings.pixel_filter_pixel_size_ratio()
+
+
 func pixel_filter_palette_steps_label() -> String:
 	return presentation_settings.pixel_filter_palette_steps_label()
+
+
+func pixel_filter_palette_steps_ratio() -> float:
+	return presentation_settings.pixel_filter_palette_steps_ratio()
 
 
 func cycle_display_resolution() -> void:
@@ -444,8 +460,16 @@ func cycle_depth_of_field_blur() -> void:
 	presentation_settings.cycle_depth_of_field_blur()
 
 
+func set_depth_of_field_blur_ratio(ratio: float, save_settings: bool = true) -> void:
+	presentation_settings.set_depth_of_field_blur_ratio(ratio, save_settings)
+
+
 func cycle_depth_of_field_focus() -> void:
 	presentation_settings.cycle_depth_of_field_focus()
+
+
+func set_depth_of_field_focus_ratio(ratio: float, save_settings: bool = true) -> void:
+	presentation_settings.set_depth_of_field_focus_ratio(ratio, save_settings)
 
 
 func toggle_taa() -> void:
@@ -460,8 +484,16 @@ func cycle_pixel_filter_pixel_size() -> void:
 	presentation_settings.cycle_pixel_filter_pixel_size()
 
 
+func set_pixel_filter_pixel_size_ratio(ratio: float, save_settings: bool = true) -> void:
+	presentation_settings.set_pixel_filter_pixel_size_ratio(ratio, save_settings)
+
+
 func cycle_pixel_filter_palette_steps() -> void:
 	presentation_settings.cycle_pixel_filter_palette_steps()
+
+
+func set_pixel_filter_palette_steps_ratio(ratio: float, save_settings: bool = true) -> void:
+	presentation_settings.set_pixel_filter_palette_steps_ratio(ratio, save_settings)
 
 
 func apply_test_visual_filter(visual: Dictionary) -> void:
@@ -475,6 +507,11 @@ func clear_test_visual_filter() -> void:
 func _apply_display_settings(save_settings: bool) -> void:
 	if presentation_settings != null:
 		await presentation_settings._apply_display_settings(save_settings)
+
+
+func save_display_settings() -> void:
+	if presentation_settings != null:
+		presentation_settings.save_display_settings()
 
 
 func quit_game() -> void:

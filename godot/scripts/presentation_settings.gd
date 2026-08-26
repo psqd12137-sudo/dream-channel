@@ -112,10 +112,34 @@ func cycle_depth_of_field_blur() -> void:
 	host._refresh_hud()
 
 
+func depth_of_field_blur_ratio() -> float:
+	return inverse_lerp(0.0, 12.0, depth_of_field_blur_strength)
+
+
+func set_depth_of_field_blur_ratio(ratio: float, save_settings: bool = true) -> void:
+	depth_of_field_blur_strength = lerpf(0.0, 12.0, clampf(ratio, 0.0, 1.0))
+	_apply_depth_of_field_state()
+	if save_settings:
+		_save_display_settings()
+	host._refresh_hud()
+
+
 func cycle_depth_of_field_focus() -> void:
 	depth_of_field_focus_width = _next_float_option(depth_of_field_focus_width, PackedFloat32Array([0.10, 0.18, 0.28, 0.38]))
 	_apply_depth_of_field_state()
 	_save_display_settings()
+	host._refresh_hud()
+
+
+func depth_of_field_focus_ratio() -> float:
+	return inverse_lerp(0.02, 0.45, depth_of_field_focus_width)
+
+
+func set_depth_of_field_focus_ratio(ratio: float, save_settings: bool = true) -> void:
+	depth_of_field_focus_width = lerpf(0.02, 0.45, clampf(ratio, 0.0, 1.0))
+	_apply_depth_of_field_state()
+	if save_settings:
+		_save_display_settings()
 	host._refresh_hud()
 
 
@@ -146,10 +170,34 @@ func cycle_pixel_filter_pixel_size() -> void:
 	host._refresh_hud()
 
 
+func pixel_filter_pixel_size_ratio() -> float:
+	return inverse_lerp(1.0, 12.0, pixel_filter_pixel_size)
+
+
+func set_pixel_filter_pixel_size_ratio(ratio: float, save_settings: bool = true) -> void:
+	pixel_filter_pixel_size = lerpf(1.0, 12.0, clampf(ratio, 0.0, 1.0))
+	_apply_user_visual_filter()
+	if save_settings:
+		_save_display_settings()
+	host._refresh_hud()
+
+
 func cycle_pixel_filter_palette_steps() -> void:
 	pixel_filter_palette_steps = _next_float_option(pixel_filter_palette_steps, PackedFloat32Array([3.0, 4.0, 5.0, 6.0, 8.0, 12.0]))
 	_apply_user_visual_filter()
 	_save_display_settings()
+	host._refresh_hud()
+
+
+func pixel_filter_palette_steps_ratio() -> float:
+	return inverse_lerp(2.0, 16.0, pixel_filter_palette_steps)
+
+
+func set_pixel_filter_palette_steps_ratio(ratio: float, save_settings: bool = true) -> void:
+	pixel_filter_palette_steps = lerpf(2.0, 16.0, clampf(ratio, 0.0, 1.0))
+	_apply_user_visual_filter()
+	if save_settings:
+		_save_display_settings()
 	host._refresh_hud()
 
 
@@ -257,6 +305,10 @@ func _save_display_settings() -> void:
 	settings.set_value("visual", "pixel_size", pixel_filter_pixel_size)
 	settings.set_value("visual", "palette_steps", pixel_filter_palette_steps)
 	settings.save(DISPLAY_SETTINGS_PATH)
+
+
+func save_display_settings() -> void:
+	_save_display_settings()
 
 
 func _apply_depth_of_field_state() -> void:

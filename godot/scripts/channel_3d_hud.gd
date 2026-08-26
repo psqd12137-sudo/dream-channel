@@ -55,6 +55,8 @@ const SETTINGS_PIXEL_RECT := Rect2(720, 480, 240, 46)
 const SETTINGS_PIXEL_SIZE_RECT := Rect2(720, 530, 240, 34)
 const SETTINGS_PIXEL_PALETTE_RECT := Rect2(720, 570, 240, 34)
 const SETTINGS_CLOSE_RECT := Rect2(720, 626, 240, 46)
+const SETTINGS_SLIDER_TRACK_LEFT := 102.0
+const SETTINGS_SLIDER_TRACK_RIGHT := 12.0
 const OMEN_A_RECT := Rect2(300, 570, 260, 46)
 const OMEN_B_RECT := Rect2(720, 570, 260, 46)
 const BUILD_CARD_RECTS := [Rect2(44, 526, 210, 150), Rect2(270, 526, 210, 150), Rect2(496, 526, 210, 150)]
@@ -156,6 +158,7 @@ var board_left_pressed := false
 var board_left_dragged := false
 var board_left_distance := 0.0
 var settings_panel_open := false
+var settings_slider_dragging := ""
 
 
 func _ready() -> void:
@@ -606,21 +609,55 @@ func _draw_settings_panel() -> void:
 	_label("当前由移轴后处理实现，用于突出画面焦点。", SETTINGS_PANEL_RECT.position + Vector2(34, 263), 11, MUTED)
 	_label("模糊强度和焦点带宽可以分别调整。", SETTINGS_PANEL_RECT.position + Vector2(34, 286), 11, MUTED)
 	_draw_button(SETTINGS_DOF_RECT, game.depth_of_field_label(), GOLD, INK)
-	_draw_button(SETTINGS_DOF_BLUR_RECT, game.depth_of_field_blur_label(), Color("b98c35"), INK)
-	_draw_button(SETTINGS_DOF_FOCUS_RECT, game.depth_of_field_focus_label(), Color("b98c35"), INK)
+	_draw_settings_slider(SETTINGS_DOF_BLUR_RECT, game.depth_of_field_blur_label(), game.depth_of_field_blur_ratio(), GOLD)
+	_draw_settings_slider(SETTINGS_DOF_FOCUS_RECT, game.depth_of_field_focus_label(), game.depth_of_field_focus_ratio(), GOLD)
 	_label("像素滤镜", SETTINGS_PANEL_RECT.position + Vector2(34, 388), 16, TEXT)
 	_label("对 3D 世界做像素化与调色，HUD 保持清晰。", SETTINGS_PANEL_RECT.position + Vector2(34, 415), 11, MUTED)
 	_label("像素尺寸越大越粗，色阶越低越复古。", SETTINGS_PANEL_RECT.position + Vector2(34, 438), 11, MUTED)
 	_draw_button(SETTINGS_PIXEL_RECT, game.pixel_filter_label(), MAGENTA, TEXT)
-	_draw_button(SETTINGS_PIXEL_SIZE_RECT, game.pixel_filter_pixel_size_label(), Color("a93570"), TEXT)
-	_draw_button(SETTINGS_PIXEL_PALETTE_RECT, game.pixel_filter_palette_steps_label(), Color("a93570"), TEXT)
+	_draw_settings_slider(SETTINGS_PIXEL_SIZE_RECT, game.pixel_filter_pixel_size_label(), game.pixel_filter_pixel_size_ratio(), MAGENTA)
+	_draw_settings_slider(SETTINGS_PIXEL_PALETTE_RECT, game.pixel_filter_palette_steps_label(), game.pixel_filter_palette_steps_ratio(), MAGENTA)
 	_draw_button(SETTINGS_CLOSE_RECT, "关闭", TEAL, TEXT)
 
 
 func _set_settings_panel_open(open: bool) -> void:
 	settings_panel_open = open
+	if not open:
+		settings_slider_dragging = ""
 	if game != null and game.has_method("set_battle_feedback_suppressed"):
 		game.set_battle_feedback_suppressed(open)
+	queue_redraw()
+
+
+func _draw_settings_slider(rect: Rect2, caption: String, ratio: float, accent: Color) -> void:
+	draw_rect(Rect2(rect.position + Vector2(4, 4), rect.size), INK, true)
+	draw_rect(rect, Color("1b2c35"), true)
+	draw_rect(rect, Color("53636a"), false, 1.0)
+	_label(caption, rect.position + Vector2(8, 15), 10, TEXT)
+	var track_start := rect.position + Vector2(SETTINGS_SLIDER_TRACK_LEFT, 23)
+	var track_end := rect.position + Vector2(rect.size.x - SETTINGS_SLIDER_TRACK_RIGHT, 23)
+	draw_line(track_start, track_end, Color("081015"), 6.0, true)
+	var knob_position := track_start.lerp(track_end, clampf(ratio, 0.0, 1.0))
+	draw_line(track_start, knob_position, accent, 6.0, true)
+	draw_circle(knob_position, 7.0, INK)
+	draw_circle(knob_position, 5.0, accent)
+
+
+func _settings_slider_ratio(rect: Rect2, point: Vector2) -> float:
+	var track_start_x := rect.position.x + SETTINGS_SLIDER_TRACK_LEFT
+	var track_width := rect.size.x - SETTINGS_SLIDER_TRACK_LEFT - SETTINGS_SLIDER_TRACK_RIGHT
+	return clampf((point.x - track_start_x) / maxf(1.0, track_width), 0.0, 1.0)
+
+
+func _update_settings_slider(point: Vector2) -> void:
+	if settings_slider_dragging == "dof_blur":
+		game.set_depth_of_field_blur_ratio(_settings_slider_ratio(SETTINGS_DOF_BLUR_RECT, point), false)
+	elif settings_slider_dragging == "dof_focus":
+		game.set_depth_of_field_focus_ratio(_settings_slider_ratio(SETTINGS_DOF_FOCUS_RECT, point), false)
+	elif settings_slider_dragging == "pixel_size":
+		game.set_pixel_filter_pixel_size_ratio(_settings_slider_ratio(SETTINGS_PIXEL_SIZE_RECT, point), false)
+	elif settings_slider_dragging == "pixel_palette":
+		game.set_pixel_filter_palette_steps_ratio(_settings_slider_ratio(SETTINGS_PIXEL_PALETTE_RECT, point), false)
 	queue_redraw()
 
 
@@ -1865,6 +1902,10 @@ func _gui_input(event: InputEvent) -> void:
 	_ensure_input_layout()
 	if event is InputEventMouseMotion:
 		var design_point := _to_design(event.position)
+		if settings_panel_open and not settings_slider_dragging.is_empty():
+			_update_settings_slider(design_point)
+			accept_event()
+			return
 		if game.phase == "combat":
 			_update_status_hover(design_point)
 		else:
@@ -1926,21 +1967,30 @@ func _gui_input(event: InputEvent) -> void:
 	var mouse_event: InputEventMouseButton = event
 	var point: Vector2 = _to_design(mouse_event.position)
 	if settings_panel_open:
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed and not settings_slider_dragging.is_empty():
+			settings_slider_dragging = ""
+			game.save_display_settings()
+			accept_event()
+			return
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 			if SETTINGS_TAA_RECT.has_point(point):
 				game.toggle_taa()
 			elif SETTINGS_DOF_RECT.has_point(point):
 				game.toggle_depth_of_field()
 			elif SETTINGS_DOF_BLUR_RECT.has_point(point):
-				game.cycle_depth_of_field_blur()
+				settings_slider_dragging = "dof_blur"
+				_update_settings_slider(point)
 			elif SETTINGS_DOF_FOCUS_RECT.has_point(point):
-				game.cycle_depth_of_field_focus()
+				settings_slider_dragging = "dof_focus"
+				_update_settings_slider(point)
 			elif SETTINGS_PIXEL_RECT.has_point(point):
 				game.toggle_pixel_filter()
 			elif SETTINGS_PIXEL_SIZE_RECT.has_point(point):
-				game.cycle_pixel_filter_pixel_size()
+				settings_slider_dragging = "pixel_size"
+				_update_settings_slider(point)
 			elif SETTINGS_PIXEL_PALETTE_RECT.has_point(point):
-				game.cycle_pixel_filter_palette_steps()
+				settings_slider_dragging = "pixel_palette"
+				_update_settings_slider(point)
 			elif SETTINGS_CLOSE_RECT.has_point(point):
 				_set_settings_panel_open(false)
 		accept_event()
