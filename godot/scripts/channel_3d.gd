@@ -191,6 +191,9 @@ var tilt_shift_enabled:
 		if presentation_settings != null:
 			presentation_settings.tilt_shift_enabled = bool(value)
 
+var active_test_visual_filter_id:
+	get: return presentation_settings.active_test_visual_filter_id if presentation_settings != null else ""
+
 var run_seed := 2522061406
 var run_layout_profile: Dictionary = {}
 var phase := "omen"
@@ -366,6 +369,16 @@ func toggle_display_mode() -> void:
 
 func toggle_tilt_shift() -> void:
 	presentation_settings.toggle_tilt_shift()
+
+
+func apply_test_visual_filter(visual: Dictionary) -> void:
+	if presentation_settings != null:
+		presentation_settings.apply_test_visual_filter(visual)
+
+
+func clear_test_visual_filter() -> void:
+	if presentation_settings != null:
+		presentation_settings.clear_test_visual_filter()
 
 
 func _apply_display_settings(save_settings: bool) -> void:
@@ -602,6 +615,7 @@ func is_world_view_point(screen_pos: Vector2) -> bool:
 
 func reset_run(seed_value: int = 0) -> void:
 	_cancel_dynamic_effect()
+	clear_test_visual_filter()
 	show_house_diagnostics = false
 	large_room_mix_test_mode = false
 	character_animation_demo_mode = false
@@ -718,6 +732,7 @@ func copy_current_seed() -> void:
 func go_home() -> void:
 	if test_combat_active:
 		_restore_test_state()
+	clear_test_visual_filter()
 	test_combat_active = false
 	test_session.clear()
 	test_saved_state.clear()

@@ -13,7 +13,7 @@ func _run() -> void:
 	var catalog := CombatTestCatalog.new()
 	_check(catalog.load_from_path(), "combat test catalog must load")
 	_check(catalog.errors.is_empty(), "valid catalog must have no errors: %s" % str(catalog.errors))
-	_check(catalog.ids().size() == 8, "catalog must expose eight initial scenarios")
+	_check(catalog.ids().size() == 9, "catalog must expose nine scenarios")
 	_check(catalog.get_scenario("squad_roles").get("room", {}).get("enemies", []).size() == 3, "squad_roles must contain three enemies")
 	var mixed_enemies: Array = catalog.get_scenario("mixed_assault").get("room", {}).get("enemies", [])
 	_check(mixed_enemies.size() == 3, "mixed_assault must contain melee, ranged, and backstab enemies")
@@ -24,9 +24,10 @@ func _run() -> void:
 	_check(int(mixed_enemies[2].get("hp", 0)) == 1 and int(mixed_enemies[2].get("damage", 0)) >= 8, "mixed_assault must configure the high-damage one-health backstab enemy")
 	_check("backstab" in (mixed_enemies[2].get("traits", []) as Array) and str(mixed_enemies[2].get("archetype", "")) == "assassin", "mixed_assault must configure the black backstab archetype")
 	_check(catalog.get_scenario("hud_eight").get("room", {}).get("enemies", []).size() == 8, "hud_eight must contain eight enemies")
+	_check(catalog.get_scenario("pixel_art_showcase").get("visual", {}).get("filter", "") == "pixel_art_3d", "pixel_art_showcase must declare the pixel filter")
 	_check(catalog.get_scenario("missing").is_empty(), "unknown scenario must resolve to an empty dictionary")
 	if failures.is_empty():
-		print("CHANNEL_COMBAT_TEST_CATALOG: PASS load-eight-scenarios-validation")
+		print("CHANNEL_COMBAT_TEST_CATALOG: PASS load-nine-scenarios-validation")
 		quit(0)
 	else:
 		for failure: String in failures:
