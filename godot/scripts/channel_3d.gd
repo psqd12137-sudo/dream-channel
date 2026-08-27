@@ -260,6 +260,7 @@ var battle_camera_distance := 20.0
 var battle_camera_yaw := atan2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z)
 var battle_camera_pitch := atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
 var battle_player_facing_yaw := 0.0
+var player_facing_selection_requested := false
 var battle_enemy_facing_yaw := PI
 var house_camera_following := false
 var house_camera_closeup := false
@@ -830,6 +831,7 @@ func reset_run(seed_value: int = 0) -> void:
 	house_player_facing_yaw = 0.0
 	house_actor_slot_assignments.clear()
 	battle_player_facing_yaw = 0.0
+	player_facing_selection_requested = false
 	battle_enemy_facing_yaw = PI
 	combat_is_boss = false
 	boss_id = ""
@@ -1928,6 +1930,7 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 		boss_id = str(room.get("boss_id", boss_id))
 	battle_room_title = str(room.get("name", "房间"))
 	battle_player_facing_yaw = house_player_facing_yaw
+	player_facing_selection_requested = false
 	battle_enemy_facing_yaw = PI
 	var enemy_specs: Variant = room.get("enemies", [])
 	if not enemy_specs is Array or (enemy_specs as Array).is_empty():
@@ -2053,6 +2056,7 @@ func _animate_combat_entry(final_message: String) -> void:
 func select_or_play_card(index: int) -> void:
 	if animation_busy or phase != "combat" or combat == null or index < 0 or index >= combat.hand.size():
 		return
+	player_facing_selection_requested = false
 	var card: Dictionary = combat.cards.get(combat.hand[index], {})
 	if _boss_closeup_blocks_card(card):
 		status_message = _boss_closeup_message(card)
@@ -2120,6 +2124,8 @@ func end_combat_turn() -> void:
 	if animation_busy or phase != "combat" or combat == null or combat.outcome != "":
 		return
 	selected_card = -1
+	# 结束回合后给玩家一次免费的朝向确认，不受本回合剩余 AP 影响。
+	player_facing_selection_requested = true
 	hovered_battle_cell = INVALID_CELL
 	if combat_is_boss and boss_directive_id == "mute":
 		combat.enemy_vision_suppressed = true
@@ -2207,8 +2213,8 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			var attack_kind := str(event.get("attack_kind", "attack"))
 			var attack_callouts := {"backstab": "背刺!", "lunge": "突进!", "faceShock": "突脸!", "guardBreak": "破防!", "slam": "砸地!", "beam": "激光!"}
 			var is_ranged_attack := attack_kind == "ranged"
-			if is_ranged_attack or attack_kind == "backstab":
-				_queue_enemy_attack_facing(tween, enemy_node, event)
+			# 所有攻击都先朝向目标；近战敌人此前会保持上一动作的朝向。
+			_queue_enemy_attack_facing(tween, enemy_node, event)
 			tween.tween_callback(_play_enemy_state.bind(actor_id, "attack", str(attack_callouts.get(attack_kind, "袭击!"))))
 			if is_ranged_attack:
 				tween.tween_callback(_show_enemy_callout_feedback.bind(actor_id, "远程攻击"))
@@ -2279,6 +2285,13 @@ func _animate_enemy_turn(turn_events: Array[Dictionary]) -> void:
 			else:
 				tween.tween_method(_set_enemy_step_motion.bind(enemy_node, _battle_pawn_world(shove_source, false, actor_id), _battle_pawn_world(shove_target, false, actor_id)), 0.0, 1.0, ENEMY_STEP_DURATION * 1.18 * animation_duration_scale)
 				tween.tween_property(enemy_node, "scale", Vector3.ONE, 0.14 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
+		elif kind == "web_place":
+			if enemy_node != null:
+				tween.tween_callback(_show_enemy_callout_feedback.bind(actor_id, "铺网"))
+				tween.tween_callback(_play_enemy_state.bind(actor_id, "ready", "铺网"))
+				tween.tween_property(enemy_node, "scale", Vector3(0.88, 1.16, 0.88), 0.18 * animation_duration_scale)
+				tween.tween_property(enemy_node, "scale", Vector3.ONE, 0.20 * animation_duration_scale)
 			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
 		elif kind == "enemy_damaged":
 			if enemy_node == null:
@@ -2417,7 +2430,7 @@ func _battle_enemy_attack_facing_yaw(enemy_node: Node3D, event: Dictionary) -> f
 func _queue_enemy_attack_facing(tween: Tween, enemy_node: Node3D, event: Dictionary) -> void:
 	var attack_facing_yaw := _battle_enemy_attack_facing_yaw(enemy_node, event)
 	battle_enemy_facing_yaw = attack_facing_yaw
-	# 远程攻击先用短转身对准玩家，再进入攻击姿态，避免敌人朝侧面开火。
+	# 攻击先用短转身对准目标，再进入攻击姿态，避免敌人朝侧面出招。
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tween.tween_property(enemy_node, "rotation:y", attack_facing_yaw, ENEMY_TURN_DURATION * animation_duration_scale)
 
@@ -2443,7 +2456,7 @@ func move_player_direction(direction: Vector2i) -> bool:
 func handle_battle_cell(target: Vector2i) -> void:
 	if animation_busy or combat == null or combat.outcome != "" or target == INVALID_CELL:
 		return
-	if selected_card < 0 and combat.energy <= 0 and choose_player_facing(target):
+	if selected_card < 0 and (combat.energy <= 0 or player_facing_selection_requested) and choose_player_facing(target, player_facing_selection_requested):
 		return
 	if selected_card < 0:
 		var clicked_enemy: Variant = combat.enemy_at(target)
@@ -2497,12 +2510,13 @@ func handle_battle_cell(target: Vector2i) -> void:
 		_refresh_hud()
 
 
-func choose_player_facing(target: Vector2i) -> bool:
-	if animation_busy or phase != "combat" or combat == null or combat.outcome != "" or selected_card >= 0 or combat.energy > 0:
+func choose_player_facing(target: Vector2i, allow_with_energy: bool = false) -> bool:
+	if animation_busy or phase != "combat" or combat == null or combat.outcome != "" or selected_card >= 0 or (combat.energy > 0 and not allow_with_energy):
 		return false
 	if not _battle_cell_inside(target) or combat.manhattan(combat.player_pos, target) != 1:
 		return false
-	var direction := target - combat.player_pos
+	var direction: Vector2i = target - combat.player_pos
+	player_facing_selection_requested = false
 	combat.set_player_facing(direction)
 	battle_player_facing_yaw = _battle_move_facing_yaw(combat.player_pos, target)
 	var player_node := battle_actor_root.get_node_or_null("Player") as Node3D
@@ -2615,12 +2629,15 @@ func move_player_to(target: Vector2i) -> bool:
 		status_message = "到达那里需要 %d AP，但本回合只剩 %d AP。" % [path_cost, combat.energy]
 		_refresh_hud()
 		return false
+	player_facing_selection_requested = false
 	status_message = "莉莉沿路径移动 %d 格。" % (path.size() - 1)
 	battle_camera_following = true
 	if animation_duration_scale <= 0.0:
 		for index in range(1, path.size()):
 			if not combat.move_player(path[index]):
 				return false
+			if _is_web_trap(path[index]):
+				_show_player_salt_ring_effect()
 		boss_round_moved = boss_round_moved or combat_is_boss
 		_after_combat_action(true)
 		return true
@@ -2637,10 +2654,13 @@ func _animate_player_path(path: Array[Vector2i], index: int) -> void:
 		return
 	var source: Vector2i = path[index - 1]
 	var target: Vector2i = path[index]
+	var stepped_on_web := _is_web_trap(target)
 	if not combat.move_player(target):
 		_complete_dynamic_effect()
 		_refresh_hud()
 		return
+	if stepped_on_web:
+		_show_player_salt_ring_effect()
 	boss_round_moved = boss_round_moved or combat_is_boss
 	# 移动过程中只移动演员节点；棋盘、家具和房间外壳保持复用。
 	# 路径结束后由 _after_combat_action() 统一刷新一次敌人意图和状态。
@@ -2932,7 +2952,9 @@ func _after_combat_action(sync_actor_positions: bool = false) -> void:
 	# 与演员编队，避免玩家落到新格子的收尾帧同步重建整套房间资产。
 	battle_world_renderer.clear_battle_triggered_traps()
 	battle_world_renderer.refresh_battle_state(true, sync_actor_positions)
-	if combat.outcome == "" and combat.energy <= 0:
+	if combat.outcome == "" and player_facing_selection_requested:
+		status_message = "点击莉莉相邻格选择朝向，或直接移动。"
+	elif combat.outcome == "" and combat.energy <= 0:
 		status_message = "行动力已耗尽：点击相邻格选择朝向，或结束回合。"
 	if combat.outcome != "":
 		status_message = "战斗胜利。" if combat.outcome == "victory" else "本集信号中断。"
@@ -4001,6 +4023,16 @@ func _is_salt_ring_event(event: Dictionary) -> bool:
 
 func _show_enemy_salt_ring_effect(enemy_id: String) -> void:
 	battle_world_renderer._show_enemy_salt_ring_effect(enemy_id)
+
+func _show_player_salt_ring_effect() -> void:
+	battle_world_renderer._show_player_salt_ring_effect()
+
+func _is_web_trap(cell: Vector2i) -> bool:
+	if combat == null:
+		return false
+	var trap_value: Variant = combat.traps.get(cell, {})
+	var trap: Dictionary = trap_value if trap_value is Dictionary else {}
+	return str(trap.get("card_id", "")) == "web"
 
 func _add_decoy_pawn(pos: Vector2i) -> void:
 	battle_world_renderer._add_decoy_pawn(pos)

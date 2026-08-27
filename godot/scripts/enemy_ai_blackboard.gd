@@ -77,6 +77,8 @@ func _resolve_role(state) -> String:
 	var configured := str(state.behavior_role)
 	if configured != "" and configured != "auto":
 		return configured
+	if state.has_trait("webber"):
+		return "webber"
 	if state.has_trait("backstab"):
 		return "flanker"
 	if state.has_trait("beam") or state.has_trait("trapAware") or state.has_trait("slam"):
@@ -97,6 +99,15 @@ func _build_plan(state, role: String) -> Dictionary:
 		return _plan(state, "patrol", state.patrol_goal, INVALID_CELL, "没有目标，选择巡逻点")
 	if decoy_target != INVALID_CELL:
 		return _plan(state, "decoy_hunt", decoy_target, INVALID_CELL, "纸傀儡优先级高于玩家")
+	if state.has_trait("webber"):
+		var web_budget := int(rules.call("_enemy_turn_budget", state))
+		var web_attack: Dictionary = rules.call("_enemy_attack_plan", state, state.pos, web_budget, true)
+		if not web_attack.is_empty():
+			return _plan(state, "engage", state.pos, INVALID_CELL, "已贴近玩家，优先进行近战攻击")
+		if not rules.call("_has_active_web_for_enemy", state):
+			var web_cell: Vector2i = rules.call("_webber_target_cell", state)
+			if web_cell != INVALID_CELL and web_budget >= 2:
+				return _plan(state, "web", web_cell, web_cell, "铺设缚网，限制玩家走位")
 	var slot := _choose_attack_slot(state, role)
 	if slot == INVALID_CELL:
 		if state.has_trait("backstab"):
@@ -107,6 +118,7 @@ func _build_plan(state, role: String) -> Dictionary:
 	match role:
 		"flanker": return _plan(state, "flank", slot, slot, "侧翼占位，避免与正面敌人重叠")
 		"controller": return _plan(state, "control", slot, slot, "优先占据攻击位并控制玩家走位")
+		"webber": return _plan(state, "engage", slot, slot, "接近玩家并寻找下一次铺网位置")
 	if state.has_trait("ranged"):
 		return _plan(state, "engage", slot, slot, "占据视线内的远程射击位")
 	if state.has_trait("beam"):

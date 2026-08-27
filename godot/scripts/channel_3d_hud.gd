@@ -1262,6 +1262,14 @@ func _enemy_intent_sentence(state) -> String:
 		if intent_type == "retreat":
 			return "背刺者暂时无法绕后，准备拉开距离。"
 		return "背刺者想前往你的后方。"
+	if state.has_trait("webber"):
+		if intent_type == "web":
+			return "缚网者准备铺设缚网，限制你的走位。"
+		if intent_type == "attack":
+			return "缚网者已接近你，准备进行近战攻击。"
+		if intent_type in ["chase", "retreat"]:
+			return "缚网者正在接近你，准备进入战斗。"
+		return "缚网者正在寻找下一处控场位置。"
 	if attack_kind == "ranged":
 		return "远程敌人想保持距离并瞄准你。" if intent_type != "attack" else "远程敌人准备在本回合射击你。"
 	if intent_type == "attack":

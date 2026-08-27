@@ -119,6 +119,35 @@
       "observer": {"max_rounds": 10, "player_script": "alternate_cells"}
     },
     {
+      "id": "webber_control",
+      "name": "缚网控场",
+      "category": "ai",
+      "description": "验证缚网者优先铺设缚网、近身后改为攻击，以及缚网对玩家移动费用和地块状态的影响。",
+      "seed": 2026082420,
+      "room": {
+        "id": "test_webber_control",
+        "name": "测试房 · 缚网控场",
+        "room_type": "gallery",
+        "theme": "paper",
+        "arena": {
+          "cols": 7,
+          "rows": 5,
+          "player": [3, 2],
+          "player_facing": [0, 1],
+          "walls": [],
+          "heights": {},
+          "portals": [],
+          "traps": []
+        },
+        "enemies": [
+          {"id": "webber", "name": "缚网者", "spawn": [5, 2], "behavior_role": "webber", "action_points": 3, "attack_cost": 2, "attack_range": 1, "hp": 5, "toughness": 1, "damage": 1, "archetype": "webber", "archetype_label": "缚网者", "archetype_desc": "优先在玩家周围铺设缚网，限制走位；贴近后进行近战攻击。", "traits": ["webber"], "trait_labels": {"webber": "铺设缚网，玩家进入后移动额外消耗1行动力"}}
+        ]
+      },
+      "run_rules": {"player_hp": 50, "base_energy": 5},
+      "deck": ["jab", "guard", "brace", "fling"],
+      "observer": {"max_rounds": 10, "player_script": "stationary"}
+    },
+    {
       "id": "ambush_release",
       "name": "埋伏释放",
       "category": "ai",

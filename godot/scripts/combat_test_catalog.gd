@@ -3,7 +3,7 @@ extends RefCounted
 
 const DEFAULT_PATH := "res://data/test_mode/combat_ai_scenarios.json"
 const VALID_CATEGORIES := ["combat", "ai", "multi_enemy", "presentation"]
-const VALID_ROLES := ["auto", "hunter", "flanker", "controller"]
+const VALID_ROLES := ["auto", "hunter", "flanker", "controller", "webber"]
 const VALID_PLAYER_SCRIPTS := ["stationary", "alternate_cells", "safe_random_walk"]
 
 var scenarios: Array[Dictionary] = []

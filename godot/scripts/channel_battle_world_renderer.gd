@@ -50,6 +50,7 @@ const COL_GREEN := Color("66b66d")
 const COL_RED := Color("d9574f")
 const COL_ENEMY_THREAT := Color("ef4444")
 const COL_ENEMY_MOVE := Color("6d4cff")
+const COL_WEB := Color("9b6dde")
 const COL_PLAYER_MOVE := Color("fffaf2")
 const COL_PLAYER_POSITION := Color("f4c542")
 const COL_HOVER_VALID := Color("f5e7a1")
@@ -604,15 +605,15 @@ func _battle_intent_cells() -> Dictionary:
 		return intent_cells
 	# 测试场景的范围面板是独立的观察工具，不能因为当前选中了卡牌
 	# 就把玩家可达格和步数一起隐藏；正式战斗仍保持卡牌目标优先。
-	var show_player_reach := player_range_display_enabled and (selected_card < 0 or host.test_combat_active)
+	var show_player_reach: bool = player_range_display_enabled and (selected_card < 0 or host.test_combat_active)
 	if show_player_reach:
 		for raw_cell in combat.player_reachable_cells():
 			var player_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			(player_entry["player_move"] as Array).append({"intent": {"enemy_id": "player"}})
 			intent_cells[raw_cell] = player_entry
-	if selected_card < 0 and combat.energy <= 0:
+	if selected_card < 0 and (combat.energy <= 0 or host.player_facing_selection_requested):
 		for direction: Vector2i in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
-			var facing_cell := combat.player_pos + direction
+			var facing_cell: Vector2i = combat.player_pos + direction
 			if not _battle_cell_in_bounds(facing_cell):
 				continue
 			var facing_entry: Dictionary = intent_cells.get(facing_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": [], "player_facing": []})
@@ -642,6 +643,12 @@ func _battle_intent_cells() -> Dictionary:
 			var impact_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			(impact_entry["impact"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
 			intent_cells[raw_cell] = impact_entry
+		for raw_cell in enemy_intent.get("web_cells", []):
+			var web_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
+			var web_markers: Array = web_entry.get("web", [])
+			web_markers.append({"enemy_id": enemy_id, "intent": enemy_intent})
+			web_entry["web"] = web_markers
+			intent_cells[raw_cell] = web_entry
 		for raw_cell in enemy_intent.get("path", []):
 			var path_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
 			(path_entry["path"] as Array).append({"enemy_id": enemy_id, "intent": enemy_intent})
@@ -698,6 +705,7 @@ func _refresh_battle_dynamic_visuals() -> void:
 			var player_moves: Array = cell_intent.get("player_move", [])
 			var player_facing: Array = cell_intent.get("player_facing", [])
 			var enemy_moves: Array = cell_intent.get("enemy_move", [])
+			var webs: Array = cell_intent.get("web", [])
 			var paths: Array = cell_intent.get("path", [])
 			var lines: Array = cell_intent.get("line", [])
 			var rim_color := base_rim
@@ -707,10 +715,12 @@ func _refresh_battle_dynamic_visuals() -> void:
 				rim_color = COL_RED
 			elif show_battle_debug and not threats.is_empty():
 				rim_color = COL_ENEMY_THREAT
-			elif show_battle_debug and not player_moves.is_empty():
-				rim_color = COL_PLAYER_MOVE
 			elif show_battle_debug and not player_facing.is_empty():
 				rim_color = COL_GOLD
+			elif show_battle_debug and not webs.is_empty():
+				rim_color = COL_WEB
+			elif show_battle_debug and not player_moves.is_empty():
+				rim_color = COL_PLAYER_MOVE
 			elif show_battle_debug and not enemy_moves.is_empty():
 				rim_color = COL_ENEMY_MOVE
 			var rim_node := cell_node.get_node_or_null("Frame") as MeshInstance3D
@@ -726,12 +736,14 @@ func _refresh_battle_dynamic_visuals() -> void:
 					_add_battle_cell_fill(cell_node, "IntentAttackOverlayFill", top_y, COL_RED, 0.88)
 				elif not threats.is_empty():
 					_add_battle_cell_fill(cell_node, "IntentThreatFill", top_y, COL_ENEMY_THREAT, 0.50)
-				elif not player_moves.is_empty():
-					_add_battle_cell_fill(cell_node, "PlayerReachableFill", top_y, COL_PLAYER_MOVE, 0.22)
 				elif not player_facing.is_empty():
 					_add_battle_cell_fill(cell_node, "PlayerFacingFill", top_y, COL_GOLD, 0.28)
 					var facing_direction := Vector2i((player_facing[0] as Dictionary).get("direction", Vector2i.ZERO))
 					_add_label(cell_node, "PlayerFacingGlyph", _battle_facing_glyph(facing_direction), Vector3(0, top_y + 0.30, 0), Color("fffaf2", 0.98), 18)
+				elif not webs.is_empty():
+					_add_battle_cell_fill(cell_node, "IntentWebFill", top_y, COL_WEB, 0.42)
+				elif not player_moves.is_empty():
+					_add_battle_cell_fill(cell_node, "PlayerReachableFill", top_y, COL_PLAYER_MOVE, 0.22)
 				elif not enemy_moves.is_empty():
 					_add_battle_cell_fill(cell_node, "IntentMoveOverlayFill", top_y, COL_ENEMY_MOVE, 0.28)
 				if player_step_display_enabled and not player_moves.is_empty():
@@ -765,6 +777,7 @@ func _refresh_battle_dynamic_visuals() -> void:
 				elif not enemy_moves.is_empty():
 					glyph_entry = enemy_moves[0]
 					glyph_node_prefix = "IntentMoveGlyph"
+				# 网格只保留网的地面效果和持续回合数，不在每个格子重复显示“网”字。
 				elif not paths.is_empty():
 					glyph_entry = paths[0]
 					glyph_node_prefix = "IntentMoveGlyph"
@@ -835,6 +848,14 @@ func _refresh_battle_intent_arrows() -> void:
 			var attack_paths := _battle_intent_attack_paths(state.pos, intent)
 			for index in range(attack_paths.size()):
 				_add_battle_intent_path_arrow(attack_paths[index], COL_GREEN, "%s_%d" % [enemy_id, index])
+			continue
+		var web_cells: Array = intent.get("web_cells", [])
+		if not web_cells.is_empty():
+			var blocked: Dictionary = combat.occupied_enemy_cells(enemy_id)
+			for index in range(web_cells.size()):
+				var target := Vector2i(web_cells[index])
+				var web_path: Array[Vector2i] = combat._find_path(state.pos, target, blocked, false)
+				_add_battle_intent_path_arrow(web_path, COL_WEB, "%s_web_%d" % [enemy_id, index])
 			continue
 		var path_cells: Array = intent.get("path", [])
 		if path_cells.is_empty():
@@ -997,6 +1018,12 @@ func _add_trap_visual(cell_node: Node3D, trap: Dictionary, top_y: float) -> void
 		salt_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		salt_ring.set_meta("collision_free", true)
 		cell_node.add_child(salt_ring)
+		return
+	if card_id == "web":
+		_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.06, 0), 0.46, 0.055, _material(Color(COL_WEB, 0.86), true, 0.035))
+		var remaining_rounds := maxi(0, int(trap.get("expires_round", combat.round_number + 1)) - combat.round_number)
+		if remaining_rounds > 0:
+			_add_label(cell_node, "TrapDuration", str(remaining_rounds), Vector3(0, top_y + 0.62, 0), Color("fff5ff", 0.98), 16)
 		return
 	_add_cylinder(cell_node, "Trap", Vector3(0, top_y + 0.08, 0), 0.30, 0.13, _material(COL_GOLD, false, 0.05))
 	_add_trap_item_sprite(cell_node, card_id, top_y)
@@ -1778,7 +1805,8 @@ func _add_battle_pawn(pos: Vector2i, is_player: bool, revealed: bool, enemy_id: 
 	var enemy_state = combat.enemy_by_id(enemy_id) if not is_player else null
 	var is_ranged_enemy: bool = enemy_state != null and enemy_state.has_trait("ranged")
 	var is_backstab_enemy: bool = enemy_state != null and enemy_state.has_trait("backstab")
-	var visible_enemy_color: Color = COL_BACKSTAB_ENEMY if is_backstab_enemy else COL_RANGED_ENEMY if is_ranged_enemy else COL_RED
+	var is_webber_enemy: bool = enemy_state != null and enemy_state.has_trait("webber")
+	var visible_enemy_color: Color = COL_BACKSTAB_ENEMY if is_backstab_enemy else COL_RANGED_ENEMY if is_ranged_enemy else COL_WEB if is_webber_enemy else COL_RED
 	var base_color: Color = COL_TEAL if is_player else visible_enemy_color if revealed else Color("1f2930")
 	_add_cylinder(node, "PawnBase", Vector3(0, floor_y + 0.026, 0), 0.46, 0.052, _material(Color(base_color, 0.58), true, 0.035))
 	var presenter := CharacterPresenter.new()
@@ -1799,6 +1827,7 @@ func _battle_intent_color(intent_type: String) -> Color:
 	match intent_type:
 		"attack": return Color("ff5a4e")
 		"chase": return Color("ff9c4a")
+		"web": return COL_WEB
 		"wait": return Color("f2a51e")
 		"search": return Color("6ab7e8")
 		"patrol": return Color("5fd6c6")
@@ -1814,6 +1843,7 @@ func _battle_intent_glyph(intent_type: String, attack_kind: String = "") -> Stri
 			if attack_kind == "beam":
 				return "束"
 			return "攻"
+		"web": return "网"
 		"chase": return "追"
 		"wait": return "待"
 		"search": return "搜"
@@ -1837,6 +1867,8 @@ func _battle_facing_glyph(direction: Vector2i) -> String:
 func _battle_intent_icon_texture(intent_type: String, attack_kind: String = "") -> Texture2D:
 	# “等待”暂时复用移动图标，等专用绕后等待图标制作完成后再替换。
 	if intent_type == "wait":
+		return INTENT_MOVE_ICON
+	if intent_type == "web":
 		return INTENT_MOVE_ICON
 	if attack_kind == "ranged":
 		return INTENT_RANGED_ICON
@@ -1863,6 +1895,9 @@ func _battle_actor_presentation(actor_key: String, enemy_id: String = "") -> Dic
 		# 远程敌人沿用原模型和贴图，只通过材质 tint 与底座颜色做识别。
 		config["model_tint"] = COL_RANGED_ENEMY
 		config["model_tint_strength"] = 0.55
+	elif state != null and state.has_trait("webber"):
+		config["model_tint"] = COL_WEB
+		config["model_tint_strength"] = 0.58
 	return config
 
 
@@ -1970,6 +2005,20 @@ func _show_enemy_salt_ring_effect(enemy_id: String) -> void:
 		return
 	var state = combat.enemy_by_id(enemy_id) if combat != null else null
 	if state != null and not state.revealed:
+		return
+	_show_salt_ring_effect(actor)
+
+
+func _show_player_salt_ring_effect() -> void:
+	var root: Node3D = battle_actor_root
+	if root == null:
+		return
+	var actor := root.get_node_or_null("Player") as Node3D
+	_show_salt_ring_effect(actor)
+
+
+func _show_salt_ring_effect(actor: Node3D) -> void:
+	if actor == null:
 		return
 	var existing := actor.get_node_or_null("SaltRingHitEffect")
 	if existing != null:

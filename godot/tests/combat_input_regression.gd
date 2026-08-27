@@ -149,13 +149,28 @@ func _run() -> void:
 	_check(game.battle_feedback_root.get_node_or_null("DamageFeedback") is Label, "enemy HP loss must create a model-scale-independent damage popup after the action callout")
 
 	if game.combat.outcome == "":
+		game.combat.energy = 2
 		var round_before: int = game.combat.round_number
 		var end_turn_click := InputEventMouseButton.new()
 		end_turn_click.button_index = MOUSE_BUTTON_LEFT
 		end_turn_click.pressed = true
 		end_turn_click.position = hud.ui_offset + hud.END_TURN_RECT.get_center() * hud.ui_scale
 		hud._gui_input(end_turn_click)
+		while game.animation_busy:
+			await process_frame
 		_check(game.combat.round_number > round_before or game.combat.outcome != "", "end-turn button must win input priority over the expanded battle viewport")
+		if game.combat.outcome == "":
+			_check(game.player_facing_selection_requested, "ending a turn must open a one-shot player-facing choice")
+			var post_end_origin: Vector2i = game.combat.player_pos
+			var post_end_direction := Vector2i.ZERO
+			for candidate_direction: Vector2i in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
+				if _inside(post_end_origin + candidate_direction, game.combat.cols, game.combat.rows):
+					post_end_direction = candidate_direction
+					break
+			if post_end_direction != Vector2i.ZERO:
+				game.handle_battle_cell(post_end_origin + post_end_direction)
+				_check(game.combat.player_pos == post_end_origin, "post-end-turn facing choice must not move the player")
+				_check(game.combat.player_facing == post_end_direction, "post-end-turn facing choice must update player facing")
 
 	game.queue_free()
 	await process_frame

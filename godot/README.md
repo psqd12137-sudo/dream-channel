@@ -223,7 +223,7 @@ $tests = @(
   "enemy_patrol_intent_regression", "enemy_vision_state_regression", "enemy_intent_snapshot_regression",
   "enemy_ai_tactical_regression", "enemy_ai_cycle_regression",
   "player_movement_range_regression",
-  "enemy_turn_animation_regression", "enemy_traits_regression", "ranged_enemy_regression", "backstab_enemy_regression", "salt_ring_effect_regression", "shared_cell_regression",
+  "enemy_turn_animation_regression", "enemy_traits_regression", "ranged_enemy_regression", "backstab_enemy_regression", "webber_enemy_regression", "salt_ring_effect_regression", "shared_cell_regression",
   "enemy_archetype_presentation_regression", "turn_order_presentation_regression", "turn_timing_regression",
   "multi_enemy_roster_regression", "multi_enemy_legacy_compat_regression",
   "multi_enemy_state_regression", "multi_enemy_turn_regression",

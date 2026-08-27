@@ -13,7 +13,7 @@ func _run() -> void:
 	var catalog := CombatTestCatalog.new()
 	_check(catalog.load_from_path(), "combat test catalog must load")
 	_check(catalog.errors.is_empty(), "valid catalog must have no errors: %s" % str(catalog.errors))
-	_check(catalog.ids().size() == 9, "catalog must expose nine scenarios")
+	_check(catalog.ids().size() == 10, "catalog must expose ten scenarios")
 	_check(catalog.get_scenario("squad_roles").get("room", {}).get("enemies", []).size() == 3, "squad_roles must contain three enemies")
 	var mixed_enemies: Array = catalog.get_scenario("mixed_assault").get("room", {}).get("enemies", [])
 	_check(mixed_enemies.size() == 3, "mixed_assault must contain melee, ranged, and backstab enemies")
@@ -27,7 +27,7 @@ func _run() -> void:
 	_check(str(catalog.get_scenario("pixel_art_showcase").get("visual", {}).get("filter", "")) == "pixel_art_3d", "pixel_art_showcase must declare the pixel filter")
 	_check(catalog.get_scenario("missing").is_empty(), "unknown scenario must resolve to an empty dictionary")
 	if failures.is_empty():
-		print("CHANNEL_COMBAT_TEST_CATALOG: PASS load-nine-scenarios-validation")
+		print("CHANNEL_COMBAT_TEST_CATALOG: PASS load-ten-scenarios-validation")
 		quit(0)
 	else:
 		for failure: String in failures:

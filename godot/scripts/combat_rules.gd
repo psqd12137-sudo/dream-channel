@@ -9,6 +9,8 @@ const CombatStatus = preload("res://scripts/combat_status.gd")
 const DIRS := [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 const INVALID_CELL := Vector2i(-999, -999)
 const LAST_SEEN_MEMORY_TURNS := 5
+const WEBBER_WEB_COST := 2
+const WEBBER_WEB_DURATION := 2
 
 var cols := 5
 var rows := 3
@@ -186,6 +188,20 @@ func statuses_for_player() -> Array[Dictionary]:
 			CombatStatus.DURATION_TURNS,
 			"player",
 			"吸收即将受到的生命伤害"))
+	var trap_value: Variant = traps.get(player_pos, {})
+	var trap: Dictionary = trap_value if trap_value is Dictionary else {}
+	if str(trap.get("card_id", "")) == "web" and int(trap.get("player_slow", 0)) > 0:
+		var remaining_rounds := maxi(0, int(trap.get("expires_round", round_number)) - round_number)
+		statuses.append(CombatStatus.make(
+			"web_slow",
+			CombatStatus.CATEGORY_CONTROL,
+			"缚网",
+			int(trap.get("player_slow", 1)),
+			remaining_rounds,
+			CombatStatus.DURATION_TURNS,
+			str(trap.get("source", "webber")),
+			"移动额外消耗%d行动力" % int(trap.get("player_slow", 1)),
+			"salt"))
 	for raw_status_id in player_statuses.keys():
 		var status_id := str(raw_status_id)
 		var status := CombatStatus.normalize(status_id, player_statuses[raw_status_id])
@@ -219,10 +235,16 @@ func statuses_for_tile(cell: Vector2i) -> Array[Dictionary]:
 		var trap_card: Dictionary = cards.get(trap_id, {})
 		var trap_label := str(trap_card.get("name", trap_id if not trap_id.is_empty() else "陷阱"))
 		var slow := int(trap.get("slow", 0))
-		if trap_id in ["guard", "salt"] or slow > 0:
+		var player_slow := int(trap.get("player_slow", 0))
+		if trap_id == "web":
+			trap_label = "缚网"
+		elif trap_id in ["guard", "salt"] or slow > 0:
 			trap_label = "盐圈"
 		var trap_detail := "踩入后触发"
-		if slow > 0:
+		if trap_id == "web":
+			var remaining_rounds := maxi(0, int(trap.get("expires_round", round_number)) - round_number)
+			trap_detail = "玩家进入后移动额外消耗%d行动力；剩余%d回合" % [player_slow, remaining_rounds]
+		elif slow > 0:
 			trap_detail = "敌人移动额外消耗%d行动力" % slow
 			if trap_id in ["guard", "salt"]:
 				trap_detail += "；剩余触发%d次" % maxi(0, int(trap.get("charges", 3)))
@@ -615,7 +637,10 @@ func player_reachable_cells() -> Array:
 
 
 func player_move_cost(target: Vector2i) -> int:
-	return move_cost + (hostile_pass_cost if enemy_at(target) != null else 0)
+	var trap_value: Variant = traps.get(target, {})
+	var trap: Dictionary = trap_value if trap_value is Dictionary else {}
+	var player_trap_cost := int(trap.get("player_slow", 0))
+	return move_cost + player_trap_cost + (hostile_pass_cost if enemy_at(target) != null else 0)
 
 
 func player_on_portal() -> bool:
@@ -815,6 +840,7 @@ func _empty_enemy_intent(enemy_id := "") -> Dictionary:
 		"impact_cells": [],
 		"coverage_cells": [],
 		"line_cells": [],
+		"web_cells": [],
 		"range_origin": INVALID_CELL,
 		"attack_range": 0,
 		"label": "观望",
@@ -901,6 +927,19 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 		result["type"] = "attack"
 		result["attack_kind"] = "decoy"
 		return result
+	if state.has_trait("webber") and state.sees_player:
+		var web_attack := _enemy_attack_plan(state, state.pos, remaining, true)
+		if not web_attack.is_empty():
+			return _intent_from_attack_plan(state, web_attack, result)
+		if not _has_active_web_for_enemy(state):
+			var web_cell := _webber_target_cell(state)
+			if remaining >= WEBBER_WEB_COST and web_cell != INVALID_CELL:
+				result["web_cells"] = [web_cell]
+				result["type"] = "web"
+				result["label"] = "铺网"
+				result["detail"] = "在玩家周围铺设缚网；进入该格后移动额外消耗1行动力。"
+				result["intent_value"] = "网"
+				return result
 	if not state.has_trait("backstab") and state.sees_player and manhattan(state.pos, player_pos) <= 1 and remaining < _effective_attack_cost(state):
 		result["label"] = "等待攻击窗口"
 		result["detail"] = "已经贴近目标，但剩余行动力不足以发动攻击。"
@@ -940,7 +979,7 @@ func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
 			result["type"] = "patrol"
 			result["label"] = "巡逻 %d步" % result["path"].size()
 			result["detail"] = "尚未发现你；蓝色编号是它即将巡逻的路线。"
-	if (result["path"] as Array).is_empty() and result["type"] != "attack":
+	if (result["path"] as Array).is_empty() and result["type"] not in ["attack", "wait"]:
 		result["label"] = "重新选点"
 		result["detail"] = "当前巡逻点已到达，下回合会选择新的搜查方向。"
 	return result
@@ -1106,10 +1145,21 @@ func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
 			turn_events.append(_resolve_decoy_attack(state))
 			remaining -= _effective_attack_cost(state)
 			continue
+		if state.has_trait("webber") and state.sees_player and not hidden_at_turn_start:
+			var web_attack := _enemy_attack_plan(state, state.pos, remaining, true)
+			if not web_attack.is_empty():
+				var web_execution := _execute_enemy_attack_plan(state, web_attack, remaining)
+				turn_events.append_array(web_execution.get("events", []))
+				remaining -= int(web_execution.get("cost", 0))
+				break
+			if not _has_active_web_for_enemy(state):
+				var web_cell := _webber_target_cell(state)
+				if remaining >= WEBBER_WEB_COST and web_cell != INVALID_CELL and _place_enemy_web(state, web_cell, turn_events):
+					remaining -= WEBBER_WEB_COST
+					break
 		if state.has_trait("backstab"):
 			var back_cell := player_back_cell()
 			if state.pos == back_cell and remaining < _effective_attack_cost(state):
-				turn_events.append({"kind": "wait", "actor_id": state.id, "label": "等待背刺窗口"})
 				break
 			var back_path := _backstab_path(state)
 			var required_cost: int = _enemy_path_cost(back_path) + _effective_attack_cost(state) if not back_path.is_empty() else 999
@@ -1288,6 +1338,75 @@ func _enemy_path_cost(path: Array[Vector2i]) -> int:
 		var cell: Vector2i = path[index]
 		total += 1 + int((traps.get(cell, {}) as Dictionary).get("slow", 0))
 	return total
+
+
+func _webber_target_cell(state: CombatEnemyState) -> Vector2i:
+	if state == null or not state.alive() or not state.sees_player:
+		return INVALID_CELL
+	var blocked := occupied_enemy_cells(state.id)
+	var candidates: Array[Dictionary] = []
+	for direction: Vector2i in DIRS:
+		var cell := player_pos + direction
+		if cell == state.pos or not is_walkable(cell) or blocked.has(cell) or traps.has(cell) or cell == decoy_pos:
+			continue
+		var path := _find_path(state.pos, cell, blocked, false)
+		if state.pos != cell and (path.size() < 2 or path.back() != cell):
+			continue
+		candidates.append({
+			"cell": cell,
+			"path_cost": _enemy_path_cost(path),
+			"distance": manhattan(state.pos, cell),
+			"side": absi(cell.x - player_pos.x),
+		})
+	if candidates.is_empty():
+		return INVALID_CELL
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if int(a["path_cost"]) != int(b["path_cost"]):
+			return int(a["path_cost"]) < int(b["path_cost"])
+		if int(a["distance"]) != int(b["distance"]):
+			return int(a["distance"]) < int(b["distance"])
+		if int(a["side"]) != int(b["side"]):
+			return int(a["side"]) > int(b["side"])
+		return str(a["cell"]) < str(b["cell"])
+	)
+	return candidates[0]["cell"]
+
+
+func _has_active_web_for_enemy(state: CombatEnemyState) -> bool:
+	if state == null:
+		return false
+	var source_id := "enemy:%s" % state.id
+	for raw_trap in traps.values():
+		var trap: Dictionary = raw_trap if raw_trap is Dictionary else {}
+		if str(trap.get("card_id", "")) == "web" and str(trap.get("source", "")) == source_id:
+			return true
+	return false
+
+
+func _place_enemy_web(state: CombatEnemyState, target: Vector2i, events: Array[Dictionary]) -> bool:
+	if state == null or not state.alive() or target == INVALID_CELL or target == player_pos or enemy_at(target) != null or not is_walkable(target) or traps.has(target):
+		return false
+	var effect := {
+		"card_id": "web",
+		"glyph": "网",
+		"damage": 0,
+		"slow": 0,
+		"player_slow": 1,
+		"persistent": true,
+		"expires_round": round_number + WEBBER_WEB_DURATION,
+		"source": "enemy:%s" % state.id,
+	}
+	traps[target] = effect
+	events.append({
+		"kind": "web_place",
+		"actor_id": state.id,
+		"target": target,
+		"cell": target,
+		"trap": effect.duplicate(true),
+		"label": "铺网",
+	})
+	event_log.append("EnemyWebPlaced enemy=%s cell=%s expires=%d" % [state.id, target, int(effect["expires_round"])])
+	return true
 
 
 func _attack_line_cells(origin: Vector2i, target: Vector2i) -> Array[Vector2i]:
@@ -1685,6 +1804,12 @@ func _finish_enemy_turn() -> void:
 			# separate, silently divergent countdown rules.
 			CombatStatus.tick_turns(state.status_effects)
 		round_number += 1
+		for raw_cell in traps.keys().duplicate():
+			var cell := raw_cell as Vector2i
+			var trap: Dictionary = traps[raw_cell] if traps[raw_cell] is Dictionary else {}
+			if str(trap.get("card_id", "")) == "web" and int(trap.get("expires_round", 0)) <= round_number:
+				traps.erase(raw_cell)
+				event_log.append("EnemyWebExpired cell=%s" % cell)
 		# 杀戮尖塔式回合：怪物回合结束后不立即抽牌；
 		# 由 channel_3d 在敌方动画播完后调用 start_player_turn() 才发新牌。
 		pending_player_turn = true
@@ -1829,6 +1954,9 @@ func _trigger_trap(state: CombatEnemyState, pos: Vector2i, chasing_decoy: bool =
 		return {}
 	var trap: Dictionary = traps[pos]
 	var trap_id := str(trap.get("card_id", "trap"))
+	if trap_id == "web":
+		# 缚网只约束玩家；敌人可以穿过它，不触发伤害、减速或提示。
+		return {}
 	var damage := int(trap.get("damage", 0))
 	if chasing_decoy and damage > 0:
 		damage += 1
