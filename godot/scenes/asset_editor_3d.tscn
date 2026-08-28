@@ -216,6 +216,16 @@ offset_bottom = 112.0
 grow_horizontal = 2
 theme_override_constants/separation = 8
 
+[node name="EditLayerLabel" type="Label" parent="UI/TopBar"]
+layout_mode = 2
+text = "编辑层："
+vertical_alignment = 1
+
+[node name="EditLayer" type="OptionButton" parent="UI/TopBar"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+tooltip_text = "选择编辑大地图格子房或对应的副本房间空间布局"
+
 [node name="RoomShapeLabel" type="Label" parent="UI/TopBar"]
 layout_mode = 2
 text = "房间："

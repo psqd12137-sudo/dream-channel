@@ -1,0 +1,29 @@
+{
+	"schema_version": 1,
+	"links": [
+		{"world_room_id": "altar", "dungeon_layout_id": "altar_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "attic", "dungeon_layout_id": "attic_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "bedroom", "dungeon_layout_id": "bedroom_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "boiler", "dungeon_layout_id": "boiler_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "cellar", "dungeon_layout_id": "cellar_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "darkroom", "dungeon_layout_id": "darkroom_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "foyer", "dungeon_layout_id": "foyer_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "gallery", "dungeon_layout_id": "gallery_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "greenhouse", "dungeon_layout_id": "greenhouse_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "guest", "dungeon_layout_id": "guest_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "hall", "dungeon_layout_id": "hall_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "kitchen", "dungeon_layout_id": "kitchen_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "living", "dungeon_layout_id": "living_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "loft", "dungeon_layout_id": "loft_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "mudroom", "dungeon_layout_id": "mudroom_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "nursery", "dungeon_layout_id": "nursery_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "pantry", "dungeon_layout_id": "pantry_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "parlor", "dungeon_layout_id": "parlor_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "porch", "dungeon_layout_id": "porch_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "ritual", "dungeon_layout_id": "ritual_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "shed", "dungeon_layout_id": "shed_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "study", "dungeon_layout_id": "study_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "west_wing", "dungeon_layout_id": "west_wing_dungeon_01", "footprint_mode": "inherit"},
+		{"world_room_id": "yard", "dungeon_layout_id": "yard_dungeon_01", "footprint_mode": "inherit"}
+	]
+}

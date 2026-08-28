@@ -5,6 +5,7 @@ const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
 const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const RoomShellGraph = preload("res://scripts/room_shell_graph.gd")
+const DungeonLayoutCatalog = preload("res://scripts/dungeon_layout_catalog.gd")
 
 const CELL := 1.55
 const FINE_SNAP := CELL / 10.0
@@ -98,6 +99,9 @@ var room_shape_id := "single"
 var room_rotation_quarters := 0
 var room_cells: Array[Vector2i] = []
 var formal_room_id := "living"
+var edit_layer_id := "world"
+var dungeon_layout_id := ""
+var suppress_edit_layer_ui := false
 var suppress_formal_room_ui := false
 var suppress_room_ui := false
 
@@ -136,6 +140,8 @@ var template_items: Array[Dictionary] = []
 @onready var camera: Camera3D = $CameraRig/Camera3D
 @onready var catalog_list: VBoxContainer = $UI/Panel/VBox/CatalogScroll/CatalogList
 @onready var status_label: Label = $UI/Panel/VBox/Status
+@onready var edit_layer: OptionButton = $UI/TopBar/EditLayer
+@onready var formal_room_label: Label = $UI/TopBar/FormalRoomLabel
 @onready var formal_room: OptionButton = $UI/TopBar/FormalRoom
 @onready var room_shape: OptionButton = $UI/TopBar/RoomShape
 @onready var rotate_room_button: Button = $UI/TopBar/RotateRoom
@@ -163,6 +169,7 @@ func _ready() -> void:
 	_validate_catalog_paths()
 	_build_catalog_panel()
 	_prepare_selection_ring()
+	_populate_edit_layers()
 	_populate_formal_rooms()
 	_populate_room_shapes()
 	_prepare_ground()
@@ -171,6 +178,7 @@ func _ready() -> void:
 	_rebuild_room(true)
 	_build_reference_actor()
 	_load_formal_room_layout(formal_room_id, false)
+	edit_layer.item_selected.connect(_on_edit_layer_selected)
 	formal_room.item_selected.connect(_on_formal_room_selected)
 	room_shape.item_selected.connect(_on_room_shape_selected)
 	rotate_room_button.pressed.connect(_rotate_room)
@@ -181,7 +189,7 @@ func _ready() -> void:
 	place_door_button.pressed.connect(_replace_selected_wall_with_door)
 	toggle_actor_button.pressed.connect(_toggle_actor)
 	template_save.pressed.connect(func(): _save_template(template_name.text))
-	export_override_button.pressed.connect(func(): _export_override(override_room_id.text))
+	export_override_button.pressed.connect(func(): _export_current_layout())
 	template_load.pressed.connect(func(): _load_template(_selected_template_name()))
 	template_refresh.pressed.connect(func(): _refresh_templates(_selected_template_name()))
 	template_delete.pressed.connect(func(): _delete_template(_selected_template_name()))
@@ -193,6 +201,7 @@ func _ready() -> void:
 	ghost.visible = false
 	_rebuild_corner_anchors()
 	_set_tool_mode("move")
+	_sync_edit_layer_ui()
 	_update_camera_transform()
 	_update_status()
 	_update_help()
@@ -470,6 +479,70 @@ func _populate_room_shapes() -> void:
 		room_shape.set_item_metadata(room_shape.item_count - 1, shape_id)
 	_sync_room_shape_ui()
 	suppress_room_ui = false
+
+
+func _populate_edit_layers() -> void:
+	suppress_edit_layer_ui = true
+	edit_layer.clear()
+	edit_layer.add_item("大地图格子房")
+	edit_layer.set_item_metadata(edit_layer.item_count - 1, "world")
+	edit_layer.add_item("副本房间")
+	edit_layer.set_item_metadata(edit_layer.item_count - 1, "dungeon")
+	_sync_edit_layer_ui()
+	suppress_edit_layer_ui = false
+
+
+func _sync_edit_layer_ui() -> void:
+	if not is_instance_valid(edit_layer):
+		return
+	edit_layer.select(-1)
+	for index in edit_layer.item_count:
+		if str(edit_layer.get_item_metadata(index)) == edit_layer_id:
+			edit_layer.select(index)
+			break
+	if is_instance_valid(formal_room_label):
+		formal_room_label.text = "正式房间：" if edit_layer_id == "world" else "来源房间："
+	if is_instance_valid(override_room_id):
+		if edit_layer_id == "world":
+			override_room_id.placeholder_text = "房间 ID"
+			export_override_button.text = "导出正式数据"
+			export_override_button.tooltip_text = "把当前大地图格子房复制到 res://data/editor/overrides/<房间ID>.json"
+		else:
+			override_room_id.placeholder_text = "副本布局 ID"
+			export_override_button.text = "导出副本布局"
+			export_override_button.tooltip_text = "把当前副本空间布局保存到 res://data/editor/dungeon_layouts/<布局ID>.json"
+
+
+func _on_edit_layer_selected(index: int) -> void:
+	if suppress_edit_layer_ui or index < 0 or index >= edit_layer.item_count:
+		return
+	_set_edit_layer(str(edit_layer.get_item_metadata(index)), true)
+
+
+func _set_edit_layer(layer_id: String, record_undo := true) -> void:
+	var target := "dungeon" if layer_id == "dungeon" else "world"
+	if edit_layer_id == target:
+		_sync_edit_layer_ui()
+		return
+	var before := _snapshot_state()
+	edit_layer_id = target
+	if edit_layer_id == "dungeon":
+		_load_dungeon_layout(formal_room_id, false)
+	else:
+		_load_formal_room_layout(formal_room_id, false)
+	if record_undo:
+		_push_undo_snapshot(before)
+	_sync_edit_layer_ui()
+
+
+func _current_layout_target() -> Dictionary:
+	var result := {
+		"layer": edit_layer_id,
+		"world_room_id": formal_room_id,
+	}
+	if edit_layer_id == "dungeon":
+		result["dungeon_layout_id"] = dungeon_layout_id if not dungeon_layout_id.is_empty() else DungeonLayoutCatalog.default_layout_id(formal_room_id)
+	return result
 
 
 func _populate_formal_rooms() -> void:
@@ -1580,6 +1653,8 @@ func _snapshot_state() -> Dictionary:
 		"room_shape": room_shape_id,
 		"room_rotation_quarters": room_rotation_quarters,
 		"formal_room_id": formal_room_id,
+		"edit_layer_id": edit_layer_id,
+		"dungeon_layout_id": dungeon_layout_id,
 		"assets": _snapshot_placements(),
 		"walls": _snapshot_walls(),
 		"fixtures": _snapshot_fixtures(),
@@ -1590,9 +1665,12 @@ func _rebuild_from_state(state: Dictionary) -> int:
 	room_shape_id = str(state.get("room_shape", room_shape_id))
 	room_rotation_quarters = posmod(int(state.get("room_rotation_quarters", room_rotation_quarters)), 4)
 	formal_room_id = str(state.get("formal_room_id", formal_room_id))
+	edit_layer_id = "dungeon" if str(state.get("edit_layer_id", edit_layer_id)) == "dungeon" else "world"
+	dungeon_layout_id = str(state.get("dungeon_layout_id", dungeon_layout_id))
 	if not RoomFootprintCatalog.ROOM_CONFIG.has(formal_room_id):
 		formal_room_id = ""
 	room_cells = Rules.rotated_cells(room_shape_id, room_rotation_quarters)
+	_sync_edit_layer_ui()
 	_sync_formal_room_ui()
 	suppress_room_ui = true
 	_sync_room_shape_ui()
@@ -1700,7 +1778,8 @@ func _on_room_shape_selected(index: int) -> void:
 	if suppress_room_ui:
 		return
 	_change_room(str(room_shape.get_item_metadata(index)), 0, true)
-	formal_room_id = ""
+	if edit_layer_id == "world":
+		formal_room_id = ""
 	_sync_formal_room_ui()
 
 
@@ -1708,7 +1787,10 @@ func _on_formal_room_selected(index: int) -> void:
 	if suppress_formal_room_ui:
 		return
 	var selected_id := str(formal_room.get_item_metadata(index))
-	_load_formal_room_layout(selected_id, true)
+	if edit_layer_id == "dungeon":
+		_load_dungeon_layout(selected_id, true)
+	else:
+		_load_formal_room_layout(selected_id, true)
 
 
 func _load_formal_room_layout(room_id: String, record_undo := true) -> int:
@@ -1722,12 +1804,57 @@ func _load_formal_room_layout(room_id: String, record_undo := true) -> int:
 		state = _generated_formal_room_state(room_id)
 		source = "Unpacking 式房间初稿"
 	var loaded := _rebuild_from_state(state)
+	edit_layer_id = "world"
+	dungeon_layout_id = ""
 	if record_undo:
 		_push_undo_snapshot(before)
 	override_room_id.text = room_id
 	template_name.text = "override_%s" % room_id
 	_sync_formal_room_ui()
+	_sync_edit_layer_ui()
 	_update_status("已载入 %s：%s · %d格 · %d件家具 · %d段墙（可直接修改）" % [source, room_id, room_cells.size(), placements.get_child_count(), walls.get_child_count()])
+	return loaded
+
+
+func _load_dungeon_layout(room_id: String, record_undo := true) -> int:
+	if not RoomFootprintCatalog.ROOM_CONFIG.has(room_id):
+		_update_status("来源房间不存在：%s" % room_id)
+		return -1
+	var before := _snapshot_state()
+	var link := DungeonLayoutCatalog.link_for(room_id)
+	dungeon_layout_id = str(link.get("dungeon_layout_id", DungeonLayoutCatalog.default_layout_id(room_id)))
+	var data := DungeonLayoutCatalog.load_layout(dungeon_layout_id, room_id)
+	var state: Dictionary
+	var source := "正式副本布局"
+	if data.is_empty():
+		state = _formal_override_state(room_id)
+		if state.is_empty():
+			state = _generated_formal_room_state(room_id)
+			source = "大地图房间初稿回退"
+		else:
+			source = "大地图布局回退"
+	else:
+		state = {
+			"room_shape": str(data.get("footprint_kind", link.get("default_footprint_kind", "single"))),
+			"room_rotation_quarters": int(data.get("room_rotation_quarters", 0)),
+			"formal_room_id": room_id,
+			"edit_layer_id": "dungeon",
+			"dungeon_layout_id": dungeon_layout_id,
+			"assets": (data.get("assets", []) as Array).duplicate(true),
+			"walls": (data.get("walls", []) as Array).duplicate(true),
+			"fixtures": (data.get("fixtures", []) as Array).duplicate(true),
+		}
+	state["edit_layer_id"] = "dungeon"
+	state["dungeon_layout_id"] = dungeon_layout_id
+	var loaded := _rebuild_from_state(state)
+	edit_layer_id = "dungeon"
+	if record_undo:
+		_push_undo_snapshot(before)
+	override_room_id.text = dungeon_layout_id
+	template_name.text = "dungeon_%s" % dungeon_layout_id
+	_sync_formal_room_ui()
+	_sync_edit_layer_ui()
+	_update_status("已载入 %s：%s → %s · %d格 · %d件家具 · %d段墙（可直接修改）" % [source, room_id, dungeon_layout_id, room_cells.size(), placements.get_child_count(), walls.get_child_count()])
 	return loaded
 
 
@@ -2277,6 +2404,42 @@ func _export_override(room_id: String) -> String:
 	file.close()
 	override_room_id.text = clean_id
 	_update_status("已导出正式房间覆盖：%s" % file_path)
+	return json_text
+
+
+func _export_current_layout() -> String:
+	if edit_layer_id == "dungeon":
+		return _export_dungeon_layout(override_room_id.text)
+	return _export_override(override_room_id.text)
+
+
+func _export_dungeon_layout(layout_id: String) -> String:
+	var requested_id := str(layout_id).strip_edges()
+	if requested_id.is_empty() or requested_id == "template":
+		requested_id = dungeon_layout_id
+	if requested_id.is_empty():
+		requested_id = DungeonLayoutCatalog.default_layout_id(formal_room_id)
+	var clean_id := _clean_template_name(requested_id).split("@")[0]
+	if clean_id.is_empty() or clean_id == "template":
+		_update_status("副本布局导出失败：请输入布局 ID，例如 living_dungeon_01")
+		return ""
+	var payload := DungeonLayoutCatalog.make_payload(clean_id, formal_room_id, _snapshot_state())
+	var json_text := JSON.stringify(payload, "\t")
+	var absolute_dir := ProjectSettings.globalize_path(DungeonLayoutCatalog.LAYOUT_DIR)
+	var directory_error := DirAccess.make_dir_recursive_absolute(absolute_dir)
+	if directory_error != OK and directory_error != ERR_ALREADY_EXISTS:
+		_update_status("副本布局导出失败：无法创建 %s" % absolute_dir)
+		return json_text
+	var file_path := DungeonLayoutCatalog.layout_path(clean_id)
+	var file := FileAccess.open(file_path, FileAccess.WRITE)
+	if file == null:
+		_update_status("副本布局导出失败：无法写入 %s" % file_path)
+		return json_text
+	file.store_string(json_text)
+	file.close()
+	dungeon_layout_id = clean_id
+	override_room_id.text = clean_id
+	_update_status("已导出副本布局：%s" % file_path)
 	return json_text
 
 
