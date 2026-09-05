@@ -6,6 +6,22 @@ const MANIFEST_PATH := "res://data/editor/dungeon_layout_manifest.json"
 const LAYOUT_DIR := "res://data/editor/dungeon_layouts/"
 
 static var _manifest_cache: Dictionary = {}
+static var _room_records: Dictionary = {}
+
+
+static func room_record(room_id: String) -> Dictionary:
+	if _room_records.is_empty():
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/exe_snapshot/rooms.json"))
+		if parsed is Dictionary:
+			_room_records = parsed.get("rooms", {})
+	return _room_records.get(room_id, {})
+
+
+static func has_dungeon(room_id: String) -> bool:
+	for link: Dictionary in _manifest().get("links", []):
+		if str(link.get("world_room_id", "")) == room_id and link.has("has_dungeon"):
+			return bool(link["has_dungeon"])
+	return bool(room_record(room_id).get("combat", false)) or room_id == "altar"
 
 
 static func link_for(world_room_id: String) -> Dictionary:

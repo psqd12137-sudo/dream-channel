@@ -4,6 +4,7 @@ extends RefCounted
 const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
 const RoomArtRegistry = preload("res://scripts/room_art_registry.gd")
 const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
+const DungeonLayouts = preload("res://scripts/dungeon_layout_catalog.gd")
 
 const EDITOR_CATALOG_PATH := "res://data/editor/asset_catalog.json"
 const MODEL_CELL := 1.55
@@ -56,10 +57,24 @@ static func build(room: Dictionary, cols: int, rows: int, battle_cell: float, ge
 	var theme := RoomPropCatalog.theme_for_room(room_for_theme, 0)
 	var style := (THEME_STYLES.get(theme, THEME_STYLES["living"]) as Dictionary).duplicate(true)
 	var override := RoomArtRegistry.load_override(room_type)
+	var dungeon: Dictionary = {}
+	if DungeonLayouts.has_dungeon(room_type):
+		var link := DungeonLayouts.link_for(room_type)
+		dungeon = DungeonLayouts.load_layout(str(link.get("dungeon_layout_id", "")), room_type)
 	var props: Array[Dictionary] = []
 	var source := "unpacking_seed"
 	var composition_id := ""
-	if not override.is_empty():
+	if not dungeon.is_empty():
+		# Authored spatial nodes are rendered directly, never reassigned to terrain.
+		source = "dungeon_layout"
+		var dungeon_cells: Array = []
+		for raw_cell: Array in dungeon.get("footprint", []):
+			var cell := Vector2i(int(raw_cell[0]), int(raw_cell[1]))
+			for turn in posmod(int(dungeon.get("room_rotation_quarters", 0)), 4):
+				cell = Vector2i(-cell.y, cell.x)
+			dungeon_cells.append([cell.x, cell.y])
+		footprint = {"kind": str(dungeon.get("footprint_kind", "single")), "cells": dungeon_cells}
+	elif not override.is_empty():
 		props = _props_from_override(override)
 		source = "override"
 	else:
@@ -77,6 +92,7 @@ static func build(room: Dictionary, cols: int, rows: int, battle_cell: float, ge
 		"footprint_kind": str(footprint.get("kind", "single")),
 		"footprint": (footprint.get("cells", [[0, 0]]) as Array).duplicate(true),
 		"source": source,
+		"dungeon_layout": dungeon,
 		"composition_id": composition_id,
 		"props": props,
 		"wall_kinds": wall_kinds,

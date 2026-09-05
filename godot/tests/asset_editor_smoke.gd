@@ -183,9 +183,12 @@ func _run_scene_structure_tests(editor: Node3D, catalog: Dictionary) -> void:
 	var catalog_list := editor.get_node("UI/Panel/VBox/CatalogScroll/CatalogList") as VBoxContainer
 	var expected_children := (catalog.get("categories", []) as Array).size() + (catalog.get("assets", []) as Array).size() + 4
 	_check(catalog_list.get_child_count() == expected_children, "catalog panel must include four categories, paper wall tools and all assets")
-	_check((editor.get_node("UI/TopBar/RoomShape") as OptionButton).item_count == 8, "room selector must contain eight footprints")
+	editor._on_room_size_selected(editor.room_size.get_item_index(1))
+	_check((editor.get_node("UI/TopBar/RoomShape") as OptionButton).item_count == 1, "world shape selector must show the selected specification")
 	var formal_room_selector := editor.get_node("UI/TopBar/FormalRoom") as OptionButton
-	_check(formal_room_selector.item_count == RoomFootprintCatalog.ROOM_CONFIG.size(), "formal room selector must expose every ROOM_CONFIG id")
+	for index in formal_room_selector.item_count:
+		var room_id := str(formal_room_selector.get_item_metadata(index))
+		_check(RoomFootprintCatalog.ROOM_CONFIG[room_id].shape == "single", "one-cell filter must exclude larger rooms")
 	var living_index := -1
 	for index in formal_room_selector.item_count:
 		if str(formal_room_selector.get_item_metadata(index)) == "living":
@@ -197,6 +200,7 @@ func _run_scene_structure_tests(editor: Node3D, catalog: Dictionary) -> void:
 		_check(editor.formal_room_id == "living" and editor.room_shape_id == str(RoomFootprintCatalog.ROOM_CONFIG["living"].get("shape", "single")), "formal room selection must sync shape and override id")
 		_check(editor.get_node("Placements").get_child_count() == 5 and editor.get_node("Walls").get_child_count() == 4, "formal room selection must load the authored living override instead of an empty footprint")
 	var hall_index := -1
+	editor._on_room_size_selected(editor.room_size.get_item_index(5))
 	for index in formal_room_selector.item_count:
 		if str(formal_room_selector.get_item_metadata(index)) == "hall":
 			hall_index = index
@@ -213,6 +217,7 @@ func _run_scene_structure_tests(editor: Node3D, catalog: Dictionary) -> void:
 				doorway_count += 1
 		_check(doorway_count == 1, "generated formal baseline must expose one editable doorway")
 	if living_index >= 0:
+		editor._on_room_size_selected(editor.room_size.get_item_index(1))
 		editor._on_formal_room_selected(living_index)
 		editor.formal_room_id = ""
 		editor._sync_formal_room_ui()

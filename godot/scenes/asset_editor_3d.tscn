@@ -206,15 +206,24 @@ layout_mode = 2
 text = "R  缩放"
 tooltip_text = "R：缩放工具；拖动中心或单轴方块"
 
-[node name="TopBar" type="HBoxContainer" parent="UI"]
+[node name="TopBar" type="HFlowContainer" parent="UI"]
 anchors_preset = 10
 anchor_right = 1.0
-offset_left = 316.0
+offset_left = 342.0
 offset_top = 70.0
 offset_right = -16.0
 offset_bottom = 112.0
 grow_horizontal = 2
-theme_override_constants/separation = 8
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="RoomSizeLabel" type="Label" parent="UI/TopBar"]
+layout_mode = 2
+text = "规格："
+
+[node name="RoomSize" type="OptionButton" parent="UI/TopBar"]
+layout_mode = 2
+custom_minimum_size = Vector2(80, 0)
 
 [node name="EditLayerLabel" type="Label" parent="UI/TopBar"]
 layout_mode = 2
@@ -228,7 +237,7 @@ tooltip_text = "选择编辑大地图格子房或对应的副本房间空间布�
 
 [node name="RoomShapeLabel" type="Label" parent="UI/TopBar"]
 layout_mode = 2
-text = "房间："
+text = "形状："
 vertical_alignment = 1
 
 [node name="RoomShape" type="OptionButton" parent="UI/TopBar"]
@@ -264,15 +273,16 @@ text = "参照物：显示"
 [node name="Sep2" type="VSeparator" parent="UI/TopBar"]
 layout_mode = 2
 
-[node name="TemplateBar" type="HBoxContainer" parent="UI"]
+[node name="TemplateBar" type="HFlowContainer" parent="UI"]
 anchors_preset = 10
 anchor_right = 1.0
-offset_left = 316.0
+offset_left = 342.0
 offset_top = 120.0
 offset_right = -16.0
 offset_bottom = 160.0
 grow_horizontal = 2
-theme_override_constants/separation = 8
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
 
 [node name="TemplateName" type="LineEdit" parent="UI/TemplateBar"]
 custom_minimum_size = Vector2(135, 0)

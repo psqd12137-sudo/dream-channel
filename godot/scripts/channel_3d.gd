@@ -995,6 +995,9 @@ func continue_saved_run() -> bool:
 	build_house_world()
 	_set_house_camera()
 	_refresh_hud()
+	var saved_rng_state := str(save.get("rng_state", ""))
+	if saved_rng_state.is_valid_int():
+		rng.state = int(saved_rng_state)
 	return true
 
 
@@ -1306,7 +1309,7 @@ func place_selected_offer() -> void:
 	_remove_remaining_room(str(room.get("id", "")))
 	phase = "explore"
 	build_offers.clear()
-	var final_message := "摆下「%s」。它仍是未知房；走进去才揭示，也才算行程。" % str(room.get("name", "房间"))
+	var final_message := "摆下未知房间。走进去才揭示内容，也才算行程。"
 	status_message = "房间正在翻转落位……"
 	event_log.append(final_message)
 	animation_busy = true
@@ -1806,7 +1809,7 @@ func _start_quiet_reward(origin: String = "quiet") -> void:
 	reward_options = [
 		{"kind": "stat", "id": "heal", "name": "恢复 2 生命"},
 		{"kind": "stat", "id": "max_hp", "name": "生命上限 +1，并治疗 1"},
-		{"kind": "stat", "id": "speed", "name": "速度 +1"},
+		{"kind": "stat", "id": "speed", "name": "速度 +1（每回合行动力 +1）"},
 	]
 	if run_progress >= 4:
 		var available: Array = content.get("relic_pool", []).filter(func(id: Variant) -> bool: return str(id) not in active_relics)
@@ -1940,7 +1943,8 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 		run_rules.merge(test_session.scenario.get("run_rules", {}), true)
 	run_rules["player_hp"] = player_hp
 	run_rules["base_speed"] = player_speed
-	run_rules["base_speed"] = player_speed
+	var starting_speed := int(content.get("run_rules", {}).get("base_speed", 3))
+	run_rules["base_energy"] = int(run_rules.get("base_energy", 5)) + maxi(0, player_speed - starting_speed)
 	if combat_is_boss:
 		run_rules["enemy_death_allowed"] = bool(room.get("boss", {}).get("killable", room.get("boss_profile", {}).get("killable", true)))
 	combat.setup(room.get("arena", {}), enemy_specs, content.get("cards", {}), run_deck, run_seed + room_rules.instance_count() * 17, run_rules, active_relics)
@@ -3045,6 +3049,7 @@ func _save_run() -> void:
 		"version": 1,
 		"source": EXE_SOURCE_ID,
 		"seed": run_seed,
+		"rng_state": str(rng.state),
 		"layout_profile": str(run_layout_profile.get("id", "")),
 		"phase": phase,
 		"player_hp": player_hp,

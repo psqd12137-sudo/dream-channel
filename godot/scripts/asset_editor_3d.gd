@@ -100,6 +100,7 @@ var room_rotation_quarters := 0
 var room_cells: Array[Vector2i] = []
 var formal_room_id := "living"
 var edit_layer_id := "world"
+var selected_room_size := 1
 var dungeon_layout_id := ""
 var suppress_edit_layer_ui := false
 var suppress_formal_room_ui := false
@@ -141,6 +142,7 @@ var template_items: Array[Dictionary] = []
 @onready var catalog_list: VBoxContainer = $UI/Panel/VBox/CatalogScroll/CatalogList
 @onready var status_label: Label = $UI/Panel/VBox/Status
 @onready var edit_layer: OptionButton = $UI/TopBar/EditLayer
+@onready var room_size: OptionButton = $UI/TopBar/RoomSize
 @onready var formal_room_label: Label = $UI/TopBar/FormalRoomLabel
 @onready var formal_room: OptionButton = $UI/TopBar/FormalRoom
 @onready var room_shape: OptionButton = $UI/TopBar/RoomShape
@@ -170,6 +172,13 @@ func _ready() -> void:
 	_build_catalog_panel()
 	_prepare_selection_ring()
 	_populate_edit_layers()
+	for size in [1, 3, 5]:
+		room_size.add_item("%d 格" % size, size)
+	room_size.item_selected.connect(_on_room_size_selected)
+	$UI/TopBar.move_child(formal_room_label, 2)
+	$UI/TopBar.move_child(formal_room, 3)
+	$UI/TopBar.resized.connect(_layout_editor_bars)
+	_layout_editor_bars.call_deferred()
 	_populate_formal_rooms()
 	_populate_room_shapes()
 	_prepare_ground()
@@ -475,6 +484,8 @@ func _populate_room_shapes() -> void:
 	suppress_room_ui = true
 	room_shape.clear()
 	for shape_id in ROOM_SHAPE_ORDER:
+		if edit_layer_id == "world" and (RoomFootprintCatalog.SHAPES[shape_id] as Array).size() != selected_room_size:
+			continue
 		room_shape.add_item(str(ROOM_SHAPE_NAMES.get(shape_id, shape_id)))
 		room_shape.set_item_metadata(room_shape.item_count - 1, shape_id)
 	_sync_room_shape_ui()
@@ -495,6 +506,7 @@ func _populate_edit_layers() -> void:
 func _sync_edit_layer_ui() -> void:
 	if not is_instance_valid(edit_layer):
 		return
+	edit_layer.set_item_disabled(1, not DungeonLayoutCatalog.has_dungeon(formal_room_id))
 	edit_layer.select(-1)
 	for index in edit_layer.item_count:
 		if str(edit_layer.get_item_metadata(index)) == edit_layer_id:
@@ -521,6 +533,9 @@ func _on_edit_layer_selected(index: int) -> void:
 
 func _set_edit_layer(layer_id: String, record_undo := true) -> void:
 	var target := "dungeon" if layer_id == "dungeon" else "world"
+	if target == "dungeon" and not DungeonLayoutCatalog.has_dungeon(formal_room_id):
+		_update_status("此房间只有事件或静室内容，无需编辑副本。")
+		return
 	if edit_layer_id == target:
 		_sync_edit_layer_ui()
 		return
@@ -533,6 +548,27 @@ func _set_edit_layer(layer_id: String, record_undo := true) -> void:
 	if record_undo:
 		_push_undo_snapshot(before)
 	_sync_edit_layer_ui()
+	_populate_room_shapes()
+
+
+func _on_room_size_selected(index: int) -> void:
+	selected_room_size = room_size.get_item_id(index)
+	_populate_formal_rooms()
+	if formal_room.item_count > 0:
+		_on_formal_room_selected(0)
+
+
+func _layout_editor_bars() -> void:
+	$UI/TemplateBar.position.y = $UI/TopBar.position.y + $UI/TopBar.size.y + 8.0
+
+
+func _sync_room_size() -> void:
+	var config: Dictionary = RoomFootprintCatalog.ROOM_CONFIG.get(formal_room_id, {})
+	if not config.is_empty():
+		selected_room_size = (RoomFootprintCatalog.SHAPES[config["shape"]] as Array).size()
+	room_size.select(room_size.get_item_index(selected_room_size))
+	_populate_formal_rooms()
+	_populate_room_shapes()
 
 
 func _current_layout_target() -> Dictionary:
@@ -556,7 +592,10 @@ func _populate_formal_rooms() -> void:
 		var config: Dictionary = RoomFootprintCatalog.ROOM_CONFIG.get(room_id, {})
 		var shape_id := str(config.get("shape", "single"))
 		var cell_count := (RoomFootprintCatalog.SHAPES.get(shape_id, RoomFootprintCatalog.SHAPES["single"]) as Array).size()
-		formal_room.add_item("%s · %d格 · %s" % [room_id, cell_count, ROOM_SHAPE_NAMES.get(shape_id, shape_id)])
+		if cell_count != selected_room_size:
+			continue
+		var room_name := str(DungeonLayoutCatalog.room_record(room_id).get("name", room_id))
+		formal_room.add_item("%s · %s" % [room_name, room_id])
 		formal_room.set_item_metadata(formal_room.item_count - 1, room_id)
 	_sync_formal_room_ui()
 	suppress_formal_room_ui = false
@@ -1669,6 +1708,7 @@ func _rebuild_from_state(state: Dictionary) -> int:
 	dungeon_layout_id = str(state.get("dungeon_layout_id", dungeon_layout_id))
 	if not RoomFootprintCatalog.ROOM_CONFIG.has(formal_room_id):
 		formal_room_id = ""
+	_sync_room_size()
 	room_cells = Rules.rotated_cells(room_shape_id, room_rotation_quarters)
 	_sync_edit_layer_ui()
 	_sync_formal_room_ui()
@@ -1778,8 +1818,6 @@ func _on_room_shape_selected(index: int) -> void:
 	if suppress_room_ui:
 		return
 	_change_room(str(room_shape.get_item_metadata(index)), 0, true)
-	if edit_layer_id == "world":
-		formal_room_id = ""
 	_sync_formal_room_ui()
 
 
@@ -1787,6 +1825,8 @@ func _on_formal_room_selected(index: int) -> void:
 	if suppress_formal_room_ui:
 		return
 	var selected_id := str(formal_room.get_item_metadata(index))
+	if edit_layer_id == "dungeon" and not DungeonLayoutCatalog.has_dungeon(selected_id):
+		edit_layer_id = "world"
 	if edit_layer_id == "dungeon":
 		_load_dungeon_layout(selected_id, true)
 	else:
@@ -1817,6 +1857,9 @@ func _load_formal_room_layout(room_id: String, record_undo := true) -> int:
 
 
 func _load_dungeon_layout(room_id: String, record_undo := true) -> int:
+	if not DungeonLayoutCatalog.has_dungeon(room_id):
+		_update_status("该房间无副本：%s" % room_id)
+		return -1
 	if not RoomFootprintCatalog.ROOM_CONFIG.has(room_id):
 		_update_status("来源房间不存在：%s" % room_id)
 		return -1
@@ -2414,6 +2457,9 @@ func _export_current_layout() -> String:
 
 
 func _export_dungeon_layout(layout_id: String) -> String:
+	if not DungeonLayoutCatalog.has_dungeon(formal_room_id):
+		_update_status("该房间无副本，跳过导出。")
+		return ""
 	var requested_id := str(layout_id).strip_edges()
 	if requested_id.is_empty() or requested_id == "template":
 		requested_id = dungeon_layout_id

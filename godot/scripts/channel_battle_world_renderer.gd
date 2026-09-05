@@ -582,8 +582,16 @@ func _build_battle_board() -> void:
 				_add_trap_visual(cell_node, trap, top_y)
 			if combat_is_boss and pos in boss_anchor_cells:
 				_add_boss_anchor_visual(cell_node, pos, top_y)
-	_add_battle_room_shell()
-	_add_battle_stage_decor()
+	var authored: Dictionary = battle_room_context.get("dungeon_layout", {})
+	if authored.is_empty():
+		_add_battle_room_shell()
+		_add_battle_stage_decor()
+	else:
+		battle_shell_edge_records.clear()
+		battle_shell_culled_count = 0
+		battle_shell_visible_count = 0
+		var authored_root := preload("res://scripts/dungeon_layout_presenter.gd").build(authored, combat.cols, combat.rows, BATTLE_CELL)
+		battle_board_root.add_child(authored_root)
 	_refresh_battle_dynamic_visuals()
 
 
@@ -2440,6 +2448,13 @@ func _add_battle_boundary_outline(shell: Node3D, boundary_edges: Array[Dictionar
 
 
 func _apply_battle_room_cutaway() -> void:
+	var authored := battle_board_root.get_node_or_null("AuthoredDungeonLayout") as Node3D
+	if authored != null:
+		var view := Vector2(sin(battle_camera_yaw), cos(battle_camera_yaw))
+		for node: Node in authored.get_children():
+			if node is Node3D and node.has_meta("authored_wall"):
+				var position: Vector3 = authored.transform * node.position
+				node.visible = Vector2(position.x, position.z).dot(view) <= 0.1
 	if combat == null or battle_shell_edge_records.is_empty():
 		return
 	battle_shell_culled_count = 0
