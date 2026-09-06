@@ -168,6 +168,7 @@ func _add_kenney_formal_floor_composer(floor_index: int, records: Array) -> void
 	composer.position = Vector3(0.0, _formal_floor_height(records), 0.0)
 	composer.set_meta("visual_cell_scale", VISUAL_CELL_SCALE)
 	composer.set_meta("floor", floor_index)
+	composer.set_meta("visual_style", "memphis_clay")
 	var layout := composer.get_node("Layout") as Node3D
 	for existing: Node in layout.get_children():
 		layout.remove_child(existing)

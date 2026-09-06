@@ -561,6 +561,10 @@ func _process(delta: float) -> void:
 	elif phase == "lab_chase":
 		_update_chase(delta)
 	_update_camera_follow(delta)
+	if phase == "combat" and combat != null and camera != null:
+		var battle_target_size := battle_camera_fit_size * battle_camera_zoom_ratio
+		if camera.size < battle_target_size * 0.75:
+			camera.size = battle_target_size
 	if battle_world_renderer != null and phase != "world_boss":
 		battle_world_renderer.update_battle_debug_visibility()
 		battle_world_renderer.update_battle_feedback_overlay()
@@ -600,7 +604,9 @@ func _update_camera_follow(delta: float) -> void:
 				_start_battle_camera_return()
 		var target_size := battle_camera_fit_size * battle_camera_zoom_ratio
 		var size_factor := CameraFollowMath.smooth_factor(CAMERA_ZOOM_SMOOTH_RATE, delta)
-		var next_size := lerpf(camera.size, target_size, size_factor)
+		# A viewport layout change can be much larger than a normal mouse-wheel
+		# zoom. Snap that one-time refit so the arena is never briefly cropped.
+		var next_size := target_size if absf(camera.size - target_size) > 8.0 else lerpf(camera.size, target_size, size_factor)
 		if absf(next_size - camera.size) > 0.001:
 			camera.size = next_size
 			battle_camera_changed = true
@@ -614,6 +620,9 @@ func _update_camera_follow(delta: float) -> void:
 				battle_camera_changed = true
 		if battle_camera_changed:
 			_apply_battle_camera()
+			# SubViewport stretch can reapply the previous projection between
+			# frames; defer the final value so the combat fit wins that handoff.
+			camera.set_deferred("size", target_size)
 
 
 func _house_follow_target_position() -> Vector3:
@@ -758,6 +767,7 @@ func set_world_view_rect(rect: Rect2) -> void:
 		return
 	if phase == "combat" and combat != null:
 		_refit_battle_camera(true)
+		camera.size = battle_camera_fit_size * battle_camera_zoom_ratio
 	elif phase in ["lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
 		_apply_search_camera()
 	else:
@@ -3418,7 +3428,7 @@ func _refit_battle_camera(preserve_zoom: bool) -> void:
 	# The invariant fit already encloses every rotated cell. Keep only a compact
 	# presentation margin so the miniature, rather than empty backdrop, is the
 	# visual subject of combat.
-	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0) * 0.90
+	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0) * 1.24
 	camera.size = battle_camera_fit_size * battle_camera_zoom_ratio
 	_apply_battle_camera()
 
@@ -4444,7 +4454,8 @@ func _add_label(parent: Node3D, node_name: String, text_value: String, local_pos
 func _material(color: Color, transparent: bool = false, emission_strength: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
-	material.roughness = 0.82
+	material.roughness = 0.92
+	material.metallic = 0.0
 	if transparent or color.a < 0.999:
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.emission_enabled = emission_strength > 0.0

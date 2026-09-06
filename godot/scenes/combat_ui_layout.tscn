@@ -30,29 +30,29 @@ stretch_mode = 6
 
 [node name="ActionArea" type="ColorRect" parent="." unique_id=1285653696]
 layout_mode = 0
-offset_left = 512.0
-offset_top = 92.0
-offset_right = 768.0
-offset_bottom = 200.0
+offset_left = 964.0
+offset_top = 214.0
+offset_right = 1260.0
+offset_bottom = 318.0
 mouse_filter = 2
 color = Color(0.95, 0.61, 0.11, 0.28)
 
 [node name="HandArea" type="ColorRect" parent="." unique_id=243134601]
 layout_mode = 0
-offset_left = 170.0
-offset_top = 470.0
-offset_right = 1110.0
-offset_bottom = 760.0
+offset_left = 188.0
+offset_top = 610.0
+offset_right = 936.0
+offset_bottom = 800.0
 mouse_filter = 2
 color = Color(0.08, 0.72, 0.64, 0.0)
 
 [node name="DeckArea" type="TextureRect" parent="." unique_id=2092191529]
 modulate = Color(1, 1, 1, 0.82)
 layout_mode = 0
-offset_left = 24.0
-offset_top = 640.0
-offset_right = 128.0
-offset_bottom = 790.0
+offset_left = 20.0
+offset_top = 610.0
+offset_right = 140.0
+offset_bottom = 760.0
 mouse_filter = 2
 texture = ExtResource("2_blue")
 expand_mode = 1
@@ -61,10 +61,10 @@ stretch_mode = 6
 [node name="DiscardArea" type="TextureRect" parent="." unique_id=1217096544]
 modulate = Color(1, 1, 1, 0.82)
 layout_mode = 0
-offset_left = 1152.0
-offset_top = 640.0
-offset_right = 1256.0
-offset_bottom = 790.0
+offset_left = 1140.0
+offset_top = 610.0
+offset_right = 1260.0
+offset_bottom = 760.0
 mouse_filter = 2
 texture = ExtResource("3_red")
 expand_mode = 1

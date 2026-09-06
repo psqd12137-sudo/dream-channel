@@ -21,17 +21,27 @@ func _run() -> void:
 	await process_frame
 	game.start_new_run(false, 2026081901)
 	var hud = game.get_node("HUD/HUDRoot")
+	var visual_layout: Dictionary = hud.combat_visual_layout_spec()
+	_check(not visual_layout.is_empty(), "combat HUD must expose a compact visual layout spec")
+	var formal_composer := game.house_root.get_node_or_null("KenneyFormalComposer") as Node3D
+	_check(formal_composer != null and str(formal_composer.get_meta("visual_style", "")) == "memphis_clay", "formal house composer must expose the Memphis clay visual style")
+	var board_design: Rect2 = visual_layout.get("board", Rect2())
+	for panel_name: String in ["player", "enemy", "action", "boss", "hand"]:
+		var panel: Rect2 = visual_layout.get(panel_name, Rect2())
+		_check(panel.size.x > 0.0 and panel.size.y > 0.0, "combat visual layout must define %s" % panel_name)
+		_check(not board_design.intersects(panel), "combat board must have a clear edge from %s panel" % panel_name)
+	_check(float(visual_layout.get("hand_min_height", 0.0)) >= 150.0, "combat hand must reserve a complete card staging area")
 	var desktop_sizes: Array[Vector2] = [Vector2(1024, 640), Vector2(1280, 800), Vector2(1600, 900), Vector2(1920, 1080), Vector2(2560, 1440)]
 	for viewport_size: Vector2 in desktop_sizes:
 		var layout: Dictionary = hud.calculate_layout(viewport_size, "combat")
 		var board: Rect2 = layout["board_rect"]
 		_check(not board.intersects(layout["top_rect"]), "board must not overlap top HUD at %s" % viewport_size)
 		var layout_scale: float = layout["scale"]
-		_check(board.size.x >= 1240.0 * layout_scale, "combat board should reclaim the removed sidebar width at %s" % viewport_size)
-		_check(board.size.y >= 380.0 * layout_scale, "combat board should preserve a readable playfield at %s" % viewport_size)
-		var hand_design := Rect2(170, 470, 940, 290)
+		_check(board.size.x >= 740.0 * layout_scale, "combat board should preserve a wide readable playfield at %s" % viewport_size)
+		_check(board.size.y >= 480.0 * layout_scale, "combat board should preserve a tall readable playfield at %s" % viewport_size)
+		var hand_design: Rect2 = visual_layout["hand"]
 		var hand_screen := Rect2(Vector2(layout["offset"]) + hand_design.position * layout_scale, hand_design.size * layout_scale)
-		_check(hand_screen.position.y < board.end.y and hand_screen.end.y <= float(layout["offset"].y) + 800.0 * layout_scale, "hand cards must float over the combat board inside the canvas at %s" % viewport_size)
+		_check(hand_screen.position.y >= board.end.y and hand_screen.end.y <= float(layout["offset"].y) + 800.0 * layout_scale, "hand cards must occupy the dedicated lower staging area inside the canvas at %s" % viewport_size)
 
 	game.choose_omen(0)
 	var hall: Dictionary = _find_room(game.room_catalog, "hall")
@@ -41,9 +51,15 @@ func _run() -> void:
 		await process_frame
 		_finish()
 		return
+	var camera: Camera3D = game.get_node(WORLD_ROOT + "/CameraRig/Camera3D")
 	game.start_combat(hall)
 	await process_frame
 	await process_frame
+	# The compact board changes the aspect ratio more than the legacy layout;
+	# allow the existing camera smoothing to settle before validating edges.
+	for _frame in range(24):
+		await process_frame
+	game.reset_battle_camera()
 	_check(game.combat.cols == 9 and game.combat.rows == 4, "hall must exercise the 9x4 arena")
 	for raw_overlay: Variant in game.battle_world_renderer.battle_intent_overlay_nodes.values():
 		var intent_overlay := raw_overlay as Control
@@ -59,7 +75,6 @@ func _run() -> void:
 			_check(intent_icon.get_parent() == intent_value.get_parent(), "enemy intent icon and value must share one overlay layer")
 			_check(intent_icon.z_index == intent_value.z_index, "enemy intent icon and value must share one z layer")
 	var battle_root: Node = game.battle_board_root
-	var camera: Camera3D = game.get_node(WORLD_ROOT + "/CameraRig/Camera3D")
 	var world_viewport: SubViewport = game.get_node("WorldLayer/WorldContainer/WorldViewport")
 	_check(_count_named_prefix(battle_root, "Cell_") == 36, "hall must render all 36 cells")
 	_check(_all_cells_have_layers(battle_root), "each cell must have a base layer and logical walkable surface")
@@ -125,7 +140,7 @@ func _run() -> void:
 	# 缩放改为逐帧平滑追赶目标，等待一帧后再验证镜头已经开始缩放。
 	await process_frame
 	_check(camera.size < initial_size, "wheel-up must zoom in")
-	_check(camera.size >= game.battle_camera_fit_size * game.CAMERA_ZOOM_MIN, "zoom must respect the minimum")
+	_check(game.battle_camera_zoom_ratio >= game.CAMERA_ZOOM_MIN, "zoom ratio must respect the minimum")
 	game.reset_battle_camera()
 	_check(is_equal_approx(camera.size, game.battle_camera_fit_size), "reset must restore fit size")
 

@@ -153,6 +153,8 @@ func _clear_generated() -> void:
 		generated_root.free()
 	generated_root = Node3D.new()
 	generated_root.name = "GeneratedMap"
+	generated_root.set_meta("visual_style", "memphis_clay")
+	generated_root.set_meta("style_palette_version", 1)
 	add_child(generated_root)
 	room_visual_roots.clear()
 
@@ -2452,12 +2454,12 @@ func _add_cardboard_box(parent: Node3D, node_name: String, position: Vector3, si
 
 func _toy_show_shell_color(room_index: int) -> Color:
 	var palette := [
-		Color("d6afa5"),
-		Color("9fb9ad"),
-		Color("b9acd0"),
-		Color("d2c27d"),
-		Color("9eb8c7"),
-		Color("d3b89b"),
+		Color("ef9a9a"),
+		Color("62c2b2"),
+		Color("b49ad6"),
+		Color("f2d252"),
+		Color("67a9d2"),
+		Color("e4a36b"),
 	]
 	return palette[posmod(room_index, palette.size())]
 
