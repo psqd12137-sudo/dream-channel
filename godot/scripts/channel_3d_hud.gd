@@ -73,7 +73,14 @@ const MOVE_RIGHT_RECT := Rect2(1114, 534, 46, 30)
 const MOVE_DOWN_RECT := Rect2(1062, 570, 46, 30)
 const CARD_CANCEL_RECT := Rect2(976, 654, 164, 28)
 const BATTLE_TILE_INSPECTION_RECT := Rect2(948, 214, 300, 132)
-const BOSS_ANCHOR_ACTION_RECT := Rect2(1080, 410, 156, 36)
+const FLOOR_RAIL_RECT := Rect2(24, 228, 138, 304)
+const FLOOR_RAIL_TOP_RECT := Rect2(42, 278, 102, 40)
+const FLOOR_RAIL_GROUND_RECT := Rect2(42, 330, 102, 40)
+const FLOOR_RAIL_BASEMENT_RECT := Rect2(42, 382, 102, 40)
+const FLOOR_RAIL_OVERVIEW_RECT := Rect2(42, 440, 102, 34)
+const FLOOR_RAIL_PLAYER_RECT := Rect2(42, 482, 102, 34)
+const BOSS_ANCHOR_ACTION_RECT := Rect2(964, 463, 268, 32)
+const STAIR_ACTION_RECT := Rect2(948, 505, 300, 34)
 const PORTAL_USE_RECT := Rect2(960, 366, 120, 44)
 const PORTAL_STAY_RECT := Rect2(1100, 366, 120, 44)
 const ENEMY_INTEL_RECT := Rect2(948, 214, 300, 58)
@@ -92,6 +99,7 @@ const HOME_TEST_CHASE_RECT := Rect2(780, 228, 205, 42)
 const HOME_TEST_DIORAMA_RECT := Rect2(997, 228, 205, 42)
 const HOME_TEST_CHARACTER_ANIMATION_RECT := Rect2(780, 282, 205, 42)
 const HOME_TEST_ASSET_EDITOR_RECT := Rect2(997, 282, 205, 42)
+const HOME_TEST_HOST_RECT := Rect2(780, 336, 422, 42)
 const TEST_MENU_SCENARIO_RECT := Rect2(56, 156, 430, 54)
 const TEST_MENU_MANUAL_RECT := Rect2(780, 548, 132, 48)
 const TEST_MENU_STEP_RECT := Rect2(922, 548, 132, 48)
@@ -218,7 +226,7 @@ func _process(delta: float) -> void:
 	if seed_input != null:
 		seed_input.visible = game != null and game.phase == "home"
 	# 离开战斗时清理残留的飞行动画状态
-	if game != null and game.phase != "combat" and (not card_flight_offsets.is_empty() or not exiting_cards.is_empty() or not card_flight_tweens.is_empty()):
+	if game != null and game.phase not in ["combat", "world_boss"] and (not card_flight_offsets.is_empty() or not exiting_cards.is_empty() or not card_flight_tweens.is_empty()):
 		for raw_tween: Variant in card_flight_tweens.values():
 			var tween: Tween = raw_tween
 			if tween != null and tween.is_valid():
@@ -416,7 +424,7 @@ func get_world_view_rect() -> Rect2:
 
 
 func _design_world_rect(phase_name: String) -> Rect2:
-	if phase_name == "combat":
+	if phase_name in ["combat", "world_boss"]:
 		return COMBAT_VIEW_RECT
 	if phase_name in ["lab_sideview", "lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
 		return Rect2(60, 120, 1160, 520)
@@ -460,11 +468,11 @@ func _draw() -> void:
 		_draw_ending_screen()
 	else:
 		var board_design := _design_world_rect(game.phase)
-		if game.phase != "lab_puzzle" and game.phase != "combat":
+		if game.phase != "lab_puzzle" and game.phase not in ["combat", "world_boss"]:
 			draw_rect(board_design.grow(4.0), Color("091116"), false, 8.0)
 			draw_rect(board_design, TEAL, false, 2.0)
 		_draw_top_bar()
-		if game.phase == "combat":
+		if game.phase in ["combat", "world_boss"]:
 			_draw_combat_hud()
 		elif game.phase.begins_with("lab_"):
 			_draw_lab_hud()
@@ -474,7 +482,7 @@ func _draw() -> void:
 			_draw_omen_modal()
 	if settings_panel_open:
 		_draw_settings_panel()
-	if game.phase == "combat" and not settings_panel_open:
+	if game.phase in ["combat", "world_boss"] and not settings_panel_open:
 		_draw_status_tooltip()
 
 
@@ -490,15 +498,15 @@ func _draw_top_bar() -> void:
 	draw_colored_polygon(title_burst, BLUE)
 	_display_label("织梦频道", Vector2(24, 42), 28, TEXT)
 	_label("第 %02d 集 · CH-%010d" % [game.run_progress, game.run_seed], Vector2(244, 41), 11, Color("7de0d5"))
-	if game.phase == "combat":
+	if game.phase in ["combat", "world_boss"]:
 		_draw_chip(Rect2(800, 18, 112, 32), _phase_label(), MAGENTA, TEXT, 11)
 		_draw_combat_turn_order()
 	else:
 		_draw_chip(Rect2(560, 18, 112, 32), "速度 %d" % int(game.player_speed), TEAL, TEXT, 11)
 		_draw_chip(Rect2(680, 18, 112, 32), "生命 %d/%d" % [game.player_hp, game.player_max_hp], RED, TEXT, 11)
 		_draw_chip(Rect2(800, 18, 112, 32), _phase_label(), BLUE, TEXT, 11)
-	if game.phase == "combat" or game.phase in ["explore", "build", "room_ready"]:
-		_draw_button(CAMERA_RESET_RECT, "镜头复位" if game.phase == "combat" else "地图复位", TEAL, TEXT)
+	if game.phase in ["combat", "world_boss"] or game.phase in ["explore", "build", "room_ready"]:
+		_draw_button(CAMERA_RESET_RECT, "镜头复位" if game.phase in ["combat", "world_boss"] else "地图复位", TEAL, TEXT)
 	if not game.phase.begins_with("lab_"):
 		_draw_button(SETTINGS_TOGGLE_RECT, "设置", BLUE, TEXT)
 	if not game.phase.begins_with("lab_"):
@@ -584,7 +592,7 @@ func _draw_home() -> void:
 	_draw_button(HOME_SEED_COPY_RECT, "复制种子", BLUE, TEXT)
 	_draw_button(HOME_TESTS_RECT, "关闭后台" if game.home_tests_open else "后台测试", Color("734b87"), TEXT)
 	if game.home_tests_open:
-		_draw_ticket_panel(Rect2(764, 96, 454, 242), Color("17151cf2"), MAGENTA)
+		_draw_ticket_panel(Rect2(764, 96, 454, 296), Color("17151cf2"), MAGENTA)
 		_label("节目后台 · 仅供开发检查", Vector2(780, 120), 10, MUTED)
 		_draw_button(HOME_TEST_COMBAT_RECT, "战斗与 AI 测试", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_SIDE_RECT, "WASD 横版手感", TEAL, TEXT)
@@ -594,6 +602,7 @@ func _draw_home() -> void:
 		_draw_button(HOME_TEST_DIORAMA_RECT, "桌模扩建 PCG", Color("5967a8"), TEXT)
 		_draw_button(HOME_TEST_CHARACTER_ANIMATION_RECT, "角色动画检查", Color("3e8b78"), TEXT)
 		_draw_button(HOME_TEST_ASSET_EDITOR_RECT, "房间资产地编", Color("c98a37"), TEXT)
+		_draw_button(HOME_TEST_HOST_RECT, "大地图 Boss · 独立试玩", MAGENTA, TEXT)
 	_label("画面", Vector2(76, 706), 10, MUTED)
 	_draw_button(HOME_RESOLUTION_RECT, game.display_resolution_label(), TEAL, TEXT)
 	_draw_button(HOME_WINDOW_MODE_RECT, game.display_mode_label(), BLUE, TEXT)
@@ -871,7 +880,10 @@ func _draw_house_hud() -> void:
 		draw_rect(Rect2(1024, 318, 216, 92), Color("f2c9bd"), true)
 		draw_rect(Rect2(1024, 318, 216, 92), RED, false, 2.0)
 		_label("祭坛已开启", Vector2(1038, 342), 12, RED)
-		_draw_wrapped(_shorten(str(boss.get("intro", "最终敌人已经醒来。")), 82), Vector2(1038, 368), 188, 10, INK)
+		var intro := str(boss.get("intro", "最终敌人已经醒来。"))
+		if game.boss_id == "channel_host":
+			intro = "决战发生在本局大地图。\n击败Boss或跨房间关闭4个锚。\n整图统一回合制；房间格就是战斗格。\n二楼与地下室通过楼梯接入。"
+		_draw_wrapped(intro, Vector2(1038, 356), 188, 10, INK)
 
 	var omen_y := 430.0 if game.phase == "boss_ready" else 338.0
 	_label("随身预兆", Vector2(1024, omen_y), 11, Color("806448"))
@@ -981,11 +993,16 @@ func _draw_combat_hud() -> void:
 			_draw_enemy_intel_panel(_enemy_intel_rect(), focused_enemy)
 	else:
 		_label("??", enemy_panel_rect.position + Vector2(88, 113), 9, MUTED)
-	var tile_inspection: Dictionary = game.battle_tile_inspection()
+	var tile_inspection: Dictionary = game.battle_tile_inspection() if game.phase == "combat" else {}
 	if not tile_inspection.is_empty():
 		_draw_battle_tile_inspection(tile_inspection)
+	if game.phase == "world_boss":
+		_draw_world_floor_rail()
+		_draw_world_boss_hints()
 	if game.combat_is_boss:
 		_draw_boss_control_panel()
+	if game.phase == "world_boss":
+		_draw_world_stair_action()
 	if game.test_combat_active:
 		_draw_test_range_panel()
 	if game.test_combat_active and SHOW_TEST_AI_PANEL:
@@ -1067,7 +1084,7 @@ func _draw_combat_hud() -> void:
 			_draw_button(CARD_CANCEL_RECT, "取消选牌", Color("4f5960"), TEXT)
 		_draw_button(END_TURN_RECT, "回合结束", GOLD, INK)
 	else:
-		var result_label := "返回测试台" if game.test_combat_active else "返回节目布景" if combat.outcome == "victory" else "重开本集"
+		var result_label := "查看结局" if game.phase == "world_boss" else "返回测试台" if game.test_combat_active else "返回节目布景" if combat.outcome == "victory" else "重开本集"
 		var result_color := TEAL if game.test_combat_active else GREEN if combat.outcome == "victory" else RED
 		_draw_button(RETURN_RECT, result_label, result_color, TEXT)
 
@@ -1091,21 +1108,75 @@ func _draw_battle_tile_inspection(info: Dictionary) -> void:
 		_register_status_hover(Rect2(rect.position + Vector2(84, 101), Vector2(rect.size.x - 100.0, 27.0)), statuses[0], "tile-status:%s" % tile_key)
 
 
+
+func _draw_world_boss_hints() -> void:
+	var r = game.combat
+	var rect := Rect2(948, 214, 300, 132)
+	_draw_ticket_panel(rect, Color("261c27f5"), GOLD)
+	_label("Boss 战 · 回合制", rect.position + Vector2(16, 25), 13, GOLD)
+	_label("结束回合后 Boss 行动并推进播出", rect.position + Vector2(16, 49), 11, TEXT)
+	_label("房间 %d · 战斗格 %d" % [game.room_rules.instance_count(), r.graph.size()], rect.position + Vector2(16, 72), 11, TEXT)
+	var floor_info: Dictionary = r.room_nodes.get(r.player_pos, {})
+	_label("当前：%s · 楼梯 %d 条" % [str(floor_info.get("floor_label", "地面层")), r.stair_links.size()], rect.position + Vector2(16, 94), 10, TEXT)
+	_label("红：攻击 · 金：取景 · 青：相连", rect.position + Vector2(16, 116), 10, MUTED)
+
+
+func _draw_world_floor_rail() -> void:
+	var current_floor: int = int(game.house_floor_view)
+	var player_floor: int = int(game.player_floor_view())
+	_draw_ticket_panel(FLOOR_RAIL_RECT, Color("142832f5"), TEAL)
+	_label("楼层视图", FLOOR_RAIL_RECT.position + Vector2(18, 25), 13, GOLD)
+	_label("只切换镜头，不消耗行动", FLOOR_RAIL_RECT.position + Vector2(18, 45), 9, MUTED)
+	draw_line(Vector2(30, 298), Vector2(30, 400), Color("4bc5bc"), 3.0)
+	for point_y in [298.0, 350.0, 402.0]:
+		draw_circle(Vector2(30, point_y), 6.0, GOLD if ((point_y == 298.0 and current_floor == 1) or (point_y == 350.0 and current_floor == 0) or (point_y == 402.0 and current_floor == -1)) else Color("52706b"))
+	var has_floor: Callable = func(index: int) -> bool: return game.combat.cell_floors.values().has(index)
+	_draw_floor_rail_button(FLOOR_RAIL_TOP_RECT, 1, "二楼", current_floor, player_floor, has_floor.call(1))
+	_draw_floor_rail_button(FLOOR_RAIL_GROUND_RECT, 0, "地面层", current_floor, player_floor, has_floor.call(0))
+	_draw_floor_rail_button(FLOOR_RAIL_BASEMENT_RECT, -1, "地下室", current_floor, player_floor, has_floor.call(-1))
+	_draw_button(FLOOR_RAIL_OVERVIEW_RECT, "三层总览", GOLD if current_floor == game.FLOOR_VIEW_OVERVIEW else Color("355e5d"), INK if current_floor == game.FLOOR_VIEW_OVERVIEW else TEXT)
+	_draw_button(FLOOR_RAIL_PLAYER_RECT, "回到玩家", TEAL if current_floor == player_floor else Color("355e5d"), TEXT)
+
+
+func _draw_floor_rail_button(rect: Rect2, floor_index: int, caption: String, current_floor: int, player_floor: int, available: bool) -> void:
+	var active := current_floor == floor_index
+	var fill := GOLD if active else TEAL if available else Color("3b4248")
+	var text_color := INK if active else TEXT
+	_draw_button(rect, ("● " if floor_index == player_floor else "  ") + caption, fill, text_color)
+
+
 func _draw_boss_control_panel() -> void:
-	var rect := Rect2(948, 352, 300, 112)
+	var rect := Rect2(948, 352, 300, 148)
 	var info: Dictionary = game.boss_anchor_summary()
 	_draw_ticket_panel(rect, Color("261c27f5"), GOLD)
-	_label("最终战 · 信号锚", rect.position + Vector2(16, 23), 12, GOLD)
+	_label("击败主持人 / 关闭全部锚" if game.boss_id == "channel_host" else "最终战 · 信号锚", rect.position + Vector2(16, 23), 12, GOLD)
 	_label("锚点 %d/%d" % [int(info.get("cleared", 0)), int(info.get("total", 0))], rect.position + Vector2(16, 50), 11, TEXT)
 	_label("阶段：%s" % str(info.get("phase", "开场")), rect.position + Vector2(112, 50), 11, MUTED)
-	_label("播出进度", rect.position + Vector2(16, 76), 9, MUTED)
-	_draw_bar(Rect2(rect.position + Vector2(82, 67), Vector2(128, 11)), int(info.get("broadcast", 0)), int(info.get("broadcast_max", 1)), RED, Color("5b4045"))
+	_label("播出 %d/%d · 本轮结束 +%d" % [int(info.get("broadcast", 0)), int(info.get("broadcast_max", 18)), int(info.get("increment", 2))], rect.position + Vector2(16, 72), 11, TEXT)
 	var directive_labels := {"closeup": "导播要特写", "spotlight": "点亮舞台", "mute": "静音", "extra": "加播"}
-	_label("指令：%s" % str(directive_labels.get(str(info.get("directive", "")), "无")), rect.position + Vector2(16, 97), 9, Color("d8c8d2"))
+	_label(str(info.get("next_action", "")) if game.boss_id == "channel_host" else "指令：%s" % str(directive_labels.get(str(info.get("directive", "")), "无")), rect.position + Vector2(16, 96), 10, Color("d8c8d2"))
 	if game.can_dismantle_boss_anchor():
-		_draw_button(BOSS_ANCHOR_ACTION_RECT, "拆除信号锚", GOLD, INK)
+		var cell: Vector2i = info.get("anchor", Vector2i.ZERO)
+		draw_rect(BOSS_ANCHOR_ACTION_RECT, GOLD, true)
+		_draw_centered("操作锚%d · %d行动力 · 余%d次" % [game.boss_anchor_cells.find(cell) + 1, int(info.get("dismantle_cost", 2)), int(game.boss_anchor_hp.get(cell, 0))], BOSS_ANCHOR_ACTION_RECT, 12, INK)
 	else:
-		_label("站上锚点后可拆除", rect.position + Vector2(218, 76), 9, Color("9a8e95"))
+		_label("靠近锚点并保留%d行动力" % int(info.get("dismantle_cost", 2)), rect.position + Vector2(16, 130), 11, MUTED)
+
+
+func _draw_world_stair_action() -> void:
+	var action: Dictionary = game.world_boss_stair_action()
+	if action.is_empty():
+		return
+	var destination: Vector2i = action.get("destination", game.INVALID_CELL)
+	var floor_index := int(game.combat.cell_floors.get(destination, 0))
+	var floor_label := "二楼" if floor_index == 1 else "地下室" if floor_index < 0 else "地面层"
+	var can_use := bool(action.get("can_use", false))
+	var fill := GOLD if can_use else Color("4d4850")
+	var text_color := INK if can_use else MUTED
+	var caption := "%s · %s · %d AP" % [str(action.get("label", "使用楼梯")), floor_label, int(action.get("cost", 0))]
+	if not can_use and not str(action.get("reason", "")).is_empty():
+		caption += " · " + str(action.get("reason", ""))
+	_draw_button(STAIR_ACTION_RECT, caption, fill, text_color)
 
 
 func _draw_tile_status_preview(rect: Rect2, status: Dictionary) -> void:
@@ -1192,20 +1263,28 @@ func _test_mode_label() -> String:
 	return game.test_session.mode
 
 
+func _can_move_direction(direction: Vector2i) -> bool:
+	if game.phase == "world_boss":
+		var r = game.combat
+		return r.outcome == "" and r.move_cooldown <= 0.0 and r.energy >= r.move_cost and game.world_boss_direction_target(direction) != game.INVALID_CELL
+	return game.combat.can_move_player(game.combat.player_pos + direction)
+
+
 func _draw_move_controls() -> void:
 	var combat = game.combat
 	if combat == null:
 		return
 	var enabled: bool = not game.animation_busy and combat.outcome == "" and game.selected_card < 0 and not combat.pending_player_turn
-	_label("直接移动 · 点击方向", Vector2(1008, 484), 10, MUTED if enabled else Color("68757a"))
-	_draw_button(MOVE_UP_RECT, "上", TEAL if enabled and combat.can_move_player(combat.player_pos + Vector2i.UP) else Color("394852"), TEXT)
-	_draw_button(MOVE_LEFT_RECT, "左", TEAL if enabled and combat.can_move_player(combat.player_pos + Vector2i.LEFT) else Color("394852"), TEXT)
-	_draw_button(MOVE_RIGHT_RECT, "右", TEAL if enabled and combat.can_move_player(combat.player_pos + Vector2i.RIGHT) else Color("394852"), TEXT)
-	_draw_button(MOVE_DOWN_RECT, "下", TEAL if enabled and combat.can_move_player(combat.player_pos + Vector2i.DOWN) else Color("394852"), TEXT)
+	if not game.combat_is_boss:
+		_label("直接移动 · 点击方向", Vector2(1008, 484), 10, MUTED if enabled else Color("68757a"))
+	_draw_button(MOVE_UP_RECT, "上", TEAL if enabled and _can_move_direction(Vector2i.UP) else Color("394852"), TEXT)
+	_draw_button(MOVE_LEFT_RECT, "左", TEAL if enabled and _can_move_direction(Vector2i.LEFT) else Color("394852"), TEXT)
+	_draw_button(MOVE_RIGHT_RECT, "右", TEAL if enabled and _can_move_direction(Vector2i.RIGHT) else Color("394852"), TEXT)
+	_draw_button(MOVE_DOWN_RECT, "下", TEAL if enabled and _can_move_direction(Vector2i.DOWN) else Color("394852"), TEXT)
 
 
 func _enemy_intel_visible() -> bool:
-	return game != null and game.has_method("enemy_intel_visible") and game.enemy_intel_visible()
+	return game != null and game.phase != "world_boss" and game.has_method("enemy_intel_visible") and game.enemy_intel_visible()
 
 
 func _enemy_intel_rect() -> Rect2:
@@ -1826,15 +1905,15 @@ func _input(event: InputEvent) -> void:
 		game.set_sideview_input(float(int(side_right) - int(side_left)), jump)
 		get_viewport().set_input_as_handled()
 		return
-	if key_event.pressed and not key_event.echo and game.phase == "combat" and key_event.keycode == KEY_1:
+	if key_event.pressed and not key_event.echo and game.phase in ["combat", "world_boss"] and key_event.keycode == KEY_1:
 		game.cycle_battle_enemy_range_display()
 		get_viewport().set_input_as_handled()
 		return
-	if key_event.pressed and not key_event.echo and game.phase == "combat" and key_event.keycode == KEY_2:
+	if key_event.pressed and not key_event.echo and game.phase in ["combat", "world_boss"] and key_event.keycode == KEY_2:
 		game.toggle_battle_player_range_display()
 		get_viewport().set_input_as_handled()
 		return
-	if key_event.pressed and not key_event.echo and game.phase == "combat" and game.selected_card < 0:
+	if key_event.pressed and not key_event.echo and game.phase in ["combat", "world_boss"] and game.selected_card < 0:
 		var move_direction := Vector2i(-999, -999)
 		match key_event.keycode:
 			KEY_UP, KEY_W: move_direction = Vector2i.UP
@@ -1845,20 +1924,26 @@ func _input(event: InputEvent) -> void:
 			game.move_player_direction(move_direction)
 			get_viewport().set_input_as_handled()
 			return
-	if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE and game.phase == "combat" and game.selected_card >= 0:
+	if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE and game.phase in ["combat", "world_boss"] and game.selected_card >= 0:
 		game.cancel_selected_card()
 		get_viewport().set_input_as_handled()
 
 
 func _combat_overlay_has_point(point: Vector2) -> bool:
-	if game == null or game.phase != "combat" or game.combat == null:
+	if game == null or game.phase not in ["combat", "world_boss"] or game.combat == null:
 		return false
 	if game.test_combat_active and _test_combat_overlay_has_point(point):
+		return true
+	if game.phase == "world_boss" and _floor_rail_has_point(point):
+		return true
+	if game.phase == "world_boss" and not game.world_boss_stair_action().is_empty() and STAIR_ACTION_RECT.has_point(point):
 		return true
 	if game.character_animation_demo_mode:
 		for rect: Rect2 in [CHARACTER_IDLE_RECT, CHARACTER_STEP_RECT, CHARACTER_ATTACK_RECT, CHARACTER_HURT_RECT]:
 			if rect.has_point(point):
 				return true
+	if game.combat_is_boss and BOSS_ANCHOR_ACTION_RECT.has_point(point):
+		return true
 	if game.combat.outcome != "":
 		return RETURN_RECT.has_point(point)
 	if END_TURN_RECT.has_point(point):
@@ -1868,6 +1953,29 @@ func _combat_overlay_has_point(point: Vector2) -> bool:
 	if game.combat.player_on_portal() and PORTAL_USE_RECT.has_point(point):
 		return true
 	return game.selected_card >= 0 and CARD_CANCEL_RECT.has_point(point)
+
+
+func _floor_rail_has_point(point: Vector2) -> bool:
+	return FLOOR_RAIL_TOP_RECT.has_point(point) or FLOOR_RAIL_GROUND_RECT.has_point(point) or FLOOR_RAIL_BASEMENT_RECT.has_point(point) or FLOOR_RAIL_OVERVIEW_RECT.has_point(point) or FLOOR_RAIL_PLAYER_RECT.has_point(point)
+
+
+func _handle_floor_rail_click(point: Vector2) -> void:
+	if not _floor_rail_has_point(point):
+		return
+	if dragged_combat_card >= 0:
+		dragged_combat_card = -1
+		hovered_combat_card = -1
+		game.cancel_selected_card("已切换楼层视图，卡牌返回手牌。")
+	if FLOOR_RAIL_TOP_RECT.has_point(point):
+		game.set_house_floor_view(1)
+	elif FLOOR_RAIL_GROUND_RECT.has_point(point):
+		game.set_house_floor_view(0)
+	elif FLOOR_RAIL_BASEMENT_RECT.has_point(point):
+		game.set_house_floor_view(-1)
+	elif FLOOR_RAIL_OVERVIEW_RECT.has_point(point):
+		game.set_house_floor_view(game.FLOOR_VIEW_OVERVIEW)
+	elif FLOOR_RAIL_PLAYER_RECT.has_point(point):
+		game.set_house_floor_view(game.player_floor_view())
 
 
 func _test_combat_overlay_has_point(point: Vector2) -> bool:
@@ -1962,12 +2070,12 @@ func _gui_input(event: InputEvent) -> void:
 			_update_settings_slider(design_point)
 			accept_event()
 			return
-		if game.phase == "combat":
+		if game.phase in ["combat", "world_boss"]:
 			_update_status_hover(design_point)
 		else:
 			hovered_status_key = ""
 			hovered_status = {}
-		if dragged_combat_card >= 0 and game.phase == "combat":
+		if dragged_combat_card >= 0 and game.phase in ["combat", "world_boss"]:
 			dragged_card_position = design_point
 			if world_view_rect_screen.has_point(event.position):
 				game.set_battle_hover(event.position - world_view_rect_screen.position)
@@ -1975,18 +2083,18 @@ func _gui_input(event: InputEvent) -> void:
 				game.clear_battle_hover()
 			queue_redraw()
 			accept_event()
-		elif board_left_pressed and game.phase in ["combat", "explore", "build", "room_ready"]:
+		elif board_left_pressed and game.phase in ["combat", "world_boss", "explore", "build", "room_ready"]:
 			board_left_distance += event.relative.length()
 			if board_left_distance >= 5.0:
 				board_left_dragged = true
-				if game.phase == "combat":
+				if game.phase in ["combat", "world_boss"]:
 					game.orbit_battle_camera(event.relative)
 					game.clear_battle_hover()
 				else:
 					game.orbit_house_camera(event.relative)
 					game.clear_house_hover()
 			accept_event()
-		elif middle_dragging and game.phase == "combat":
+		elif middle_dragging and game.phase in ["combat", "world_boss"]:
 			game.pan_battle_camera(event.relative)
 			game.clear_battle_hover()
 			accept_event()
@@ -1996,7 +2104,7 @@ func _gui_input(event: InputEvent) -> void:
 		elif middle_dragging and game.phase in ["lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
 			game.orbit_search_camera(event.relative)
 			accept_event()
-		elif game.phase == "combat":
+		elif game.phase in ["combat", "world_boss"]:
 			var previous_hover := hovered_combat_card
 			hovered_combat_card = -1
 			for i in range(combat_card_rects.size() - 1, -1, -1):
@@ -2051,17 +2159,29 @@ func _gui_input(event: InputEvent) -> void:
 				_set_settings_panel_open(false)
 		accept_event()
 		return
-	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed and game.phase == "combat" and game.selected_card >= 0:
+	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed and game.phase in ["combat", "world_boss"] and game.selected_card >= 0:
 		game.cancel_selected_card()
 		accept_event()
 		return
-	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed and game.phase == "combat" and world_view_rect_screen.has_point(mouse_event.position):
+	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed and game.phase in ["combat", "world_boss"] and world_view_rect_screen.has_point(mouse_event.position):
 		var inspected_cell: Vector2i = game.battle_cell_from_viewport(mouse_event.position - world_view_rect_screen.position)
 		if inspected_cell != game.INVALID_CELL:
 			game.inspect_battle_cell(inspected_cell)
 		accept_event()
 		return
-	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase == "combat":
+	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase == "world_boss" and _floor_rail_has_point(point):
+		if mouse_event.pressed:
+			_handle_floor_rail_click(point)
+		queue_redraw()
+		accept_event()
+		return
+	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase == "world_boss" and STAIR_ACTION_RECT.has_point(point):
+		if mouse_event.pressed:
+			game.use_world_boss_stair()
+		queue_redraw()
+		accept_event()
+		return
+	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase in ["combat", "world_boss"]:
 		if not mouse_event.pressed and dragged_combat_card >= 0:
 			var dropped_on_board := world_view_rect_screen.has_point(mouse_event.position) and not _combat_overlay_has_point(point)
 			dragged_combat_card = -1
@@ -2133,20 +2253,20 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 			return
 	if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
-		if mouse_event.pressed and game.phase in ["combat", "explore", "build", "room_ready", "lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"] and world_view_rect_screen.has_point(mouse_event.position):
+		if mouse_event.pressed and game.phase in ["combat", "world_boss", "explore", "build", "room_ready", "lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"] and world_view_rect_screen.has_point(mouse_event.position):
 			middle_dragging = true
-			if game.phase == "combat":
+			if game.phase in ["combat", "world_boss"]:
 				game.clear_battle_hover()
 			accept_event()
 		elif not mouse_event.pressed:
 			middle_dragging = false
 			if game.phase in ["explore", "build", "room_ready"]:
 				game.release_house_camera_gesture()
-			elif game.phase == "combat":
+			elif game.phase in ["combat", "world_boss"]:
 				game.release_battle_camera_gesture()
 			accept_event()
 		return
-	if mouse_event.pressed and game.phase == "combat" and world_view_rect_screen.has_point(mouse_event.position):
+	if mouse_event.pressed and game.phase in ["combat", "world_boss"] and world_view_rect_screen.has_point(mouse_event.position):
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			game.zoom_battle_camera(mouse_event.position - world_view_rect_screen.position, 0.9)
 			accept_event()
@@ -2188,6 +2308,8 @@ func _gui_input(event: InputEvent) -> void:
 			game.copy_current_seed()
 		elif HOME_TESTS_RECT.has_point(point):
 			game.toggle_home_tests()
+		elif game.home_tests_open and HOME_TEST_HOST_RECT.has_point(point):
+			game.start_host_preview()
 		elif game.home_tests_open and HOME_TEST_COMBAT_RECT.has_point(point):
 			game.open_combat_test_mode()
 		elif game.home_tests_open and HOME_TEST_SIDE_RECT.has_point(point):
@@ -2299,7 +2421,7 @@ func _gui_input(event: InputEvent) -> void:
 		elif TEST_MENU_OBSERVER_RECT.has_point(point):
 			game.start_test_combat("observer_auto")
 		return
-	if game.phase == "combat" and CAMERA_RESET_RECT.has_point(point):
+	if game.phase in ["combat", "world_boss"] and CAMERA_RESET_RECT.has_point(point):
 		game.reset_battle_camera()
 		return
 	if game.phase in ["explore", "build", "room_ready"] and CAMERA_RESET_RECT.has_point(point):
@@ -2332,7 +2454,7 @@ func _gui_input(event: InputEvent) -> void:
 	if game.phase == "explore" and ENTER_PENDING_RECT.has_point(point) and game._rooms_connected(game.current_room_pos, game.pending_room_pos):
 		game.enter_room(game.pending_room_pos)
 		return
-	if game.phase == "combat":
+	if game.phase in ["combat", "world_boss"]:
 		if game.combat_is_boss and BOSS_ANCHOR_ACTION_RECT.has_point(point):
 			game.dismantle_boss_anchor()
 			return
@@ -2490,6 +2612,8 @@ func _phase_label() -> String:
 		return "祭坛决战"
 	if game.phase == "reward":
 		return "节目奖励"
+	if game.phase == "world_boss":
+		return "大地图终局"
 	if game.phase == "combat":
 		return "惊吓时间"
 	if game.phase == "ending":

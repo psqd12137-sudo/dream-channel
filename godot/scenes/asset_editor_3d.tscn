@@ -270,6 +270,11 @@ tooltip_text = "选中实体墙后替换为门洞"
 layout_mode = 2
 text = "参照物：显示"
 
+[node name="StrictPlacement" type="CheckButton" parent="UI/TopBar"]
+layout_mode = 2
+text = "严格重叠检查"
+tooltip_text = "关闭时允许普通资产交叠并给出提示；开启时重叠会拒绝放置或变换"
+
 [node name="Sep2" type="VSeparator" parent="UI/TopBar"]
 layout_mode = 2
 

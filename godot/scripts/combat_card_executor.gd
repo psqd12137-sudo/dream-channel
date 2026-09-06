@@ -2,15 +2,17 @@ class_name CombatCardExecutor
 extends RefCounted
 
 # 卡牌执行器只负责一张牌的一次完整提交；具体效果仍由战斗规则提供。
-var combat = null
+var _combat_ref: WeakRef
+var combat:
+	get: return _combat_ref.get_ref() if _combat_ref != null else null
 
 
 func _init(combat_rules) -> void:
-	combat = combat_rules
+	_combat_ref = weakref(combat_rules)
 
 
 func execute(hand_index: int, target: Vector2i, enemy_id: String = "") -> bool:
-	if combat.outcome != "" or hand_index < 0 or hand_index >= combat.hand.size():
+	if combat == null or combat.outcome != "" or hand_index < 0 or hand_index >= combat.hand.size():
 		return false
 	var card_id := str(combat.hand[hand_index])
 	if not combat.cards.has(card_id):

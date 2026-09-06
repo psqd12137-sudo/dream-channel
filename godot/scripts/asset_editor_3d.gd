@@ -21,6 +21,7 @@ const UNDO_LIMIT := 50
 const FORMAL_BASE_LAYOUT_SEED := 20260816
 const GHOST_CHECK_INTERVAL_MS := 50
 const GHOST_CHECK_DISTANCE := 0.05
+const ROTATION_SNAP := PI / 12.0
 const GOLD := Color("#f3a51f")
 const INVALID_RED := Color("#d63b72")
 ## Reference actor height in world metres: a toy-doll figure that fits the
@@ -80,7 +81,10 @@ var gizmo_drag_start_world := INVALID_POINT
 var gizmo_drag_start_position := Vector3.ZERO
 var gizmo_drag_start_yaw := 0.0
 var gizmo_drag_start_scale := Vector3.ONE
+var gizmo_drag_start_scale_direction := Vector2.RIGHT
 var gizmo_drag_start_tier := 1
+var gizmo_drag_last_ring_angle := 0.0
+var gizmo_drag_rotation_offset := 0.0
 var gizmo_drag_snapshot: Dictionary = {}
 var endpoint_dragging := false
 var endpoint_wall: Node3D = null
@@ -95,6 +99,7 @@ var drag_from := Vector3.ZERO
 var drag_yaw_from := 0.0
 var drag_valid := true
 var drag_snapshot: Dictionary = {}
+var strict_placement_validation := false
 var room_shape_id := "single"
 var room_rotation_quarters := 0
 var room_cells: Array[Vector2i] = []
@@ -153,6 +158,7 @@ var template_items: Array[Dictionary] = []
 @onready var tool_scale_button: Button = $UI/ToolDock/ToolRow/ToolScale
 @onready var place_door_button: Button = $UI/TopBar/PlaceDoor
 @onready var toggle_actor_button: Button = $UI/TopBar/ToggleActor
+@onready var strict_placement_toggle: CheckButton = $UI/TopBar/StrictPlacement
 @onready var template_name: LineEdit = $UI/TemplateBar/TemplateName
 @onready var override_room_id: LineEdit = $UI/TemplateBar/OverrideRoomId
 @onready var export_override_button: Button = $UI/TemplateBar/ExportOverride
@@ -197,6 +203,8 @@ func _ready() -> void:
 	tool_scale_button.pressed.connect(func(): _set_tool_mode("scale"))
 	place_door_button.pressed.connect(_replace_selected_wall_with_door)
 	toggle_actor_button.pressed.connect(_toggle_actor)
+	strict_placement_toggle.toggled.connect(_set_strict_placement_validation)
+	strict_placement_toggle.button_pressed = strict_placement_validation
 	template_save.pressed.connect(func(): _save_template(template_name.text))
 	export_override_button.pressed.connect(func(): _export_current_layout())
 	template_load.pressed.connect(func(): _load_template(_selected_template_name()))
@@ -234,6 +242,9 @@ func _process(delta: float) -> void:
 	_update_camera_transform()
 	if selection != null and is_instance_valid(selection) and gizmo.visible:
 		gizmo.global_position = selection.global_position + Vector3(0.0, 0.35, 0.0)
+		# Scale uses the selected asset's local X/Y/Z axes. Move/rotate keep the
+		# world-aligned Unity-style handles so their meaning stays stable.
+		gizmo.global_rotation = Vector3(0.0, selection.global_rotation.y if tool_mode == "scale" else 0.0, 0.0)
 		# Unity keeps handles readable at different camera distances.
 		gizmo.scale = Vector3.ONE * clampf(cam_distance_current / 8.5, 0.72, 2.1)
 	_update_wall_handles()
@@ -253,10 +264,21 @@ func _set_tool_mode(next_mode: String) -> void:
 		var can_use_gizmo := tool_mode in ["move", "rotate", "scale"] and selection != null and is_instance_valid(selection) and not bool(selection.get_meta("is_wall", false))
 		if can_use_gizmo:
 			gizmo.set_target(selection, tool_mode)
+			gizmo.global_rotation = Vector3(0.0, selection.global_rotation.y if tool_mode == "scale" else 0.0, 0.0)
 		else:
 			gizmo.clear_target()
 	_update_tool_buttons()
 	_update_wall_handles()
+	_update_help()
+	_update_status()
+
+
+func _set_strict_placement_validation(enabled: bool) -> void:
+	strict_placement_validation = enabled
+	if strict_placement_toggle != null and strict_placement_toggle.button_pressed != enabled:
+		strict_placement_toggle.set_pressed_no_signal(enabled)
+	if ghost != null and is_instance_valid(ghost) and ghost.visible:
+		_update_ghost_validity(true)
 	_update_help()
 	_update_status()
 
@@ -289,7 +311,29 @@ func _begin_gizmo_drag(mouse: Vector2, hit: Dictionary) -> bool:
 	gizmo_drag_start_world = _gizmo_drag_world_point(mouse, gizmo_handle)
 	gizmo_drag_start_yaw = selection.rotation.y
 	gizmo_drag_start_scale = selection.scale
+	gizmo_drag_start_scale_direction = Vector2.RIGHT
 	gizmo_drag_start_tier = int(selection.get_meta("size_tier", 1))
+	gizmo_drag_rotation_offset = 0.0
+	if gizmo_handle.begins_with("scale_"):
+		if gizmo_handle == "scale_uniform":
+			var uniform_center := camera.unproject_position(gizmo.global_position)
+			var radial := mouse - uniform_center
+			if radial.length_squared() > 0.0001:
+				gizmo_drag_start_scale_direction = radial.normalized()
+		else:
+			var local_axis := Vector3.ZERO
+			match gizmo_handle:
+				"scale_x":
+					local_axis = Vector3.RIGHT
+				"scale_y":
+					local_axis = Vector3.UP
+				"scale_z":
+					# The visual Z stem is built from +Y rotated to +Z.
+					local_axis = Vector3.BACK
+			gizmo_drag_start_scale_direction = _gizmo_screen_axis_direction(local_axis)
+	if gizmo_handle == "rotate_y":
+		var initial_ring_vector := _gizmo_rotate_ring_vector(mouse)
+		gizmo_drag_last_ring_angle = _gizmo_ring_angle(initial_ring_vector) if _point_is_valid(initial_ring_vector) else 0.0
 	gizmo_drag_snapshot = _snapshot_state()
 	drag_valid = true
 	return true
@@ -325,13 +369,13 @@ func _update_gizmo_drag(mouse: Vector2) -> void:
 			selection.position.x = snapped.x
 			selection.position.z = snapped.z
 	elif gizmo_handle == "rotate_y":
-		# Godot's positive Y rotation matches a rightward screen drag from the
-		# default editor camera. The old minus sign made left/right feel mirrored.
-		selection.rotation.y = gizmo_drag_start_yaw + delta.x * 0.01
+		_update_gizmo_rotate_from_mouse(mouse)
 	elif gizmo_handle.begins_with("scale_"):
-		# Continuous scale. Uniform handle scales XYZ together; per-axis handles
-		# stretch a single axis. Factor derived from horizontal mouse delta.
-		var factor := exp(delta.x * 0.008)
+		# Continuous scale. Project the mouse motion onto the selected handle's
+		# screen direction so dragging outward always grows the local axis, even
+		# when the camera projects X/Z in opposite horizontal directions.
+		var scale_delta := delta.dot(gizmo_drag_start_scale_direction)
+		var factor := exp(scale_delta * 0.008)
 		var base := gizmo_drag_start_scale
 		match gizmo_handle:
 			"scale_uniform":
@@ -348,6 +392,42 @@ func _update_gizmo_drag(mouse: Vector2) -> void:
 	selection_ring.global_position = Vector3(selection.global_position.x, 0.025, selection.global_position.z)
 
 
+func _gizmo_rotate_ring_vector(mouse: Vector2) -> Vector3:
+	if camera == null or gizmo == null or not is_instance_valid(gizmo):
+		return INVALID_POINT
+	var origin := camera.project_ray_origin(mouse)
+	var direction := camera.project_ray_normal(mouse)
+	if absf(direction.y) < 0.000001:
+		return INVALID_POINT
+	var center := gizmo.global_position
+	var distance := (center.y - origin.y) / direction.y
+	if distance < 0.0:
+		return INVALID_POINT
+	var hit := origin + direction * distance
+	var ring_vector := Vector3(hit.x - center.x, 0.0, hit.z - center.z)
+	return ring_vector if ring_vector.length_squared() > 0.0001 else INVALID_POINT
+
+
+func _gizmo_ring_angle(ring_vector: Vector3) -> float:
+	return atan2(ring_vector.x, ring_vector.z)
+
+
+func _update_gizmo_rotate_from_mouse(mouse: Vector2) -> void:
+	if selection == null or not is_instance_valid(selection):
+		return
+	var ring_vector := _gizmo_rotate_ring_vector(mouse)
+	if not _point_is_valid(ring_vector):
+		return
+	var current_angle := _gizmo_ring_angle(ring_vector)
+	var angle_delta := Rules.wrapped_angle_delta(gizmo_drag_last_ring_angle, current_angle)
+	gizmo_drag_rotation_offset += angle_delta
+	gizmo_drag_last_ring_angle = current_angle
+	var next_yaw := gizmo_drag_start_yaw + gizmo_drag_rotation_offset
+	if Input.is_key_pressed(KEY_CTRL):
+		next_yaw = roundf(next_yaw / ROTATION_SNAP) * ROTATION_SNAP
+	selection.rotation.y = next_yaw
+
+
 func _finish_gizmo_drag() -> void:
 	if not gizmo_dragging:
 		return
@@ -358,6 +438,9 @@ func _finish_gizmo_drag() -> void:
 	gizmo_dragging = false
 	gizmo_handle = ""
 	gizmo_drag_start_world = INVALID_POINT
+	gizmo_drag_start_scale_direction = Vector2.RIGHT
+	gizmo_drag_last_ring_angle = 0.0
+	gizmo_drag_rotation_offset = 0.0
 	gizmo_drag_snapshot.clear()
 	_set_selection_invalid(false)
 	_update_status()
@@ -375,6 +458,16 @@ func _gizmo_drag_world_point(mouse: Vector2, handle: String) -> Vector3:
 		"move_x", "move_z", "move_xz":
 			return _mouse_plane_point(mouse, Vector3.UP, plane_point)
 	return INVALID_POINT
+
+
+func _gizmo_screen_axis_direction(local_axis: Vector3) -> Vector2:
+	if camera == null or gizmo == null or not is_instance_valid(gizmo):
+		return Vector2.RIGHT
+	var center := camera.unproject_position(gizmo.global_position)
+	var world_axis := (gizmo.global_transform.basis * local_axis).normalized()
+	var tip := camera.unproject_position(gizmo.global_position + world_axis * 0.82)
+	var direction := tip - center
+	return direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
 
 
 func _mouse_plane_point(mouse: Vector2, plane_normal: Vector3, plane_point: Vector3) -> Vector3:
@@ -705,7 +798,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_cancel_active_mode()
 			return
 
-	if (event is InputEventMouseButton or event is InputEventMouseMotion) and get_viewport().gui_get_hovered_control() != null:
+	var active_drag := gizmo_dragging or endpoint_dragging or wall_dragging or rotating_ghost or dragging
+	var is_drag_release := event is InputEventMouseButton and not (event as InputEventMouseButton).pressed and active_drag
+	if (event is InputEventMouseButton or event is InputEventMouseMotion) and get_viewport().gui_get_hovered_control() != null and not is_drag_release:
 		return
 
 	if event is InputEventMouseButton:
@@ -719,7 +814,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
 		if (motion.button_mask & MOUSE_BUTTON_MASK_RIGHT) != 0:
-			cam_yaw_target -= motion.relative.x * 0.008
+			cam_yaw_target += motion.relative.x * 0.008
 			cam_pitch_target += motion.relative.y * 0.008
 			_clamp_camera_targets()
 			return
@@ -967,6 +1062,7 @@ func _placement_valid(node_or_ghost, ignore_node: Node3D = null) -> Dictionary:
 		return {"ok": false, "reason": "out_of_bounds"}
 	if bool(candidate.get_meta("overlay", false)):
 		return {"ok": true, "reason": ""}
+	var overlap_found := false
 	for container in [placements, walls]:
 		for child in container.get_children():
 			var placed := child as Node3D
@@ -974,7 +1070,11 @@ func _placement_valid(node_or_ghost, ignore_node: Node3D = null) -> Dictionary:
 				continue
 			var other_aabb := _node_world_aabb(placed)
 			if other_aabb.size != Vector3.ZERO and Rules.aabb_overlaps(candidate_aabb, other_aabb):
-				return {"ok": false, "reason": "overlap"}
+				overlap_found = true
+				if strict_placement_validation:
+					return {"ok": false, "reason": "overlap"}
+	if overlap_found:
+		return {"ok": true, "reason": "overlap_warning"}
 	return {"ok": true, "reason": ""}
 
 
@@ -1099,6 +1199,9 @@ func _cancel_transform() -> void:
 	dragging = false
 	rotating_selection = false
 	rotating_ghost = false
+	gizmo_drag_start_scale_direction = Vector2.RIGHT
+	gizmo_drag_last_ring_angle = 0.0
+	gizmo_drag_rotation_offset = 0.0
 	drag_snapshot.clear()
 
 
@@ -2899,6 +3002,8 @@ func _reason_text(reason: String) -> String:
 			return "超出房间外轮廓"
 		"overlap":
 			return "与已有资产或墙重叠"
+		"overlap_warning":
+			return "提示：与已有资产或墙重叠（仍可放置）"
 		"wall_not_boundary":
 			return "墙不在房间外轮廓"
 		"wall_overlap":
@@ -2926,7 +3031,7 @@ func _update_status(message := "") -> void:
 		status_label.text = "%s · 画墙：%s · 左键沿外轮廓拖动" % [room_name, WALL_TOOL_NAMES.get(wall_kind, wall_kind)]
 	elif not selected_asset.is_empty():
 		var entry := _find_asset_entry(selected_asset)
-		var validity := "合法" if ghost_valid else _reason_text(ghost_invalid_reason)
+		var validity := "合法" if ghost_invalid_reason.is_empty() else _reason_text(ghost_invalid_reason)
 		status_label.text = "%s · 放置：%s · %s" % [room_name, entry.get("name", selected_asset), validity]
 	elif selection != null and is_instance_valid(selection):
 		status_label.text = "%s · 已选中：%s · %s" % [room_name, selection.name, "门洞（G 放门不可用 / Delete 恢复实体墙）" if bool(selection.get_meta("is_door", false)) else ("墙段（端点拖动 / G 放门 / Delete 删除）" if bool(selection.get_meta("is_wall", false)) else "工具 %s · 拖 Gizmo" % tool_mode)]
@@ -2937,4 +3042,4 @@ func _update_status(message := "") -> void:
 
 
 func _update_help() -> void:
-	help_label.text = "Unity 操作：Q=视图  W=移动  E=旋转  R=缩放；工具保持激活，点击物体只负责选中\n移动 Gizmo：X/Y/Z 箭头锁单轴 · XY/YZ/XZ 方片锁正交平面；绿色圆环绕 Y 轴旋转\n右键拖动：环绕   中键拖动：平移   滚轮：缩放相机   F：聚焦   Ctrl+D：复制\nCtrl+拖动：吸附细网格   Delete：删除（门洞恢复实体墙）   Ctrl+Z/Y：撤销/重做   Esc：取消\n墙工具：从金色角柱锚点拖到外轮廓形成连续墙带；选中墙段可拖两端端点，自动重算转角\n资产可相互堆叠：用移动 Gizmo 把资产落到另一资产顶面"
+	help_label.text = "Unity 操作：Q=视图  W=移动  E=旋转  R=缩放；工具保持激活，点击物体只负责选中\n移动 Gizmo：X/Y/Z 箭头锁单轴 · XY/YZ/XZ 方片锁正交平面；绿色圆环按鼠标绕 Y 轴旋转\n右键拖动：环绕（水平拖动跟手）   中键拖动：平移   滚轮：缩放相机   F：聚焦   Ctrl+D：复制\nCtrl+拖动：吸附细网格；Ctrl+旋转：15° 吸附   Delete：删除（门洞恢复实体墙）   Ctrl+Z/Y：撤销/重做   Esc：取消\n资产可相互堆叠：移动 Gizmo 会保留位置；重叠默认提示但不回退，勾选“严格重叠检查”后才拒绝\n墙工具：从金色角柱锚点拖到外轮廓形成连续墙带；选中墙段可拖两端端点，自动重算转角"

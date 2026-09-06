@@ -300,6 +300,8 @@ func clear_player_shield() -> void:
 	player_shield = 0
 
 
+var host_fight: RefCounted = null
+
 func apply_enemy_toughness_damage(state: CombatEnemyState, amount: int, source: String) -> int:
 	if state == null or amount <= 0 or state.toughness <= 0:
 		return 0
@@ -308,6 +310,8 @@ func apply_enemy_toughness_damage(state: CombatEnemyState, amount: int, source: 
 	var dealt := before - state.toughness
 	if state.toughness <= 0:
 		state.broken = true
+		if host_fight != null:
+			host_fight.on_break(self)
 		if state.archetype == "execute":
 			state.execute_bonus_pending = true
 		elif state.archetype == "stagger":
@@ -859,6 +863,8 @@ func _empty_enemy_intent(enemy_id := "") -> Dictionary:
 
 
 func _preview_intent_for(state: CombatEnemyState) -> Dictionary:
+	if host_fight != null:
+		return host_fight.preview(self, state)
 	var result := _empty_enemy_intent(state.id)
 	result["enemy_revealed"] = state.revealed
 	result["sees_player"] = state.sees_player
@@ -1076,6 +1082,8 @@ func preview_all_tactical_plans() -> Dictionary:
 
 
 func _single_enemy_turn(state: CombatEnemyState) -> Array[Dictionary]:
+	if host_fight != null:
+		return host_fight.execute(self, state)
 	var turn_events: Array[Dictionary] = []
 	if outcome != "":
 		return turn_events

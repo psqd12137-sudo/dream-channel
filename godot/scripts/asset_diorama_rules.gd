@@ -36,6 +36,13 @@ static func snap_fine(point: Vector3) -> Vector3:
 	)
 
 
+static func wrapped_angle_delta(previous: float, current: float) -> float:
+	## Smallest signed delta from the previous ring angle to the current one.
+	## Keeping this in the shared rules module makes rotation behavior stable
+	## across the editor gizmo and headless regression tests.
+	return wrapf(current - previous, -PI, PI)
+
+
 static func rotated_cells(shape_id: String, rotation_quarters: int) -> Array[Vector2i]:
 	var source: Array = RoomFootprintCatalog.SHAPES.get(shape_id, RoomFootprintCatalog.SHAPES["single"])
 	var result: Array[Vector2i] = []

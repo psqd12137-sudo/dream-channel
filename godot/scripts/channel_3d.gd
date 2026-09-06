@@ -94,6 +94,7 @@ const BATTLE_CAMERA_FRAME_OFFSET := 0.12
 const BATTLE_CAMERA_RETURN_DELAY := 1.5
 const BATTLE_CAMERA_RETURN_DURATION := 0.9
 const INVALID_CELL := Vector2i(-999, -999)
+const FLOOR_VIEW_OVERVIEW := 999
 const UNITY_ROOM_DROP_DURATION := 0.25
 const UNITY_ROOM_DROP_HEIGHT_CELLS := 0.65
 const UNITY_ROOM_START_SCALE := 0.94
@@ -272,6 +273,8 @@ var house_camera_returning := false
 var house_camera_intro_weight := 1.0
 var house_camera_intro_tween: Tween = null
 var house_camera_return_tween: Tween = null
+var house_floor_view := FLOOR_VIEW_OVERVIEW
+var world_boss_pending_floor_follow := FLOOR_VIEW_OVERVIEW
 var battle_camera_following := false
 var battle_camera_user_hold := false
 var battle_camera_return_delay := 0.0
@@ -281,6 +284,11 @@ var battle_room_title := "房间"
 var battle_room_context: Dictionary = {}
 var combat_is_boss := false
 var boss_id := ""
+var boss_finish_reason := ""
+var boss_recap: Dictionary = {}
+var boss_preview_active := false
+const OverworldBossRules = preload("res://scripts/overworld_boss_rules.gd")
+const OverworldBossPresentation = preload("res://scripts/overworld_boss_presentation.gd")
 var boss_anchor_cells: Array[Vector2i] = []
 var boss_anchor_hp: Dictionary = {}
 var boss_anchors_cleared := 0
@@ -533,6 +541,9 @@ func set_battle_feedback_suppressed(suppressed: bool) -> void:
 
 
 func _process(delta: float) -> void:
+	if phase == "world_boss" and combat != null and not hud.settings_panel_open:
+		combat.tick(delta)
+		hud.queue_redraw()
 	if phase == "combat" and test_combat_active:
 		_update_test_observer(delta)
 	elif phase == "lab_sideview":
@@ -550,7 +561,7 @@ func _process(delta: float) -> void:
 	elif phase == "lab_chase":
 		_update_chase(delta)
 	_update_camera_follow(delta)
-	if battle_world_renderer != null:
+	if battle_world_renderer != null and phase != "world_boss":
 		battle_world_renderer.update_battle_debug_visibility()
 		battle_world_renderer.update_battle_feedback_overlay()
 
@@ -566,7 +577,7 @@ func _update_camera_follow(delta: float) -> void:
 		house_camera_return_delay = maxf(0.0, house_camera_return_delay - delta)
 		if house_camera_return_delay <= 0.0 and not house_camera_user_hold:
 			_start_house_camera_return()
-	if phase in ["explore", "build", "room_ready"] and camera != null:
+	if phase in ["explore", "build", "room_ready", "world_boss"] and camera != null:
 		var target_size := _house_camera_size_target()
 		var size_factor := CameraFollowMath.smooth_factor(HOUSE_CAMERA_SIZE_SMOOTH_RATE, delta)
 		var next_size := lerpf(house_camera_size_current, target_size, size_factor)
@@ -628,6 +639,9 @@ func _house_camera_overview_target() -> Vector3:
 func _house_camera_layout_points() -> Array[Vector3]:
 	var points: Array[Vector3] = []
 	for raw_pos: Variant in room_rules.placed.keys():
+		var room: Dictionary = room_rules.placed[raw_pos]
+		if phase == "world_boss" and house_floor_view != FLOOR_VIEW_OVERVIEW and int(room.get("floor", 0)) != house_floor_view:
+			continue
 		points.append(_house_visual_world(raw_pos as Vector2i))
 	# Ordinary frontier sockets are navigation affordances, not composition
 	# content. Only the currently selected multi-cell build preview contributes
@@ -676,6 +690,9 @@ func _battle_follow_target_position() -> Vector3:
 
 
 func release_battle_camera_gesture() -> void:
+	if phase == "world_boss":
+		release_house_camera_gesture()
+		return
 	battle_camera_user_hold = false
 	if not battle_camera_returning:
 		battle_camera_return_delay = BATTLE_CAMERA_RETURN_DELAY
@@ -745,6 +762,26 @@ func set_world_view_rect(rect: Rect2) -> void:
 		_apply_search_camera()
 	else:
 		_set_house_camera()
+
+
+func set_house_floor_view(floor_index: int) -> void:
+	if phase != "world_boss" or combat == null:
+		return
+	if floor_index != FLOOR_VIEW_OVERVIEW and not combat.cell_floors.values().has(floor_index):
+		return
+	house_floor_view = floor_index
+	house_camera_user_adjusted = false
+	house_camera_user_hold = false
+	_cancel_house_camera_return()
+	OverworldBossPresentation.refresh(self)
+	_set_house_camera()
+	_refresh_hud()
+
+
+func player_floor_view() -> int:
+	if combat == null:
+		return 0
+	return int(combat.cell_floors.get(combat.player_pos, 0))
 
 
 func _battle_feedback_screen_position(world_position: Vector3) -> Vector2:
@@ -897,6 +934,9 @@ func copy_current_seed() -> void:
 
 
 func go_home() -> void:
+	if phase == "world_boss" and combat != null:
+		_save_run()
+	boss_preview_active = false
 	clear_test_visual_filter()
 	if test_combat_active:
 		_restore_test_state()
@@ -974,6 +1014,10 @@ func continue_saved_run() -> bool:
 		var room: Dictionary = (entry.get("room", {}) as Dictionary).duplicate(true)
 		room["pos"] = pos
 		room_rules.placed[pos] = room
+	room_rules.stair_links.clear()
+	for raw_stair: Variant in save.get("stair_links", []):
+		if raw_stair is Dictionary:
+			room_rules.stair_links.append((raw_stair as Dictionary).duplicate(true))
 	var remaining_ids: Array = save.get("remaining_ids", [])
 	remaining_rooms.clear()
 	for room: Dictionary in room_catalog:
@@ -984,6 +1028,9 @@ func continue_saved_run() -> bool:
 	pending_room_pos = _array_to_pos(save.get("pending_room", [0, 0]))
 	house_player_facing_yaw = float(save.get("house_player_facing_yaw", 0.0))
 	phase = str(save.get("phase", "explore"))
+	if phase == "world_boss" and save.has("world_boss"):
+		_begin_world_boss(save.world_boss)
+		return true
 	if phase not in ["omen", "explore", "room_ready", "reward", "boss_ready"]:
 		phase = "room_ready" if not bool(current_room().get("completed", false)) else "explore"
 	house_camera_closeup = phase == "reward" and reward_origin in ["combat", "event", "boss_access"]
@@ -1397,6 +1444,11 @@ func _find_room_instance_nodes(target: Vector2i) -> Array[Node3D]:
 func handle_screen_click(screen_pos: Vector2) -> void:
 	if animation_busy:
 		return
+	if phase == "world_boss":
+		var cell := battle_cell_from_viewport(screen_pos)
+		if cell != INVALID_CELL:
+			world_boss_click(cell)
+		return
 	if phase == "combat":
 		_handle_battle_world_click(screen_pos)
 	elif phase == "explore":
@@ -1587,7 +1639,8 @@ func _prepare_boss_ready() -> void:
 	house_camera_following = true
 	status_message = "最后一张布景已经落幕。祭坛开启：%s 正在等你。" % str(content.get("bosses", {}).get("bosses", {}).get(boss_id, {}).get("name", boss_id))
 	event_log.append("祭坛开启：%s" % str(content.get("bosses", {}).get("bosses", {}).get(boss_id, {}).get("name", boss_id)))
-	build_house_world()
+	if house_root.get_child_count() == 0:
+		build_house_world()
 	_set_house_camera()
 	_save_run()
 	_refresh_hud()
@@ -1596,15 +1649,317 @@ func _prepare_boss_ready() -> void:
 func begin_boss_combat() -> void:
 	if animation_busy or phase != "boss_ready":
 		return
-	var boss_room: Dictionary = BossProgression.build_boss_room(content.get("bosses", {}), content.get("pressure", {}), content.get("boss_room", {}), boss_id)
-	if boss_room.is_empty():
-		status_message = "祭坛数据不完整，无法开始决战。"
+	_begin_world_boss()
+
+
+func _begin_world_boss(saved: Dictionary = {}) -> void:
+	var finale = OverworldBossRules.new()
+	var rules: Dictionary = content.get("run_rules", {}).duplicate(true)
+	rules.player_hp = player_hp
+	rules.base_speed = player_speed
+	rules.base_energy = int(rules.get("base_energy", 5)) + maxi(0, player_speed - int(content.run_rules.get("base_speed", 3)))
+	var seed_value := run_seed
+	var start := current_room_pos
+	var deck: Array = run_deck.duplicate()
+	var relics: Array = active_relics.duplicate()
+	if not saved.is_empty():
+		var initial_state: Dictionary = saved.initial
+		rules = initial_state.rules.duplicate(true)
+		start = _array_to_pos(initial_state.cell)
+		deck = initial_state.deck.duplicate()
+		relics = initial_state.relics.duplicate()
+		seed_value = int(initial_state.seed)
+	finale.initialize(room_rules, start, content.bosses.bosses.get(boss_id, {}), content.cards, deck, seed_value, rules, relics)
+	if not finale.error.is_empty():
+		status_message = finale.error
+		phase = "boss_ready"
 		_refresh_hud()
 		return
-	start_combat(boss_room, true)
+	combat = finale
+	if not saved.is_empty():
+		combat.replay(saved)
+	combat_is_boss = true
+	phase = "world_boss"
+	house_floor_view = int(combat.cell_floors.get(combat.player_pos, 0))
+	boss_finish_reason = ""
+	boss_recap.clear()
+	selected_card = -1
+	world_container.visible = true
+	house_root.visible = true
+	battle_root.visible = false
+	house_camera_closeup = false
+	house_camera_following = false
+	# Preserve the live house; only a resumed encounter reconstructs it.
+	if not saved.is_empty() or house_root.get_child_count() == 0:
+		build_house_world()
+	battle_focused_enemy_id = str(combat.enemy_order[0])
+	hovered_battle_cell = INVALID_CELL
+	for marker in house_root.find_children("Frontier_*", "Node3D", false, false):
+		marker.visible = false
+	_refresh_world_boss()
+	_set_house_camera()
+
+
+func _refresh_world_boss() -> void:
+	if combat == null or phase != "world_boss":
+		return
+	var followed_floor := world_boss_pending_floor_follow
+	var floor_changed := followed_floor != FLOOR_VIEW_OVERVIEW
+	if floor_changed:
+		house_floor_view = followed_floor
+		house_camera_user_adjusted = false
+		house_camera_user_hold = false
+		_cancel_house_camera_return()
+		world_boss_pending_floor_follow = FLOOR_VIEW_OVERVIEW
+	player_hp = combat.player_hp
+	current_room_pos = combat.room_nodes[combat.player_pos].cell
+	boss_anchors_cleared = combat.cleared()
+	boss_anchor_cells.assign(combat.anchors.keys())
+	boss_anchor_hp = combat.anchors
+	boss_broadcast_progress = combat.broadcast
+	boss_broadcast_max = combat.broadcast_max
+	boss_phase_name = combat.host_fight.update_phase(combat, boss_anchors_cleared)
+	boss_finish_reason = combat.finish_reason
+	status_message = "回合制：移动、放置或使用卡牌；点击结束回合后 Boss 行动。"
+	OverworldBossPresentation.refresh(self)
+	_save_run()
+	if floor_changed:
+		_set_house_camera()
+	_refresh_hud()
+
+
+func world_boss_click(node: Vector2i) -> void:
+	if phase != "world_boss" or combat == null:
+		return
+	var done := false
+	if selected_card >= 0:
+		done = combat.use_card(selected_card, node)
+		if done:
+			selected_card = -1
+	else:
+		done = _move_world_boss_to(node)
+	if done:
+		if not animation_busy:
+			_refresh_world_boss()
+	else:
+		status_message = "行动力不足或目标不符合规则；放置需选择合法相邻格，移动只能经过连通门洞。"
+		_refresh_hud()
+
+
+func world_boss_stair_action() -> Dictionary:
+	if phase != "world_boss" or combat == null or combat.outcome != "":
+		return {}
+	for stair: Dictionary in combat.stair_links:
+		var from_cell: Vector2i = stair.get("from", INVALID_CELL)
+		var to_cell: Vector2i = stair.get("to", INVALID_CELL)
+		var destination := INVALID_CELL
+		var direction_label := ""
+		if combat.player_pos == from_cell:
+			destination = to_cell
+			direction_label = "↥ " + str(stair.get("label", "前往楼层"))
+		elif combat.player_pos == to_cell:
+			destination = from_cell
+			direction_label = "↧ 返回上一层"
+		if destination == INVALID_CELL:
+			continue
+		var path: Array[Vector2i] = combat.player_path_to(destination)
+		if path.size() < 2:
+			continue
+		var cost: int = combat.player_path_cost(path)
+		return {
+			"destination": destination,
+			"label": direction_label,
+			"cost": cost,
+			"can_use": not animation_busy and cost <= combat.energy,
+			"reason": "行动力不足，需要 %d AP" % cost if cost > combat.energy else "",
+			"kind": str(stair.get("kind", "stair")),
+		}
+	return {}
+
+
+func use_world_boss_stair() -> bool:
+	var action := world_boss_stair_action()
+	if action.is_empty():
+		status_message = "请先移动到楼梯入口格。"
+		_refresh_hud()
+		return false
+	if not bool(action.get("can_use", false)):
+		status_message = str(action.get("reason", "当前无法使用楼梯。"))
+		_refresh_hud()
+		return false
+	var moved := _move_world_boss_to(action.get("destination", INVALID_CELL))
+	if moved and not animation_busy:
+		_refresh_world_boss()
+	return moved
+
+
+func _move_world_boss_to(target: Vector2i) -> bool:
+	if animation_busy or combat == null or combat.outcome != "" or not combat.is_walkable(target):
+		return false
+	var path: Array[Vector2i] = combat.player_path_to(target)
+	if path.size() < 2:
+		return false
+	var path_cost: int = combat.player_path_cost(path)
+	if path_cost > combat.energy:
+		status_message = "到达那里需要 %d AP，但本回合只剩 %d AP。" % [path_cost, combat.energy]
+		return false
+	var source_floor := int(combat.cell_floors.get(combat.player_pos, 0))
+	var target_floor := int(combat.cell_floors.get(target, 0))
+	if source_floor != target_floor:
+		world_boss_pending_floor_follow = target_floor
+	player_facing_selection_requested = false
+	status_message = "莉莉沿大地图格子移动 %d 格。" % (path.size() - 1)
+	if animation_duration_scale <= 0.0:
+		for index in range(1, path.size()):
+			if not _move_world_boss_step(path[index]):
+				world_boss_pending_floor_follow = FLOOR_VIEW_OVERVIEW
+				return false
+			combat.move_cooldown = 0.0
+		current_room_pos = combat.player_pos
+		return true
+	animation_busy = true
+	active_animation_kind = "world_boss_path"
+	_animate_world_boss_path(path, 1)
+	return true
+
+
+func _move_world_boss_step(target: Vector2i) -> bool:
+	return combat.step_to(target)
+
+
+func _animate_world_boss_path(path: Array[Vector2i], index: int) -> void:
+	if index >= path.size() or combat.outcome != "":
+		animation_busy = false
+		active_animation_kind = ""
+		current_room_pos = combat.player_pos
+		_refresh_world_boss()
+		return
+	if not _move_world_boss_step(path[index]):
+		animation_busy = false
+		active_animation_kind = ""
+		world_boss_pending_floor_follow = FLOOR_VIEW_OVERVIEW
+		_refresh_world_boss()
+		return
+	var token := house_root.get_node_or_null("LiliToken") as Node3D
+	var source := token.position if token != null else _house_world(path[index - 1]) + Vector3(-0.45, 0.3, 0)
+	var target_position := _house_world(path[index]) + Vector3(-0.45, 0.3, 0)
+	var duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
+	combat.move_cooldown = 0.0
+	if token == null or duration <= 0.0:
+		if token != null:
+			token.position = target_position
+		_animate_world_boss_path(path, index + 1)
+		return
+	var presenter := token.get_node_or_null("Presenter")
+	if presenter != null and presenter.has_method("play_state"):
+		presenter.play_state("move")
+	var tween := create_tween()
+	active_motion_tween = tween
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(token, "position", target_position, duration)
+	tween.finished.connect(func() -> void:
+		if active_motion_tween != tween:
+			return
+		_animate_world_boss_path(path, index + 1)
+	)
+
+
+func world_boss_action(action: String, index: int = -1) -> void:
+	if phase != "world_boss" or combat == null:
+		return
+	if animation_busy:
+		return
+	match action:
+		"anchor": combat.dismantle()
+		"end":
+			if combat.outcome != "":
+				_finish_boss_combat(combat.outcome == "victory")
+				return
+			var enemy_start: Vector2i = combat.enemy_pos
+			var turn_events: Array[Dictionary] = combat.pulse()
+			battle_turn_events = turn_events.duplicate(true)
+			battle_turn_actor_id = "enemy_phase"
+			status_message = _enemy_turn_summary(turn_events)
+			_refresh_world_boss()
+			_animate_world_boss_turn(enemy_start, turn_events)
+		"card":
+			if index >= 0 and index < combat.hand.size():
+				var card: Dictionary = combat.cards.get(combat.hand[index], {})
+				if combat.card_target_type(card) == "self":
+					if not combat.use_card(index, combat.player_pos):
+						status_message = "无法使用这张牌：需要 %d AP，当前 %d AP；还需满足卡牌效果条件。" % [combat.card_cost(card), combat.energy]
+						_refresh_hud()
+						return
+				else:
+					selected_card = index
+		"cancel": selected_card = -1
+	_refresh_world_boss()
+
+
+func _animate_world_boss_turn(enemy_start: Vector2i, turn_events: Array[Dictionary]) -> void:
+	var boss_node := house_root.get_node_or_null("WorldBossOverlay/BossToken") as Node3D
+	if boss_node == null or animation_duration_scale <= 0.0 or turn_events.is_empty():
+		animation_busy = false
+		active_animation_kind = ""
+		return
+	animation_busy = true
+	active_animation_kind = "world_boss_enemy_turn"
+	boss_node.position = _house_world(enemy_start) + Vector3(0.65, 0.4, 0)
+	var tween := create_tween()
+	active_motion_tween = tween
+	for event: Dictionary in turn_events:
+		var kind := str(event.get("kind", ""))
+		if kind == "move":
+			var source: Vector2i = event.get("from", enemy_start)
+			var target: Vector2i = event.get("to", source)
+			tween.tween_callback(_play_world_boss_state.bind("move"))
+			tween.tween_method(_set_world_boss_step_motion.bind(boss_node, _house_world(source) + Vector3(0.65, 0.4, 0), _house_world(target) + Vector3(0.65, 0.4, 0)), 0.0, 1.0, UNITY_ACTOR_STEP_DURATION * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
+		elif kind == "attack":
+			tween.tween_callback(_play_world_boss_state.bind("attack"))
+			var damage := int(event.get("damage", 0))
+			if damage > 0:
+				tween.tween_callback(_show_world_boss_attack_feedback.bind(damage))
+			tween.tween_property(boss_node, "scale", Vector3(1.24, 0.78, 1.24), ENEMY_ATTACK_DURATION * 0.45 * animation_duration_scale)
+			tween.tween_property(boss_node, "scale", Vector3.ONE * 1.65, ENEMY_ATTACK_DURATION * 0.55 * animation_duration_scale)
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
+		else:
+			tween.tween_interval(ENEMY_EVENT_PAUSE_DURATION * animation_duration_scale)
+	tween.finished.connect(func() -> void:
+		if active_motion_tween != tween:
+			return
+		_complete_dynamic_effect()
+		_refresh_world_boss()
+	)
+
+
+func _set_world_boss_step_motion(weight: float, boss_node: Node3D, start_position: Vector3, target_position: Vector3) -> void:
+	if boss_node == null or not is_instance_valid(boss_node):
+		return
+	boss_node.position = start_position.lerp(target_position, clampf(weight, 0.0, 1.0))
+
+
+func _play_world_boss_state(state: String) -> void:
+	var boss_node := house_root.get_node_or_null("WorldBossOverlay/BossToken") as Node3D
+	if boss_node == null:
+		return
+	var presenter := boss_node.get_node_or_null("Presenter")
+	if presenter != null and presenter.has_method("play_state"):
+		presenter.play_state(state)
+
+
+func _show_world_boss_attack_feedback(damage: int) -> void:
+	status_message = "Boss 攻击命中，造成 %d 点伤害。" % damage
+	var player_node := house_root.get_node_or_null("LiliToken") as Node3D
+	if player_node != null:
+		var presenter := player_node.get_node_or_null("Presenter")
+		if presenter != null and presenter.has_method("play_state"):
+			presenter.play_state("hurt")
 
 
 func _configure_boss_combat(room: Dictionary) -> void:
+	boss_finish_reason = ""
+	boss_recap.clear()
 	boss_anchor_cells.clear()
 	boss_anchor_hp.clear()
 	boss_anchors_cleared = 0
@@ -1624,12 +1979,44 @@ func _configure_boss_combat(room: Dictionary) -> void:
 		if boss_anchor_cells.size() >= anchor_limit:
 			break
 		var cell := _array_to_pos(raw_cell) if raw_cell is Array else _parse_battle_cell(raw_cell)
+		if boss_id == "channel_host":
+			cell = _resolve_host_anchor_cell(cell)
 		if cell == INVALID_CELL or not combat.is_walkable(cell) or cell in boss_anchor_cells:
 			continue
 		boss_anchor_cells.append(cell)
 		boss_anchor_hp[cell] = anchor_health
+	if boss_id == "channel_host":
+		while boss_anchor_cells.size() < anchor_limit:
+			var cell := _resolve_host_anchor_cell(Vector2i(combat.cols - 1, combat.rows - 1))
+			if cell == INVALID_CELL:
+				break
+			boss_anchor_cells.append(cell)
+			boss_anchor_hp[cell] = anchor_health
 	boss_broadcast_max = maxi(1, int(profile.get("broadcastMax", fight_rules.get("broadcastMax", 14))))
+	if boss_id == "channel_host":
+		combat.host_fight = preload("res://scripts/channel_host_fight.gd").new()
+		combat.enemy_by_id(combat.enemy_order[0]).archetype = "host"
 	_update_boss_phase()
+	if combat.host_fight != null:
+		combat.host_fight.prepare(combat)
+
+
+func _resolve_host_anchor_cell(preferred: Vector2i) -> Vector2i:
+	var best := INVALID_CELL
+	var distance := 2147483647
+	for y in range(combat.rows):
+		for x in range(combat.cols):
+			var cell := Vector2i(x, y)
+			if not combat.is_walkable(cell) or cell in boss_anchor_cells or combat.enemy_at(cell, false) != null:
+				continue
+			var path: Array[Vector2i] = combat._find_path(combat.player_pos, cell, {}, false)
+			if path.is_empty() or path.back() != cell:
+				continue
+			var score: int = combat.manhattan(cell, preferred)
+			if score < distance:
+				distance = score
+				best = cell
+	return best
 
 
 func _parse_battle_cell(raw_cell: Variant) -> Vector2i:
@@ -1651,34 +2038,60 @@ func _boss_fight_rules() -> Dictionary:
 
 
 func _boss_dismantle_cost() -> int:
+	if phase == "world_boss":
+		return 2
 	return maxi(1, int(_boss_profile().get("dismantleCost", _boss_fight_rules().get("dismantleCost", 1))))
 
 
 func can_dismantle_boss_anchor() -> bool:
+	if phase == "world_boss" and combat != null:
+		return combat.outcome == "" and combat.energy >= 2 and int(combat.anchors.get(combat.player_pos, 0)) > 0
 	if not combat_is_boss or combat == null or combat.outcome != "" or animation_busy:
 		return false
-	if not boss_anchor_hp.has(combat.player_pos) or int(boss_anchor_hp.get(combat.player_pos, 0)) <= 0:
+	if _nearby_boss_anchor() == INVALID_CELL:
 		return false
 	return combat.energy >= _boss_dismantle_cost()
 
 
+func _nearby_boss_anchor() -> Vector2i:
+	if combat == null:
+		return INVALID_CELL
+	if phase == "world_boss":
+		return combat.player_pos if int(combat.anchors.get(combat.player_pos, 0)) > 0 else INVALID_CELL
+	# Prefer the occupied anchor; then stable arena order, never a random target.
+	if int(boss_anchor_hp.get(combat.player_pos, 0)) > 0:
+		return combat.player_pos
+	if boss_id == "channel_host":
+		for cell: Vector2i in boss_anchor_cells:
+			if int(boss_anchor_hp.get(cell, 0)) > 0 and combat.manhattan(cell, combat.player_pos) == 1:
+				return cell
+	return INVALID_CELL
+
+
 func dismantle_boss_anchor() -> void:
+	if phase == "world_boss":
+		world_boss_action("anchor")
+		return
 	if not can_dismantle_boss_anchor():
-		status_message = "需要站在仍在播出的信号锚上，并保留 %d 点行动力。" % _boss_dismantle_cost()
+		status_message = "靠近仍在播出的信号锚，并保留 %d 点行动力。" % _boss_dismantle_cost()
 		_refresh_hud()
 		return
-	var cell: Vector2i = combat.player_pos
+	var cell: Vector2i = _nearby_boss_anchor()
 	combat.energy -= _boss_dismantle_cost()
 	var remaining := int(boss_anchor_hp.get(cell, 0)) - 1
 	boss_anchor_hp[cell] = remaining
 	if remaining <= 0:
 		boss_anchors_cleared += 1
+		if combat.host_fight != null:
+			combat.enemy_max_toughness = maxi(2, 6 - boss_anchors_cleared)
+			combat.enemy_toughness = mini(combat.enemy_toughness, combat.enemy_max_toughness)
 		var relief := int(_boss_profile().get("anchorClockRelief", _boss_fight_rules().get("anchorClockRelief", 2)))
 		boss_broadcast_progress = maxi(0, boss_broadcast_progress - relief)
 		status_message = "信号锚已拆除（%d/%d），播出进度 -%d。" % [boss_anchors_cleared, boss_anchor_cells.size(), relief]
 		combat.event_log.append("BossAnchorCleared cell=%s count=%d" % [cell, boss_anchors_cleared])
 		if boss_anchors_cleared >= boss_anchor_cells.size() and str(_boss_profile().get("victoryMode", "kill")) in ["ritual", "mixed"]:
 			combat.outcome = "victory"
+			boss_finish_reason = "ritual"
 			status_message = "所有信号锚熄灭，祭坛失去播出权。"
 			combat.event_log.append("BossRitualComplete")
 	else:
@@ -1691,6 +2104,10 @@ func dismantle_boss_anchor() -> void:
 
 func _update_boss_phase() -> void:
 	if not combat_is_boss:
+		return
+	if combat != null and combat.host_fight != null:
+		boss_phase_name = combat.host_fight.update_phase(combat, boss_anchors_cleared)
+		boss_directive_id = ""
 		return
 	var phases: Array = _boss_fight_rules().get("phases", [])
 	var selected_phase: Dictionary = {}
@@ -1708,12 +2125,16 @@ func _advance_boss_broadcast() -> void:
 	if not combat_is_boss or combat == null or combat.outcome != "":
 		return
 	var increment := 1
+	if combat.host_fight != null:
+		_sync_host_break_relief()
+		increment = boss_broadcast_increment()
 	if boss_directive_id == "extra" and boss_anchors_cleared >= 2:
 		increment += 1
 	boss_broadcast_progress += increment
 	_update_boss_phase()
 	if boss_broadcast_progress >= boss_broadcast_max:
 		combat.outcome = "defeat"
+		boss_finish_reason = "broadcast"
 		combat.event_log.append("BossBroadcastOverflow progress=%d" % boss_broadcast_progress)
 		status_message = "播出进度已满，频道把你编进了片尾。"
 
@@ -1727,7 +2148,22 @@ func boss_anchor_summary() -> Dictionary:
 		"phase": boss_phase_name,
 		"directive": boss_directive_id,
 		"dismantle_cost": _boss_dismantle_cost(),
+		"increment": boss_broadcast_increment(),
+		"next_action": combat.host_fight.label() if combat != null and combat.host_fight != null else "",
+		"anchor": _nearby_boss_anchor(),
 	}
+
+
+func boss_broadcast_increment() -> int:
+	if combat != null and combat.host_fight != null:
+		return 2 + (1 if combat.player_pos in combat.host_fight.camera_cells else 0)
+	return 2 if boss_directive_id == "extra" and boss_anchors_cleared >= 2 else 1
+
+
+func _sync_host_break_relief() -> void:
+	if combat != null and combat.host_fight != null:
+		boss_broadcast_progress = maxi(0, boss_broadcast_progress - combat.host_fight.relief_pending)
+		combat.host_fight.relief_pending = 0
 
 
 func _boss_closeup_blocks_card(card: Dictionary) -> bool:
@@ -1746,7 +2182,11 @@ func _finish_boss_combat(success: bool) -> void:
 	player_hp = combat.player_hp
 	if success:
 		_collect_combat_deck()
-	var result := BossProgression.ending(content.get("bosses", {}), boss_id, success)
+	if boss_finish_reason.is_empty():
+		boss_finish_reason = "kill" if success else "hp"
+	boss_recap = {"rounds": combat.round_number, "anchors": boss_anchors_cleared, "breaks": combat.host_fight.break_count if combat.host_fight != null else 0, "reason": boss_finish_reason}
+	event_log.append("BossResult %s" % JSON.stringify(boss_recap))
+	var result := current_ending_for(success)
 	ending_id = str(result.get("id", "end_fail"))
 	ending_success = success
 	combat = null
@@ -1763,7 +2203,18 @@ func _finish_boss_combat(success: bool) -> void:
 
 
 func current_ending() -> Dictionary:
-	return BossProgression.ending(content.get("bosses", {}), boss_id, ending_success)
+	return current_ending_for(ending_success)
+
+
+func current_ending_for(success: bool) -> Dictionary:
+	var result := BossProgression.ending(content.get("bosses", {}), boss_id, success)
+	if boss_id == "channel_host":
+		var endings := {"kill": ["停机事故", "主持人倒下了。最后一句台词卡在雪花屏里。"], "ritual": ["关台", "四盏灯全部熄灭。没有观众，主持人终于停止表演。"], "hp": ["谢幕失败", "你倒在舞台上。这次录制没能走到终点。"], "broadcast": ["被播映", "录制完成。你的名字被印进了固定演员名单。"]}
+		var entry: Array = endings.get(boss_finish_reason, endings["kill" if success else "hp"])
+		result["title"] = entry[0]
+		result["boss_message"] = entry[1]
+		result["text"] = "%d 回合 · 关闭 %d/4 信号锚 · 破韧 %d 次%s" % [int(boss_recap.get("rounds", 0)), int(boss_recap.get("anchors", 0)), int(boss_recap.get("breaks", 0)), "\n后台试玩 · 不影响正式存档" if boss_preview_active else ""]
+	return result
 
 
 func finish_ending() -> void:
@@ -1948,12 +2399,19 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	if combat_is_boss:
 		run_rules["enemy_death_allowed"] = bool(room.get("boss", {}).get("killable", room.get("boss_profile", {}).get("killable", true)))
 	combat.setup(room.get("arena", {}), enemy_specs, content.get("cards", {}), run_deck, run_seed + room_rules.instance_count() * 17, run_rules, active_relics)
-	_configure_boss_combat(room)
 	battle_entry_cell = combat.player_pos
 	battle_entry_side = _resolve_battle_entry_side(room)
 	battle_room_context = BattleRoomArtContext.build(room, combat.cols, combat.rows, BATTLE_CELL, run_seed + str(room.get("instance_id", room.get("id", "room"))).hash())
 	_apply_battle_footprint_to_combat()
 	_align_battle_terrain_to_room_context()
+	_configure_boss_combat(room)
+	if combat_is_boss and boss_id == "channel_host" and boss_anchor_cells.size() < 4:
+		combat = null
+		combat_is_boss = false
+		phase = "boss_ready"
+		status_message = "祭坛可达空间不足，无法放置4个信号锚。请检查副本布局。"
+		_refresh_hud()
+		return
 	_prepare_battle_prop_assignments()
 	selected_card = -1
 	battle_inspected_cell = INVALID_CELL
@@ -2058,6 +2516,12 @@ func _animate_combat_entry(final_message: String) -> void:
 
 
 func select_or_play_card(index: int) -> void:
+	if phase == "world_boss":
+		if selected_card == index:
+			cancel_selected_card()
+		else:
+			world_boss_action("card", index)
+		return
 	if animation_busy or phase != "combat" or combat == null or index < 0 or index >= combat.hand.size():
 		return
 	player_facing_selection_requested = false
@@ -2116,6 +2580,9 @@ func select_or_play_card(index: int) -> void:
 
 
 func cancel_selected_card(message: String = "已取消选牌；绿色角标表示可以移动的格子。") -> void:
+	if phase == "world_boss":
+		world_boss_action("cancel")
+		return
 	if phase != "combat" or selected_card < 0:
 		return
 	selected_card = -1
@@ -2125,6 +2592,10 @@ func cancel_selected_card(message: String = "已取消选牌；绿色角标表�
 
 
 func end_combat_turn() -> void:
+	if phase == "world_boss":
+		selected_card = -1
+		world_boss_action("end")
+		return
 	if animation_busy or phase != "combat" or combat == null or combat.outcome != "":
 		return
 	selected_card = -1
@@ -2449,6 +2920,16 @@ func _handle_battle_world_click(screen_pos: Vector2) -> void:
 
 
 func move_player_direction(direction: Vector2i) -> bool:
+	if phase == "world_boss":
+		if selected_card >= 0 or combat == null:
+			return false
+		var target := world_boss_direction_target(direction)
+		if target == INVALID_CELL:
+			return false
+		var moved := _move_world_boss_to(target)
+		if moved and not animation_busy:
+			_refresh_world_boss()
+		return moved
 	if animation_busy or phase != "combat" or combat == null or combat.outcome != "" or selected_card >= 0:
 		return false
 	if direction.x != 0 and direction.y != 0:
@@ -2457,7 +2938,22 @@ func move_player_direction(direction: Vector2i) -> bool:
 	return move_player_to(target)
 
 
+func world_boss_direction_target(direction: Vector2i) -> Vector2i:
+	if combat == null or phase != "world_boss":
+		return INVALID_CELL
+	# Directions follow actual connecting doors, not graph node indices.
+	for cell: Vector2i in combat.room_nodes[combat.player_pos].cells:
+		var neighbor_cell := cell + direction
+		var node: Vector2i = combat.cell_nodes.get(neighbor_cell, INVALID_CELL)
+		if node in combat.graph[combat.player_pos] and _rooms_connected(cell, neighbor_cell):
+			return node
+	return INVALID_CELL
+
+
 func handle_battle_cell(target: Vector2i) -> void:
+	if phase == "world_boss":
+		world_boss_click(target)
+		return
 	if animation_busy or combat == null or combat.outcome != "" or target == INVALID_CELL:
 		return
 	if selected_card < 0 and (combat.energy <= 0 or player_facing_selection_requested) and choose_player_facing(target, player_facing_selection_requested):
@@ -2765,13 +3261,50 @@ func _animate_player_portal(source: Vector2i, target: Vector2i) -> void:
 	)
 
 
+func _world_boss_pick_plane_y() -> float:
+	if combat == null:
+		return house_root.to_global(Vector3.ZERO).y
+	var target_floor := player_floor_view()
+	if house_floor_view != FLOOR_VIEW_OVERVIEW:
+		target_floor = house_floor_view
+	for raw_cell: Variant in combat.cell_floors.keys():
+		var cell: Vector2i = raw_cell
+		if int(combat.cell_floors.get(cell, 0)) == target_floor:
+			var local_height := float(combat.cell_elevations.get(cell, 0.0))
+			return house_root.to_global(Vector3(0.0, local_height, 0.0)).y
+	return house_root.to_global(Vector3.ZERO).y
+
+
+func _world_boss_pick_floor_origin(floor_index: int) -> Vector2i:
+	if combat == null:
+		return Vector2i.ZERO
+	for raw_cell: Variant in combat.cell_floors.keys():
+		var cell: Vector2i = raw_cell
+		if int(combat.cell_floors.get(cell, 0)) != floor_index or not room_rules.placed.has(cell):
+			continue
+		var room: Dictionary = room_rules.placed[cell]
+		var raw_origin: Variant = room.get("floor_origin", [])
+		if raw_origin is Array and (raw_origin as Array).size() >= 2:
+			return _array_to_pos(raw_origin)
+		if floor_index != 0:
+			return _array_to_pos(room.get("origin", [cell.x, cell.y]))
+	return Vector2i.ZERO
+
+
 func battle_cell_from_viewport(view_pos: Vector2) -> Vector2i:
 	if combat == null:
 		return INVALID_CELL
-	var hit: Variant = _screen_to_plane(view_pos, 0.0)
+	var plane_y := _world_boss_pick_plane_y() if phase == "world_boss" else 0.0
+	var hit: Variant = _screen_to_plane(view_pos, plane_y)
 	if hit == null:
 		return INVALID_CELL
 	var world: Vector3 = hit
+	if phase == "world_boss":
+		world = _house_logical_world_from_visual(world)
+		var floor_index := player_floor_view() if house_floor_view == FLOOR_VIEW_OVERVIEW else house_floor_view
+		var floor_origin := _world_boss_pick_floor_origin(floor_index)
+		var cell := Vector2i(roundi(world.x / HOUSE_CELL) + floor_origin.x, roundi(world.z / HOUSE_CELL) + floor_origin.y)
+		return combat.cell_nodes.get(cell, INVALID_CELL)
 	var grid_origin := Vector2(-float(combat.cols - 1) * BATTLE_CELL * 0.5, -float(combat.rows - 1) * BATTLE_CELL * 0.5)
 	var target := Vector2i(roundi((world.x - grid_origin.x) / BATTLE_CELL), roundi((world.z - grid_origin.y) / BATTLE_CELL))
 	if target.x < 0 or target.y < 0 or target.x >= combat.cols or target.y >= combat.rows:
@@ -2780,6 +3313,12 @@ func battle_cell_from_viewport(view_pos: Vector2) -> Vector2i:
 
 
 func set_battle_hover(view_pos: Vector2) -> void:
+	if phase == "world_boss" and combat != null:
+		var target := battle_cell_from_viewport(view_pos)
+		if target != hovered_battle_cell:
+			hovered_battle_cell = target
+			OverworldBossPresentation.refresh(self)
+		return
 	if animation_busy or phase != "combat" or combat == null:
 		return
 	var next_hover := battle_cell_from_viewport(view_pos)
@@ -2797,6 +3336,8 @@ func clear_battle_hover() -> void:
 	hovered_battle_cell = INVALID_CELL
 	if phase == "combat":
 		update_battle_hover()
+	elif phase == "world_boss":
+		OverworldBossPresentation.refresh(self)
 
 
 func set_house_hover(view_pos: Vector2) -> void:
@@ -2825,6 +3366,9 @@ func clear_house_hover() -> void:
 		build_house_world()
 
 func reset_battle_camera() -> void:
+	if phase == "world_boss":
+		reset_house_camera()
+		return
 	if combat == null or camera == null:
 		return
 	battle_camera_following = false
@@ -2880,6 +3424,9 @@ func _refit_battle_camera(preserve_zoom: bool) -> void:
 
 
 func pan_battle_camera(pixel_delta: Vector2) -> void:
+	if phase == "world_boss":
+		pan_house_camera(pixel_delta)
+		return
 	if phase != "combat" or combat == null:
 		return
 	battle_camera_following = false
@@ -2894,6 +3441,9 @@ func pan_battle_camera(pixel_delta: Vector2) -> void:
 
 
 func orbit_battle_camera(pixel_delta: Vector2) -> void:
+	if phase == "world_boss":
+		orbit_house_camera(pixel_delta)
+		return
 	if phase != "combat" or combat == null:
 		return
 	battle_camera_following = false
@@ -2904,6 +3454,9 @@ func orbit_battle_camera(pixel_delta: Vector2) -> void:
 
 
 func zoom_battle_camera(_view_pos: Vector2, zoom_factor: float) -> void:
+	if phase == "world_boss":
+		zoom_house_camera(_view_pos, zoom_factor)
+		return
 	if phase != "combat" or combat == null:
 		return
 	battle_camera_following = false
@@ -2941,6 +3494,8 @@ func _rotation_invariant_fit_size(horizontal_radius: float, vertical_span: float
 
 func _after_combat_action(sync_actor_positions: bool = false) -> void:
 	player_hp = combat.player_hp
+	_sync_host_break_relief()
+	_update_boss_phase()
 	if test_combat_active and test_session.active and test_enemy_phase_pending:
 		test_session.record_enemy_phase(test_last_events, combat)
 		test_last_events.clear()
@@ -2949,6 +3504,8 @@ func _after_combat_action(sync_actor_positions: bool = false) -> void:
 	if combat != null and combat.pending_player_turn and combat.outcome == "":
 		combat.enemy_vision_suppressed = false
 		combat.start_player_turn()
+		if combat.host_fight != null:
+			combat.host_fight.prepare(combat)
 		boss_round_moved = false
 		battle_turn_actor_id = "player"
 		battle_turn_events.clear()
@@ -2966,6 +3523,11 @@ func _after_combat_action(sync_actor_positions: bool = false) -> void:
 
 
 func return_from_combat() -> void:
+	if phase == "world_boss" and combat != null and combat.outcome != "":
+		combat.after_action()
+		_refresh_world_boss()
+		_finish_boss_combat(combat.outcome == "victory")
+		return
 	if animation_busy or phase != "combat" or combat == null or combat.outcome == "":
 		return
 	if test_combat_active:
@@ -3034,6 +3596,8 @@ func reward_description(reward: Dictionary) -> String:
 
 
 func _save_run() -> void:
+	if boss_preview_active:
+		return
 	if large_room_mix_test_mode or phase == "home" or phase.begins_with("lab_") and event_context.is_empty():
 		return
 	var placed_entries: Array[Dictionary] = []
@@ -3065,13 +3629,98 @@ func _save_run() -> void:
 		"pending_room": [pending_room_pos.x, pending_room_pos.y],
 		"house_player_facing_yaw": house_player_facing_yaw,
 		"placed": placed_entries,
+		"stair_links": room_rules.stair_links.duplicate(true),
 		"remaining_ids": remaining_ids,
 	}
+	if phase == "world_boss" and combat != null:
+		payload["world_boss"] = combat.snapshot()
 	run_save_repository.write(payload)
 
 
 func _clear_run_save() -> void:
+	if boss_preview_active:
+		return
 	run_save_repository.clear()
+
+
+func start_host_preview() -> void:
+	if animation_busy:
+		return
+	# Set before new-run initialization, which normally writes a checkpoint.
+	boss_preview_active = true
+	start_new_run(false, 1337)
+	choose_omen(0)
+	# A connected example OVERWORLD; formal finales always use their actual run.
+	var examples := [
+		{"id": "gallery", "at": [1, 0]},
+		{"id": "study", "at": [4, 0]},
+		{"id": "living", "at": [0, 1]}, {"id": "pantry", "at": [0, 2]},
+		{"id": "greenhouse", "at": [1, 2]}, {"id": "darkroom", "at": [2, 2]},
+		{"id": "bedroom", "at": [3, 2]}, {"id": "kitchen", "at": [3, 1]},
+		{"id": "porch", "at": [-1, 0]},
+		{"id": "parlor", "at": [-2, 1]},
+		{"id": "cellar", "at": [5, 1]},
+		# Upper and basement rooms keep their authored logical cells for the battle
+		# graph, but share a local floor origin so the three layers stack over one
+		# house footprint in the presentation.
+		{"id": "hall", "at": [2, 7], "floor": 1, "floor_origin": [0, 7], "floor_height": 3.4, "floor_label": "二楼"},
+		{"id": "attic", "at": [5, 7], "floor": 1, "floor_origin": [0, 7], "floor_height": 3.4, "floor_label": "二楼"},
+		{"id": "nursery", "at": [6, 7], "floor": 1, "floor_origin": [0, 7], "floor_height": 3.4, "floor_label": "二楼"},
+		{"id": "boiler", "at": [3, -6], "floor": -1, "floor_origin": [0, -7], "floor_height": -3.4, "floor_label": "地下室"},
+		{"id": "mudroom", "at": [0, -7], "floor": -1, "floor_origin": [0, -7], "floor_height": -3.4, "floor_label": "地下室"},
+		{"id": "shed", "at": [4, -7], "floor": -1, "floor_origin": [0, -7], "floor_height": -3.4, "floor_label": "地下室"}]
+	# The start room is authored as the ground floor even though old saves do
+	# not carry the optional floor fields yet.
+	for raw_start_cell: Variant in room_rules.placed.keys():
+		var start_room: Dictionary = room_rules.placed[raw_start_cell]
+		start_room["floor"] = int(start_room.get("floor", 0))
+		start_room["floor_height"] = float(start_room.get("floor_height", 0.0))
+		start_room["floor_label"] = str(start_room.get("floor_label", "地面层"))
+		start_room["floor_origin"] = start_room.get("floor_origin", [0, 0])
+		room_rules.placed[raw_start_cell] = start_room
+	for i in range(examples.size()):
+		var example: Dictionary = examples[i]
+		var origin := _array_to_pos(example.at)
+		var room_id := str(example.get("id", ""))
+		var source_room: Dictionary = {}
+		for catalog_room: Dictionary in room_catalog:
+			if str(catalog_room.get("id", "")) == room_id:
+				source_room = catalog_room.duplicate(true)
+				break
+		if source_room.is_empty() and room_id == str(content.get("start_room", {}).get("id", "foyer")):
+			source_room = (content.get("start_room", {}) as Dictionary).duplicate(true)
+		var footprint: Array = (source_room.get("footprint", [[0, 0]]) as Array).duplicate(true)
+		var occupied: Array = []
+		for offset in footprint:
+			var cell := origin + _array_to_pos(offset)
+			occupied.append([cell.x, cell.y])
+		var room: Dictionary = source_room
+		room["id"] = room_id
+		room["instance_id"] = "preview_%d" % i
+		room["origin"] = example.at
+		room["world_cells"] = occupied
+		room["footprint"] = footprint
+		room["doors"] = [true, true, true, true]
+		room["completed"] = true
+		room["revealed"] = true
+		room["visited"] = true
+		room["floor"] = int(example.get("floor", 0))
+		room["floor_origin"] = (example.get("floor_origin", [0, 0]) as Array).duplicate(true)
+		room["floor_height"] = float(example.get("floor_height", 0.0))
+		room["floor_label"] = str(example.get("floor_label", "地面层"))
+		room["pos"] = origin
+		for cell in occupied:
+			room_rules.placed[_array_to_pos(cell)] = room
+	room_rules.placed[Vector2i.ZERO]["doors"] = [true, true, true, true]
+	room_rules.placed[Vector2i.ZERO].erase("open_edges")
+	room_rules.stair_links.clear()
+	room_rules.stair_links.append({"from": [1, 0], "to": [2, 7], "label": "通往二楼", "kind": "up"})
+	room_rules.stair_links.append({"from": [5, 1], "to": [3, -6], "label": "通往地下室", "kind": "down"})
+	boss_id = "channel_host"
+	phase = "boss_ready"
+	status_message = "大地图终局试玩：18个正式房间、三层、%d个战斗格；Boss与四个信号锚都在本局地图。" % room_rules.placed.size()
+	build_house_world()
+	_refresh_hud()
 
 
 func _array_to_pos(raw_value: Variant) -> Vector2i:
@@ -3253,7 +3902,11 @@ func _set_house_camera() -> void:
 		horizontal_radius = maxf(horizontal_radius, Vector2(point.x - center.x, point.z - center.z).length())
 	horizontal_radius += HOUSE_CELL * VISUAL_CELL_SCALE * 0.85
 	house_camera_fit_size = minf(28.0 * VISUAL_CELL_SCALE, _rotation_invariant_fit_size(horizontal_radius, HOUSE_CELL * VISUAL_CELL_SCALE * 1.65, house_camera_pitch, 0.8 * VISUAL_CELL_SCALE, 7.6 * VISUAL_CELL_SCALE))
+	if phase == "world_boss":
+		house_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, HOUSE_CELL * VISUAL_CELL_SCALE * 1.65, house_camera_pitch, 0.8 * VISUAL_CELL_SCALE, 7.6 * VISUAL_CELL_SCALE)
 	house_camera_size_target = _house_camera_size_target()
+	if phase == "world_boss":
+		house_camera_size_current = house_camera_size_target
 	if house_camera_size_current <= 0.0:
 		house_camera_size_current = house_camera_size_target
 	# 跟随/回位/用户操作期间保持镜头对准点（玩家偏上构图），只有空闲态才重置为布局中心
@@ -3263,7 +3916,7 @@ func _set_house_camera() -> void:
 
 
 func toggle_house_camera_closeup() -> bool:
-	if phase not in ["explore", "build", "room_ready"] or camera == null:
+	if phase not in ["explore", "build", "room_ready", "world_boss"] or camera == null:
 		return false
 	house_camera_closeup = not house_camera_closeup
 	house_camera_following = true
@@ -3276,7 +3929,7 @@ func toggle_house_camera_closeup() -> bool:
 
 
 func pan_house_camera(pixel_delta: Vector2) -> void:
-	if phase not in ["explore", "build", "room_ready"]:
+	if phase not in ["explore", "build", "room_ready", "world_boss"]:
 		return
 	house_camera_user_hold = true
 	_cancel_house_camera_return()
@@ -3290,7 +3943,7 @@ func pan_house_camera(pixel_delta: Vector2) -> void:
 
 
 func orbit_house_camera(pixel_delta: Vector2) -> void:
-	if phase not in ["explore", "build", "room_ready"]:
+	if phase not in ["explore", "build", "room_ready", "world_boss"]:
 		return
 	house_camera_user_hold = true
 	_cancel_house_camera_return()
@@ -3300,7 +3953,7 @@ func orbit_house_camera(pixel_delta: Vector2) -> void:
 
 
 func zoom_house_camera(_view_pos: Vector2, zoom_factor: float) -> void:
-	if phase not in ["explore", "build", "room_ready"]:
+	if phase not in ["explore", "build", "room_ready", "world_boss"]:
 		return
 	# 缩放属于手动镜头操作，暂停自动跟随，避免跟随目标和缩放同时改写 target。
 	house_camera_following = false
@@ -3376,7 +4029,7 @@ func _cancel_house_camera_return() -> void:
 
 
 func _start_house_camera_return() -> void:
-	if camera == null or phase not in ["explore", "build", "room_ready"]:
+	if camera == null or phase not in ["explore", "build", "room_ready", "world_boss"]:
 		return
 	house_camera_returning = true
 	var player_pos := _house_follow_target_position() + _house_camera_frame_offset()
@@ -3441,7 +4094,20 @@ func _set_battle_neutral_lighting(enabled: bool) -> void:
 
 
 func _house_world(pos: Vector2i) -> Vector3:
-	return Vector3(float(pos.x) * HOUSE_CELL, 0.0, float(pos.y) * HOUSE_CELL)
+	var floor_height := 0.0
+	var floor_origin := Vector2i.ZERO
+	if room_rules != null and room_rules.placed.has(pos):
+		var room: Dictionary = room_rules.placed[pos]
+		floor_height = float(room.get("floor_height", 0.0))
+		var raw_floor_origin: Variant = room.get("floor_origin", [])
+		if raw_floor_origin is Array and (raw_floor_origin as Array).size() >= 2:
+			floor_origin = _array_to_pos(raw_floor_origin)
+		elif int(room.get("floor", 0)) != 0:
+			# Older layered saves used the room origin as the floor lane. Keep
+			# them visually stackable while new data writes floor_origin.
+			floor_origin = _array_to_pos(room.get("origin", [0, 0]))
+	var local_pos := pos - floor_origin
+	return Vector3(float(local_pos.x) * HOUSE_CELL, floor_height, float(local_pos.y) * HOUSE_CELL)
 
 
 func _house_visual_world(pos: Vector2i) -> Vector3:

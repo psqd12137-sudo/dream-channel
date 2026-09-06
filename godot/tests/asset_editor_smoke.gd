@@ -99,6 +99,8 @@ func _run_rule_tests() -> void:
 	# 6. XZ-only overlap.
 	_check(Rules.aabb_overlaps_xz(AABB(Vector3.ZERO, Vector3.ONE), AABB(Vector3(0.5, 8.0, 0.5), Vector3.ONE)), "XZ overlap must ignore Y")
 	_check(not Rules.aabb_overlaps_xz(AABB(Vector3.ZERO, Vector3.ONE), AABB(Vector3(2.0, 0.0, 2.0), Vector3.ONE)), "separated rectangles must not overlap")
+	_check(is_equal_approx(Rules.wrapped_angle_delta(3.05, -3.05), 0.1831853), "ring angle delta must unwrap across +PI/-PI")
+	_check(is_equal_approx(Rules.wrapped_angle_delta(-3.05, 3.05), -0.1831853), "ring angle delta must unwrap across -PI/+PI")
 	# 7-9. Wall geometry.
 	_check(Rules.wall_axis_from_drag(Vector3(0.4, 0.0, 0.2), Vector3(2.2, 0.0, 0.4)) == Vector3i(1, 0, 0), "horizontal drag must select X axis")
 	_check(Rules.wall_axis_from_drag(Vector3(0.2, 0.0, 0.4), Vector3(0.4, 0.0, 2.2)) == Vector3i(0, 0, 1), "vertical drag must select Z axis")
@@ -289,9 +291,14 @@ func _run_boundary_and_overlap_tests(editor: Node3D) -> void:
 	var center := Vector3(CELL * 0.5, 0.0, CELL * 0.5)
 	var first: Node3D = editor._place_at_free(center, "kk_chair_a", 0.0, Vector3.ONE * 0.28, true)
 	var second: Node3D = editor._place_at_free(center, "kk_chair_b", 0.0, Vector3.ONE * 0.28, true)
-	_check(first != null and second == null and editor.last_rejection_reason == "overlap", "solid overlap must be rejected")
+	_check(first != null and second != null, "ordinary asset overlap must be allowed in free placement mode")
+	_check(not bool(editor.get("strict_placement_validation")), "free placement mode must be the default")
+	editor.call("_set_strict_placement_validation", true)
+	var strict_rejected: Node3D = editor._place_at_free(center, "kk_chair_a", 0.0, Vector3.ONE * 0.28, true)
+	_check(strict_rejected == null and editor.last_rejection_reason == "overlap", "strict placement mode must reject solid overlap")
+	editor.call("_set_strict_placement_validation", false)
 	var rug: Node3D = editor._place_at_free(center, "kk_rug_oval", 0.0, Vector3.ONE * 0.28, true)
-	_check(rug != null, "overlay rug must be exempt from overlap rejection")
+	_check(rug != null, "overlay rug must remain placeable in both placement modes")
 	editor._clear_all(false)
 
 
@@ -367,6 +374,19 @@ func _run_size_rotation_copy_tests(editor: Node3D) -> void:
 	var old_yaw: float = asset.rotation.y
 	editor._rotate_selected_by_motion(20.0)
 	_check(is_equal_approx(asset.rotation.y, old_yaw + 0.2), "rightward rotation drag must rotate right instead of mirroring the Y axis")
+	_check(editor.has_method("_update_gizmo_rotate_from_mouse"), "rotate gizmo must expose angle-based mouse update")
+	_check(editor.has_method("_gizmo_rotate_ring_vector"), "rotate gizmo must project mouse onto the Y ring")
+	var rotate_camera := editor.get_node("CameraRig/Camera3D") as Camera3D
+	var rotate_gizmo := editor.get_node("EditorOverlay/Gizmo3D") as Node3D
+	var ring_center := rotate_gizmo.global_position
+	var ring_start_mouse := rotate_camera.unproject_position(ring_center + Vector3(0.9, 0.0, 0.0))
+	var ring_end_mouse := rotate_camera.unproject_position(ring_center + Vector3(0.0, 0.0, -0.9))
+	editor._set_tool_mode("rotate")
+	_check(editor._begin_gizmo_drag(ring_start_mouse, {"handle": "rotate_y"}), "rotate ring drag must begin from a projected ring point")
+	var ring_yaw_before: float = asset.rotation.y
+	editor._update_gizmo_drag(ring_end_mouse)
+	_check(absf((asset.rotation.y - ring_yaw_before) - PI * 0.5) < 0.03, "rotate ring must follow the signed mouse angle around the Y axis")
+	editor._finish_gizmo_drag()
 	editor.drag_valid = true
 	var duplicate: Node3D = editor._duplicate_selected()
 	_check(duplicate != null and editor.get_node("Placements").get_child_count() == 2, "Ctrl+D must duplicate a valid selected asset")
@@ -393,6 +413,32 @@ func _run_size_rotation_copy_tests(editor: Node3D) -> void:
 	# v5: scale gizmo exposes a uniform handle plus per-axis handles (continuous scale).
 	_check(editor.tool_mode == "scale" and editor.get_node("EditorOverlay/Gizmo3D/ScaleHandle").visible, "scale tool must show the scale handle")
 	_check(gizmo.get_node_or_null("ScaleHandle/Uniform") != null and gizmo.get_node_or_null("ScaleHandle/X") != null and gizmo.get_node_or_null("ScaleHandle/Y") != null and gizmo.get_node_or_null("ScaleHandle/Z") != null, "scale gizmo must expose uniform + X/Y/Z handles")
+	# Scale handles follow the asset's local axes, and dragging outward along the
+	# projected X/Z handle must increase only that local component.
+	asset.rotation.y = PI * 0.5
+	editor._process(0.016)
+	var scale_camera := editor.get_node("CameraRig/Camera3D") as Camera3D
+	var scale_gizmo := editor.get_node("EditorOverlay/Gizmo3D") as Node3D
+	_check(absf(wrapf(scale_gizmo.global_rotation.y - asset.global_rotation.y, -PI, PI)) < 0.001, "scale gizmo must follow the selected asset's local Y rotation")
+	var scale_start := asset.scale
+	var scale_center := scale_gizmo.global_position
+	var scale_center_screen := scale_camera.unproject_position(scale_center)
+	for scale_case in [["scale_x", Vector3.RIGHT, 0], ["scale_z", Vector3.BACK, 2]]:
+		var scale_handle := str(scale_case[0])
+		var axis := scale_case[1] as Vector3
+		var component := int(scale_case[2])
+		var tip_screen := scale_camera.unproject_position(scale_center + scale_gizmo.global_transform.basis * (axis * 0.82))
+		var outward := (tip_screen - scale_center_screen).normalized()
+		_check(outward.length_squared() > 0.5, "%s handle must have a usable screen direction" % scale_handle)
+		_check(editor._begin_gizmo_drag(tip_screen, {"handle": scale_handle}), "%s scale drag must begin" % scale_handle)
+		editor._update_gizmo_drag(tip_screen + outward * 20.0)
+		var after_scale := asset.scale
+		var component_grew := after_scale[component] > scale_start[component] + 0.0001
+		var other_component := 2 if component == 0 else 0
+		_check(component_grew and is_equal_approx(after_scale[other_component], scale_start[other_component]), "%s outward drag must scale only its local axis" % scale_handle)
+		editor._finish_gizmo_drag()
+		asset.scale = scale_start
+		editor._set_selection_invalid(false)
 	editor._set_tool_mode("select")
 	editor._cancel_active_mode()
 
@@ -476,6 +522,12 @@ func _run_camera_tests(editor: Node3D) -> void:
 	editor._clamp_camera_targets()
 	_check(is_equal_approx(editor.cam_pitch_target, 0.12), "camera pitch lower clamp must prevent ground penetration")
 	_check(is_equal_approx(editor.cam_distance_target, 6.0), "camera minimum distance must be 6")
+	var yaw_before: float = editor.cam_yaw_target
+	var orbit_motion := InputEventMouseMotion.new()
+	orbit_motion.relative = Vector2(20.0, 0.0)
+	orbit_motion.button_mask = MOUSE_BUTTON_MASK_RIGHT
+	editor._unhandled_input(orbit_motion)
+	_check(is_equal_approx(editor.cam_yaw_target, yaw_before + 0.16), "right-drag orbit must follow horizontal mouse direction")
 
 
 func _run_select_interaction_regression(editor: Node3D) -> void:

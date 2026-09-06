@@ -47,8 +47,9 @@ func _run() -> void:
 	game._prepare_boss_ready()
 	_check(game.phase == "boss_ready", "reaching the run cap must open the Boss-ready phase")
 	_check(not game.boss_id.is_empty(), "Boss-ready phase must lock a Boss id")
-	game.begin_boss_combat()
-	_check(game.phase == "combat" and game.combat_is_boss, "Boss-ready action must enter an isolated Boss combat")
+	# Legacy single-room rule regression; formal finale entry is covered by overworld_boss_regression.
+	game.start_combat(BossProgression.build_boss_room(game.content.bosses, game.content.pressure, game.content.boss_room, game.boss_id))
+	_check(game.phase == "combat" and game.combat_is_boss, "legacy Boss fixture starts its room combat")
 	_check(game.combat != null and game.combat.enemy_order.size() == 1, "formal Boss combat must have one enemy")
 	_check(not game.combat.enemy_death_allowed, "ritual Bosses must require the signal-anchor victory route")
 	game.boss_directive_id = "closeup"

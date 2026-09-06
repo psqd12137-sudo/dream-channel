@@ -4,6 +4,9 @@ extends "res://scripts/pcg_diorama_stitch_lab.gd"
 var layout_errors: Array[Dictionary] = []
 var authored_piece_count := 0
 var explicit_connection_edges: Dictionary = {}
+## Runtime floor compositions may contain islands joined by stairs outside the
+## floor-local grid. The asset editor keeps the stricter default validation.
+@export var allow_disconnected_layout := false
 @export var show_summary_title := true
 var _last_layout_signature := ""
 var _refresh_pending := false
@@ -76,8 +79,10 @@ func _generate_room_layout() -> void:
 		rooms[room_index] = generated_room
 		if room_index == 0:
 			continue
-		if contacts.is_empty():
+		if contacts.is_empty() and not allow_disconnected_layout:
 			layout_errors.append({"id": room_id, "position": Vector3(piece.position.x, 2.2, piece.position.z), "message": "没有接触之前的房间"})
+			continue
+		if contacts.is_empty():
 			continue
 		contacts.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a["key"]) < str(b["key"]))
 		var chosen_contacts: Array[Dictionary] = []

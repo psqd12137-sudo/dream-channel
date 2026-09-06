@@ -79,7 +79,7 @@
     "toughBonus": 3
   },
   "bossProfiles": {
-    "channel_host": { "archetype": "crush", "victoryMode": "mixed", "anchorCount": 4, "broadcastMax": 14, "directives": ["closeup", "spotlight", "mute", "extra"] },
+    "channel_host": { "archetype": "host", "victoryMode": "mixed", "anchorCount": 4, "anchorHp": 2, "dismantleCost": 2, "broadcastMax": 18, "directives": [], "traits": [], "arena_overrides": { "walls": ["1,1", "4,1"] } },
     "whisper_wall": { "archetype": "stagger", "victoryMode": "ritual", "killable": false, "anchorCount": 3, "broadcastMax": 17, "anchorClockRelief": 3, "directives": ["mute", "spotlight"] },
     "fog_walker": { "archetype": "stagger", "victoryMode": "ritual", "killable": false, "anchorCount": 3, "broadcastMax": 16, "seenClockBonus": 2, "directives": ["mute", "closeup"] },
     "rust_keeper": { "archetype": "crush", "victoryMode": "kill", "ritualDisabled": true, "anchorCount": 2, "broadcastMax": 19, "anchorHp": 3, "directives": ["closeup", "extra"] },

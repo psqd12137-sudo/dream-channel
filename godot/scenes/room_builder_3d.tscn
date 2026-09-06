@@ -1,0 +1,138 @@
+[gd_scene format=3 uid="uid://cr42g6td75c5e"]
+
+[ext_resource type="Script" path="res://scripts/room_builder_3d.gd" id="1_builder"]
+[ext_resource type="Script" path="res://scripts/room_builder_room.gd" id="2_room"]
+
+[sub_resource type="Environment" id="Environment_builder"]
+background_mode = 1
+background_color = Color(0.035, 0.05, 0.065, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.34, 0.47, 0.55, 1)
+ambient_light_energy = 0.8
+tonemap_mode = 2
+
+[sub_resource type="StyleBoxFlat" id="Style_panel"]
+content_margin_left = 18.0
+content_margin_top = 16.0
+content_margin_right = 18.0
+content_margin_bottom = 16.0
+bg_color = Color(0.035, 0.07, 0.09, 0.93)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.17, 0.72, 0.68, 0.85)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[node name="RoomBuilder3D" type="Node3D" unique_id=2028770371]
+script = ExtResource("1_builder")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=103386700]
+environment = SubResource("Environment_builder")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="." unique_id=686033320]
+transform = Transform3D(0.90630776, 0.34618863, -0.24240388, 0, 0.57357645, 0.81915206, 0.42261827, -0.74240386, 0.5198368, 0, 0, 0)
+light_color = Color(1, 0.88, 0.72, 1)
+light_energy = 1.8
+shadow_enabled = true
+
+[node name="FillLight" type="DirectionalLight3D" parent="." unique_id=1791464982]
+transform = Transform3D(-0.81915206, -0.32898995, 0.46984634, 0, 0.81915206, 0.57357645, -0.57357645, 0.46984634, -0.6710101, 0, 0, 0)
+light_color = Color(0.4, 0.72, 1, 1)
+light_energy = 0.7
+
+[node name="Rooms" type="Node3D" parent="." unique_id=2145742806]
+
+[node name="R1" type="Node3D" parent="Rooms" unique_id=696831972]
+script = ExtResource("2_room")
+room_id = "R1"
+
+[node name="R3L" type="Node3D" parent="Rooms" unique_id=112799492]
+script = ExtResource("2_room")
+room_id = "R3L"
+display_name = "3格玩法房 · L形"
+footprint_kind = "l3"
+grid_position = Vector2i(1, 0)
+
+[node name="R3Line" type="Node3D" parent="Rooms" unique_id=1638689977]
+script = ExtResource("2_room")
+room_id = "R3Line"
+display_name = "3格玩法房 · 长条"
+footprint_kind = "line3"
+grid_position = Vector2i(2, 1)
+
+[node name="R5" type="Node3D" parent="Rooms" unique_id=634250815]
+script = ExtResource("2_room")
+room_id = "R5"
+display_name = "5格精英战斗房"
+footprint_kind = "t5"
+grid_position = Vector2i(4, 2)
+
+[node name="Generated" type="Node3D" parent="." unique_id=1567996084]
+
+[node name="Connections" type="Node3D" parent="." unique_id=1043530200]
+
+[node name="RoomTileGrid" type="GridMap" parent="." unique_id=393165269]
+cell_size = Vector3(3.4, 1, 3.4)
+metadata/_purpose = "未来替换为正式模块化 MeshLibrary；当前房间壳体使用 room_layout_cell.tscn"
+
+[node name="CameraRig" type="Node3D" parent="." unique_id=2087153708]
+transform = Transform3D(0.89879405, -0.24513404, 0.36342618, 0, 0.8290376, 0.5591929, -0.43837115, -0.50259924, 0.74513406, 9.5, 16.5, 18.5)
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig" unique_id=863593868]
+current = true
+fov = 48.0
+
+[node name="UI" type="CanvasLayer" parent="." unique_id=2068862355]
+
+[node name="Panel" type="PanelContainer" parent="UI" unique_id=1093639838]
+offset_left = 22.0
+offset_top = 22.0
+offset_right = 394.0
+offset_bottom = 340.0
+theme_override_styles/panel = SubResource("Style_panel")
+
+[node name="Column" type="VBoxContainer" parent="UI/Panel" unique_id=129899563]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="UI/Panel/Column" unique_id=1050822721]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "RoomBuilder3D"
+
+[node name="Help" type="Label" parent="UI/Panel/Column" unique_id=1522683115]
+layout_mode = 2
+text = "独立 3D 地编实验 · 在 Inspector 修改房间格坐标、形状和旋转"
+autowrap_mode = 2
+
+[node name="Status" type="Label" parent="UI/Panel/Column" unique_id=777919843]
+layout_mode = 2
+text = "正在生成…"
+
+[node name="Report" type="Label" parent="UI/Panel/Column" unique_id=380127491]
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="Reset" type="Button" parent="UI/Panel/Column" unique_id=1503811651]
+layout_mode = 2
+text = "重置示例布局"
+
+[node name="RotateL" type="Button" parent="UI/Panel/Column" unique_id=1695879905]
+layout_mode = 2
+text = "旋转 3 格 L 形房"
+
+[node name="RotateElite" type="Button" parent="UI/Panel/Column" unique_id=835866991]
+layout_mode = 2
+text = "旋转 5 格精英房"
+
+[node name="ToggleSeams" type="Button" parent="UI/Panel/Column" unique_id=1877373328]
+layout_mode = 2
+text = "显示/隐藏 PCG 门缝"
+
+[node name="Validate" type="Button" parent="UI/Panel/Column" unique_id=1078259095]
+layout_mode = 2
+text = "重新检查连接"

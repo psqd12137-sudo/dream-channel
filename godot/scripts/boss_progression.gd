@@ -39,6 +39,8 @@ static func build_boss_room(snapshot: Dictionary, pressure: Dictionary, altar_ro
 	var boss_rule: Dictionary = pressure.get("boss", {})
 	var profile: Dictionary = (pressure.get("bossProfiles", {}).get(boss_id, {}) as Dictionary).duplicate(true)
 	var traits: Array = (boss_rule.get("traits", []) as Array).duplicate()
+	if profile.has("traits"):
+		traits.assign(profile["traits"])
 	var archetype := str(profile.get("archetype", boss_rule.get("archetype", "crush")))
 	var boss_spec := {
 		"id": "boss_%s" % boss_id,
@@ -60,6 +62,9 @@ static func build_boss_room(snapshot: Dictionary, pressure: Dictionary, altar_ro
 		"trait_labels": (pressure.get("traitLabels", {}) as Dictionary).duplicate(true),
 	}
 	var result := altar_room.duplicate(true)
+	if profile.has("arena_overrides"):
+		result["arena"] = (result.get("arena", {}) as Dictionary).duplicate(true)
+		(result["arena"] as Dictionary).merge(profile["arena_overrides"], true)
 	result["id"] = "altar"
 	result["name"] = "祭坛 · %s" % str(boss.get("name", boss_id))
 	result["description"] = str(boss.get("intro", "频道核心已经醒来。"))

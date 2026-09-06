@@ -602,7 +602,7 @@ func _add_boss_anchor_visual(cell_node: Node3D, cell: Vector2i, top_y: float) ->
 	var core := _add_cylinder(cell_node, "BossAnchorCore", Vector3(0, top_y + 0.24, 0), 0.24, 0.48, _material(color, false, 0.22 if active else 0.0))
 	core.rotation.x = 0.0
 	_add_cylinder(cell_node, "BossAnchorRing", Vector3(0, top_y + 0.055, 0), 0.54, 0.06, _material(Color(color, 0.80), true, 0.12 if active else 0.0))
-	_add_label(cell_node, "BossAnchorLabel", "锚 %d" % remaining if active else "锚·熄灭", Vector3(0, top_y + 0.82, 0), Color("ffe8a3") if active else Color("9ba4a9"), 13)
+	_add_label(cell_node, "BossAnchorLabel", "锚%d · 余%d次" % [boss_anchor_cells.find(cell) + 1, remaining] if active else "锚·熄灭", Vector3(0, top_y + 0.82, 0), Color("ffe8a3") if active else Color("9ba4a9"), 15)
 
 
 func _battle_intent_cells() -> Dictionary:
@@ -631,7 +631,7 @@ func _battle_intent_cells() -> Dictionary:
 			intent_cells[facing_cell] = facing_entry
 	var focused_enemy_id := _focused_battle_enemy_id()
 	for enemy_id in combat.living_enemy_ids():
-		if not _enemy_range_display_allows(enemy_id, focused_enemy_id):
+		if combat.host_fight == null and not _enemy_range_display_allows(enemy_id, focused_enemy_id):
 			continue
 		var enemy_intent: Dictionary = battle_intent_snapshot.get(enemy_id, {})
 		if enemy_intent.is_empty():
@@ -686,7 +686,7 @@ func _enemy_arrow_display_allows(enemy_id: String, focused_enemy_id: String) -> 
 
 func _clear_battle_cell_dynamic(cell_node: Node3D) -> void:
 	for child: Node in cell_node.get_children():
-		if child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_") or child.name.begins_with("PlayerReachable") or child.name.begins_with("PlayerFacing") or child.name.begins_with("PlayerPosition") or child.name.begins_with("EnemyReachable") or child.name.begins_with("Hover"):
+		if child.name.begins_with("HostCamera") or child.name.begins_with("Intent") or child.name.begins_with("Trap") or child.name.begins_with("ItemArt_") or child.name.begins_with("PlayerReachable") or child.name.begins_with("PlayerFacing") or child.name.begins_with("PlayerPosition") or child.name.begins_with("EnemyReachable") or child.name.begins_with("Hover"):
 			child.free()
 
 
@@ -808,6 +808,8 @@ func _refresh_battle_dynamic_visuals() -> void:
 					if not hover_valid and selected_card < 0:
 						_add_label(cell_node, "HoverInvalidGlyph", "×", Vector3(0, top_y + 0.26, 0), COL_HOVER_INVALID, 28)
 			var visible_trap: Dictionary = combat.traps.get(pos, {})
+			if show_battle_debug and combat.host_fight != null and pos in combat.host_fight.camera_cells:
+				_add_label(cell_node, "HostCameraLabel", "▣ 取景+1", Vector3(0, top_y + 0.42, 0.55), Color("edd777"), 15)
 			if battle_triggered_traps.has(pos):
 				visible_trap = battle_triggered_traps[pos]
 			if not visible_trap.is_empty():
@@ -833,7 +835,7 @@ func _refresh_boss_anchor_visuals() -> void:
 			ring.material_override = _material(Color(color, 0.80), true, 0.12 if active else 0.0)
 		var label := cell_node.get_node_or_null("BossAnchorLabel") as Label3D
 		if label != null:
-			label.text = "锚 %d" % remaining if active else "锚·熄灭"
+			label.text = "锚%d · 余%d次" % [boss_anchor_cells.find(cell) + 1, remaining] if active else "锚·熄灭"
 			label.modulate = Color("ffe8a3") if active else Color("9ba4a9")
 
 

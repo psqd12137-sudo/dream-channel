@@ -121,7 +121,13 @@ func _run() -> void:
 	check(game.phase == "boss_ready", "normal progression must reach altar")
 	if game.phase == "boss_ready":
 		game.begin_boss_combat()
-		check(game.combat_is_boss, "altar must start boss combat")
+		check(game.combat_is_boss and game.phase == "world_boss", "altar must start Boss combat on the explored overworld")
+		var explored_cells := 0
+		for raw_cell in game.room_rules.placed.keys():
+			var cell_room: Dictionary = game.room_rules.placed[raw_cell]
+			if bool(cell_room.get("revealed", false)) or bool(cell_room.get("completed", false)):
+				explored_cells += 1
+		check(game.combat != null and game.combat.graph.size() == explored_cells, "finale board must preserve every explored physical map cell")
 		game.combat.outcome = "victory"
 		game.return_from_combat()
 		check(game.phase == "ending" and game.ending_success, "boss victory must reach ending")
@@ -138,9 +144,7 @@ func _run() -> void:
 	game.combat.outcome = "defeat"
 	game.return_from_combat()
 	check(game.phase == "home" and not game.has_saved_run(), "ordinary defeat must clear run")
-	game.start_new_run(false, 1337)
-	game.choose_omen(0)
-	game._prepare_boss_ready()
+	game.start_host_preview()
 	game.begin_boss_combat()
 	game.combat.outcome = "defeat"
 	game.return_from_combat()

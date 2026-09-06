@@ -1,6 +1,6 @@
-[gd_resource type="Theme" load_steps=2 format=3]
+[gd_resource type="Theme" format=3 uid="uid://j8ldr32jra8u"]
 
-[ext_resource type="FontFile" path="res://assets/fonts/SourceHanSansCN-Regular.otf" id="1_font"]
+[ext_resource type="FontFile" uid="uid://s86tlda2p0tt" path="res://assets/fonts/SourceHanSansCN-Regular.otf" id="1_font"]
 
 [resource]
 default_font = ExtResource("1_font")

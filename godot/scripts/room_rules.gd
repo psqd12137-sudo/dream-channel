@@ -4,10 +4,15 @@ const DIRS := [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 const OPPOSITE := [2, 3, 0, 1]
 
 var placed: Dictionary = {}
+## Explicit vertical transitions for multi-floor maps. The current room key
+## remains Vector2i for save compatibility; each link connects two physical
+## cells and carries the authored stair label/type.
+var stair_links: Array[Dictionary] = []
 
 
 func reset(start_room: Dictionary) -> void:
 	placed.clear()
+	stair_links.clear()
 	var room := start_room.duplicate(true)
 	room["rotation"] = 0
 	room["doors"] = normalize_doors(room.get("doors", [false, false, false, false]))

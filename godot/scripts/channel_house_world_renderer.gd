@@ -117,8 +117,9 @@ func build_house_world() -> void:
 		_add_kenney_formal_composer()
 	else:
 		_add_room_bridges()
-	for frontier in room_rules.frontiers():
-		_add_frontier_mesh(frontier, phase == "build" and frontier == selected_frontier)
+	if phase != "world_boss":
+		for frontier in room_rules.frontiers():
+			_add_frontier_mesh(frontier, phase == "build" and frontier == selected_frontier)
 	if phase == "build" and not build_offers.is_empty():
 		_add_build_preview()
 	_add_house_player()
@@ -129,9 +130,25 @@ func build_house_world() -> void:
 
 
 func _add_kenney_formal_composer() -> void:
+	var records_by_floor: Dictionary = {}
+	for record: Dictionary in _formal_instance_records_in_connection_order():
+		var room: Dictionary = record["room"]
+		var floor_index := int(room.get("floor", 0))
+		if not records_by_floor.has(floor_index):
+			records_by_floor[floor_index] = []
+		(records_by_floor[floor_index] as Array).append(record)
+	var floors: Array = records_by_floor.keys()
+	floors.sort()
+	for raw_floor: Variant in floors:
+		_add_kenney_formal_floor_composer(int(raw_floor), records_by_floor[raw_floor] as Array)
+
+
+func _add_kenney_formal_floor_composer(floor_index: int, records: Array) -> void:
+	if records.is_empty():
+		return
 	var composer := PCG_HAND_LAYOUT_LAB.instantiate() as Node3D
-	composer.name = "KenneyFormalComposer"
-	composer.generation_seed = run_seed
+	composer.name = "KenneyFormalComposer" if floor_index == 0 else "KenneyFormalComposer_Floor_%d" % floor_index
+	composer.generation_seed = run_seed + floor_index * 997
 	composer.animate_room_build = false
 	# Room identity and state live in the HUD. Floating labels break the
 	# miniature-photography read and obscure props when rooms overlap on screen.
@@ -141,15 +158,21 @@ func _add_kenney_formal_composer() -> void:
 	composer.unify_room_floor_finish = large_room_mix_test_mode
 	composer.open_visited_connections = true
 	composer.show_summary_title = false
-	composer.explicit_connection_edges = _formal_connection_edge_keys()
-	composer.explicit_open_edges = _formal_outer_open_edge_keys()
+	# A floor can contain islands that are connected by a stair outside the
+	# floor's local footprint. They are valid presentation groups, not errors.
+	composer.allow_disconnected_layout = true
+	var floor_origin := _formal_floor_origin(records)
+	composer.explicit_connection_edges = _formal_connection_edge_keys_for_floor(floor_index, floor_origin)
+	composer.explicit_open_edges = _formal_outer_open_edge_keys_for_floor(floor_index, floor_origin)
 	composer.scale = Vector3.ONE * (HOUSE_CELL / 1.55)
+	composer.position = Vector3(0.0, _formal_floor_height(records), 0.0)
 	composer.set_meta("visual_cell_scale", VISUAL_CELL_SCALE)
+	composer.set_meta("floor", floor_index)
 	var layout := composer.get_node("Layout") as Node3D
 	for existing: Node in layout.get_children():
 		layout.remove_child(existing)
 		existing.free()
-	for record: Dictionary in _formal_instance_records_in_connection_order():
+	for record: Dictionary in records:
 		var room: Dictionary = record["room"]
 		var origin_raw: Array = room.get("origin", [0, 0])
 		var origin := Vector2i(int(origin_raw[0]), int(origin_raw[1]))
@@ -164,8 +187,12 @@ func _add_kenney_formal_composer() -> void:
 		piece.set_meta("revealed", bool(room.get("revealed", false)))
 		piece.set_meta("visited", bool(room.get("visited", false)))
 		piece.set_meta("completed", bool(room.get("completed", false)))
+		piece.set_meta("floor", floor_index)
 		piece.set_meta("is_current", str(record["id"]) == str(room_rules.placed[current_room_pos].get("instance_id", "")))
-		piece.position = Vector3(float(origin.x) * 1.55, 0.0, float(origin.y) * 1.55)
+		# Each floor has its own formal grid. The composer is then moved vertically
+		# as a whole, so floor-local occupancy can never collide with another floor.
+		var local_origin := origin - floor_origin
+		piece.position = Vector3(float(local_origin.x) * 1.55, 0.0, float(local_origin.y) * 1.55)
 		piece.rotation.y = float(int(room.get("rotation", 0))) * PI * 0.5
 		layout.add_child(piece)
 		# DIAGNOSTIC: log every formal room's id/room_type and whether a template
@@ -175,6 +202,29 @@ func _add_kenney_formal_composer() -> void:
 		var _has_ov := not RoomArtRegistry.load_override(_base_id).is_empty()
 		print("[OVERRIDE] compose room=%s room_id=%s room_type=%s override=%s" % [piece.name, str(record["id"]), str(room.get("id", "")), "YES" if _has_ov else "no"])
 	house_root.add_child(composer)
+
+
+func _formal_floor_origin(records: Array) -> Vector2i:
+	if records.is_empty():
+		return Vector2i.ZERO
+	var room: Dictionary = records[0]["room"]
+	var origin_raw: Array = room.get("origin", [0, 0])
+	return _floor_origin(room, Vector2i(int(origin_raw[0]), int(origin_raw[1])))
+
+
+func _formal_floor_height(records: Array) -> float:
+	if records.is_empty():
+		return 0.0
+	return float((records[0]["room"] as Dictionary).get("floor_height", 0.0))
+
+
+func _floor_origin(room: Dictionary, fallback_origin: Vector2i) -> Vector2i:
+	var raw_origin: Variant = room.get("floor_origin", [])
+	if raw_origin is Array and (raw_origin as Array).size() >= 2:
+		return Vector2i(int((raw_origin as Array)[0]), int((raw_origin as Array)[1]))
+	if int(room.get("floor", 0)) != 0:
+		return fallback_origin
+	return Vector2i.ZERO
 
 
 func _formal_instance_records_in_connection_order() -> Array[Dictionary]:
@@ -242,6 +292,41 @@ func _formal_outer_open_edge_keys() -> Dictionary:
 				result[_grid_edge_key(pos, neighbor)] = true
 	return result
 
+
+func _formal_connection_edge_keys_for_floor(floor_index: int, floor_origin: Vector2i) -> Dictionary:
+	var result: Dictionary = {}
+	for raw_pos: Variant in room_rules.placed.keys():
+		var pos: Vector2i = raw_pos
+		var room: Dictionary = room_rules.placed[pos]
+		if int(room.get("floor", 0)) != floor_index:
+			continue
+		for side in [1, 2]:
+			var neighbor: Vector2i = pos + RoomRules.DIRS[side]
+			if not room_rules.placed.has(neighbor) or room_rules.same_instance(pos, neighbor):
+				continue
+			var neighbor_room: Dictionary = room_rules.placed[neighbor]
+			if int(neighbor_room.get("floor", 0)) != floor_index:
+				continue
+			if room_rules.cell_has_door(pos, side) and room_rules.cell_has_door(neighbor, (side + 2) % 4):
+				result[_grid_edge_key(pos - floor_origin, neighbor - floor_origin)] = true
+	return result
+
+
+func _formal_outer_open_edge_keys_for_floor(floor_index: int, floor_origin: Vector2i) -> Dictionary:
+	var result: Dictionary = {}
+	for raw_pos: Variant in room_rules.placed.keys():
+		var pos: Vector2i = raw_pos
+		var room: Dictionary = room_rules.placed[pos]
+		if int(room.get("floor", 0)) != floor_index:
+			continue
+		for side in range(4):
+			var neighbor: Vector2i = pos + RoomRules.DIRS[side]
+			if room_rules.placed.has(neighbor):
+				continue
+			if room_rules.cell_has_door(pos, side):
+				result[_grid_edge_key(pos - floor_origin, neighbor - floor_origin)] = true
+	return result
+
 func _grid_edge_key(a: Vector2i, b: Vector2i) -> String:
 	var first := a if a.y < b.y or (a.y == b.y and a.x < b.x) else b
 	var second := b if first == a else a
@@ -251,6 +336,7 @@ func _grid_edge_key(a: Vector2i, b: Vector2i) -> String:
 func _add_room_mesh(pos: Vector2i, room: Dictionary) -> void:
 	var node := Node3D.new()
 	node.name = "Room_%d_%d" % [pos.x, pos.y]
+	node.set_meta("floor", int(room.get("floor", 0)))
 	node.position = _house_world(pos)
 	house_root.add_child(node)
 	_populate_room_visual(node, pos, room)
@@ -318,7 +404,8 @@ func _add_room_bridges() -> void:
 			if not room_rules.placed.has(neighbor) or not room_rules.cell_has_door(pos, side):
 				continue
 			var bridge_size := Vector3(0.55, 0.12, 2.82) if side == 1 else Vector3(2.82, 0.12, 0.55)
-			_add_box(house_root, "RoomJoin" if room_rules.same_instance(pos, neighbor) else "Bridge", (_house_world(pos) + _house_world(neighbor)) * 0.5 + Vector3(0, 0.24, 0), bridge_size, _material(COL_PAPER))
+			var bridge := _add_box(house_root, "RoomJoin" if room_rules.same_instance(pos, neighbor) else "Bridge", (_house_world(pos) + _house_world(neighbor)) * 0.5 + Vector3(0, 0.24, 0), bridge_size, _material(COL_PAPER))
+			bridge.set_meta("floor", int(room_rules.placed[pos].get("floor", 0)))
 
 
 func _add_frontier_mesh(pos: Vector2i, selected: bool) -> void:
