@@ -31,6 +31,16 @@ const HANDMADE_FINISH_PALETTES := {
 	"painted_wood": [Color("e3bd72"), Color("88aebe"), Color("d59482")],
 	"clay": [Color("83c2ad"), Color("e0a579"), Color("a9a0ce")],
 }
+## Room-level color families keep the formal diorama readable as a single
+## handmade set while the prop catalog still chooses furniture per theme.
+const MEMPHIS_CLAY_THEME_STYLES := {
+	"living": {"color_group": "coral", "base_color": Color("c96f79"), "accent_color": Color("f1c24b"), "pattern": "arch_dots"},
+	"bedroom": {"color_group": "aqua", "base_color": Color("5daea7"), "accent_color": Color("ed9eac"), "pattern": "squiggle_stripes"},
+	"kitchen": {"color_group": "violet", "base_color": Color("9c86bd"), "accent_color": Color("e7c15f"), "pattern": "confetti_grid"},
+	"study": {"color_group": "sun", "base_color": Color("d7ae50"), "accent_color": Color("5eabc0"), "pattern": "sunburst_tiles"},
+	"greenhouse": {"color_group": "sky", "base_color": Color("65a8c4"), "accent_color": Color("d9df8a"), "pattern": "zigzag_steps"},
+	"basement": {"color_group": "apricot", "base_color": Color("cc895e"), "accent_color": Color("9e8fc3"), "pattern": "orbit_checks"},
+}
 const THEME_COMPOSITIONS := {
 	"living": [
 		{"id": "conversation", "items": [[SLOT_WALL, "kk_couch"], [SLOT_MAIN, "kk_low_table"], [SLOT_CORNER, "kk_armchair"], [SLOT_CORNER, "kk_standing_lamp"], [SLOT_ACCENT, "kk_pillow"], [SLOT_ACCENT, "kk_books"]]},
@@ -337,6 +347,11 @@ static func handmade_tint_for(asset_id: String) -> Color:
 	var finish := handmade_finish_for(asset_id)
 	var palette: Array = HANDMADE_FINISH_PALETTES.get(finish, [Color.WHITE])
 	return palette[posmod(asset_id.hash(), palette.size())]
+
+
+static func memphis_clay_style_for(theme: String) -> Dictionary:
+	var style: Dictionary = MEMPHIS_CLAY_THEME_STYLES.get(theme, MEMPHIS_CLAY_THEME_STYLES["living"])
+	return style.duplicate(true)
 
 
 static func anomaly_for_theme(theme: String) -> String:

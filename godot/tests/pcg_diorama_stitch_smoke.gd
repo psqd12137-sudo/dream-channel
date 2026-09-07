@@ -40,6 +40,7 @@ func _run() -> void:
 	_check(generator.prop_counts_match_room_sizes(), "one, three and five-cell rooms must stay within their 2-3, 4-6 and 6-8 prop budgets")
 	_check(generator.prop_records_match_themes(), "every placed prop must belong to the room theme and requested slot")
 	_check(generator.props_use_handmade_finishes(), "every room prop must use an isolated high-roughness felt, painted-wood or clay material finish: %s" % generator.handmade_finish_debug_summary())
+	_check(_memphis_clay_visuals_are_applied(generator), "every formal room must expose a themed Memphis color group, pattern tag, and contact-shadow-ready clay base material")
 	_check(generator.prop_compositions_are_coherent(), "each room must preserve a coherent seeded furniture composition with its visual subject")
 	_check(generator.prop_placements_respect_reserved_clearance(), "props must keep every doorway, stair passage and open build interface clear")
 	_check(generator.interaction_slots_are_valid() and generator.interaction_slot_records.size() == generator.occupancy.size() * 4, "every occupied cell in every visited PCG room must expose exactly four stable actor interaction slots")
@@ -145,6 +146,29 @@ func _cross_room_touch_count(generator: Node3D) -> int:
 			if generator.occupancy.has(neighbor) and int(generator.occupancy[cell]) != int(generator.occupancy[neighbor]):
 				count += 1
 	return count
+
+
+func _memphis_clay_visuals_are_applied(generator: Node3D) -> bool:
+	var allowed_groups := ["coral", "aqua", "violet", "sun", "sky", "apricot"]
+	var allowed_patterns := ["arch_dots", "squiggle_stripes", "confetti_grid", "sunburst_tiles", "zigzag_steps", "orbit_checks"]
+	if generator.room_visual_roots.size() != generator.rooms.size():
+		return false
+	for room_root: Node3D in generator.room_visual_roots:
+		if str(room_root.get_meta("memphis_color_group", "")) not in allowed_groups:
+			return false
+		if str(room_root.get_meta("memphis_pattern", "")) not in allowed_patterns:
+			return false
+		var bases := room_root.find_children("Base_*", "MeshInstance3D", true, false)
+		if bases.is_empty():
+			return false
+		for raw_base: Node in bases:
+			var base := raw_base as MeshInstance3D
+			var material := base.material_override as StandardMaterial3D
+			if material == null or material.roughness < 0.95 or not material.ao_enabled:
+				return false
+			if base.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_ON:
+				return false
+	return true
 
 
 func _check(condition: bool, message: String) -> void:

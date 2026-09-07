@@ -346,6 +346,10 @@ func _prepare_room_visual_roots(center: Vector2) -> void:
 		room_root.set_meta("visited", bool(room.get("visited", true)))
 		room_root.set_meta("completed", bool(room.get("completed", false)))
 		room_root.set_meta("is_current", bool(room.get("is_current", false)))
+		var memphis_style := _room_memphis_style(room_index)
+		room_root.set_meta("memphis_color_group", str(memphis_style.get("color_group", "coral")))
+		room_root.set_meta("memphis_pattern", str(memphis_style.get("pattern", "arch_dots")))
+		room_root.set_meta("memphis_clay_material", "rough_ao")
 		generated_root.add_child(room_root)
 		room_visual_roots.append(room_root)
 
@@ -360,13 +364,19 @@ func _build_cell(cell: Vector2i, center: Vector2) -> void:
 	var floor_variant_key := str(room.get("id", room_index)).hash() + generation_seed if unify_room_floor_finish else cell.x * 17 + cell.y * 31 + generation_seed
 	var floor_asset := KAYKIT_ROOT + ("floor_wood_large_dark.gltf.glb" if use_kaykit_room_shell and posmod(floor_variant_key, 7) == 0 else "floor_wood_large.gltf.glb") if use_kaykit_room_shell else KENNEY_ROOT + ("floor-detail.fbx" if posmod(floor_variant_key, 7) == 0 else "floor.fbx")
 	var floor_scale := KAYKIT_FLOOR_SCALE if use_kaykit_room_shell else Vector3.ONE * CELL
-	_add_model("Floor_%d_%d" % [cell.x, cell.y], floor_asset, world + Vector3(0, elevation + 0.025, 0), floor_scale, 0.0, room_index)
+	var floor := _add_model("Floor_%d_%d" % [cell.x, cell.y], floor_asset, world + Vector3(0, elevation + 0.025, 0), floor_scale, 0.0, room_index)
+	_apply_memphis_clay_material(floor, _room_memphis_style(room_index), 0.16)
 
 
 func _room_base_color(room_index: int, elevation: float) -> Color:
-	var palette := [Color("303840"), Color("38433e"), Color("3e3945"), Color("3f4035")]
-	var color: Color = palette[posmod(room_index, palette.size())]
-	return color.lightened(0.12) if elevation > 0.0 else color
+	var color: Color = _room_memphis_style(room_index).get("base_color", Color("c96f79"))
+	return color.lightened(0.08) if elevation > 0.0 else color
+
+
+func _room_memphis_style(room_index: int) -> Dictionary:
+	if room_index < 0 or room_index >= rooms.size():
+		return RoomPropCatalog.memphis_clay_style_for("living")
+	return RoomPropCatalog.memphis_clay_style_for(RoomPropCatalog.theme_for_room(rooms[room_index], room_index))
 
 
 func _build_edges(center: Vector2) -> void:
@@ -876,6 +886,7 @@ func _build_room_props(center: Vector2) -> void:
 				continue
 			var handmade_finish := RoomPropCatalog.handmade_finish_for(str(entry["id"]))
 			var finish_surface_count := _apply_handmade_prop_finish(node, str(entry["id"]), handmade_finish)
+			_apply_memphis_clay_material(node, _room_memphis_style(room_index), 0.10)
 			if finish_surface_count <= 0:
 				prop_placement_issues.append("asset has no surface for handmade finish: %s" % str(entry["path"]))
 			var edge_key := str(candidate.get("edge_key", ""))
@@ -2304,7 +2315,9 @@ func _add_box(node_name: String, position: Vector3, size: Vector3, color: Color,
 	mesh_instance.mesh = mesh
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
-	material.roughness = 0.92
+	material.roughness = 0.96
+	material.ao_enabled = true
+	material.ao_light_affect = 0.72
 	mesh_instance.material_override = material
 	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_add_to_visual_root(mesh_instance, room_index, position)
@@ -2351,11 +2364,36 @@ func _apply_handmade_prop_finish(model: Node3D, asset_id: String, finish: String
 			material.albedo_color = source_color.lerp(target_color, tint_strength)
 			material.roughness = maxf(material.roughness, _handmade_finish_roughness(finish))
 			material.metallic = minf(material.metallic, 0.03)
+			material.ao_enabled = true
+			material.ao_light_affect = 0.72
 			mesh_instance.set_surface_override_material(surface_index, material)
 			surface_count += 1
 	model.set_meta("handmade_finish", finish)
 	model.set_meta("handmade_finish_surface_count", surface_count)
 	return surface_count
+
+
+func _apply_memphis_clay_material(model: Node3D, style: Dictionary, tint_strength: float) -> void:
+	if model == null:
+		return
+	var accent: Color = style.get("accent_color", Color("f1c24b"))
+	for mesh_instance: MeshInstance3D in _mesh_instances_in(model):
+		if mesh_instance.mesh == null:
+			continue
+		for surface_index in range(mesh_instance.mesh.get_surface_count()):
+			var source_material := mesh_instance.get_surface_override_material(surface_index)
+			if source_material == null:
+				source_material = mesh_instance.mesh.surface_get_material(surface_index)
+			var material := source_material.duplicate() as StandardMaterial3D if source_material is StandardMaterial3D else StandardMaterial3D.new()
+			material.albedo_color = material.albedo_color.lerp(accent, tint_strength)
+			material.roughness = maxf(material.roughness, 0.96)
+			material.metallic = minf(material.metallic, 0.03)
+			material.ao_enabled = true
+			material.ao_light_affect = 0.72
+			mesh_instance.set_surface_override_material(surface_index, material)
+			mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	model.set_meta("memphis_clay_material", true)
+	model.set_meta("memphis_color_group", str(style.get("color_group", "coral")))
 
 
 func _handmade_finish_roughness(finish: String) -> float:
