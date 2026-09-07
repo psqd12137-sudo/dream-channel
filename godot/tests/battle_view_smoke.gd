@@ -58,6 +58,7 @@ func _run() -> void:
 	game.start_combat(hall)
 	await process_frame
 	await process_frame
+	_check(hud._combat_overlay_has_point(Vector2(1250, 204)), "right-side action panel blank space must remain an input island")
 	# The compact board changes the aspect ratio more than the legacy layout;
 	# allow the existing camera smoothing to settle before validating edges.
 	for _frame in range(24):
