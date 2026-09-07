@@ -26,10 +26,13 @@ func _run() -> void:
 	var formal_composer := game.house_root.get_node_or_null("KenneyFormalComposer") as Node3D
 	_check(formal_composer != null and str(formal_composer.get_meta("visual_style", "")) == "memphis_clay", "formal house composer must expose the Memphis clay visual style")
 	var board_design: Rect2 = visual_layout.get("board", Rect2())
+	_check(board_design.position == Vector2(0, 72), "combat board must fill the stage below the top broadcast bar")
+	_check(board_design.end == Vector2(1280, 800), "combat board must reach the bottom of the design canvas")
 	for panel_name: String in ["player", "enemy", "action", "boss", "hand"]:
 		var panel: Rect2 = visual_layout.get(panel_name, Rect2())
 		_check(panel.size.x > 0.0 and panel.size.y > 0.0, "combat visual layout must define %s" % panel_name)
-		_check(not board_design.intersects(panel), "combat board must have a clear edge from %s panel" % panel_name)
+		_check(panel.position.x >= board_design.position.x and panel.position.y >= board_design.position.y and panel.end.x <= board_design.end.x and panel.end.y <= board_design.end.y, "combat overlay %s must stay inside the full-screen stage" % panel_name)
+	_check(board_design.intersects(visual_layout["hand"]), "combat hand must float over the battle stage instead of occupying a separate strip")
 	_check(float(visual_layout.get("hand_min_height", 0.0)) >= 150.0, "combat hand must reserve a complete card staging area")
 	var desktop_sizes: Array[Vector2] = [Vector2(1024, 640), Vector2(1280, 800), Vector2(1600, 900), Vector2(1920, 1080), Vector2(2560, 1440)]
 	for viewport_size: Vector2 in desktop_sizes:
@@ -41,7 +44,7 @@ func _run() -> void:
 		_check(board.size.y >= 480.0 * layout_scale, "combat board should preserve a tall readable playfield at %s" % viewport_size)
 		var hand_design: Rect2 = visual_layout["hand"]
 		var hand_screen := Rect2(Vector2(layout["offset"]) + hand_design.position * layout_scale, hand_design.size * layout_scale)
-		_check(hand_screen.position.y >= board.end.y and hand_screen.end.y <= float(layout["offset"].y) + 800.0 * layout_scale, "hand cards must occupy the dedicated lower staging area inside the canvas at %s" % viewport_size)
+		_check(hand_screen.position.y < board.end.y and hand_screen.end.y <= float(layout["offset"].y) + 800.0 * layout_scale, "hand cards must float over the battle stage inside the canvas at %s" % viewport_size)
 
 	game.choose_omen(0)
 	var hall: Dictionary = _find_room(game.room_catalog, "hall")

@@ -39,13 +39,13 @@ const CARD_TEXT_OUTLINE := Color("05070a")
 const DESIGN_SIZE := Vector2(1280, 800)
 const HOUSE_VIEW_RECT := Rect2(20, 88, 968, 586)
 const BUILD_VIEW_RECT := Rect2(20, 88, 968, 376)
-const COMBAT_VIEW_RECT := Rect2(188, 88, 748, 510)
-const COMBAT_PLAYER_PANEL_RECT := Rect2(20, 88, 156, 86)
-const COMBAT_ENEMY_PANEL_RECT := Rect2(964, 88, 296, 118)
-const COMBAT_ACTION_RECT := Rect2(964, 214, 296, 104)
-const COMBAT_BOSS_PANEL_RECT := Rect2(964, 438, 296, 110)
-const COMBAT_HAND_RECT := Rect2(188, 610, 748, 190)
-const COMBAT_SIDE_RECT := Rect2(964, 88, 296, 680)
+const COMBAT_VIEW_RECT := Rect2(0, 72, 1280, 728)
+const COMBAT_PLAYER_PANEL_RECT := Rect2(20, 88, 220, 92)
+const COMBAT_ENEMY_PANEL_RECT := Rect2(1000, 88, 260, 96)
+const COMBAT_ACTION_RECT := Rect2(1000, 196, 260, 92)
+const COMBAT_BOSS_PANEL_RECT := Rect2(1000, 410, 260, 126)
+const COMBAT_HAND_RECT := Rect2(150, 570, 820, 230)
+const COMBAT_SIDE_RECT := Rect2(1000, 88, 260, 680)
 const TURN_ORDER_RECT := Rect2(404, 8, 386, 56)
 
 const RESET_RECT := Rect2(1142, 17, 110, 38)
@@ -71,25 +71,25 @@ const BUILD_PLACE_RECT := Rect2(734, 580, 230, 48)
 const BUILD_CANCEL_RECT := Rect2(734, 640, 230, 38)
 const ROOM_ACTION_RECT := Rect2(1020, 682, 220, 50)
 const ENTER_PENDING_RECT := Rect2(1020, 620, 220, 46)
-const END_TURN_RECT := Rect2(976, 690, 164, 48)
-const RETURN_RECT := Rect2(976, 690, 164, 48)
-const MOVE_UP_RECT := Rect2(1062, 594, 46, 30)
-const MOVE_LEFT_RECT := Rect2(1010, 628, 46, 30)
-const MOVE_RIGHT_RECT := Rect2(1114, 628, 46, 30)
-const MOVE_DOWN_RECT := Rect2(1062, 662, 46, 30)
-const CARD_CANCEL_RECT := Rect2(976, 654, 164, 28)
-const BATTLE_TILE_INSPECTION_RECT := Rect2(964, 326, 296, 104)
+const END_TURN_RECT := Rect2(1000, 690, 164, 48)
+const RETURN_RECT := Rect2(1000, 690, 164, 48)
+const MOVE_UP_RECT := Rect2(1100, 560, 46, 30)
+const MOVE_LEFT_RECT := Rect2(1048, 594, 46, 30)
+const MOVE_RIGHT_RECT := Rect2(1152, 594, 46, 30)
+const MOVE_DOWN_RECT := Rect2(1100, 628, 46, 30)
+const CARD_CANCEL_RECT := Rect2(1000, 654, 164, 28)
+const BATTLE_TILE_INSPECTION_RECT := Rect2(1000, 300, 260, 104)
 const FLOOR_RAIL_RECT := Rect2(20, 194, 156, 280)
 const FLOOR_RAIL_TOP_RECT := Rect2(36, 244, 124, 36)
 const FLOOR_RAIL_GROUND_RECT := Rect2(36, 288, 124, 36)
 const FLOOR_RAIL_BASEMENT_RECT := Rect2(36, 332, 124, 36)
 const FLOOR_RAIL_OVERVIEW_RECT := Rect2(36, 390, 124, 32)
 const FLOOR_RAIL_PLAYER_RECT := Rect2(36, 430, 124, 32)
-const BOSS_ANCHOR_ACTION_RECT := Rect2(976, 506, 268, 28)
-const STAIR_ACTION_RECT := Rect2(964, 554, 296, 34)
-const PORTAL_USE_RECT := Rect2(960, 366, 120, 44)
-const PORTAL_STAY_RECT := Rect2(1100, 366, 120, 44)
-const ENEMY_INTEL_RECT := Rect2(964, 326, 296, 58)
+const BOSS_ANCHOR_ACTION_RECT := Rect2(1010, 504, 240, 28)
+const STAIR_ACTION_RECT := Rect2(1000, 542, 260, 34)
+const PORTAL_USE_RECT := Rect2(1000, 366, 120, 44)
+const PORTAL_STAY_RECT := Rect2(1140, 366, 120, 44)
+const ENEMY_INTEL_RECT := Rect2(1000, 300, 260, 58)
 const HOME_START_RECT := Rect2(76, 610, 300, 58)
 const HOME_TUTORIAL_RECT := Rect2(390, 610, 148, 48)
 const HOME_CONTINUE_RECT := Rect2(550, 610, 174, 48)
@@ -313,9 +313,9 @@ func _hand_card_anchor_position(card_id: String, hand_ids: Array) -> Vector2:
 		return Vector2(250, 700)
 	var hand_rect := _combat_layout_rect("HandArea", COMBAT_HAND_RECT)
 	var count := maxi(1, hand_ids.size())
-	var card_width := 112.0
-	var card_height := minf(card_width * 1.66, hand_rect.size.y - 8.0)
-	var spacing := card_width * 0.62
+	var card_width := 126.0
+	var card_height := minf(card_width * 1.66, hand_rect.size.y - 18.0)
+	var spacing := card_width * 0.66
 	var total_width := card_width + spacing * maxf(0.0, float(count - 1))
 	var start_x := hand_rect.position.x + (hand_rect.size.x - total_width) * 0.5
 	var x := start_x + float(idx) * spacing
@@ -987,8 +987,8 @@ func _draw_combat_hud() -> void:
 	var combat = game.combat
 	var action_rect := _combat_layout_rect("ActionArea", COMBAT_ACTION_RECT)
 	var hand_rect := _combat_layout_rect("HandArea", COMBAT_HAND_RECT)
-	var deck_rect := _combat_layout_rect("DeckArea", Rect2(20, 610, 120, 150))
-	var discard_rect := _combat_layout_rect("DiscardArea", Rect2(1140, 610, 120, 150))
+	var deck_rect := _combat_layout_rect("DeckArea", Rect2(28, 636, 100, 132))
+	var discard_rect := _combat_layout_rect("DiscardArea", Rect2(1160, 636, 100, 132))
 	var focused_enemy: Variant = _focused_enemy_state()
 	var enemy_display := _enemy_panel_display_data(combat, focused_enemy)
 	var enemy_panel_rect := COMBAT_ENEMY_PANEL_RECT
@@ -1027,6 +1027,10 @@ func _draw_combat_hud() -> void:
 		_draw_test_ai_panel()
 	_draw_move_controls()
 
+	# The battle viewport is the visual base layer. This small translucent
+	# contrast wash lives only behind the hand; it is not a second panel or a
+	# replacement for the world surface.
+	draw_rect(Rect2(126, 548, 852, 252), Color("07131acc"), true)
 	_draw_ticket_panel(action_rect, Color("17151cf4"), GOLD)
 	_draw_action_ticket(Rect2(action_rect.position + Vector2(10, 8), Vector2(action_rect.size.x - 20, action_rect.size.y - 16)))
 	_draw_card_frame_contained(CARD_BACK_BLUE, deck_rect, Color(1, 1, 1, 0.92))
@@ -1038,12 +1042,13 @@ func _draw_combat_hud() -> void:
 	if hand_key != last_hand_key:
 		_update_card_flights(last_hand_key, hand_key)
 		last_hand_key = hand_key
-	var card_width := 112.0
-	var card_height := minf(card_width * 1.66, hand_rect.size.y - 8.0)
-	var spacing := card_width * 0.62
+	var card_width := 126.0
+	var card_height := minf(card_width * 1.66, hand_rect.size.y - 18.0)
+	var spacing := card_width * 0.66
 	var total_width := card_width + spacing * maxf(0.0, float(combat.hand.size() - 1))
 	var start_x := hand_rect.position.x + (hand_rect.size.x - total_width) * 0.5
-	# 第一阶段直接展示完整卡面；手牌区已经独立于战场，避免卡牌被底部裁掉。
+	# Cards are a foreground fan over the world stage. The hand rectangle is only
+	# an input/layout guide; it does not draw a separate background surface.
 	var base_y := hand_rect.end.y - card_height
 	var card_draw_entries: Array[Dictionary] = []
 	for i in range(combat.hand.size()):
@@ -1054,7 +1059,7 @@ func _draw_combat_hud() -> void:
 			rect.position += card_flight_offsets[card_id]
 		if i == game.selected_card:
 			rect.position.y -= 8.0
-		var stagger := (float(posmod(i, 3)) - 1.0) * 5.0
+		var stagger := (float(posmod(i, 3)) - 1.0) * 7.0
 		rect.position.y += stagger
 		if i == hovered_combat_card and dragged_combat_card < 0:
 			var hover_scale := lerpf(1.0, 1.16, combat_card_hover_amount)
@@ -1128,7 +1133,7 @@ func _draw_battle_tile_inspection(info: Dictionary) -> void:
 
 func _draw_world_boss_hints() -> void:
 	var r = game.combat
-	var rect := Rect2(964, 326, 296, 104)
+	var rect := Rect2(1000, 300, 260, 104)
 	_draw_ticket_panel(rect, Color("261c27f5"), GOLD)
 	_label("Boss 战 · 回合制", rect.position + Vector2(16, 25), 13, GOLD)
 	_label("结束回合后 Boss 行动并推进播出", rect.position + Vector2(16, 49), 11, TEXT)
@@ -1292,7 +1297,7 @@ func _draw_move_controls() -> void:
 		return
 	var enabled: bool = not game.animation_busy and combat.outcome == "" and game.selected_card < 0 and not combat.pending_player_turn
 	if not game.combat_is_boss:
-		_label("直接移动 · 点击方向", Vector2(1008, 584), 10, MUTED if enabled else Color("68757a"))
+		_label("直接移动 · 点击方向", Vector2(1008, 552), 10, MUTED if enabled else Color("68757a"))
 	_draw_button(MOVE_UP_RECT, "上", TEAL if enabled and _can_move_direction(Vector2i.UP) else Color("394852"), TEXT)
 	_draw_button(MOVE_LEFT_RECT, "左", TEAL if enabled and _can_move_direction(Vector2i.LEFT) else Color("394852"), TEXT)
 	_draw_button(MOVE_RIGHT_RECT, "右", TEAL if enabled and _can_move_direction(Vector2i.RIGHT) else Color("394852"), TEXT)
@@ -1957,6 +1962,11 @@ func _input(event: InputEvent) -> void:
 func _combat_overlay_has_point(point: Vector2) -> bool:
 	if game == null or game.phase not in ["combat", "world_boss"] or game.combat == null:
 		return false
+	# The world now fills the whole stage, so HUD panels and the hand must be
+	# explicitly treated as input islands; empty space remains world-interactive.
+	for rect: Rect2 in [COMBAT_PLAYER_PANEL_RECT, COMBAT_ENEMY_PANEL_RECT, COMBAT_HAND_RECT, COMBAT_SIDE_RECT]:
+		if rect.has_point(point):
+			return true
 	if game.test_combat_active and _test_combat_overlay_has_point(point):
 		return true
 	if game.phase == "world_boss" and _floor_rail_has_point(point):
