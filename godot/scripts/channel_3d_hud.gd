@@ -1030,7 +1030,10 @@ func _draw_combat_hud() -> void:
 	# The battle viewport is the visual base layer. This small translucent
 	# contrast wash lives only behind the hand; it is not a second panel or a
 	# replacement for the world surface.
-	draw_rect(Rect2(126, 548, 852, 252), Color("07131acc"), true)
+	# Fade in toward the bottom so the world remains visible behind the cards.
+	for strip in range(28):
+		var opacity := 0.32 * pow(float(strip + 1) / 28.0, 2.0)
+		draw_rect(Rect2(126, 548 + strip * 9, 852, 9), Color(0.027, 0.075, 0.102, opacity), true)
 	_draw_ticket_panel(action_rect, Color("17151cf4"), GOLD)
 	_draw_action_ticket(Rect2(action_rect.position + Vector2(10, 8), Vector2(action_rect.size.x - 20, action_rect.size.y - 16)))
 	_draw_card_frame_contained(CARD_BACK_BLUE, deck_rect, Color(1, 1, 1, 0.92))

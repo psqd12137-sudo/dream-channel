@@ -22,7 +22,9 @@ func _run() -> void:
 	game.start_combat(hall)
 	await process_frame
 	await process_frame
-	await create_timer(0.25).timeout
+	await create_timer(1.0).timeout
+	game.reset_battle_camera()
+	await process_frame
 	await RenderingServer.frame_post_draw
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://artifacts"))
 	var world_viewport := game.get_node("WorldLayer/WorldContainer/WorldViewport") as SubViewport

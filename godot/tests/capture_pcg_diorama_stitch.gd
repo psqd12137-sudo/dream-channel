@@ -25,6 +25,9 @@ func _run() -> void:
 		quit(1)
 	else:
 		print("CAPTURE_PCG_DIORAMA_STITCH: PASS")
+		game.queue_free()
+		await process_frame
+		await process_frame
 		quit(0)
 
 var _smb_tail_padding := """

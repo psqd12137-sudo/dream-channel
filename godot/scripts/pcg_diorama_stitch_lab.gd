@@ -365,7 +365,24 @@ func _build_cell(cell: Vector2i, center: Vector2) -> void:
 	var floor_asset := KAYKIT_ROOT + ("floor_wood_large_dark.gltf.glb" if use_kaykit_room_shell and posmod(floor_variant_key, 7) == 0 else "floor_wood_large.gltf.glb") if use_kaykit_room_shell else KENNEY_ROOT + ("floor-detail.fbx" if posmod(floor_variant_key, 7) == 0 else "floor.fbx")
 	var floor_scale := KAYKIT_FLOOR_SCALE if use_kaykit_room_shell else Vector3.ONE * CELL
 	var floor := _add_model("Floor_%d_%d" % [cell.x, cell.y], floor_asset, world + Vector3(0, elevation + 0.025, 0), floor_scale, 0.0, room_index)
-	_apply_memphis_clay_material(floor, _room_memphis_style(room_index), 0.16)
+	_apply_memphis_floor_pattern(floor, _room_memphis_style(room_index))
+
+
+func _apply_memphis_floor_pattern(node: Node, style: Dictionary) -> void:
+	if node == null:
+		return
+	if node is MeshInstance3D:
+		var material := ShaderMaterial.new()
+		material.shader = preload("res://shaders/memphis_floor.gdshader")
+		material.set_shader_parameter("base_color", style.get("base_color", Color("c96f79")))
+		material.set_shader_parameter("accent_color", style.get("accent_color", Color("f1c24b")))
+		var patterns := ["arch_dots", "squiggle_stripes", "confetti_grid", "sunburst_tiles", "zigzag_steps", "orbit_checks"]
+		material.set_shader_parameter("pattern_kind", maxi(0, patterns.find(str(style.get("pattern", "arch_dots")))))
+		var mesh_instance := node as MeshInstance3D
+		for surface_index in range(mesh_instance.get_surface_override_material_count()):
+			mesh_instance.set_surface_override_material(surface_index, material)
+	for child in node.get_children():
+		_apply_memphis_floor_pattern(child, style)
 
 
 func _room_base_color(room_index: int, elevation: float) -> Color:
