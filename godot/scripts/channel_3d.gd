@@ -677,7 +677,8 @@ func _house_camera_frame_offset() -> Vector3:
 
 
 func _battle_camera_frame_offset() -> Vector3:
-	return CameraFollowMath.screen_up_offset(camera, BATTLE_CAMERA_FRAME_OFFSET)
+	# Place the miniature above the floating hand and left of the status column.
+	return camera.global_basis.x * camera.size * 0.18 - camera.global_basis.y * camera.size * 0.10
 
 
 func _battle_follow_target_position() -> Vector3:
@@ -3420,15 +3421,10 @@ func _refit_battle_camera(preserve_zoom: bool) -> void:
 	# 旋转适配半径也必须包含这段已知偏移，否则边缘会在某些角度出框。
 	var known_focus := _battle_follow_target_position()
 	horizontal_radius += Vector2(known_focus.x, known_focus.z).length()
-	# 镜头始终偏上构图（对准点向屏幕上方平移约 size*FRAME_OFFSET），fit 需把该偏移量计入半径，
-	# 保证全棋盘在偏上对准下仍然可见
-	# Reserve only the actual framing offset. The previous doubled-radius plus
-	# ten-unit allowance left a themed arena occupying barely half the viewport.
-	horizontal_radius += BATTLE_CAMERA_FRAME_OFFSET * (horizontal_radius + 4.0)
 	# The invariant fit already encloses every rotated cell. Keep only a compact
 	# presentation margin so the miniature, rather than empty backdrop, is the
 	# visual subject of combat.
-	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0) * 1.24
+	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0)
 	camera.size = battle_camera_fit_size * battle_camera_zoom_ratio
 	_apply_battle_camera()
 
