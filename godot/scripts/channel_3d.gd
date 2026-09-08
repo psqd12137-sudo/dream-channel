@@ -288,6 +288,7 @@ var boss_finish_reason := ""
 var boss_recap: Dictionary = {}
 var boss_preview_active := false
 const OverworldBossRules = preload("res://scripts/overworld_boss_rules.gd")
+const ExplorationAnchors = preload("res://scripts/exploration_anchors.gd")
 const OverworldBossPresentation = preload("res://scripts/overworld_boss_presentation.gd")
 var boss_anchor_cells: Array[Vector2i] = []
 var boss_anchor_hp: Dictionary = {}
@@ -1030,6 +1031,8 @@ func continue_saved_run() -> bool:
 		if raw_stair is Dictionary:
 			room_rules.stair_links.append((raw_stair as Dictionary).duplicate(true))
 	var remaining_ids: Array = save.get("remaining_ids", [])
+	if str(save.get("phase", "")) != "world_boss":
+		ExplorationAnchors.discover(room_rules, int(content.get("run_length", 12)))
 	remaining_rooms.clear()
 	for room: Dictionary in room_catalog:
 		if str(room.get("id", "")) in remaining_ids:
@@ -1648,6 +1651,9 @@ func _complete_current_room() -> bool:
 		room_rules.set_instance_flag(current_room_pos, "completion_order", completion_order)
 	room_rules.set_instance_flag(current_room_pos, "completed", true)
 	room_rules.set_instance_flag(current_room_pos, "visited", true)
+	if ExplorationAnchors.discover(room_rules, int(content.get("run_length", 12))) > 0:
+		event_log.append("发现信号锚：已标记在大地图，决战时可前往关闭。")
+		house_world_renderer.refresh_exploration_anchors()
 	return not was_completed and run_progress >= int(content.get("run_length", 12))
 
 
@@ -1723,6 +1729,9 @@ func _begin_world_boss(saved: Dictionary = {}) -> void:
 		_refresh_hud()
 		return
 	combat = finale
+	var exploration_markers := house_root.get_node_or_null("ExplorationAnchors")
+	if exploration_markers != null:
+		exploration_markers.queue_free()
 	if not saved.is_empty():
 		combat.replay(saved)
 	combat_is_boss = true

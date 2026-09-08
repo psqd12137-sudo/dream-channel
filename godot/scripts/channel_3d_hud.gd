@@ -893,6 +893,10 @@ func _draw_house_hud() -> void:
 	_label("本集进度", Vector2(1024, 248), 11, Color("806448"))
 	_draw_bar(Rect2(1024, 261, 216, 13), game.run_progress, int(game.content.get("run_length", 12)), GOLD, Color("bba781"))
 	_label("%d / %d 个布景" % [game.run_progress, int(game.content.get("run_length", 12))], Vector2(1024, 296), 13, INK)
+	if game.phase != "boss_ready":
+		var found := preload("res://scripts/exploration_anchors.gd").cells(game.room_rules).size()
+		var hint := " · 本房有锚" if room.has("signal_anchor_cell") and revealed else " · 决战时关闭"
+		_label("信号锚 %d/4%s" % [found, hint], Vector2(1024, 318), 12, Color("834b21"))
 	if game.phase == "boss_ready":
 		var boss: Dictionary = game.content.get("bosses", {}).get("bosses", {}).get(game.boss_id, {})
 		draw_rect(Rect2(1024, 318, 216, 92), Color("f2c9bd"), true)

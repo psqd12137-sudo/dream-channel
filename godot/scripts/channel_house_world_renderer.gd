@@ -123,10 +123,26 @@ func build_house_world() -> void:
 	if phase == "build" and not build_offers.is_empty():
 		_add_build_preview()
 	_add_house_player()
+	refresh_exploration_anchors()
 	if hovered_house_cell != INVALID_CELL and room_rules.placed.has(hovered_house_cell):
 		_add_move_hover_mesh(hovered_house_cell)
 	if phase != "combat":
 		_set_house_camera()
+
+
+func refresh_exploration_anchors() -> void:
+	var old: Node = house_root.get_node_or_null("ExplorationAnchors")
+	if old != null:
+		old.free()
+	if phase == "world_boss":
+		return
+	var layer := Node3D.new()
+	layer.name = "ExplorationAnchors"
+	house_root.add_child(layer)
+	for cell: Vector2i in preload("res://scripts/exploration_anchors.gd").cells(room_rules):
+		var point := _house_world(cell)
+		_add_cylinder(layer, "Signal_%d_%d" % [cell.x, cell.y], point + Vector3(0.65, 0.55, 0), 0.18, 0.7, _material(COL_GOLD))
+		_add_label(layer, "Label_%d_%d" % [cell.x, cell.y], "信号锚 · 决战时关闭", point + Vector3(0, 1.6, 0), COL_GOLD, 24)
 
 
 func _add_kenney_formal_composer() -> void:

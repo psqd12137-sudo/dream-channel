@@ -124,18 +124,32 @@ func initialize(rooms, start: Vector2i, boss: Dictionary, defs: Dictionary, star
 		return da > db or da == db and (a.y < b.y or a.y == b.y and a.x < b.x)
 	)
 	var spawn: Vector2i = reachable[0]
+	var discovered := preload("res://scripts/exploration_anchors.gd").cells(rooms)
+	for cell: Vector2i in discovered:
+		if cell not in reachable:
+			error = "已发现的信号锚无法从终局起点到达，请检查门洞和楼梯连接。"
+			return
+		anchors[cell] = 2
+	for candidate: Vector2i in reachable:
+		if candidate not in discovered and candidate != start_cell:
+			spawn = candidate
+			break
 	# CombatRules keeps its historical non-negative spawn contract. The board
 	# itself may contain negative overworld coordinates (the basement lane), so
 	# choose a reachable non-negative spawn whenever one exists and leave the
 	# physical coordinates untouched everywhere else.
 	for candidate: Vector2i in reachable:
-		if candidate.x >= 0 and candidate.y >= 0:
+		if candidate.x >= 0 and candidate.y >= 0 and (discovered.is_empty() or candidate not in discovered and candidate != start_cell):
 			spawn = candidate
 			break
 	# Prefer one anchor in each room instance, then fill remaining positions by
 	# distance. All anchor keys are still physical battle cells.
 	var chosen_instances: Dictionary = {}
+	for cell: Vector2i in discovered:
+		chosen_instances[str(room_nodes[cell].id)] = true
 	for cell: Vector2i in reachable:
+		if anchors.size() >= 4:
+			break
 		if cell == start_cell or cell == spawn:
 			continue
 		var instance_id := str(room_nodes[cell].id)
