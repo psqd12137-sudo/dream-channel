@@ -4187,17 +4187,50 @@ func _make_build_offers(target: Vector2i) -> Array[Dictionary]:
 	_shuffle_variants(candidates)
 	if large_room_mix_test_mode:
 		return _make_large_room_test_offers(candidates)
-	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		var score_a := _layout_profile_offer_score(a)
-		var score_b := _layout_profile_offer_score(b)
+	var buckets: Dictionary = {1: [], 3: [], 5: []}
+	for room: Dictionary in candidates:
+		var room_size := _room_offer_size(room)
+		(buckets[room_size] as Array).append(room)
+	var available_sizes: Array[int] = []
+	for room_size: int in [1, 3, 5]:
+		if not (buckets[room_size] as Array).is_empty():
+			available_sizes.append(room_size)
+	if available_sizes.is_empty():
+		return result
+	var force_large_room := _consecutive_single_room_count() >= 2 and available_sizes.size() > 1
+	available_sizes.sort_custom(func(a: int, b: int) -> bool:
+		if force_large_room and (a == 1) != (b == 1):
+			return a != 1
+		var score_a := _layout_profile_size_score(a, buckets)
+		var score_b := _layout_profile_size_score(b, buckets)
 		if score_a != score_b:
 			return score_a > score_b
-		return posmod((str(a.get("id", "")) + str(run_seed)).hash(), 10007) < posmod((str(b.get("id", "")) + str(run_seed)).hash(), 10007)
+		return a > b
 	)
-	for room in candidates:
+	# When multiple sizes can legally fit, spend the three offers on different
+	# sizes first. The profile still controls which size is shown first and which
+	# room is sampled within that size, but it can no longer erase variety.
+	for room_size: int in available_sizes:
 		if result.size() >= 3:
 			break
-		result.append(room)
+		var size_bucket: Array = buckets[room_size]
+		var picked: Dictionary = _pick_weighted_room(size_bucket)
+		if not picked.is_empty():
+			result.append(picked)
+	# If only one or two sizes are currently legal, fill the remaining slots with
+	# weighted unique rooms. This keeps the offer count stable without inventing
+	# an impossible placement.
+	while result.size() < 3:
+		var remaining_candidates: Array[Dictionary] = []
+		for room: Dictionary in candidates:
+			if not _contains_room(result, str(room.get("id", ""))):
+				remaining_candidates.append(room)
+		if remaining_candidates.is_empty():
+			break
+		var picked: Dictionary = _pick_weighted_room(remaining_candidates)
+		if picked.is_empty():
+			break
+		result.append(picked)
 	return result
 
 
@@ -4268,6 +4301,62 @@ func _placed_room_size_counts() -> Dictionary:
 
 func _latest_placed_room_size() -> int:
 	return int(current_room().get("room_size", 1))
+
+
+func _room_offer_size(room: Dictionary) -> int:
+	var room_size := int(room.get("room_size", 1))
+	if room_size <= 1:
+		return 1
+	if room_size <= 3:
+		return 3
+	return 5
+
+
+func _layout_profile_size_score(room_size: int, buckets: Dictionary) -> int:
+	var best_score := 0
+	var bucket: Array = buckets.get(room_size, [])
+	for room: Dictionary in bucket:
+		best_score = maxi(best_score, _layout_profile_offer_score(room))
+	return best_score
+
+
+func _pick_weighted_room(pool: Array) -> Dictionary:
+	if pool.is_empty():
+		return {}
+	var total_weight := 0
+	for raw_room: Variant in pool:
+		var room: Dictionary = raw_room
+		total_weight += maxi(1, _layout_profile_offer_score(room))
+	var roll := rng.randi_range(1, maxi(1, total_weight))
+	for raw_room: Variant in pool:
+		var room: Dictionary = raw_room
+		roll -= maxi(1, _layout_profile_offer_score(room))
+		if roll <= 0:
+			return room
+	return pool[pool.size() - 1]
+
+
+func _consecutive_single_room_count() -> int:
+	var completed_rooms: Array[Dictionary] = []
+	var seen_instances: Dictionary = {}
+	for raw_pos: Variant in room_rules.placed.keys():
+		var room: Dictionary = room_rules.placed[raw_pos]
+		var instance_id := str(room.get("instance_id", ""))
+		var seen_key := instance_id if not instance_id.is_empty() else str(raw_pos)
+		if seen_instances.has(seen_key):
+			continue
+		seen_instances[seen_key] = true
+		if int(room.get("completion_order", 0)) > 0:
+			completed_rooms.append(room)
+	completed_rooms.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("completion_order", 0)) < int(b.get("completion_order", 0))
+	)
+	var streak := 0
+	for index in range(completed_rooms.size() - 1, -1, -1):
+		if _room_offer_size(completed_rooms[index]) != 1:
+			break
+		streak += 1
+	return streak
 
 
 func _apply_large_room_test_catalog() -> void:
