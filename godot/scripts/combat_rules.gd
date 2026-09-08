@@ -1828,6 +1828,52 @@ func start_player_turn() -> void:
 	_start_player_turn()
 
 
+func connect_walkable_regions(excluded: Dictionary) -> Array[Vector2i]:
+	# Connect floor islands through the fewest removable wall cells. Excluded
+	# footprint corners are never candidates, even when a shorter path exists.
+	var removed: Array[Vector2i] = []
+	var start := INVALID_CELL
+	for y in range(rows):
+		for x in range(cols):
+			var cell := Vector2i(x, y)
+			if start == INVALID_CELL and is_walkable(cell) and not excluded.has(cell):
+				start = cell
+	if start == INVALID_CELL:
+		return removed
+	while true:
+		var distances := {start: 0}
+		var parents := {start: start}
+		var pending: Array[Vector2i] = [start]
+		while not pending.is_empty():
+			pending.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return int(distances[a]) < int(distances[b]))
+			var cell: Vector2i = pending.pop_front()
+			for direction: Vector2i in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
+				var next := cell + direction
+				if next.x < 0 or next.y < 0 or next.x >= cols or next.y >= rows or excluded.has(next):
+					continue
+				var cost := int(distances[cell]) + (1 if walls.has(next) else 0)
+				if not distances.has(next) or cost < int(distances[next]):
+					distances[next] = cost
+					parents[next] = cell
+					if next not in pending:
+						pending.append(next)
+		var target := INVALID_CELL
+		var best := 2147483647
+		for cell: Vector2i in distances:
+			var cost := int(distances[cell])
+			if is_walkable(cell) and cost > 0 and cost < best:
+				target = cell
+				best = cost
+		if target == INVALID_CELL:
+			break
+		while target != start:
+			if walls.has(target):
+				walls.erase(target)
+				removed.append(target)
+			target = parents[target]
+	return removed
+
+
 func is_walkable(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.y >= 0 and pos.x < cols and pos.y < rows and not walls.has(pos)
 

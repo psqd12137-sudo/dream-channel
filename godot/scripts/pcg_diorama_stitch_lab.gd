@@ -987,8 +987,7 @@ func _apply_room_override(room_index: int, room_type: String, room_root: Node3D)
 			continue
 		var node_name := str(node.name)
 		var generated_prop := node_name.begins_with("RoomProp_") or node_name.begins_with("QuaterniusProp_") or node_name.begins_with("ShowEvidence_") or node_name.begins_with("ProductionFixture_")
-		var generated_shell := bool(node.get_meta("structure_kind", "") != "") or bool(node.get_meta("cardboard_shell", false))
-		if generated_prop or generated_shell or node_name.begins_with("CutawayMarker_"):
+		if generated_prop:
 			node.visible = false
 	var furniture_root := Node3D.new()
 	furniture_root.name = "OverrideFurniture_%s" % room_type
@@ -999,6 +998,9 @@ func _apply_room_override(room_index: int, room_type: String, room_root: Node3D)
 	shell_root.name = "OverrideWalls_%s" % room_type
 	shell_root.set_meta("room_override", true)
 	shell_root.set_meta("room_id", room_type)
+	# Authored perimeter walls remain available for editor inspection, while
+	# the canonical shell displays the doors of this actual room instance.
+	shell_root.visible = false
 	room_root.add_child(shell_root)
 	var center := _override_template_center(override_data)
 	var room_elevation := float(room.get("elevation", 0.0))
@@ -1067,7 +1069,7 @@ func _apply_room_override(room_index: int, room_type: String, room_root: Node3D)
 			continue
 		fixture.name = "OverrideFixture_%02d" % wall_count
 		fixture.set_meta("room_override", true)
-		shell_root.add_child(fixture)
+		furniture_root.add_child(fixture)
 		wall_count += 1
 	room_root.set_meta("room_override", room_type)
 	room_root.set_meta("room_override_assets", asset_count)

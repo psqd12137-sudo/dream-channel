@@ -23,6 +23,12 @@ func _run() -> void:
 	var root_node: Node3D = generator.room_visual_roots[0]
 	assert(root_node.get_node_or_null("OverrideFurniture_living") != null, "override furniture root missing")
 	assert(root_node.get_node_or_null("OverrideWalls_living") != null, "override wall root missing")
+	assert(not root_node.get_node("OverrideWalls_living").visible, "fixed template doors must not cover the canonical room connections")
+	var canonical_shells := 0
+	for child in root_node.get_children():
+		if child is Node3D and child.visible and (child.has_meta("cardboard_shell") or child.has_meta("structure_kind")):
+			canonical_shells += 1
+	assert(canonical_shells > 0, "connected room must retain its canonical wall and door shell")
 	assert(root_node.get_meta("room_override_assets", 0) == 5, "override furniture count mismatch")
 	assert(root_node.get_meta("room_override_walls", 0) == 4, "override wall count mismatch")
 	var override_slots: Array[Dictionary] = generator.interaction_slots_for_room_index(0)

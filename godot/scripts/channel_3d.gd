@@ -1474,12 +1474,23 @@ func _handle_house_world_click(screen_pos: Vector2) -> void:
 	var target := Vector2i(roundi(world.x / HOUSE_CELL), roundi(world.z / HOUSE_CELL))
 	if target in room_rules.frontiers():
 		begin_build(target)
-	elif room_rules.placed.has(target) and target != current_room_pos and _rooms_connected(current_room_pos, target):
+	elif room_rules.placed.has(target) and target != current_room_pos:
 		enter_room(target)
 
 
 func enter_room(target: Vector2i) -> void:
-	if animation_busy or not room_rules.placed.has(target) or not _rooms_connected(current_room_pos, target):
+	if animation_busy or not room_rules.placed.has(target):
+		return
+	if not _rooms_connected(current_room_pos, target):
+		var path := house_path_to(target)
+		if path.size() < 2:
+			status_message = "没有连通的门，无法到达该房间。"
+			_refresh_hud()
+			return
+		for index in range(1, path.size()):
+			if phase != "explore" or animation_busy or current_room_pos != path[index - 1]:
+				return
+			await enter_room(path[index])
 		return
 	previous_room_pos = current_room_pos
 	animation_busy = true
@@ -1490,7 +1501,32 @@ func enter_room(target: Vector2i) -> void:
 	_cancel_house_camera_return()
 	status_message = "莉莉正走进未知房间……"
 	_refresh_hud()
-	_animate_enter_room(target)
+	await _animate_enter_room(target)
+
+
+func house_path_to(target: Vector2i) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	if not room_rules.placed.has(target):
+		return result
+	var parents := {current_room_pos: current_room_pos}
+	var queue: Array[Vector2i] = [current_room_pos]
+	while not queue.is_empty():
+		var cell: Vector2i = queue.pop_front()
+		if cell == target:
+			while cell != current_room_pos:
+				result.push_front(cell)
+				cell = parents[cell]
+			result.push_front(current_room_pos)
+			return result
+		# Unvisited rooms can be destinations, but never shortcuts.
+		if cell != current_room_pos and not bool(room_rules.placed[cell].get("visited", false)):
+			continue
+		for direction: Vector2i in RoomRules.DIRS:
+			var next := cell + direction
+			if not parents.has(next) and _rooms_connected(cell, next):
+				parents[next] = cell
+				queue.append(next)
+	return result
 
 
 func _animate_enter_room(target: Vector2i) -> void:
@@ -3357,9 +3393,9 @@ func set_house_hover(view_pos: Vector2) -> void:
 	var hit: Variant = _screen_to_plane(view_pos, 0.0)
 	var next_hover := INVALID_CELL
 	if hit != null:
-		var world: Vector3 = hit
+		var world: Vector3 = _house_logical_world_from_visual(hit as Vector3)
 		var target := Vector2i(roundi(world.x / HOUSE_CELL), roundi(world.z / HOUSE_CELL))
-		if room_rules.placed.has(target) and target != current_room_pos and _rooms_connected(current_room_pos, target):
+		if target != current_room_pos and house_path_to(target).size() >= 2:
 			next_hover = target
 	if next_hover == hovered_house_cell:
 		return

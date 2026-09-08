@@ -928,7 +928,7 @@ func _draw_house_hud() -> void:
 		_draw_button(ROOM_ACTION_RECT, action_text, MAGENTA if str(room.get("kind", "")) == "combat" else GOLD, INK if str(room.get("kind", "")) != "combat" else TEXT)
 	elif game.phase == "boss_ready":
 		_draw_button(ROOM_ACTION_RECT, "进入祭坛决战", RED, TEXT)
-	elif game.phase == "explore" and game.pending_room_pos != game.current_room_pos and game._rooms_connected(game.current_room_pos, game.pending_room_pos):
+	elif game.phase == "explore" and game.pending_room_pos != game.current_room_pos and game.house_path_to(game.pending_room_pos).size() >= 2:
 		_draw_button(ENTER_PENDING_RECT, "走进新房间", MAGENTA, TEXT)
 
 	if game.phase == "build":
@@ -2489,7 +2489,7 @@ func _gui_input(event: InputEvent) -> void:
 	if game.phase == "boss_ready" and ROOM_ACTION_RECT.has_point(point):
 		game.begin_boss_combat()
 		return
-	if game.phase == "explore" and ENTER_PENDING_RECT.has_point(point) and game._rooms_connected(game.current_room_pos, game.pending_room_pos):
+	if game.phase == "explore" and ENTER_PENDING_RECT.has_point(point) and game.house_path_to(game.pending_room_pos).size() >= 2:
 		game.enter_room(game.pending_room_pos)
 		return
 	if game.phase in ["combat", "world_boss"]:
