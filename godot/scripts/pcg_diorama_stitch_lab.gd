@@ -2451,6 +2451,7 @@ func _add_cardboard_wall(node_name: String, position: Vector3, yaw: float, room_
 	_add_to_visual_root(root, room_index, position)
 	toy_show_shell_nodes.append(root)
 	cardboard_shell_records.append({"kind": edge_kind, "edge_key": edge_key, "span": span, "node_name": node_name})
+	CardboardShellBuilder.apply_memphis_wall(root, room_index, yaw)
 	return root
 
 

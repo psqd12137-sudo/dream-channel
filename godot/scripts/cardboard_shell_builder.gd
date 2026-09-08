@@ -46,7 +46,30 @@ static func build_wall(kind: String, position: Vector3, yaw: float, color_index:
 	if normalized_kind == "cb_shelves":
 		_add_box(root, "Shelf", Vector3(0.0, height * 0.42, -0.075), Vector3(WALL_SPAN * 0.68, 0.045, 0.16), base_color.lightened(0.04))
 		_add_box(root, "ShelfLip", Vector3(0.0, height * 0.48, -0.15), Vector3(WALL_SPAN * 0.72, 0.035, 0.035), TAPE_COLOR, false)
+	apply_memphis_wall(root, color_index, yaw)
 	return root
+
+
+static func apply_memphis_wall(root: Node3D, color_index: int, yaw: float) -> void:
+	var panel := root.get_node_or_null("Panel") as MeshInstance3D
+	if panel == null or not panel.mesh is BoxMesh:
+		return
+	var colors := [Color("be513e"), Color("126b70"), Color("46316e"), Color("c98b18"), Color("194473"), Color("ad4c67")]
+	var accents := [Color("f2bb39"), Color("ef976b"), Color("eca0ae"), Color("285b83"), Color("f1ab43"), Color("8fd2c1")]
+	var index := posmod(color_index, colors.size())
+	var role := posmod(roundi(yaw / (PI * 0.5)) + color_index, 3)
+	var material := ShaderMaterial.new()
+	material.shader = preload("res://shaders/memphis_wall.gdshader")
+	material.set_shader_parameter("wall_color", Color("eadfc5") if role == 2 else colors[index])
+	material.set_shader_parameter("accent_color", accents[index])
+	material.set_shader_parameter("panel_size", Vector2(panel.mesh.size.x, panel.mesh.size.y))
+	material.set_shader_parameter("motif", role)
+	panel.material_override = material
+	# The wall motif replaces the old central tape strip, but keeps the frame.
+	var tape := root.get_node_or_null("TapeSeam") as Node3D
+	if tape != null:
+		tape.visible = false
+	root.set_meta("memphis_wall_role", role)
 
 
 static func build_doorway(position: Vector3, yaw: float, color_index: int) -> Node3D:

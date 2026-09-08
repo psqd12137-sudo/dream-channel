@@ -2353,6 +2353,7 @@ func _add_battle_shell_edge(shell: Node3D, edge: Dictionary, edge_index: int, is
 	var model := CardboardShellBuilder.build_doorway(Vector3.ZERO, 0.0, shell_color) if is_entrance else CardboardShellBuilder.build_wall(wall_kind, Vector3.ZERO, 0.0, shell_color)
 	if model != null:
 		model.name = "ShellAsset"
+		CardboardShellBuilder.apply_memphis_wall(model, shell_color, segment.rotation.y)
 		var source_height := CardboardShellBuilder.WALL_HEIGHT if is_entrance else CardboardShellBuilder.wall_height_for_kind(wall_kind)
 		model.scale = Vector3(
 			(BATTLE_CELL - BATTLE_SHELL_JUNCTION_WIDTH) / CardboardShellBuilder.WALL_SPAN,
