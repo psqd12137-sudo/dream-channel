@@ -1431,6 +1431,8 @@ func _apply_battle_footprint_to_combat() -> void:
 		var cell := raw_cell as Vector2i
 		combat.walls[cell] = true
 		combat.traps.erase(cell)
+	if (battle_room_context.get("footprint", []) as Array).size() == 5:
+		combat.arrange_walls_for_alternate_routes(battle_backstage_cells)
 	combat.connect_walkable_regions(battle_backstage_cells)
 	if battle_backstage_cells.has(combat.player_pos) or not combat.is_walkable(combat.player_pos):
 		combat.player_pos = _nearest_active_battle_cell(combat.player_pos)

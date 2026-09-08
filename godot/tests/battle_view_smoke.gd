@@ -64,7 +64,7 @@ func _run() -> void:
 	for _frame in range(24):
 		await process_frame
 	game.reset_battle_camera()
-	_check(game.combat.cols == 9 and game.combat.rows == 4, "hall must exercise the 9x4 arena")
+	_check(game.combat.cols == 9 and game.combat.rows == 9, "five-cell hall must provide a 3x3 combat patch per footprint cell")
 	for raw_overlay: Variant in game.battle_world_renderer.battle_intent_overlay_nodes.values():
 		var intent_overlay := raw_overlay as Control
 		var intent_badge: Panel = null
@@ -80,7 +80,7 @@ func _run() -> void:
 			_check(intent_icon.z_index == intent_value.z_index, "enemy intent icon and value must share one z layer")
 	var battle_root: Node = game.battle_board_root
 	var world_viewport: SubViewport = game.get_node("WorldLayer/WorldContainer/WorldViewport")
-	_check(_count_named_prefix(battle_root, "Cell_") == 36, "hall must render all 36 cells")
+	_check(_count_named_prefix(battle_root, "Cell_") == 81, "hall must render the expanded arena bounding grid")
 	_check(_all_cells_have_layers(battle_root), "each cell must have a base layer and logical walkable surface")
 	_check(_count_named_prefix(battle_root, "Height") == 0, "height must be communicated by furniture silhouettes rather than debug H labels")
 	var h1_cells := 0

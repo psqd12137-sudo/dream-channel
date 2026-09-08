@@ -2425,6 +2425,9 @@ func finish_event_trial(success: bool) -> void:
 
 
 func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
+	# Upgrade rooms loaded from older saves without mutating saved room data.
+	room = room.duplicate(true)
+	RoomFootprintCatalog.expand_large_arena(room)
 	combat = CombatRules.new()
 	combat_is_boss = bool(room.get("boss_room", false))
 	if combat_is_boss:

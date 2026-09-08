@@ -1828,6 +1828,55 @@ func start_player_turn() -> void:
 	_start_player_turn()
 
 
+func arrange_walls_for_alternate_routes(excluded: Dictionary) -> void:
+	var original: Array[Vector2i] = []
+	for cell: Vector2i in walls.keys():
+		if not excluded.has(cell):
+			original.append(cell)
+			walls.erase(cell)
+	for source: Vector2i in original:
+		var candidates: Array[Vector2i] = []
+		for y in range(rows):
+			for x in range(cols):
+				var cell := Vector2i(x, y)
+				if not is_walkable(cell) or excluded.has(cell) or cell == player_pos or enemy_at(cell) != null or portals.has(cell) or heights.has(cell):
+					continue
+				candidates.append(cell)
+		candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+			var da := absi(a.x - source.x) + absi(a.y - source.y)
+			var db := absi(b.x - source.x) + absi(b.y - source.y)
+			return da < db if da != db else (a.y < b.y or (a.y == b.y and a.x < b.x)))
+		for candidate: Vector2i in candidates:
+			walls[candidate] = true
+			if has_alternate_walk_routes():
+				break
+			walls.erase(candidate)
+
+
+func has_alternate_walk_routes() -> bool:
+	var floor_cells: Array[Vector2i] = []
+	for y in range(rows):
+		for x in range(cols):
+			if is_walkable(Vector2i(x, y)):
+				floor_cells.append(Vector2i(x, y))
+	if floor_cells.size() < 3:
+		return false
+	for blocked: Vector2i in floor_cells:
+		var start: Vector2i = floor_cells[0] if floor_cells[0] != blocked else floor_cells[1]
+		var seen := {start: true}
+		var pending: Array[Vector2i] = [start]
+		while not pending.is_empty():
+			var cell: Vector2i = pending.pop_front()
+			for direction: Vector2i in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
+				var next := cell + direction
+				if next != blocked and is_walkable(next) and not seen.has(next):
+					seen[next] = true
+					pending.append(next)
+		if seen.size() != floor_cells.size() - 1:
+			return false
+	return true
+
+
 func connect_walkable_regions(excluded: Dictionary) -> Array[Vector2i]:
 	# Connect floor islands through the fewest removable wall cells. Excluded
 	# footprint corners are never candidates, even when a shorter path exists.

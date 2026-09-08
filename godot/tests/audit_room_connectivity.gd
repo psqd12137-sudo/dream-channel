@@ -20,7 +20,13 @@ func _initialize():
 	# No scene-tree entry or run start: the user's save is never touched.
 	game.battle_world_renderer = load("res://scripts/channel_battle_world_renderer.gd").new(game)
 	var content = load("res://scripts/web_content_adapter.gd").new().build_content(20260908)
-	for room in content.rooms:
+	var audit_rooms: Array = content.rooms.duplicate()
+	audit_rooms.append(content.boss_room)
+	for room in audit_rooms:
+		var serialized := JSON.stringify(room)
+		load("res://scripts/room_footprint_catalog.gd").expand_large_arena(room)
+		if JSON.stringify(room) != serialized:
+			failures += 1 # Loading an upgraded arena must not scale it a second time.
 		var c = load("res://scripts/combat_rules.gd").new()
 		c.setup(room.arena, room.enemies, content.cards, [], 20260908, content.run_rules, [])
 		var before = reachable(c)
@@ -43,7 +49,24 @@ func _initialize():
 			var e = c.enemy_by_id(id)
 			if not seen.has(e.pos):
 				enemies.append(str(e.pos))
-		print("AUDIT ", JSON.stringify({"id":room.id,"name":room.name,"kind":room.kind,"size":[c.cols,c.rows],"raw_reachable":before.size(),"walkable":total,"reachable":seen.size(),"unreachable":unreachable,"enemies_cut_off":enemies,"spawn":str(c.player_pos)}))
+		var bottlenecks: Array = []
+		if int(room.get("room_size", 1)) == 5:
+			if total < 40:
+				failures += 1
+			var spawn: Vector2i = c.player_pos
+			for blocked: Vector2i in seen:
+				c.walls[blocked] = true
+				for candidate: Vector2i in seen:
+					if candidate != blocked:
+						c.player_pos = candidate
+						break
+				if reachable(c).size() != total - 1:
+					bottlenecks.append(str(blocked))
+				c.walls.erase(blocked)
+			c.player_pos = spawn
+			if not bottlenecks.is_empty():
+				failures += 1
+		print("AUDIT ", JSON.stringify({"id":room.id,"name":room.name,"kind":room.kind,"size":[c.cols,c.rows],"raw_reachable":before.size(),"walkable":total,"reachable":seen.size(),"unreachable":unreachable,"enemies_cut_off":enemies,"spawn":str(c.player_pos),"bottlenecks":bottlenecks}))
 		if not unreachable.is_empty() or not enemies.is_empty():
 			failures += 1
 		for cell in game.battle_backstage_cells:
