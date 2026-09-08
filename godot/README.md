@@ -37,7 +37,6 @@
 
 2026-09-09 增补：正式探索在第 2、4、7、9 次房间完成时（12 房流程，不计玄关的初始完成）逐步发现四个信号锚。锚点固定在对应房间的一个物理格上，显示“信号锚 · 决战时关闭”；探索期间不能拆除。位置随房间存档，终局优先继承，Boss 出生避开这些格子。旧探索存档按完成顺序补齐，已有终局存档保留旧生成与回放方式。其他局长按完成进度比例调整揭示节点。专项验证：`tests/exploration_anchors_regression.gd`。
 
-1. 正式主页以“织梦频道”为唯一产品名，提供“打开电视机”“新手教学”“接着看上集”、自定义种子播出和右上角可展开的后台测试入口；后台中的“战斗与 AI 测试”进入固定 Seed 的隔离测试台，其他“房间资产地编”可直接进入完整 3D 地编工具，并由右上角“返回标题”回到主页。
 2. 开局先从两张“行前预兆”中选择一张；玄关计入行程，初始进度为 `1/12`。
 3. 在等距 3D 屋面点击黄色扩建格；每次抽三张隐藏类型的房间票根，旋转并严格匹配双边门。
 4. 角色走进房间才揭示内容，完成事件或战斗后才增加行程。
@@ -46,7 +45,6 @@
 7. 战斗规则已支持任意数量 `N` 个敌人：每个敌人用稳定 `enemy_id` 管理独立状态，按出生/内容顺序依次行动；单体卡牌必须在多敌人场景中明确选择目标，群体、范围和随机目标牌会按实际受击敌人反馈。
 
 当前 AI 边界：敌人使用确定性的优先级规则状态机，并新增回合级战术黑板和基础闭环；敌人可按配置或特性分为 `hunter`、`flanker`、`controller`，每个敌方阶段重新感知、预订互不重叠的攻击位、由既有移动/攻击执行器完成行动，下一阶段再重新规划；HUD 意图预览与实际行动共用计划。视线、埋伏、最后目击点、巡逻、寻路、传送门、陷阱、高差、诱饵和特性攻击仍保持兼容。集火、保护、撤退、动态编队、诱导玩家走位和跨回合战术记忆尚未实现。正式内容快照仍主要使用旧的单敌人字段，多敌人内容通过房间的 `enemies[]` 数组接入。多敌人基础重构记录在仓库根 `.omc/plans/multi-enemy-refactor-plan.md`。
-7. 战斗与 AI 测试台现含单敌人、三角色、视野搜索、埋伏释放、四敌人窄口、传送门/陷阱/高差、八敌人压力和像素滤镜展示预设，支持手动战斗、AI 单步/连续观察、固定 Seed 重开和 AI 调试面板；测试不会结算正式奖励或写入正式存档。像素滤镜展示只作用于该测试关卡的 3D 世界视口，返回测试台或正式流程后恢复默认移轴滤镜。
 8. 节目后台仍保留横版跳跃收集、八数码拼图、3D 微缩搜物，以及直接复用正式黄色扩建格、票根选择、旋转与摆放规则的 Kenney 桌模 PCG 测试。
 
 详细的已完成/待补齐矩阵见 `WEB_GODOT_PARITY.md`。
@@ -161,11 +159,9 @@
 
 打开 `scenes/diorama_art_lab.tscn` 可以手调三组完全隔离的样板：`CurrentBaseline` 是现有软装与几何墙体，`KenneyMiniDungeon` 是桌面模型候选，`QuaterniusRuins` 是破损墙体、石拱门与资产高差候选。每个模型都是场景树里的真实节点，可直接在 Inspector 修改 Transform；这份场景不会被主游戏当作房间布局读取。
 
-运行项目后，在标题页展开“后台测试”，点击“桌模扩建 PCG”进入大房间节奏实验。该入口暂时把客厅、厨房、温室、卧室、育儿室升为三格房，把后院升为五格地标；正式开局仍使用原房型表。A/B/C 单格场景仍可直接运行 `scenes/diorama_art_lab.tscn` 检查资产；其中 Modular Ruins 只保留为历史对比，不再用于当前 PCG 桌模方案。
 
 ### PCG 连片箱庭实验
 
-`scenes/pcg_diorama_stitch_lab.tscn` 保留为自动 Seed 整体构图测试；玩家实际评审入口是标题页“后台测试 → 桌模扩建 PCG”。该入口直接复用 `explore/build` 交互，但启用隔离的 `large_room_mix_test_mode`：三选一按尺寸分桶，参考 `1,3,3,5,3,1,3,5,3,1,3,1` 的 12 房节奏，玄关后不连续推荐单格，并让同一多格房统一使用一种地板 finish。点击黄色扩建格、选择票根、旋转并摆放仍走真实 `room_rules`；实验过程不会写入正式存档，回到正式开局后房型覆盖和地板开关都会重置。
 
 当前 PCG 壳体分为四层：KayKit Dungeon 只保留木地板与高差楼梯；墙、纸盒门扇和转角柱改为程序化涂漆纸板；KayKit Furniture Bits 与 Quaternius 提供生活家具；每个已揭示房间额外生成演员走位胶带，以及场记板、假窗或播出灯牌之一。Modular Ruins 与 Mini Dungeon 石墙不再进入正式大地图链路。
 
@@ -186,7 +182,6 @@
 
 ### 正式地图手摆模拟
 
-打开 `scenes/pcg_hand_layout_lab.tscn`，只编辑场景树 `Layout` 下的房间节点；不要移动自动生成的 `GeneratedMap`。初始样板按正式摆放顺序提供 `1→5→3→1→3→5→1` 七间房；该场景现在作为编辑器构图辅助，实际游戏内旋转与摆放效果请使用标题页“桌模扩建 PCG”。
 
 1. 选中一个 `Layout/Rxx_*` 房间节点，使用 Godot 移动工具拖动 X/Z；生成器按 `1.55m` 为一格自动吸附到最近格。建议在编辑器顶部开启移动吸附并把步长设为 `1.55`。
 2. 绕 Y 轴旋转房间；生成器按最接近的 `90°` 读取朝向。建议把旋转吸附设为 `90°`。
@@ -238,7 +233,7 @@ $tests = @(
   "battle_view_smoke", "camera_orbit_regression", "camera_dolly_follow_regression", "display_mode_regression", "presentation_settings_regression",
   "ui_hit_regression", "combat_input_regression", "input_intent_regression",
   "card_system_regression", "intent_arrow_path_regression", "dynamic_effects_smoke", "quaternius_room_art_smoke",
-  "room_footprint_regression", "multi_room_build_regression", "large_room_mix_lab_regression",
+  "room_footprint_regression", "multi_room_build_regression", "layout_intuition_regression", "layout_intuition_scene_regression",
   "enemy_patrol_intent_regression", "enemy_vision_state_regression", "enemy_intent_snapshot_regression",
   "enemy_ai_tactical_regression", "enemy_ai_cycle_regression",
   "player_movement_range_regression",
@@ -248,10 +243,7 @@ $tests = @(
   "multi_enemy_state_regression", "multi_enemy_turn_regression",
   "multi_enemy_pathing_regression", "multi_enemy_targeting_regression",
   "multi_enemy_presentation_regression", "multi_enemy_visibility_regression", "multi_enemy_stress_regression",
-  "combat_test_catalog_regression", "pixel_filter_regression", "combat_test_entry_regression",
-  "combat_test_isolation_regression", "combat_test_observer_regression",
-  "combat_test_ai_overlay_regression",
-  "completion_labs_smoke", "diorama_art_lab_smoke", "pcg_diorama_stitch_smoke",
+  "completion_labs_smoke", "diorama_art_lab_smoke",
   "pcg_hand_layout_lab_smoke", "portal_height_build_preview_regression",
   "presentation_animation_regression", "home_video_regression",
   "run_progression_save_regression", "kenney_formal_build_flow_regression",
@@ -279,7 +271,6 @@ if ($failed.Count -gt 0) {
 - `ui_hit_regression.gd` 覆盖按钮命中、phase 切换重排 world rect、全屏/分辨率切换后的布局与命中。
 - 个别依赖 `user://` 写入的测试（如 `run_progression_save_regression`、`formal_build_promoted_regression`）在无用户目录写入权限的受限环境会失败，属环境限制；正常开发机可直接运行。
 
-截图脚本会把视觉校验图写入本机 `artifacts/`；该目录与 `.godot/` 一样属于可再生成产物，不提交到仓库。`capture_completion_pass.gd` 同时覆盖关闭/展开后台测试的主页，`capture_combat_test_mode.gd` 覆盖测试台和三角色手动战斗，`capture_combat_ai_observer.gd` 覆盖 AI 单步观察，`capture_progression_ui.gd` 覆盖预兆双卡和奖励三卡，`capture_combat_selection.gd` 覆盖战斗选牌状态，`capture_large_room_mix_lab.gd` 覆盖大房间票根、落位和进入后的统一地板效果。
 
 ## 近期改动（2026-08-21）
 
@@ -307,7 +298,6 @@ if ($failed.Count -gt 0) {
 ### 正式 UI 视觉整理
 
 - 主页标题统一为“织梦频道”，副标题和开局文案改为荒诞儿童玩具秀、纸盒微缩片场语义；EXE hash、`3D BRIDGE`、PCG/KayKit/ROT 等开发信息不再进入正式流程。
-- 顶栏收至 72px，探索右栏按“正在播出 / 本集进度 / 随身预兆 / 导播记录”分层；PCG 诊断只在“桌模扩建 PCG”后台入口显示。
 - 建造阶段改为地图下方全宽操作带，三张票根显示中文房型、门型和方向，并为旋转、摆放、取消保留独立命令区。
 - 预兆、节目奖励和战斗手牌改为独立卡面层级；奖励卡区分新道具、常驻预兆和演员成长，战斗卡区分放置、预备、药物和技巧，并提供费用不足遮罩。
 - `battle_view_smoke.gd` 约束战斗棋盘不侵入手牌安全区；视觉截图新增正式主页与开播预兆状态。
@@ -337,3 +327,14 @@ if ($failed.Count -gt 0) {
 # 正式探索跨层操作（2026-09-09）
 
 楼梯不再只存在于 Boss 测试地图。完成顺序达到第 2 / 第 5 次后，在符合条件的已完成地面层房间分别发现二楼 / 地下室入口（不计初始玄关；若当时在其他楼层，等待后续完成的地面层房间）。走到楼梯标记所在格，点击右侧“扩建二楼入口”或“扩建地下室入口”，从正常房间候选中建造另一层第一间房，再点击楼梯按钮进入。建造计入本局房间额度；取消不会留下连接。此后可以往返、继续扩建该层，镜头自动跟随。楼梯和房间楼层随局存档，最终 Boss 战继承连接。旧探索存档按完成记录补出入口。专项测试：`tests/exploration_floors_regression.gd`。
+
+
+## 布局直觉测试区（2026-09-09）
+
+标题 → 后台测试 → 布局直觉测试区。也可单独运行 `scenes/layout_intuition_lab.tscn`。
+
+独立沙盒复用正式 RoomRules 和微缩房间渲染，不改变正式房型表，也不写续玩存档。鼠标悬停预览，左键摆放；选 1/3/5 格模块，R 旋转，中键平移，滚轮缩放，可撤销和重置。金色接点表示门能连接。起点到锚点的路线按同一门连接图计算；点击“模拟封路”对比补缺口前后的可达性。这是静态动线验证，不是新 Boss 战，没有美观分数或属性奖励；候选为固定实验模块，尚未实现自适应推荐、三层生成或自动战报。
+
+已删除战斗/AI 测试菜单、专用目录/会话脚本/预设及对应专用测试，删除旧扩建 PCG 游戏内启动流程和自动连片独立场景。正式战斗、AI、资产地编与 Boss 独立试玩保留。`pcg_hand_layout_lab.gd`、`pcg_diorama_stitch_lab.gd` 和手摆场景仍被正式房间渲染引用，属于共用代码，未删除。通用显示与回合测试改为直接准备房间，不依赖已删除菜单。
+
+验证：`layout_intuition_regression.gd`（回路、封路、撤销、规格）与 `layout_intuition_scene_regression.gd`（场景、正式存档不变；加 `-- --capture` 输出截图）。测试日志应使用独立的 `--log-file`，不要覆盖玩家运行日志。

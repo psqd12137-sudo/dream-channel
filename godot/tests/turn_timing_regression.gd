@@ -14,7 +14,11 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	game.go_home()
-	game.start_kenney_build_lab()
+	game.reset_run(1337)
+	game.large_room_mix_test_mode = true
+	game._apply_large_room_test_catalog()
+	game.phase = "explore"
+	game.build_house_world()
 	await process_frame
 	game.start_combat_lab("hall")
 	await process_frame

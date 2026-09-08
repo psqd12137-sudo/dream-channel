@@ -5,7 +5,6 @@ extends RefCounted
 ## The host owns the run; this module owns only lab/test flows.
 
 const DIORAMA_ART_LAB = preload("res://scenes/diorama_art_lab.tscn")
-const PCG_DIORAMA_STITCH_LAB = preload("res://scenes/pcg_diorama_stitch_lab.tscn")
 const PCG_HAND_LAYOUT_LAB = preload("res://scenes/pcg_hand_layout_lab.tscn")
 const ASSET_EDITOR_SCENE_PATH := "res://scenes/asset_editor_3d.tscn"
 const COL_INK := Color("161b24")
@@ -42,12 +41,6 @@ var host = null
 var content:
 	get: return host.content
 	set(value): host.content = value
-var test_catalog:
-	get: return host.test_catalog
-	set(value): host.test_catalog = value
-var test_session:
-	get: return host.test_session
-	set(value): host.test_session = value
 var run_seed:
 	get: return host.run_seed
 	set(value): host.run_seed = value
@@ -63,15 +56,6 @@ var player_speed:
 var run_deck: Array[String]:
 	get: return host.run_deck
 	set(value): host.run_deck = value
-var test_saved_state:
-	get: return host.test_saved_state
-	set(value): host.test_saved_state = value
-var test_focused_enemy_id:
-	get: return host.test_focused_enemy_id
-	set(value): host.test_focused_enemy_id = value
-var test_combat_active:
-	get: return host.test_combat_active
-	set(value): host.test_combat_active = value
 var combat_presentation_lab:
 	get: return host.combat_presentation_lab
 	set(value): host.combat_presentation_lab = value
@@ -84,9 +68,6 @@ var status_message:
 var animation_busy:
 	get: return host.animation_busy
 	set(value): host.animation_busy = value
-var test_mode_selected_id:
-	get: return host.test_mode_selected_id
-	set(value): host.test_mode_selected_id = value
 var battle_actor_root:
 	get: return host.battle_actor_root
 	set(value): host.battle_actor_root = value
@@ -105,12 +86,6 @@ var enemy_nodes:
 var combat:
 	get: return host.combat
 	set(value): host.combat = value
-var test_last_events: Array[Dictionary]:
-	get: return host.test_last_events
-	set(value): host.test_last_events = value
-var test_enemy_phase_pending:
-	get: return host.test_enemy_phase_pending
-	set(value): host.test_enemy_phase_pending = value
 var home_tests_open:
 	get: return host.home_tests_open
 	set(value): host.home_tests_open = value
@@ -339,170 +314,6 @@ func toggle_home_tests() -> void:
 	_refresh_hud()
 
 
-func open_combat_test_mode() -> bool:
-	if phase != "home":
-		return false
-	if test_catalog.scenarios.is_empty() and not test_catalog.load_from_path():
-		status_message = "战斗测试目录加载失败：%s" % "; ".join(test_catalog.errors)
-		_refresh_hud()
-		return false
-	_set_home_video(false)
-	home_tests_open = false
-	test_combat_active = false
-	test_session.clear()
-	test_mode_selected_id = test_catalog.first_id()
-	test_focused_enemy_id = ""
-	world_container.visible = false
-	house_root.visible = false
-	battle_root.visible = false
-	phase = "test_combat_menu"
-	status_message = "选择一个固定场景，观察房间战斗和敌人 AI。"
-	_refresh_hud()
-	return true
-
-
-func select_combat_test_scenario(scenario_id: String) -> void:
-	if phase != "test_combat_menu":
-		return
-	if not test_catalog.get_scenario(scenario_id).is_empty():
-		test_mode_selected_id = scenario_id
-		status_message = "已选择测试场景：%s。" % str(test_catalog.get_scenario(scenario_id).get("name", scenario_id))
-		_refresh_hud()
-
-
-func start_test_combat(mode: String = "manual") -> bool:
-	var scenario: Dictionary = test_catalog.get_scenario(test_mode_selected_id)
-	if scenario.is_empty():
-		return false
-	test_saved_state = {
-		"run_seed": run_seed,
-		"player_hp": player_hp,
-		"player_max_hp": player_max_hp,
-		"player_speed": player_speed,
-		"run_deck": run_deck.duplicate(),
-	}
-	var run_rules: Dictionary = scenario.get("run_rules", {})
-	player_hp = int(run_rules.get("player_hp", 30))
-	player_max_hp = player_hp
-	player_speed = int(run_rules.get("base_speed", 3))
-	run_seed = int(scenario.get("seed", run_seed))
-	run_deck.assign(scenario.get("deck", ["jab", "guard", "brace", "fling"]))
-	test_session.begin(scenario, mode)
-	var test_enemies: Array = (scenario.get("room", {}) as Dictionary).get("enemies", [])
-	test_focused_enemy_id = str(test_enemies[0].get("id", "")) if not test_enemies.is_empty() else ""
-	test_combat_active = true
-	host.apply_test_visual_filter(scenario.get("visual", {}))
-	start_combat((scenario.get("room", {}) as Dictionary).duplicate(true))
-	status_message = "测试场景：%s。" % str(scenario.get("description", scenario.get("name", "")))
-	_refresh_hud()
-	return true
-
-
-func restart_test_combat() -> bool:
-	if not test_combat_active and phase != "combat":
-		return false
-	var mode: String = test_session.mode if test_session.active else "manual"
-	if phase == "combat":
-		return_to_combat_test_menu()
-	return start_test_combat(mode)
-
-
-func return_to_combat_test_menu() -> void:
-	if not test_combat_active:
-		return
-	host.clear_test_visual_filter()
-	_cancel_dynamic_effect()
-	if active_motion_tween != null and active_motion_tween.is_valid():
-		active_motion_tween.kill()
-	active_motion_tween = null
-	animation_busy = false
-	active_animation_kind = ""
-	enemy_nodes.clear()
-	combat = null
-	_restore_test_state()
-	test_combat_active = false
-	test_last_events.clear()
-	test_focused_enemy_id = ""
-	test_enemy_phase_pending = false
-	test_session.paused = true
-	world_container.visible = false
-	house_root.visible = false
-	battle_root.visible = false
-	phase = "test_combat_menu"
-	status_message = "测试战斗已结束；可以重开同一场景或选择其他预设。"
-	_refresh_hud()
-
-
-func _restore_test_state() -> void:
-	if test_saved_state.is_empty():
-
-		return
-	run_seed = int(test_saved_state.get("run_seed", run_seed))
-	player_hp = int(test_saved_state.get("player_hp", player_hp))
-	player_max_hp = int(test_saved_state.get("player_max_hp", player_max_hp))
-	player_speed = int(test_saved_state.get("player_speed", player_speed))
-	run_deck.assign(test_saved_state.get("run_deck", []))
-
-
-func _update_test_observer(_delta: float) -> void:
-	if not test_session.active or test_session.mode != "observer_auto" or not test_session.can_advance():
-		return
-	if animation_busy or combat == null or combat.outcome != "":
-		return
-	if combat.pending_player_turn:
-		return
-	_advance_test_player_script()
-	end_combat_turn()
-
-
-func _advance_test_player_script() -> void:
-	if combat == null or combat.energy <= 0:
-		return
-	var observer: Dictionary = test_session.scenario.get("observer", {})
-	var script_id := str(observer.get("player_script", "stationary"))
-	if script_id == "stationary":
-		return
-	var directions: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
-	var ordered: Array[Vector2i] = []
-	var offset: int = test_session.round_count % directions.size()
-	for index in range(directions.size()):
-		ordered.append(directions[(index + offset) % directions.size()])
-	for direction in ordered:
-		var target: Vector2i = combat.player_pos + direction
-		if not combat.can_move_player(target):
-			continue
-		if script_id == "safe_random_walk" and combat.enemy_at(target, false) != null:
-			continue
-		combat.move_player(target)
-		return
-
-
-func advance_test_observer() -> void:
-	if not test_combat_active or not test_session.active or test_session.mode != "observer_step":
-		return
-	if animation_busy or combat == null or combat.outcome != "" or combat.pending_player_turn:
-		return
-	test_session.paused = false
-	_advance_test_player_script()
-	end_combat_turn()
-	test_session.paused = true
-
-
-func toggle_test_observer() -> void:
-	if not test_combat_active or not test_session.active or test_session.mode != "observer_auto":
-		return
-	test_session.paused = not test_session.paused
-	status_message = "AI 连续观察已%s。" % ("暂停" if test_session.paused else "继续")
-	_refresh_hud()
-
-
-func focus_test_enemy(enemy_id: String) -> void:
-	if not test_combat_active or combat == null or combat.enemy_by_id(enemy_id) == null:
-		return
-	test_focused_enemy_id = enemy_id
-	_refresh_hud()
-
-
 func open_asset_editor() -> bool:
 	if phase != "home":
 		return false
@@ -530,23 +341,6 @@ func start_combat_lab(room_id: String = "hall") -> void:
 	combat.hand.assign(["jab", "guard", "brace", "fling"])
 	status_message = "意图实验：未揭示怪物最多埋伏一拍，随后会巡逻；蓝色编号显示逐步路径。"
 	build_battle_world()
-	_refresh_hud()
-
-
-func start_kenney_build_lab() -> void:
-	_set_home_video(false)
-	kenney_build_lab_mode = true
-	reset_run(run_seed + 101)
-	show_house_diagnostics = true
-
-	large_room_mix_test_mode = true
-	_apply_large_room_test_catalog()
-	camera.environment = _make_visual_polish_environment()
-	phase = "explore"
-	omen_options.clear()
-	status_message = "大房间节奏实验：三选一优先展示不同尺寸；生活房升格，整房统一地板，正式开局暂不受影响。"
-	build_house_world()
-	_set_house_camera()
 	_refresh_hud()
 
 
@@ -615,31 +409,6 @@ func demo_character_hurt() -> void:
 		duration = presenter.preview_model_animation("hurt", 1.25)
 	status_message = "受击：完整预览 FBX preset_biped_afraid（%.1f 秒），不改变生命值。" % duration
 	_refresh_hud()
-
-
-func start_pcg_diorama_lab() -> void:
-	_prepare_lab("lab_pcg_diorama")
-	var generator: Node3D = PCG_DIORAMA_STITCH_LAB.instantiate() as Node3D
-	generator.name = "PcgDioramaStitch"
-	generator.generation_seed = pcg_diorama_seed
-	lab_root.add_child(generator)
-	_set_pcg_diorama_camera(generator)
-	status_message = "先看 R00·1格 整块接入 R01·5格，再继续拼 3/1/5 格；编号保留房间归属，门洞标记跨房连接，整房依次落位。"
-	_refresh_hud()
-
-
-func reroll_pcg_diorama() -> void:
-	if phase != "lab_pcg_diorama":
-		return
-	var generator: Node = lab_root.get_node_or_null("PcgDioramaStitch")
-	if generator == null:
-		return
-	pcg_diorama_seed += 1
-	generator.regenerate(pcg_diorama_seed)
-	_set_pcg_diorama_camera(generator)
-	status_message = "已换 Seed %d 并重播建造：%d 房 / %d 格 / %d 门洞 / %d 外墙 / %d 楼梯。" % [pcg_diorama_seed, generator.rooms.size(), generator.occupancy.size(), generator.doorway_count, generator.external_wall_count, generator.stair_count]
-	_refresh_hud()
-
 
 
 func start_pcg_hand_layout_lab() -> void:

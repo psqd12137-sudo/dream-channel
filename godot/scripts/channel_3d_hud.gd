@@ -98,35 +98,15 @@ const HOME_SEED_INPUT_RECT := Rect2(762, 616, 292, 38)
 const HOME_SEED_START_RECT := Rect2(762, 666, 138, 38)
 const HOME_SEED_COPY_RECT := Rect2(916, 666, 138, 38)
 const HOME_TESTS_RECT := Rect2(1060, 20, 172, 34)
-const HOME_TEST_COMBAT_RECT := Rect2(780, 120, 205, 42)
+const HOME_TEST_LAYOUT_RECT := Rect2(780, 120, 205, 42)
 const HOME_TEST_SIDE_RECT := Rect2(997, 120, 205, 42)
 const HOME_TEST_PUZZLE_RECT := Rect2(780, 174, 205, 42)
 const HOME_TEST_SEARCH_RECT := Rect2(997, 174, 205, 42)
 const HOME_TEST_CHASE_RECT := Rect2(780, 228, 205, 42)
-const HOME_TEST_DIORAMA_RECT := Rect2(997, 228, 205, 42)
-const HOME_TEST_CHARACTER_ANIMATION_RECT := Rect2(780, 282, 205, 42)
-const HOME_TEST_ASSET_EDITOR_RECT := Rect2(997, 282, 205, 42)
-const HOME_TEST_HOST_RECT := Rect2(780, 336, 422, 42)
-const TEST_MENU_SCENARIO_RECT := Rect2(56, 156, 430, 54)
-const TEST_MENU_MANUAL_RECT := Rect2(780, 548, 132, 48)
-const TEST_MENU_STEP_RECT := Rect2(922, 548, 132, 48)
-const TEST_MENU_OBSERVER_RECT := Rect2(1064, 548, 132, 48)
-const TEST_MENU_BACK_RECT := Rect2(1040, 704, 192, 40)
+const HOME_TEST_CHARACTER_ANIMATION_RECT := Rect2(997, 228, 205, 42)
+const HOME_TEST_ASSET_EDITOR_RECT := Rect2(780, 282, 205, 42)
+const HOME_TEST_HOST_RECT := Rect2(997, 282, 205, 42)
 const TEST_COMBAT_RETURN_RECT := Rect2(1040, 18, 192, 34)
-const TEST_AI_PANEL_RECT := Rect2(24, 214, 360, 390)
-const SHOW_TEST_AI_PANEL := false
-const TEST_AI_STEP_RECT := Rect2(36, 556, 104, 34)
-const TEST_AI_PAUSE_RECT := Rect2(148, 556, 104, 34)
-const TEST_AI_RESTART_RECT := Rect2(260, 556, 104, 34)
-const TEST_AI_ROW_RECT := Rect2(36, 394, 336, 18)
-const TEST_AI_ROW_STEP := 18.0
-const TEST_RANGE_PANEL_RECT := Rect2(24, 452, 340, 168)
-const TEST_RANGE_PANEL_COLLAPSED_RECT := Rect2(24, 452, 190, 34)
-const TEST_RANGE_PANEL_HEADER_RECT := Rect2(24, 452, 340, 34)
-const TEST_RANGE_PLAYER_REACH_RECT := Rect2(36, 508, 150, 32)
-const TEST_RANGE_PLAYER_STEPS_RECT := Rect2(198, 508, 150, 32)
-const TEST_RANGE_ENEMY_RANGE_RECT := Rect2(36, 574, 150, 32)
-const TEST_RANGE_ENEMY_ARROW_RECT := Rect2(198, 574, 150, 32)
 const HOME_RESOLUTION_RECT := Rect2(76, 714, 180, 36)
 const HOME_WINDOW_MODE_RECT := Rect2(270, 714, 102, 36)
 const HOME_DOF_RECT := Rect2(386, 714, 112, 36)
@@ -181,7 +161,6 @@ var board_left_dragged := false
 var board_left_distance := 0.0
 var settings_panel_open := false
 var settings_slider_dragging := ""
-var test_range_panel_open := true
 
 
 func _ready() -> void:
@@ -477,9 +456,6 @@ func _draw() -> void:
 	draw_set_transform(ui_offset, 0.0, Vector2(ui_scale, ui_scale))
 	if game.phase == "home":
 		_draw_home()
-	elif game.phase == "test_combat_menu":
-		_draw_top_bar()
-		_draw_test_combat_menu()
 	elif game.phase == "reward":
 		_draw_top_bar()
 		_draw_reward_modal()
@@ -529,7 +505,7 @@ func _draw_top_bar() -> void:
 	if not game.phase.begins_with("lab_"):
 		_draw_button(SETTINGS_TOGGLE_RECT, "设置", BLUE, TEXT)
 	if not game.phase.begins_with("lab_"):
-		_draw_button(RESET_RECT, "返回测试台" if game.test_combat_active else "回到标题", MAGENTA if not game.test_combat_active else TEAL, TEXT)
+		_draw_button(RESET_RECT, "回到标题", MAGENTA, TEXT)
 
 
 func _draw_combat_turn_order() -> void:
@@ -613,12 +589,11 @@ func _draw_home() -> void:
 	if game.home_tests_open:
 		_draw_ticket_panel(Rect2(764, 96, 454, 296), Color("17151cf2"), MAGENTA)
 		_label("节目后台 · 仅供开发检查", Vector2(780, 120), 10, MUTED)
-		_draw_button(HOME_TEST_COMBAT_RECT, "战斗与 AI 测试", MAGENTA, TEXT)
+		_draw_button(HOME_TEST_LAYOUT_RECT, "布局直觉测试区", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_SIDE_RECT, "WASD 横版手感", TEAL, TEXT)
 		_draw_button(HOME_TEST_PUZZLE_RECT, "八数码拼图", GOLD, INK)
 		_draw_button(HOME_TEST_SEARCH_RECT, "3D 微缩搜物", Color("7863a5"), TEXT)
 		_draw_button(HOME_TEST_CHASE_RECT, "警察抓小偷", RED, TEXT)
-		_draw_button(HOME_TEST_DIORAMA_RECT, "桌模扩建 PCG", Color("5967a8"), TEXT)
 		_draw_button(HOME_TEST_CHARACTER_ANIMATION_RECT, "角色动画检查", Color("3e8b78"), TEXT)
 		_draw_button(HOME_TEST_ASSET_EDITOR_RECT, "房间资产地编", Color("c98a37"), TEXT)
 		_draw_button(HOME_TEST_HOST_RECT, "大地图 Boss · 独立试玩", MAGENTA, TEXT)
@@ -697,48 +672,6 @@ func _update_settings_slider(point: Vector2) -> void:
 	queue_redraw()
 
 
-func _draw_test_combat_menu() -> void:
-	draw_rect(Rect2(0, 72, DESIGN_SIZE.x, DESIGN_SIZE.y - 72), Color("101a22"), true)
-	draw_rect(Rect2(0, 72, DESIGN_SIZE.x, 6), MAGENTA, true)
-	_display_label("战斗与 AI 测试台", Vector2(56, 126), 30, GOLD)
-	_label("复用正式房间战斗；固定 Seed 可重复，测试不会结算奖励或改写正式存档。", Vector2(58, 146), 12, MUTED)
-	_draw_ticket_panel(Rect2(44, 174, 470, 510), Color("17151cf5"), TEAL)
-	_label("测试场景", Vector2(66, 204), 16, TEXT)
-	for index in range(game.test_catalog.scenarios.size()):
-		var scenario: Dictionary = game.test_catalog.scenarios[index]
-		var rect := Rect2(TEST_MENU_SCENARIO_RECT.position + Vector2(0, float(index) * 62.0), TEST_MENU_SCENARIO_RECT.size)
-		if rect.position.y + rect.size.y > 664.0:
-			break
-		var selected: bool = str(scenario.get("id", "")) == game.test_mode_selected_id
-		draw_rect(rect, Color("2e4650") if selected else Color("222d36"), true)
-		draw_rect(rect, GOLD if selected else Color("53636a"), false, 2.0)
-		_label(str(scenario.get("name", scenario.get("id", ""))), rect.position + Vector2(14, 23), 14, GOLD if selected else TEXT)
-		var scenario_room: Dictionary = scenario.get("room", {})
-		_label("%s · %d 敌人" % [str(scenario.get("category", "combat")), (scenario_room.get("enemies", []) as Array).size()], rect.position + Vector2(14, 43), 10, MUTED)
-	var selected_scenario: Dictionary = game.test_catalog.get_scenario(game.test_mode_selected_id)
-	_draw_ticket_panel(Rect2(548, 174, 684, 510), Color("17151cf5"), MAGENTA)
-	_label("场景说明", Vector2(574, 208), 16, TEXT)
-	_label(str(selected_scenario.get("name", "未选择")), Vector2(574, 244), 24, GOLD)
-	_draw_wrapped(str(selected_scenario.get("description", "请选择左侧场景。")), Vector2(574, 270), 570, 14, MUTED)
-	var room: Dictionary = selected_scenario.get("room", {})
-	var arena: Dictionary = room.get("arena", {})
-	var observer: Dictionary = selected_scenario.get("observer", {})
-	_label("房间：%s" % str(room.get("name", "—")), Vector2(574, 342), 13, TEXT)
-	_label("棋盘：%d × %d    敌人：%d    Seed：%s" % [int(arena.get("cols", 0)), int(arena.get("rows", 0)), (room.get("enemies", []) as Array).size(), str(selected_scenario.get("seed", "—"))], Vector2(574, 366), 12, MUTED)
-	_label("观察脚本：%s    上限：%d 回合" % [str(observer.get("player_script", "stationary")), int(observer.get("max_rounds", 10))], Vector2(574, 390), 12, MUTED)
-	_label("敌人编组", Vector2(574, 438), 13, TEXT)
-	var enemy_names: Array[String] = []
-	for raw_enemy in room.get("enemies", []):
-		var enemy: Dictionary = raw_enemy
-		enemy_names.append("%s[%s]" % [str(enemy.get("name", enemy.get("id", ""))), str(enemy.get("behavior_role", "auto"))])
-	_draw_wrapped("、".join(enemy_names), Vector2(574, 462), 570, 12, Color("d9ede5"))
-	_label("启动方式", Vector2(574, 524), 13, TEXT)
-	_draw_button(TEST_MENU_MANUAL_RECT, "手动战斗", MAGENTA, TEXT)
-	_draw_button(TEST_MENU_STEP_RECT, "AI 单步", GOLD, INK)
-	_draw_button(TEST_MENU_OBSERVER_RECT, "AI 连续观察", TEAL, TEXT)
-	_draw_button(TEST_MENU_BACK_RECT, "返回标题", Color("394852"), TEXT)
-
-
 func _draw_lab_hud() -> void:
 	_draw_button(LAB_EXIT_RECT, "回到标题", Color("394852"), TEXT)
 	if game.phase == "lab_sideview":
@@ -751,17 +684,11 @@ func _draw_lab_hud() -> void:
 		_draw_coach(Rect2(60, 660, 1160, 96), "搜物实验", game.status_message)
 	elif game.phase == "lab_diorama":
 		_label("美术增强对比 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
-		_draw_button(LAB_SWITCH_RECT, "查看 PCG 连片", Color("5967a8"), TEXT)
+
 		_draw_coach(Rect2(60, 660, 1160, 96), "灯光与空间层次", game.status_message)
-	elif game.phase == "lab_pcg_diorama":
-		_label("PCG 连片箱庭 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
-		_draw_button(LAB_REROLL_RECT, "换一个 Seed", GOLD, INK)
-		_draw_button(LAB_HAND_RECT, "查看手摆模拟", Color("3e8b78"), TEXT)
-		_draw_button(LAB_SWITCH_RECT, "查看 A/B/C 单格", Color("5967a8"), TEXT)
-		_draw_coach(Rect2(60, 660, 1160, 96), "拼接规则", game.status_message)
 	elif game.phase == "lab_hand_diorama":
 		_label("正式地图手摆模拟 · 中键环视 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
-		_draw_button(LAB_REROLL_RECT, "返回 PCG", GOLD, INK)
+
 		_draw_button(LAB_SWITCH_RECT, "查看 A/B/C 单格", Color("5967a8"), TEXT)
 		_draw_coach(Rect2(60, 660, 1160, 96), "手摆工作流", game.status_message)
 	elif game.phase == "lab_puzzle":
@@ -1030,10 +957,6 @@ func _draw_combat_hud() -> void:
 		_draw_boss_control_panel()
 	if game.phase == "world_boss":
 		_draw_world_stair_action()
-	if game.test_combat_active:
-		_draw_test_range_panel()
-	if game.test_combat_active and SHOW_TEST_AI_PANEL:
-		_draw_test_ai_panel()
 	_draw_move_controls()
 
 	# The battle viewport is the visual base layer. This small translucent
@@ -1118,8 +1041,8 @@ func _draw_combat_hud() -> void:
 			_draw_button(CARD_CANCEL_RECT, "取消选牌", Color("4f5960"), TEXT)
 		_draw_button(END_TURN_RECT, "回合结束", GOLD, INK)
 	else:
-		var result_label := "查看结局" if game.phase == "world_boss" else "返回测试台" if game.test_combat_active else "返回节目布景" if combat.outcome == "victory" else "重开本集"
-		var result_color := TEAL if game.test_combat_active else GREEN if combat.outcome == "victory" else RED
+		var result_label := "查看结局" if game.phase == "world_boss" else "返回节目布景" if combat.outcome == "victory" else "重开本集"
+		var result_color := GREEN if combat.outcome == "victory" else RED
 		_draw_button(RETURN_RECT, result_label, result_color, TEXT)
 
 
@@ -1239,63 +1162,6 @@ func _tile_preview_status(statuses: Array[Dictionary]) -> Dictionary:
 	return statuses[0] if not statuses.is_empty() else {}
 
 
-func _draw_test_ai_panel() -> void:
-	var combat = game.combat
-	draw_rect(Rect2(TEST_AI_PANEL_RECT.position + Vector2(5, 6), TEST_AI_PANEL_RECT.size), Color("050a0ecc"), true)
-	draw_rect(TEST_AI_PANEL_RECT, Color("14232bf5"), true)
-	draw_rect(TEST_AI_PANEL_RECT, TEAL, false, 2.0)
-	_label("AI 调试 · %s" % str(game.test_session.scenario_id), TEST_AI_PANEL_RECT.position + Vector2(12, 23), 13, GOLD)
-	_label("模式：%s    回合：%d/%d" % [_test_mode_label(), game.test_session.round_count, game.test_session.max_rounds], TEST_AI_PANEL_RECT.position + Vector2(12, 45), 10, MUTED)
-	_label("范围：敌方·%s（1）  玩家可达·%s（2）" % [game.battle_world_renderer.enemy_range_display_mode_label(), game.battle_world_renderer.player_range_display_label()], TEST_AI_PANEL_RECT.position + Vector2(12, 60), 10, GOLD)
-	var focused = combat.enemy_by_id(game.test_focused_enemy_id)
-	if focused != null:
-		_label("关注：%s · %s/%s" % [focused.id, focused.ai_role, focused.ai_state], TEST_AI_PANEL_RECT.position + Vector2(12, 82), 11, TEXT)
-		_label("视线：%s  最后目击：%s" % ["有" if focused.sees_player else "无", str(focused.last_seen)], TEST_AI_PANEL_RECT.position + Vector2(12, 102), 10, MUTED)
-		_label("目标：%s  攻击位：%s" % [str(focused.tactical_goal), str(focused.tactical_reserved_cell)], TEST_AI_PANEL_RECT.position + Vector2(12, 120), 10, MUTED)
-		# 理由区限制行数，给下方敌人列表留出稳定的独立空间。
-		_draw_wrapped_lines(str(focused.ai_reason), TEST_AI_PANEL_RECT.position + Vector2(12, 128), 332, 10, Color("d9ede5"), 4)
-	var plans: Dictionary = combat.preview_all_tactical_plans()
-	for index in range(combat.enemy_order.size()):
-		var enemy_id := str(combat.enemy_order[index])
-		var state = combat.enemy_by_id(enemy_id)
-		if state == null:
-			continue
-		var row := Rect2(TEST_AI_ROW_RECT.position + Vector2(0, float(index) * TEST_AI_ROW_STEP), TEST_AI_ROW_RECT.size)
-		if row.position.y + row.size.y > 548.0:
-			break
-		var selected: bool = enemy_id == game.test_focused_enemy_id
-		draw_rect(row, Color("31525a") if selected else Color("1d3038"), true)
-		draw_rect(row, Color("e6d34c") if selected else Color("3b5d64"), false, 1.0)
-		var plan: Dictionary = plans.get(enemy_id, {})
-		_label("%s  %s/%s  → %s" % [enemy_id, str(plan.get("role", state.ai_role)), str(plan.get("state", state.ai_state)), str(plan.get("goal", state.tactical_goal))], row.position + Vector2(8, 17), 9, TEXT)
-	_draw_button(TEST_AI_STEP_RECT, "单步" if game.test_session.mode == "observer_step" else "手动", GOLD if game.test_session.mode == "observer_step" else Color("394852"), INK if game.test_session.mode == "observer_step" else TEXT)
-	_draw_button(TEST_AI_PAUSE_RECT, "继续" if game.test_session.paused else "暂停", TEAL, TEXT)
-	_draw_button(TEST_AI_RESTART_RECT, "重开", MAGENTA, TEXT)
-
-
-func _draw_test_range_panel() -> void:
-	var rect := TEST_RANGE_PANEL_RECT if test_range_panel_open else TEST_RANGE_PANEL_COLLAPSED_RECT
-	_draw_ticket_panel(rect, Color("14232bf5"), TEAL)
-	_label("测试显示", rect.position + Vector2(12, 23), 12, GOLD)
-	_label("收起" if test_range_panel_open else "展开", rect.position + Vector2(rect.size.x - 48, 23), 10, MUTED)
-	if not test_range_panel_open:
-		return
-	_label("玩家", rect.position + Vector2(12, 49), 10, MUTED)
-	_draw_button(TEST_RANGE_PLAYER_REACH_RECT, "可达：%s" % game.battle_world_renderer.player_range_display_label(), TEAL if game.battle_world_renderer.player_range_display_enabled else Color("394852"), TEXT)
-	_draw_button(TEST_RANGE_PLAYER_STEPS_RECT, "步数：%s" % game.battle_world_renderer.player_step_display_label(), BLUE if game.battle_world_renderer.player_step_display_enabled else Color("394852"), TEXT)
-	_label("敌人", rect.position + Vector2(12, 115), 10, MUTED)
-	_draw_button(TEST_RANGE_ENEMY_RANGE_RECT, "范围：%s" % game.battle_world_renderer.enemy_range_scope_label(), RED, TEXT)
-	_draw_button(TEST_RANGE_ENEMY_ARROW_RECT, "箭头：%s" % game.battle_world_renderer.enemy_arrow_scope_label(), MAGENTA, TEXT)
-
-
-func _test_mode_label() -> String:
-	match game.test_session.mode:
-		"manual": return "手动"
-		"observer_step": return "单步观察"
-		"observer_auto": return "连续观察"
-	return game.test_session.mode
-
-
 func _can_move_direction(direction: Vector2i) -> bool:
 	if game.phase == "world_boss":
 		var r = game.combat
@@ -1399,9 +1265,9 @@ func _focused_enemy_id() -> String:
 	var active_enemy_id: String = _active_enemy_turn_id()
 	if not active_enemy_id.is_empty():
 		return active_enemy_id
-	var focused_enemy_id := str(game.test_focused_enemy_id) if game.test_combat_active else str(game.battle_focused_enemy_id)
+	var focused_enemy_id := str(game.battle_focused_enemy_id)
 	if focused_enemy_id.is_empty():
-		focused_enemy_id = str(game.battle_focused_enemy_id) if game.test_combat_active else str(game.test_focused_enemy_id)
+		focused_enemy_id = str(game.battle_focused_enemy_id)
 	return focused_enemy_id
 
 
@@ -1911,10 +1777,6 @@ func _input(event: InputEvent) -> void:
 		game.toggle_house_camera_closeup()
 		get_viewport().set_input_as_handled()
 		return
-	if key_event.pressed and not key_event.echo and key_event.keycode == KEY_ESCAPE and game.phase == "test_combat_menu":
-		game.go_home()
-		get_viewport().set_input_as_handled()
-		return
 	if key_event.pressed and not key_event.echo and game.phase.begins_with("lab_") and key_event.keycode == KEY_ESCAPE:
 		if not game.event_context.is_empty():
 			game.finish_event_trial(false)
@@ -1979,8 +1841,6 @@ func _combat_overlay_has_point(point: Vector2) -> bool:
 	for rect: Rect2 in [COMBAT_PLAYER_PANEL_RECT, COMBAT_ENEMY_PANEL_RECT, COMBAT_HAND_RECT, COMBAT_SIDE_RECT]:
 		if rect.has_point(point):
 			return true
-	if game.test_combat_active and _test_combat_overlay_has_point(point):
-		return true
 	if game.phase == "world_boss" and _floor_rail_has_point(point):
 		return true
 	if game.phase == "world_boss" and not game.world_boss_stair_action().is_empty() and STAIR_ACTION_RECT.has_point(point):
@@ -2025,15 +1885,6 @@ func _handle_floor_rail_click(point: Vector2) -> void:
 		game.set_house_floor_view(game.player_floor_view())
 
 
-func _test_combat_overlay_has_point(point: Vector2) -> bool:
-	if game == null or not game.test_combat_active:
-		return false
-	var range_panel_rect := TEST_RANGE_PANEL_RECT if test_range_panel_open else TEST_RANGE_PANEL_COLLAPSED_RECT
-	if range_panel_rect.has_point(point):
-		return true
-	return SHOW_TEST_AI_PANEL and TEST_AI_PANEL_RECT.has_point(point)
-
-
 func _combat_move_controls_has_point(point: Vector2) -> bool:
 	return MOVE_UP_RECT.has_point(point) or MOVE_LEFT_RECT.has_point(point) or MOVE_RIGHT_RECT.has_point(point) or MOVE_DOWN_RECT.has_point(point)
 
@@ -2048,47 +1899,6 @@ func _combat_move_direction_at_point(point: Vector2) -> Vector2i:
 	if MOVE_DOWN_RECT.has_point(point):
 		return Vector2i.DOWN
 	return Vector2i(-999, -999)
-
-
-func _handle_test_combat_click(point: Vector2) -> void:
-	var header_rect := TEST_RANGE_PANEL_HEADER_RECT if test_range_panel_open else TEST_RANGE_PANEL_COLLAPSED_RECT
-	if header_rect.has_point(point):
-		test_range_panel_open = not test_range_panel_open
-		queue_redraw()
-		return
-	if test_range_panel_open:
-		if TEST_RANGE_PLAYER_REACH_RECT.has_point(point):
-			game.toggle_battle_player_range_display()
-			return
-		if TEST_RANGE_PLAYER_STEPS_RECT.has_point(point):
-			game.toggle_battle_player_step_display()
-			return
-		if TEST_RANGE_ENEMY_RANGE_RECT.has_point(point):
-			game.cycle_battle_enemy_range_scope()
-			return
-		if TEST_RANGE_ENEMY_ARROW_RECT.has_point(point):
-			game.cycle_battle_enemy_arrow_scope()
-			return
-	if not SHOW_TEST_AI_PANEL:
-		return
-	if TEST_AI_STEP_RECT.has_point(point):
-		if game.test_session.mode == "observer_step":
-			game.advance_test_observer()
-		return
-	if TEST_AI_PAUSE_RECT.has_point(point):
-		if game.test_session.mode == "observer_auto":
-			game.toggle_test_observer()
-		return
-	if TEST_AI_RESTART_RECT.has_point(point):
-		game.restart_test_combat()
-		return
-	for index in range(game.combat.enemy_order.size()):
-		var row := Rect2(TEST_AI_ROW_RECT.position + Vector2(0, float(index) * TEST_AI_ROW_STEP), TEST_AI_ROW_RECT.size)
-		if row.position.y + row.size.y > 548.0:
-			break
-		if row.has_point(point):
-			game.focus_test_enemy(str(game.combat.enemy_order[index]))
-			return
 
 
 func _house_overlay_has_point(point: Vector2) -> bool:
@@ -2254,10 +2064,6 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 			return
 		if mouse_event.pressed:
-			if game.test_combat_active and _test_combat_overlay_has_point(point):
-				_handle_test_combat_click(point)
-				accept_event()
-				return
 			var move_direction := _combat_move_direction_at_point(point)
 			if move_direction != Vector2i(-999, -999):
 				game.move_player_direction(move_direction)
@@ -2357,8 +2163,8 @@ func _gui_input(event: InputEvent) -> void:
 			game.toggle_home_tests()
 		elif game.home_tests_open and HOME_TEST_HOST_RECT.has_point(point):
 			game.start_host_preview()
-		elif game.home_tests_open and HOME_TEST_COMBAT_RECT.has_point(point):
-			game.open_combat_test_mode()
+		elif game.home_tests_open and HOME_TEST_LAYOUT_RECT.has_point(point):
+			game.get_tree().change_scene_to_file("res://scenes/layout_intuition_lab.tscn")
 		elif game.home_tests_open and HOME_TEST_SIDE_RECT.has_point(point):
 			game.start_sideview_lab()
 		elif game.home_tests_open and HOME_TEST_PUZZLE_RECT.has_point(point):
@@ -2367,8 +2173,6 @@ func _gui_input(event: InputEvent) -> void:
 			game.start_search_lab()
 		elif game.home_tests_open and HOME_TEST_CHASE_RECT.has_point(point):
 			game.start_chase_lab()
-		elif game.home_tests_open and HOME_TEST_DIORAMA_RECT.has_point(point):
-			game.start_kenney_build_lab()
 		elif game.home_tests_open and HOME_TEST_CHARACTER_ANIMATION_RECT.has_point(point):
 			game.start_character_animation_lab()
 		elif game.home_tests_open and HOME_TEST_ASSET_EDITOR_RECT.has_point(point):
@@ -2395,21 +2199,8 @@ func _gui_input(event: InputEvent) -> void:
 		_set_settings_panel_open(true)
 		accept_event()
 		return
-	if game.phase == "lab_diorama" and LAB_SWITCH_RECT.has_point(point):
-		game.start_pcg_diorama_lab()
-		return
-	if game.phase == "lab_pcg_diorama":
-		if LAB_REROLL_RECT.has_point(point):
-			game.reroll_pcg_diorama()
-		elif LAB_HAND_RECT.has_point(point):
-			game.start_pcg_hand_layout_lab()
-		elif LAB_SWITCH_RECT.has_point(point):
-			game.start_diorama_art_lab()
-		return
 	if game.phase == "lab_hand_diorama":
-		if LAB_REROLL_RECT.has_point(point):
-			game.start_pcg_diorama_lab()
-		elif LAB_SWITCH_RECT.has_point(point):
+		if LAB_SWITCH_RECT.has_point(point):
 			game.start_diorama_art_lab()
 		return
 	if game.phase == "lab_puzzle":
@@ -2445,28 +2236,7 @@ func _gui_input(event: InputEvent) -> void:
 			game.finish_ending()
 		return
 	if RESET_RECT.has_point(point):
-		if game.test_combat_active:
-			game.return_to_combat_test_menu()
-		else:
-			game.go_home()
-		return
-	if game.phase == "test_combat_menu":
-		if TEST_MENU_BACK_RECT.has_point(point):
-			game.go_home()
-			return
-		for index in range(game.test_catalog.scenarios.size()):
-			var rect := Rect2(TEST_MENU_SCENARIO_RECT.position + Vector2(0, float(index) * 62.0), TEST_MENU_SCENARIO_RECT.size)
-			if rect.position.y + rect.size.y > 664.0:
-				break
-			if rect.has_point(point):
-				game.select_combat_test_scenario(str(game.test_catalog.scenarios[index].get("id", "")))
-				return
-		if TEST_MENU_MANUAL_RECT.has_point(point):
-			game.start_test_combat("manual")
-		elif TEST_MENU_STEP_RECT.has_point(point):
-			game.start_test_combat("observer_step")
-		elif TEST_MENU_OBSERVER_RECT.has_point(point):
-			game.start_test_combat("observer_auto")
+		game.go_home()
 		return
 	if game.phase in ["combat", "world_boss"] and CAMERA_RESET_RECT.has_point(point):
 		game.reset_battle_camera()
@@ -2528,10 +2298,7 @@ func _gui_input(event: InputEvent) -> void:
 			game.cancel_selected_card()
 			return
 		if game.combat.outcome != "" and RETURN_RECT.has_point(point):
-			if game.test_combat_active:
-				game.return_to_combat_test_menu()
-			else:
-				game.return_from_combat()
+			game.return_from_combat()
 			return
 		if game.combat.outcome == "" and END_TURN_RECT.has_point(point):
 			game.end_combat_turn()

@@ -173,15 +173,12 @@ func _run() -> void:
 	_check(death_after_trap_popup != null and death_after_trap_popup.text == "死亡", "the death feedback must wait for the preceding trap feedback")
 	await create_timer(0.70).timeout
 	game.animation_duration_scale = 0.0
-	game.test_combat_active = true
-	_check(game.enemy_intel_visible(), "test combat must reveal enemy intel")
-	var intel_rect: Rect2 = hud.call("_enemy_intel_rect")
-	var tile_rect: Rect2 = hud.call("_battle_tile_inspection_rect")
-	_check(tile_rect.position.y >= intel_rect.position.y + intel_rect.size.y, "tile inspection must move below enemy intel")
-	game.test_combat_active = false
 	var intel_relics: Array[String] = ["omen_bell"]
 	game.active_relics = intel_relics
 	_check(game.enemy_intel_visible(), "omen bell must reveal enemy intel")
+	var intel_rect: Rect2 = hud.call("_enemy_intel_rect")
+	var tile_rect: Rect2 = hud.call("_battle_tile_inspection_rect")
+	_check(tile_rect.position.y >= intel_rect.position.y + intel_rect.size.y, "tile inspection must move below enemy intel")
 	alpha.hp = 0
 	game._queue_card_enemy_feedback_before_refresh([{"kind": "enemy_damaged", "target_enemy_id": "alpha", "damage": 1}])
 	var feedback_root: Control = game.battle_feedback_root

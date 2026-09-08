@@ -155,11 +155,9 @@ dream-channel/
 - 旧房间格式 `room.enemy + arena.enemy` 仍然兼容；正式快照目前仍以单敌人为主，多敌人房间使用 `room.enemies[]` 配置，尚未大规模写入正式内容。
 - 当前敌人 AI 仍是确定性的优先级规则状态机，不是行为树、规划器或学习型 AI；本轮已加入回合级战术黑板和基础闭环。敌人会根据配置或特性自动分为 `hunter`、`flanker`、`controller`，每个敌方阶段重新感知、预订互不重叠的攻击位、执行移动/攻击，并在下一阶段重新规划；HUD 与行动共用同一套攻击、寻路和状态边界。
 - 背刺敌人在本回合无法抵达玩家背部时会撤退并跨回合重整；集火、保护、动态编队、诱导玩家走位和通用撤退策略仍未实现，这些属于下一阶段。正式快照目前仍以单敌人为主，多敌人房间使用 `room.enemies[]` 配置。多敌人基础计划见 [.omc/plans/multi-enemy-refactor-plan.md](./.omc/plans/multi-enemy-refactor-plan.md)。
-- 主菜单现有“后台测试 → 战斗与 AI 测试”已升级为隔离测试台：提供固定 Seed 的房间预设、手动战斗、AI 单步/连续观察、敌人角色与攻击位调试信息；测试不会结算正式奖励、推进集数或改写正式存档。详细执行计划见 [.omc/plans/combat-ai-test-mode-plan.md](./.omc/plans/combat-ai-test-mode-plan.md)。
 
 ## Godot 战斗测试与操作说明
 
-战斗测试入口位于主菜单的“后台测试 → 战斗与 AI 测试”。这是隔离的开发测试场景，不会推进正式集数、结算正式奖励，也不会改写正式存档。测试台用于确认房间内战斗、敌人意图、敌方回合节奏、多敌人轮流行动和动画表现。
 
 ### 当前操作方式
 
@@ -201,7 +199,6 @@ CombatRules（权威战斗状态）
 <godot> --headless --path godot --script res://tests/enemy_turn_animation_regression.gd
 <godot> --headless --path godot --script res://tests/combat_input_regression.gd
 <godot> --headless --path godot --script res://tests/multi_enemy_pathing_regression.gd
-<godot> --headless --path godot --script res://tests/combat_test_observer_regression.gd
 ```
 
 其中 `enemy_turn_animation_regression.gd` 包含连续多格移动的首帧起点检查；视觉相关问题仍需要在 Godot 实机运行测试台，通过实际画面确认字体、阴影、角色移动和镜头表现。
@@ -255,3 +252,14 @@ CombatRules（权威战斗状态）
 | **MCP 工具装配** | 恢复 Godot MCP Pro（`addons/godot_mcp`，本地忽略不入库）；server 位于 `G:\dream-channel\.tools\godot-mcp-pro\server`，配置见 `godot/.mcp.json`。 |
 | **Web 目录整理** | web 拆为 `ai_media/`（AI 播片动画）+ `releases/`（exe 与 lab 日志）+ 活跃源码，详见 [Web README](./web/README.md)。 |
 | **标准明确** | Web 规则基准 = 共享盘 `CabinSlice_织梦频道.exe` 实际行为；Godot 为 3D 表现分支，本地权威开发主线。 |
+
+
+## 布局直觉测试区（2026-09-09）
+
+标题 → 后台测试 → 布局直觉测试区。也可单独运行 `godot/scenes/layout_intuition_lab.tscn`。
+
+独立沙盒复用正式 RoomRules 和微缩房间渲染，不改变正式房型表，也不写续玩存档。鼠标悬停预览，左键摆放；选 1/3/5 格模块，R 旋转，中键平移，滚轮缩放，可撤销和重置。金色接点表示门能连接。起点到锚点的路线按同一门连接图计算；点击“模拟封路”对比补缺口前后的可达性。这是静态动线验证，不是新 Boss 战，没有美观分数或属性奖励；候选为固定实验模块，尚未实现自适应推荐、三层生成或自动战报。
+
+已删除战斗/AI 测试菜单、专用目录/会话脚本/预设及对应专用测试，删除旧扩建 PCG 游戏内启动流程和自动连片独立场景。正式战斗、AI、资产地编与 Boss 独立试玩保留。`pcg_hand_layout_lab.gd`、`pcg_diorama_stitch_lab.gd` 和手摆场景仍被正式房间渲染引用，属于共用代码，未删除。通用显示与回合测试改为直接准备房间，不依赖已删除菜单。
+
+验证：`layout_intuition_regression.gd`（回路、封路、撤销、规格）与 `layout_intuition_scene_regression.gd`（场景、正式存档不变；加 `-- --capture` 输出截图）。测试日志应使用独立的 `--log-file`，不要覆盖玩家运行日志。

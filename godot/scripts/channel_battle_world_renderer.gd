@@ -268,7 +268,7 @@ func reset_battle_display_preferences() -> void:
 	enemy_range_display_mode = EnemyRangeDisplayMode.FOCUSED
 	enemy_arrow_display_mode = EnemyRangeDisplayMode.FOCUSED
 	player_range_display_enabled = true
-	player_step_display_enabled = host.test_combat_active
+	player_step_display_enabled = false
 
 
 func refresh_battle_board() -> void:
@@ -613,7 +613,7 @@ func _battle_intent_cells() -> Dictionary:
 		return intent_cells
 	# 测试场景的范围面板是独立的观察工具，不能因为当前选中了卡牌
 	# 就把玩家可达格和步数一起隐藏；正式战斗仍保持卡牌目标优先。
-	var show_player_reach: bool = player_range_display_enabled and (selected_card < 0 or host.test_combat_active)
+	var show_player_reach: bool = player_range_display_enabled and selected_card < 0
 	if show_player_reach:
 		for raw_cell in combat.player_reachable_cells():
 			var player_entry: Dictionary = intent_cells.get(raw_cell, {"impact": [], "threat": [], "player_move": [], "enemy_move": [], "path": [], "line": []})
@@ -1256,19 +1256,13 @@ func _refresh_enemy_selection_outline(node: Node3D, state) -> void:
 
 
 func _selected_battle_enemy_id() -> String:
-	if host.test_combat_active and not str(host.test_focused_enemy_id).is_empty():
-		return str(host.test_focused_enemy_id)
-	if not str(host.battle_focused_enemy_id).is_empty():
-		return str(host.battle_focused_enemy_id)
-	return str(host.test_focused_enemy_id)
+	return str(host.battle_focused_enemy_id)
 
 
 func _focused_battle_enemy_id() -> String:
 	if combat == null:
 		return ""
-	var focused_enemy_id := str(host.test_focused_enemy_id) if host.test_combat_active else str(host.battle_focused_enemy_id)
-	if focused_enemy_id.is_empty():
-		focused_enemy_id = str(host.battle_focused_enemy_id) if host.test_combat_active else str(host.test_focused_enemy_id)
+	var focused_enemy_id := str(host.battle_focused_enemy_id)
 	if not focused_enemy_id.is_empty() and battle_intent_snapshot.has(focused_enemy_id):
 		return focused_enemy_id
 	var hovered_enemy = combat.enemy_at(hovered_battle_cell)
@@ -2246,7 +2240,7 @@ func _add_battle_stage_decor() -> void:
 	far_position -= Vector3(float(far_direction.x), 0.0, float(far_direction.y)) * 0.08
 	# The Web door belongs to the formal room presentation. The combat test
 	# arena intentionally stays open and must not grow a decorative door.
-	if not host.test_combat_active and not host.combat_presentation_lab:
+	if not host.combat_presentation_lab:
 		# Align it to the entrance wall; the old billboard always faced the
 		# camera and produced the broken door orientation/black bar.
 		_add_decor_sprite("StageDoor", str(decor.get("door", "")), entrance_position + Vector3.UP * 0.92, 0.0036, false, _battle_shell_direction_yaw(entrance_direction))

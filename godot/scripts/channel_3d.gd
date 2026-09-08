@@ -3,8 +3,6 @@ extends Node3D
 const RoomRules = preload("res://scripts/room_rules.gd")
 const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
 const CombatRules = preload("res://scripts/combat_rules.gd")
-const CombatTestCatalog = preload("res://scripts/combat_test_catalog.gd")
-const CombatTestSession = preload("res://scripts/combat_test_session.gd")
 const WebContentAdapter = preload("res://scripts/web_content_adapter.gd")
 const CharacterPresenter = preload("res://scripts/character_presenter.gd")
 const CameraFollowMath = preload("res://scripts/camera_follow_math.gd")
@@ -19,7 +17,6 @@ const HouseWorldRenderer = preload("res://scripts/channel_house_world_renderer.g
 const BattleWorldRenderer = preload("res://scripts/channel_battle_world_renderer.gd")
 const LabController = preload("res://scripts/channel_lab_controller.gd")
 const DIORAMA_ART_LAB = preload("res://scenes/diorama_art_lab.tscn")
-const PCG_DIORAMA_STITCH_LAB = preload("res://scenes/pcg_diorama_stitch_lab.tscn")
 const PCG_HAND_LAYOUT_LAB = preload("res://scenes/pcg_hand_layout_lab.tscn")
 const PCG_HAND_ROOM_SCRIPT = preload("res://scripts/pcg_hand_room.gd")
 const ASSET_EDITOR_SCENE_PATH := "res://scenes/asset_editor_3d.tscn"
@@ -166,8 +163,6 @@ var content: Dictionary = {}
 var presentation: Dictionary = {}
 var room_rules = RoomRules.new()
 var combat = null
-var test_catalog = CombatTestCatalog.new()
-var test_session = CombatTestSession.new()
 var rng := RandomNumberGenerator.new()
 var run_save_repository = RunSaveRepository.new(RUN_SAVE_PATH, EXE_SOURCE_ID)
 var presentation_settings = null
@@ -326,15 +321,9 @@ var battle_projectile_target := Vector3.ZERO
 var build_preview_tween: Tween = null
 var lab_root: Node3D = null
 var home_tests_open := false
-var test_combat_active := false
 var combat_presentation_lab := false
-var test_mode_selected_id := ""
-var test_saved_state: Dictionary = {}
 var test_auto_accumulator := 0.0
-var test_last_events: Array[Dictionary] = []
-var test_focused_enemy_id := ""
 var battle_focused_enemy_id := ""
-var test_enemy_phase_pending := false
 var battle_turn_actor_id := "player"
 var battle_turn_events: Array[Dictionary] = []
 var show_house_diagnostics := false
@@ -381,8 +370,6 @@ func _ready() -> void:
 	_configure_environment()
 	presentation_settings.configure_home_video()
 	presentation = _load_json_dictionary(PRESENTATION_MANIFEST)
-	if not test_catalog.load_from_path():
-		push_error("Combat test catalog failed: %s" % str(test_catalog.errors))
 	lab_root = Node3D.new()
 	lab_root.name = "LabRoot"
 	world_root.add_child(lab_root)
@@ -546,8 +533,6 @@ func _process(delta: float) -> void:
 	if phase == "world_boss" and combat != null and not hud.settings_panel_open:
 		combat.tick(delta)
 		hud.queue_redraw()
-	if phase == "combat" and test_combat_active:
-		_update_test_observer(delta)
 	elif phase == "lab_sideview":
 		var keyboard_axis := 0.0
 		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
@@ -953,17 +938,8 @@ func go_home() -> void:
 		_save_run()
 	boss_preview_active = false
 	clear_test_visual_filter()
-	if test_combat_active:
-		_restore_test_state()
-	test_combat_active = false
-	test_session.clear()
-	test_saved_state.clear()
-	test_mode_selected_id = ""
 	test_auto_accumulator = 0.0
-	test_last_events.clear()
-	test_focused_enemy_id = ""
 	battle_focused_enemy_id = ""
-	test_enemy_phase_pending = false
 	combat_is_boss = false
 	boss_id = ""
 	boss_anchor_cells.clear()
@@ -1070,60 +1046,12 @@ func toggle_home_tests() -> void:
 	lab_controller.toggle_home_tests()
 
 
-func open_combat_test_mode() -> bool:
-	return lab_controller.open_combat_test_mode()
-
-
-func select_combat_test_scenario(scenario_id: String) -> void:
-	lab_controller.select_combat_test_scenario(scenario_id)
-
-
-func start_test_combat(mode: String = "manual") -> bool:
-	return lab_controller.start_test_combat(mode)
-
-
-func restart_test_combat() -> bool:
-	return lab_controller.restart_test_combat()
-
-
-func return_to_combat_test_menu() -> void:
-	lab_controller.return_to_combat_test_menu()
-
-
-func _restore_test_state() -> void:
-	lab_controller._restore_test_state()
-
-
-func _update_test_observer(_delta: float) -> void:
-	lab_controller._update_test_observer(_delta)
-
-
-func _advance_test_player_script() -> void:
-	lab_controller._advance_test_player_script()
-
-
-func advance_test_observer() -> void:
-	lab_controller.advance_test_observer()
-
-
-func toggle_test_observer() -> void:
-	lab_controller.toggle_test_observer()
-
-
-func focus_test_enemy(enemy_id: String) -> void:
-	lab_controller.focus_test_enemy(enemy_id)
-
-
 func open_asset_editor() -> bool:
 	return lab_controller.open_asset_editor()
 
 
 func start_combat_lab(room_id: String = "hall") -> void:
 	lab_controller.start_combat_lab(room_id)
-
-
-func start_kenney_build_lab() -> void:
-	lab_controller.start_kenney_build_lab()
 
 
 func start_diorama_art_lab() -> void:
@@ -1148,14 +1076,6 @@ func demo_character_attack() -> void:
 
 func demo_character_hurt() -> void:
 	lab_controller.demo_character_hurt()
-
-
-func start_pcg_diorama_lab() -> void:
-	lab_controller.start_pcg_diorama_lab()
-
-
-func reroll_pcg_diorama() -> void:
-	lab_controller.reroll_pcg_diorama()
 
 
 func start_pcg_hand_layout_lab() -> void:
@@ -2491,8 +2411,6 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	if not enemy_specs is Array or (enemy_specs as Array).is_empty():
 		enemy_specs = room.get("enemy", {})
 	var run_rules: Dictionary = content.get("run_rules", {}).duplicate(true)
-	if test_combat_active and test_session.active:
-		run_rules.merge(test_session.scenario.get("run_rules", {}), true)
 	run_rules["player_hp"] = player_hp
 	run_rules["base_speed"] = player_speed
 	var starting_speed := int(content.get("run_rules", {}).get("base_speed", 3))
@@ -2717,9 +2635,6 @@ func end_combat_turn() -> void:
 		if not actor_id.is_empty():
 			battle_turn_actor_id = actor_id
 			break
-	if test_combat_active:
-		test_last_events = turn_events.duplicate(true)
-		test_enemy_phase_pending = true
 	animation_busy = true
 	active_animation_kind = "enemy_turn"
 	status_message = _enemy_turn_summary(turn_events)
@@ -3188,8 +3103,6 @@ func select_battle_enemy(enemy_id: String) -> void:
 	if state == null or not state.revealed:
 		return
 	battle_focused_enemy_id = enemy_id
-	if test_combat_active:
-		test_focused_enemy_id = enemy_id
 	battle_world_renderer.refresh_battle_state(false, false)
 	battle_world_renderer.refresh_battle_selection_visuals()
 	_refresh_hud()
@@ -3593,10 +3506,6 @@ func _after_combat_action(sync_actor_positions: bool = false) -> void:
 	player_hp = combat.player_hp
 	_sync_host_break_relief()
 	_update_boss_phase()
-	if test_combat_active and test_session.active and test_enemy_phase_pending:
-		test_session.record_enemy_phase(test_last_events, combat)
-		test_last_events.clear()
-		test_enemy_phase_pending = false
 	# 杀戮尖塔式回合：敌方动画播完后才给玩家发新牌
 	if combat != null and combat.pending_player_turn and combat.outcome == "":
 		combat.enemy_vision_suppressed = false
@@ -3626,9 +3535,6 @@ func return_from_combat() -> void:
 		_finish_boss_combat(combat.outcome == "victory")
 		return
 	if animation_busy or phase != "combat" or combat == null or combat.outcome == "":
-		return
-	if test_combat_active:
-		return_to_combat_test_menu()
 		return
 	if combat_is_boss:
 		_finish_boss_combat(combat.outcome == "victory")
@@ -3664,7 +3570,7 @@ func current_omen() -> Dictionary:
 
 
 func enemy_intel_visible() -> bool:
-	if test_combat_active or combat_presentation_lab:
+	if combat_presentation_lab:
 		return true
 	for raw_relic_id in active_relics:
 		var relic: Dictionary = content.get("relics", {}).get(str(raw_relic_id), {})
@@ -4699,20 +4605,10 @@ func cycle_battle_enemy_range_display() -> void:
 	if phase != "combat" or combat == null:
 		return
 	var mode_label: String = battle_world_renderer.cycle_enemy_range_display()
-	if test_combat_active:
-		status_message = "敌方范围：%s（按 1 切换）" % mode_label
-		_refresh_hud()
-
-
 func cycle_battle_enemy_range_scope() -> void:
 	if phase != "combat" or combat == null:
 		return
 	var mode_label: String = battle_world_renderer.cycle_enemy_range_scope()
-	if test_combat_active:
-		status_message = "敌方行动范围：%s" % mode_label
-		_refresh_hud()
-
-
 func toggle_battle_enemy_range_scope() -> void:
 	cycle_battle_enemy_range_scope()
 
@@ -4721,11 +4617,6 @@ func cycle_battle_enemy_arrow_scope() -> void:
 	if phase != "combat" or combat == null:
 		return
 	var mode_label: String = battle_world_renderer.cycle_enemy_arrow_scope()
-	if test_combat_active:
-		status_message = "敌人箭头：%s" % mode_label
-		_refresh_hud()
-
-
 func toggle_battle_enemy_arrow_scope() -> void:
 	cycle_battle_enemy_arrow_scope()
 
@@ -4734,19 +4625,10 @@ func toggle_battle_player_range_display() -> void:
 	if phase != "combat" or combat == null:
 		return
 	var enabled: bool = battle_world_renderer.toggle_player_range_display()
-	if test_combat_active:
-		status_message = "玩家可达范围：%s（按 2 切换）" % ("显示" if enabled else "隐藏")
-		_refresh_hud()
-
-
 func toggle_battle_player_step_display() -> void:
 	if phase != "combat" or combat == null:
 		return
 	var enabled: bool = battle_world_renderer.toggle_player_step_display()
-	if test_combat_active:
-		status_message = "玩家步数：%s" % ("显示" if enabled else "隐藏")
-		_refresh_hud()
-
 func update_battle_hover() -> void:
 	battle_world_renderer.update_battle_hover()
 

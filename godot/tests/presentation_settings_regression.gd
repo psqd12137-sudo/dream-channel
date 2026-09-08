@@ -8,6 +8,9 @@ func _init() -> void:
 
 
 func _run() -> void:
+	var config_path := "user://channel_display.cfg"
+	var config_existed := FileAccess.file_exists(config_path)
+	var original_config := FileAccess.get_file_as_bytes(config_path) if config_existed else PackedByteArray()
 	var game := (load("res://channel_3d.tscn") as PackedScene).instantiate() as Node3D
 	root.add_child(game)
 	await process_frame
@@ -31,12 +34,12 @@ func _run() -> void:
 	if dof_material != null:
 		_check(bool(dof_material.get_shader_parameter("effect_enabled")) == game.depth_of_field_enabled, "settings panel depth-of-field toggle must update the shader")
 	var initial_dof_blur: float = game.depth_of_field_blur_strength
-	_drag_slider(hud, hud.SETTINGS_DOF_BLUR_RECT, 0.75)
+	_drag_slider(hud, hud.SETTINGS_DOF_BLUR_RECT, 0.2 if game.depth_of_field_blur_ratio() > 0.5 else 0.8)
 	_check(not is_equal_approx(game.depth_of_field_blur_strength, initial_dof_blur), "settings panel depth-of-field blur slider must update the parameter")
 	if dof_material != null:
 		_check(is_equal_approx(float(dof_material.get_shader_parameter("max_blur_pixels")), game.depth_of_field_blur_strength), "depth-of-field blur control must update the shader")
 	var initial_dof_focus: float = game.depth_of_field_focus_width
-	_drag_slider(hud, hud.SETTINGS_DOF_FOCUS_RECT, 0.65)
+	_drag_slider(hud, hud.SETTINGS_DOF_FOCUS_RECT, 0.2 if game.depth_of_field_focus_ratio() > 0.5 else 0.8)
 	_check(not is_equal_approx(game.depth_of_field_focus_width, initial_dof_focus), "settings panel depth-of-field focus slider must update the parameter")
 	if dof_material != null:
 		_check(is_equal_approx(float(dof_material.get_shader_parameter("focus_half_width")), game.depth_of_field_focus_width), "depth-of-field focus control must update the shader")
@@ -46,10 +49,10 @@ func _run() -> void:
 	var pixel_material: ShaderMaterial = game.world_container.material as ShaderMaterial
 	_check(pixel_material != null and pixel_material.shader != null and pixel_material.shader.resource_path.ends_with("pixel_art_3d.gdshader"), "settings panel pixel filter toggle must apply the pixel shader")
 	var initial_pixel_size: float = game.pixel_filter_pixel_size
-	_drag_slider(hud, hud.SETTINGS_PIXEL_SIZE_RECT, 0.55)
+	_drag_slider(hud, hud.SETTINGS_PIXEL_SIZE_RECT, 0.2 if game.pixel_filter_pixel_size_ratio() > 0.5 else 0.8)
 	_check(not is_equal_approx(game.pixel_filter_pixel_size, initial_pixel_size), "settings panel pixel-size slider must update the parameter")
 	var initial_palette_steps: float = game.pixel_filter_palette_steps
-	_drag_slider(hud, hud.SETTINGS_PIXEL_PALETTE_RECT, 0.35)
+	_drag_slider(hud, hud.SETTINGS_PIXEL_PALETTE_RECT, 0.2 if game.pixel_filter_palette_steps_ratio() > 0.5 else 0.8)
 	_check(not is_equal_approx(game.pixel_filter_palette_steps, initial_palette_steps), "settings panel palette slider must update the parameter")
 	pixel_material = game.world_container.material as ShaderMaterial
 	if pixel_material != null:
@@ -60,8 +63,7 @@ func _run() -> void:
 	_click(hud, hud.SETTINGS_CLOSE_RECT)
 	_check(not hud.settings_panel_open, "settings panel close button must close the panel")
 
-	_check(game.open_combat_test_mode(), "settings overlay regression must enter the combat test desk")
-	_check(game.start_test_combat("manual"), "settings overlay regression must start a combat test")
+	game.start_combat_lab("hall")
 	await process_frame
 	_click(hud, hud.SETTINGS_TOGGLE_RECT)
 	_check(hud.settings_panel_open, "combat top-bar settings button must open the settings panel")
@@ -73,6 +75,12 @@ func _run() -> void:
 
 	game.queue_free()
 	await process_frame
+	if config_existed:
+		var file := FileAccess.open(config_path,FileAccess.WRITE)
+		file.store_buffer(original_config)
+		file.close()
+	elif FileAccess.file_exists(config_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(config_path))
 	if failures.is_empty():
 		print("PRESENTATION_SETTINGS: PASS panel TAA DOF pixel parameters and feedback suppression")
 		quit(0)

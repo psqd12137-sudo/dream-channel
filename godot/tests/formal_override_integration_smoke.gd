@@ -5,9 +5,13 @@ func _init() -> void:
 
 
 func _run() -> void:
-	var packed := load("res://scenes/pcg_diorama_stitch_lab.tscn") as PackedScene
-	assert(packed != null, "PCG scene missing")
-	var generator := packed.instantiate() as Node3D
+	var generator := load("res://scripts/pcg_diorama_stitch_lab.gd").new() as Node3D
+	var rig := Node3D.new()
+	rig.name = "StandaloneRig"
+	var camera := Camera3D.new()
+	camera.name = "Camera3D"
+	rig.add_child(camera)
+	generator.add_child(rig)
 	root.add_child(generator)
 	await process_frame
 	assert(generator.rooms.size() > 0 and generator.room_visual_roots.size() > 0, "PCG did not build rooms")

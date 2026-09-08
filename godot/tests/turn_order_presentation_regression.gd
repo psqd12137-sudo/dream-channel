@@ -13,9 +13,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 
-	game.open_combat_test_mode()
-	game.select_combat_test_scenario("squad_roles")
-	_check(game.start_test_combat("manual"), "squad roles test combat must start")
+	game.start_combat_lab("hall")
 	await process_frame
 	var hud: Control = game.get_node("HUD/HUDRoot") as Control
 	var enemy_id: String = str(game.combat.enemy_order[0])
