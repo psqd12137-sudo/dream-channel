@@ -8,11 +8,13 @@ var placed: Dictionary = {}
 ## remains Vector2i for save compatibility; each link connects two physical
 ## cells and carries the authored stair label/type.
 var stair_links: Array[Dictionary] = []
+var stair_build: Dictionary = {} # transient, only while choosing a floor's first room
 
 
 func reset(start_room: Dictionary) -> void:
 	placed.clear()
 	stair_links.clear()
+	stair_build.clear()
 	var room := start_room.duplicate(true)
 	room["rotation"] = 0
 	room["doors"] = normalize_doors(room.get("doors", [false, false, false, false]))
@@ -100,9 +102,10 @@ func _candidate_is_legal(selected_target: Vector2i, candidate_cells: Array[Vecto
 			return false
 		candidate_set[cell] = true
 	var candidate_open_edges := _resolved_open_edges(candidate_cells, doors)
-	var touches_room := false
-	var creates_connection := false
-	var connects_selected_target := false
+	var vertical_entry: bool = stair_build.get("target", Vector2i(-999, -999)) == selected_target
+	var touches_room := vertical_entry
+	var creates_connection := vertical_entry
+	var connects_selected_target := vertical_entry
 	for cell: Vector2i in candidate_cells:
 		for i in range(4):
 			var neighbor_pos: Vector2i = cell + DIRS[i]
@@ -138,9 +141,40 @@ func place(target: Vector2i, room: Dictionary, rotation: int) -> bool:
 	instance["world_cells"] = serialized_cells
 	instance["open_edges"] = _resolved_open_edges(occupied, instance["doors"])
 	instance["completed"] = false
+	var floor_record := floor_metadata(target)
+	for key: String in ["floor", "floor_origin", "floor_height", "floor_label"]:
+		if floor_record.has(key):
+			instance[key] = floor_record[key]
 	for cell: Vector2i in occupied:
 		placed[cell] = instance
+	if stair_build.get("target", Vector2i(-999, -999)) == target:
+		var source: Vector2i = stair_build.source
+		stair_links.append({"from": [source.x, source.y], "to": [target.x, target.y], "label": "通往" + str(instance.get("floor_label", "楼层")), "kind": "up" if int(instance.get("floor", 0)) > 0 else "down"})
+		stair_build.clear()
 	return true
+
+
+func floor_metadata(cell: Vector2i) -> Dictionary:
+	if placed.has(cell):
+		return placed[cell]
+	if not stair_build.is_empty() and cell.distance_to(stair_build.target) < 20.0:
+		return stair_build
+	for dir: Vector2i in DIRS:
+		if placed.has(cell + dir):
+			return placed[cell + dir]
+	return {}
+
+
+func stair_neighbors(cell: Vector2i) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for link: Dictionary in stair_links:
+		var a := Vector2i(int(link.from[0]), int(link.from[1]))
+		var b := Vector2i(int(link.to[0]), int(link.to[1]))
+		if a == cell and placed.has(b):
+			result.append(b)
+		elif b == cell and placed.has(a):
+			result.append(a)
+	return result
 
 
 func valid_rotations(target: Vector2i, room: Dictionary) -> Array[int]:
@@ -153,6 +187,8 @@ func valid_rotations(target: Vector2i, room: Dictionary) -> Array[int]:
 
 func frontiers() -> Array[Vector2i]:
 	var unique: Dictionary = {}
+	if not stair_build.is_empty():
+		unique[stair_build.target] = true
 	for raw_pos in placed.keys():
 		var pos: Vector2i = raw_pos
 		for i in range(4):

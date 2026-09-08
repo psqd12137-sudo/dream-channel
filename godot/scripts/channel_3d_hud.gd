@@ -71,6 +71,7 @@ const BUILD_PLACE_RECT := Rect2(734, 580, 230, 48)
 const BUILD_CANCEL_RECT := Rect2(734, 640, 230, 38)
 const ROOM_ACTION_RECT := Rect2(1020, 682, 220, 50)
 const ENTER_PENDING_RECT := Rect2(1020, 620, 220, 46)
+const EXPLORE_STAIR_RECT := Rect2(1020, 674, 220, 46)
 const END_TURN_RECT := Rect2(1000, 690, 164, 48)
 const RETURN_RECT := Rect2(1000, 690, 164, 48)
 const MOVE_UP_RECT := Rect2(1100, 560, 46, 30)
@@ -878,7 +879,7 @@ func _draw_house_hud() -> void:
 	var side := Rect2(1004, 88, 260, 680)
 	_draw_ticket_panel(side, Color("fff3dff5"), TEAL)
 	draw_texture_rect(TV_MASCOT, Rect2(1194, 102, 48, 48), false)
-	_label("正在播出", Vector2(1024, 120), 11, Color("806448"))
+	_label("正在播出 · " + str(game.room_rules.placed.get(game.current_room_pos, {}).get("floor_label", "地面层")), Vector2(1024, 120), 11, Color("806448"))
 	var room_title := str(room.get("name", "玄关")) if revealed else "未知布景"
 	var room_kind := _room_kind_label(room) if revealed else "信号未解码"
 	var room_accent := _room_kind_color(room) if revealed else Color("4f5960")
@@ -888,6 +889,10 @@ func _draw_house_hud() -> void:
 		room_kind = "最终敌人"
 		room_accent = RED
 	_label(room_title, Vector2(1024, 154), 20 if game.phase == "boss_ready" else 23, INK)
+	if game.phase == "explore":
+		var stair: Dictionary = game.exploration_stair_action()
+		if not stair.is_empty():
+			_draw_button(EXPLORE_STAIR_RECT, str(stair.label), TEAL, TEXT)
 	_draw_chip(Rect2(1024, 170, 116, 30), room_kind, room_accent, TEXT, 11)
 	draw_rect(Rect2(1024, 218, 216, 1), Color("bda981"), true)
 	_label("本集进度", Vector2(1024, 248), 11, Color("806448"))
@@ -2098,7 +2103,7 @@ func _house_overlay_has_point(point: Vector2) -> bool:
 	if game.phase == "room_ready":
 		return ROOM_ACTION_RECT.has_point(point)
 	if game.phase == "explore":
-		return ENTER_PENDING_RECT.has_point(point)
+		return ENTER_PENDING_RECT.has_point(point) or EXPLORE_STAIR_RECT.has_point(point)
 	return false
 
 
@@ -2489,6 +2494,9 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	if game.phase == "room_ready" and ROOM_ACTION_RECT.has_point(point):
 		game.resolve_current_room()
+		return
+	if game.phase == "explore" and EXPLORE_STAIR_RECT.has_point(point):
+		game.use_exploration_stair()
 		return
 	if game.phase == "boss_ready" and ROOM_ACTION_RECT.has_point(point):
 		game.begin_boss_combat()

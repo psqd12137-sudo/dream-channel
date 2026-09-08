@@ -55,6 +55,14 @@ func run() -> void:
 		originals.append([child.get_instance_id(), child.transform])
 	var room_meshes: Array = []
 	for mesh in game.house_root.find_children("*", "MeshInstance3D", true, false):
+		# Exploration-only hints are replaced by the combat overlay, not room art.
+		var temporary_hint := false
+		for layer_name: String in ["ExplorationAnchors", "ExplorationStairs"]:
+			var layer = game.house_root.get_node_or_null(layer_name)
+			if layer != null and layer.is_ancestor_of(mesh):
+				temporary_hint = true
+		if temporary_hint:
+			continue
 		if not game.house_root.get_node("LiliToken").is_ancestor_of(mesh):
 			room_meshes.append([mesh.get_instance_id(), mesh.mesh, mesh.material_override, mesh.transform])
 	game._prepare_boss_ready()

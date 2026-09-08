@@ -289,6 +289,7 @@ var boss_recap: Dictionary = {}
 var boss_preview_active := false
 const OverworldBossRules = preload("res://scripts/overworld_boss_rules.gd")
 const ExplorationAnchors = preload("res://scripts/exploration_anchors.gd")
+const ExplorationFloors = preload("res://scripts/exploration_floors.gd")
 const OverworldBossPresentation = preload("res://scripts/overworld_boss_presentation.gd")
 var boss_anchor_cells: Array[Vector2i] = []
 var boss_anchor_hp: Dictionary = {}
@@ -651,6 +652,8 @@ func _house_camera_layout_points() -> Array[Vector3]:
 	for raw_pos: Variant in room_rules.placed.keys():
 		var room: Dictionary = room_rules.placed[raw_pos]
 		if phase == "world_boss" and house_floor_view != FLOOR_VIEW_OVERVIEW and int(room.get("floor", 0)) != house_floor_view:
+			continue
+		if phase != "world_boss" and int(room.get("floor", 0)) != exploration_floor_view():
 			continue
 		points.append(_house_visual_world(raw_pos as Vector2i))
 	# Ordinary frontier sockets are navigation affordances, not composition
@@ -1033,6 +1036,7 @@ func continue_saved_run() -> bool:
 	var remaining_ids: Array = save.get("remaining_ids", [])
 	if str(save.get("phase", "")) != "world_boss":
 		ExplorationAnchors.discover(room_rules, int(content.get("run_length", 12)))
+		ExplorationFloors.ensure_sites(room_rules)
 	remaining_rooms.clear()
 	for room: Dictionary in room_catalog:
 		if str(room.get("id", "")) in remaining_ids:
@@ -1341,6 +1345,7 @@ func cancel_build() -> void:
 	if animation_busy or phase != "build":
 		return
 	phase = "explore"
+	room_rules.stair_build.clear()
 	build_offers.clear()
 	build_house_world()
 	status_message = "取消扩建。选择另一个黄色格继续。"
@@ -1439,7 +1444,9 @@ func _find_room_instance_nodes(target: Vector2i) -> Array[Node3D]:
 		return result
 	var instance_id := str(room_rules.placed[target].get("instance_id", ""))
 	if kenney_build_lab_mode:
-		var generated := house_root.get_node_or_null("KenneyFormalComposer/GeneratedMap")
+		var floor_index := int(room_rules.placed[target].get("floor", 0))
+		var composer_name := "KenneyFormalComposer" if floor_index == 0 else "KenneyFormalComposer_Floor_%d" % floor_index
+		var generated := house_root.get_node_or_null(composer_name + "/GeneratedMap")
 		if generated != null:
 			for child: Node in generated.get_children():
 				if child is Node3D and str(child.get_meta("room_id", "")) == instance_id:
@@ -1470,15 +1477,44 @@ func handle_screen_click(screen_pos: Vector2) -> void:
 
 
 func _handle_house_world_click(screen_pos: Vector2) -> void:
-	var hit: Variant = _screen_to_plane(screen_pos, 0.0)
+	var floor_data := room_rules.floor_metadata(current_room_pos)
+	var hit: Variant = _screen_to_plane(screen_pos, float(floor_data.get("floor_height", 0.0)) * VISUAL_CELL_SCALE)
 	if hit == null:
 		return
 	var world := _house_logical_world_from_visual(hit as Vector3)
-	var target := Vector2i(roundi(world.x / HOUSE_CELL), roundi(world.z / HOUSE_CELL))
+	var target := Vector2i(roundi(world.x / HOUSE_CELL), roundi(world.z / HOUSE_CELL)) + _array_to_pos(floor_data.get("floor_origin", [0, 0]))
 	if target in room_rules.frontiers():
 		begin_build(target)
+	elif target == current_room_pos and not exploration_stair_action().is_empty():
+		use_exploration_stair()
 	elif room_rules.placed.has(target) and target != current_room_pos:
 		enter_room(target)
+
+
+func exploration_floor_view() -> int:
+	if phase == "build" and not room_rules.stair_build.is_empty():
+		return int(room_rules.stair_build.floor)
+	return int(room_rules.placed.get(current_room_pos, {}).get("floor", 0))
+
+
+func exploration_stair_action() -> Dictionary:
+	if phase != "explore" or animation_busy:
+		return {}
+	return ExplorationFloors.action(room_rules, current_room_pos)
+
+
+func use_exploration_stair() -> void:
+	var action := exploration_stair_action()
+	if action.is_empty():
+		return
+	if bool(action.build):
+		room_rules.stair_build = action.duplicate(true)
+		begin_build(action.target)
+		if build_offers.is_empty():
+			cancel_build()
+			status_message = "没有可用房间，请先完成当前探索。"
+	else:
+		enter_room(action.target)
 
 
 func enter_room(target: Vector2i) -> void:
@@ -1527,6 +1563,10 @@ func house_path_to(target: Vector2i) -> Array[Vector2i]:
 		for direction: Vector2i in RoomRules.DIRS:
 			var next := cell + direction
 			if not parents.has(next) and _rooms_connected(cell, next):
+				parents[next] = cell
+				queue.append(next)
+		for next: Vector2i in room_rules.stair_neighbors(cell):
+			if not parents.has(next):
 				parents[next] = cell
 				queue.append(next)
 	return result
@@ -1651,6 +1691,7 @@ func _complete_current_room() -> bool:
 		room_rules.set_instance_flag(current_room_pos, "completion_order", completion_order)
 	room_rules.set_instance_flag(current_room_pos, "completed", true)
 	room_rules.set_instance_flag(current_room_pos, "visited", true)
+	ExplorationFloors.ensure_sites(room_rules)
 	if ExplorationAnchors.discover(room_rules, int(content.get("run_length", 12))) > 0:
 		event_log.append("发现信号锚：已标记在大地图，决战时可前往关闭。")
 		house_world_renderer.refresh_exploration_anchors()
@@ -1729,9 +1770,10 @@ func _begin_world_boss(saved: Dictionary = {}) -> void:
 		_refresh_hud()
 		return
 	combat = finale
-	var exploration_markers := house_root.get_node_or_null("ExplorationAnchors")
-	if exploration_markers != null:
-		exploration_markers.queue_free()
+	for marker_name: String in ["ExplorationAnchors", "ExplorationStairs"]:
+		var exploration_markers := house_root.get_node_or_null(marker_name)
+		if exploration_markers != null:
+			exploration_markers.queue_free()
 	if not saved.is_empty():
 		combat.replay(saved)
 	combat_is_boss = true
@@ -3402,11 +3444,12 @@ func clear_battle_hover() -> void:
 func set_house_hover(view_pos: Vector2) -> void:
 	if animation_busy or phase != "explore":
 		return
-	var hit: Variant = _screen_to_plane(view_pos, 0.0)
+	var floor_data := room_rules.floor_metadata(current_room_pos)
+	var hit: Variant = _screen_to_plane(view_pos, float(floor_data.get("floor_height", 0.0)) * VISUAL_CELL_SCALE)
 	var next_hover := INVALID_CELL
 	if hit != null:
 		var world: Vector3 = _house_logical_world_from_visual(hit as Vector3)
-		var target := Vector2i(roundi(world.x / HOUSE_CELL), roundi(world.z / HOUSE_CELL))
+		var target := Vector2i(roundi(world.x / HOUSE_CELL), roundi(world.z / HOUSE_CELL)) + _array_to_pos(floor_data.get("floor_origin", [0, 0]))
 		if target != current_room_pos and house_path_to(target).size() >= 2:
 			next_hover = target
 	if next_hover == hovered_house_cell:
@@ -4150,8 +4193,10 @@ func _set_battle_neutral_lighting(enabled: bool) -> void:
 func _house_world(pos: Vector2i) -> Vector3:
 	var floor_height := 0.0
 	var floor_origin := Vector2i.ZERO
-	if room_rules != null and room_rules.placed.has(pos):
-		var room: Dictionary = room_rules.placed[pos]
+	if room_rules != null:
+		var room: Dictionary = room_rules.floor_metadata(pos)
+		if room.is_empty() and phase == "build":
+			room = room_rules.floor_metadata(selected_frontier)
 		floor_height = float(room.get("floor_height", 0.0))
 		var raw_floor_origin: Variant = room.get("floor_origin", [])
 		if raw_floor_origin is Array and (raw_floor_origin as Array).size() >= 2:
@@ -4417,6 +4462,10 @@ func _select_first_valid_rotation() -> void:
 
 func _rooms_connected(a: Vector2i, b: Vector2i) -> bool:
 	if not room_rules.placed.has(a) or not room_rules.placed.has(b):
+		return false
+	if b in room_rules.stair_neighbors(a):
+		return true
+	if int(room_rules.placed[a].get("floor", 0)) != int(room_rules.placed[b].get("floor", 0)):
 		return false
 	var delta := b - a
 	var side := -1

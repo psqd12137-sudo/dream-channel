@@ -124,6 +124,25 @@ func build_house_world() -> void:
 		_add_build_preview()
 	_add_house_player()
 	refresh_exploration_anchors()
+	if phase != "world_boss":
+		var active_floor: int = host.exploration_floor_view()
+		for child: Node in house_root.get_children():
+			if child.has_meta("floor"):
+				child.visible = int(child.get_meta("floor")) == active_floor
+		var player: Node3D = house_root.get_node_or_null("LiliToken")
+		if player != null:
+			player.visible = int(room_rules.placed.get(current_room_pos, {}).get("floor", 0)) == active_floor
+		var stairs := Node3D.new()
+		stairs.name = "ExplorationStairs"
+		house_root.add_child(stairs)
+		for cell: Vector2i in room_rules.placed:
+			if int(room_rules.placed[cell].get("floor", 0)) != active_floor:
+				continue
+			var action := preload("res://scripts/exploration_floors.gd").action(room_rules, cell)
+			if action.is_empty():
+				continue
+			host.OverworldBossPresentation._add_stair_steps(stairs, "Stair_%s" % cell, _house_world(cell), "up")
+			_add_label(stairs, "Caption_%s" % cell, str(action.label), _house_world(cell) + Vector3(0, 1.4, 0), COL_GOLD, 24)
 	if hovered_house_cell != INVALID_CELL and room_rules.placed.has(hovered_house_cell):
 		_add_move_hover_mesh(hovered_house_cell)
 	if phase != "combat":
@@ -140,6 +159,8 @@ func refresh_exploration_anchors() -> void:
 	layer.name = "ExplorationAnchors"
 	house_root.add_child(layer)
 	for cell: Vector2i in preload("res://scripts/exploration_anchors.gd").cells(room_rules):
+		if int(room_rules.placed[cell].get("floor", 0)) != host.exploration_floor_view():
+			continue
 		var point := _house_world(cell)
 		_add_cylinder(layer, "Signal_%d_%d" % [cell.x, cell.y], point + Vector3(0.65, 0.55, 0), 0.18, 0.7, _material(COL_GOLD))
 		_add_label(layer, "Label_%d_%d" % [cell.x, cell.y], "信号锚 · 决战时关闭", point + Vector3(0, 1.6, 0), COL_GOLD, 24)
@@ -428,6 +449,7 @@ func _add_room_bridges() -> void:
 func _add_frontier_mesh(pos: Vector2i, selected: bool) -> void:
 	var node := Node3D.new()
 	node.name = "Frontier_%d_%d" % [pos.x, pos.y]
+	node.set_meta("floor", int(room_rules.floor_metadata(pos).get("floor", 0)))
 	node.position = _house_world(pos)
 	house_root.add_child(node)
 	var color := COL_GOLD if selected else Color("c88b2f")
@@ -543,10 +565,16 @@ func _add_house_player() -> void:
 
 
 func room_interaction_slots(target: Vector2i) -> Array[Dictionary]:
-	var composer: Node3D = house_root.get_node_or_null("KenneyFormalComposer") as Node3D
+	var room: Dictionary = room_rules.placed.get(target, {})
+	var floor_index := int(room.get("floor", 0))
+	var composer: Node3D = house_root.get_node_or_null("KenneyFormalComposer" if floor_index == 0 else "KenneyFormalComposer_Floor_%d" % floor_index) as Node3D
 	if composer == null or not composer.has_method("interaction_slots_for_cell"):
 		return []
-	return composer.interaction_slots_for_cell(target)
+	var raw_origin: Array = room.get("floor_origin", [0, 0])
+	var slots: Array[Dictionary] = composer.interaction_slots_for_cell(target - Vector2i(int(raw_origin[0]), int(raw_origin[1])))
+	for slot: Dictionary in slots:
+		slot["floor"] = floor_index
+	return slots
 
 
 func claim_room_interaction_slot(actor_id: String, target: Vector2i, preferred_kind: String = "") -> Dictionary:
@@ -610,7 +638,8 @@ func _house_interaction_target_position(actor_id: String, target: Vector2i) -> V
 
 func _interaction_slot_house_position(slot: Dictionary, field: String) -> Vector3:
 	var local_position: Vector3 = slot.get(field, Vector3.ZERO)
-	var composer := house_root.get_node_or_null("KenneyFormalComposer") as Node3D
+	var floor_index := int(slot.get("floor", 0))
+	var composer := house_root.get_node_or_null("KenneyFormalComposer" if floor_index == 0 else "KenneyFormalComposer_Floor_%d" % floor_index) as Node3D
 	if composer == null:
 		return local_position
 	return composer.transform * local_position
@@ -627,12 +656,15 @@ func _add_move_hover_mesh(pos: Vector2i) -> void:
 func _apply_current_room_cutaway() -> void:
 	if not room_rules.placed.has(current_room_pos):
 		return
-	var composer: Node3D = house_root.get_node_or_null("KenneyFormalComposer") as Node3D
+	var room: Dictionary = room_rules.placed[current_room_pos]
+	var floor_index := int(room.get("floor", 0))
+	var composer: Node3D = house_root.get_node_or_null("KenneyFormalComposer" if floor_index == 0 else "KenneyFormalComposer_Floor_%d" % floor_index) as Node3D
 	if composer == null or camera == null or not composer.has_method("apply_camera_cutaway"):
 		return
 	var viewer_axis: Vector3 = camera.global_transform.basis.z
 	var local_viewer_axis: Vector3 = composer.global_transform.basis.inverse() * viewer_axis
-	composer.apply_camera_cutaway(current_room_pos, Vector2(local_viewer_axis.x, local_viewer_axis.z))
+	var raw_origin: Array = room.get("floor_origin", [0, 0])
+	composer.apply_camera_cutaway(current_room_pos - Vector2i(int(raw_origin[0]), int(raw_origin[1])), Vector2(local_viewer_axis.x, local_viewer_axis.z))
 
 
 func pcg_cutaway_debug_text() -> String:
