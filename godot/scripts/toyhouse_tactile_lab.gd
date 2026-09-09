@@ -9,6 +9,9 @@ var reference_root: Node3D
 var reference_environment: Environment
 var reference_builder: RefCounted
 var reference_bases: Array[Dictionary] = []
+var reference_features: Array[bool] = [true, true, true]
+var joinery: RefCounted
+var atmosphere_environment: Environment
 var material_records: Array[Dictionary] = []
 var decor_root: Node3D
 var target := Vector2i.ZERO
@@ -78,6 +81,12 @@ func start() -> void:
 	reference_root = reference_builder.build(self)
 	for node in host.house_root.find_children("ToyWorkbench*", "MeshInstance3D", true, false):
 		reference_bases.append({"node": node, "visible": node.visible})
+	joinery = load("res://scripts/toy_workshop_joinery.gd").new()
+	joinery.build(self)
+	atmosphere_environment = reference_environment.duplicate()
+	atmosphere_environment.ambient_light_energy = 0.20
+	atmosphere_environment.ssao_radius = 0.20
+	atmosphere_environment.ssao_intensity = 1.3
 	_apply()
 
 func _light_snapshot() -> Array[Dictionary]:
@@ -116,6 +125,16 @@ func update_reference_view() -> void:
 	if is_instance_valid(reference_root):
 		reference_builder.update_view(host.camera.global_position)
 
+func toggle_reference_feature(index: int) -> void:
+	if not reference_mode or index < 0 or index >= reference_features.size():
+		return
+	var restart := playing
+	_stop_replay()
+	reference_features[index] = not reference_features[index]
+	_apply()
+	if restart:
+		replay()
+
 func toggle_feature(index: int) -> void:
 	if index < 0 or index >= features.size():
 		return
@@ -128,6 +147,7 @@ func toggle_feature(index: int) -> void:
 		replay()
 
 func _apply() -> void:
+	joinery.set_enabled(false)
 	decor_root.visible = features[0] and not reference_mode
 	reference_root.visible = reference_mode and features[0]
 	for record in reference_bases:
@@ -139,6 +159,9 @@ func _apply() -> void:
 		mesh.material_override = record.sample_override if features[1] else record.original_override
 		for i in range(mesh.mesh.get_surface_count()):
 			mesh.set_surface_override_material(i, record.sample_surfaces[i] if features[1] else record.original_surfaces[i])
+	joinery.set_enabled(reference_root.visible and reference_features[0])
+	var atmosphere := reference_root.visible and reference_features[2]
+	reference_builder.set_atmosphere(atmosphere)
 	host.world_root.get_node("WorldEnvironment").environment = sample_environment if features[2] else baseline_environment
 	if reference_mode and features[2]:
 		host.world_root.get_node("WorldEnvironment").environment = reference_environment
@@ -154,12 +177,21 @@ func _apply() -> void:
 		if reference_mode:
 			key.light_energy = 0.85
 			fill.light_energy = 0.22
+	if atmosphere:
+		host.world_root.get_node("WorldEnvironment").environment = atmosphere_environment
+		var key = host.world_root.get_node("KeyLight")
+		key.light_color = Color("fff1d9")
+		key.light_energy = 0.92
+		key.light_angular_distance = 4.0
+		var fill = host.world_root.get_node("FillLight")
+		fill.light_color = Color("adc9df")
+		fill.light_energy = 0.12
 	var settings = host.presentation_settings
 	settings.depth_of_field_enabled = true if features[3] else (saved_dof[0] if not mode_b else false)
 	settings.depth_of_field_blur_strength = 1.5 if features[3] else saved_dof[1]
 	settings.depth_of_field_focus_width = 0.40 if features[3] else saved_dof[2]
 	settings._apply_depth_of_field_state()
-	host.status_message = "A 原版 / B 质感样板 / C 参考工坊：切割垫、书本、胶带、零件盘与窗边工作台。拖拽旋转，R 重播拼装。"
+	host.status_message = "A 原版 / B 质感样板 / C 参考工坊。C 可独立比较拼图接口、扣合收尾和氛围光；R 重播，拖拽旋转。"
 	host._refresh_hud()
 
 func reset_camera() -> void:
@@ -178,6 +210,7 @@ func replay() -> void:
 	host.animation_busy = true
 	host.active_animation_kind = "room_drop"
 	var assembly = load("res://scripts/toy_room_assembly.gd").new()
+	assembly.toy_snap_enabled = reference_mode and reference_features[1]
 	host.active_room_assembly = assembly
 	assembly.prepare(host._find_room_instance_nodes(target), host.camera)
 	var tween: Tween = host.create_tween()
@@ -217,6 +250,8 @@ func close() -> void:
 		return
 	_stop_replay()
 	closed = true
+	if joinery != null:
+		joinery.close()
 	for record in material_records:
 		if is_instance_valid(record.node):
 			record.node.mesh = record.original_mesh

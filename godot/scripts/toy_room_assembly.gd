@@ -9,6 +9,7 @@ var pieces: Array[Dictionary] = []
 var labels: Array[Node3D] = []
 var caps: Array[Node3D] = []
 var paused_tweens: Array[Tween] = []
+var toy_snap_enabled := false
 
 func prepare(modules: Array[Node3D], view: Camera3D) -> void:
 	camera = view
@@ -118,6 +119,17 @@ func pose_piece(piece: Dictionary, time: float) -> void:
 		return
 	if time >= landing:
 		var u := (time - landing) / 0.42
+		if toy_snap_enabled and kind == "base":
+			# Gentle compression at contact, then one small settling rebound.
+			var settle := sin(u * PI * 2.0) * exp(-u * 5.0)
+			var compression := maxf(0.0, settle) * 0.06
+			var contact_shift := 0.0
+			if node is MeshInstance3D:
+				contact_shift = node.get_aabb().position.y * compression * final_pose.basis.y.length()
+			else:
+				compression = 0.0
+			node.transform = Transform3D(final_pose.basis.scaled(Vector3(1, 1.0 - compression, 1)), final_pose.origin + Vector3.UP * (contact_shift + maxf(0, -settle) * 0.018))
+			return
 		var squash := sin(u * PI * 4.0 + PI * 0.5) * exp(-u * 5.0)
 		var strength := 0.36 if kind == "base" else 0.24
 		var stretch := Vector3(1.0 + squash * strength * 0.55, 1.0 - squash * strength, 1.0 + squash * strength * 0.55)
@@ -129,6 +141,9 @@ func pose_piece(piece: Dictionary, time: float) -> void:
 	var fall_start := landing - 0.20
 	var t := clampf((time - fall_start) / 0.20, 0.0, 1.0)
 	var fall := t * t * t
+	if toy_snap_enabled and kind == "base":
+		# Most of the fall is unchanged; the final short descent eases into the socket.
+		fall = 1.0 - pow(1.0 - t, 2.0) if t > 0.85 else (t * t * t / pow(0.85, 3.0)) * 0.9775
 	var offset: Vector3 = piece.offset
 	offset *= 1.0 - fall
 	if time < start + 0.12:

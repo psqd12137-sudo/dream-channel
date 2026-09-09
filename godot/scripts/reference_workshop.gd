@@ -6,6 +6,23 @@ var root: Node3D
 var back: Node3D
 var side: Node3D
 var center := Vector3.ZERO
+var baseline_lamp: OmniLight3D
+var warm_pool: SpotLight3D
+var window_fill: SpotLight3D
+var window_material: StandardMaterial3D
+var atmosphere_enabled := false
+
+func set_atmosphere(enabled: bool) -> void:
+	atmosphere_enabled = enabled
+	if not is_instance_valid(baseline_lamp):
+		return
+	# Keep the old preset exact when disabled; the new lights move with the set.
+	baseline_lamp.visible = not enabled
+	warm_pool.visible = enabled
+	window_fill.visible = enabled
+	window_material.emission_enabled = enabled
+	window_material.emission = Color("688d9e")
+	window_material.emission_energy_multiplier = 0.3 if enabled else 0.0
 
 func group(parent: Node3D, title: String, at: Vector3) -> Node3D:
 	var node := Node3D.new()
@@ -58,7 +75,7 @@ func build(owner_lab) -> Node3D:
 	var bounds := AABB(Vector3(-4, -0.8, -4), Vector3(8, 0.2, 8))
 	var benches = lab.host.house_root.find_children("ToyWorkbench", "MeshInstance3D", true, false)
 	if not benches.is_empty():
-		bounds = benches[0].global_transform * benches[0].get_aabb()
+		bounds = (lab.host.house_root.global_transform.affine_inverse() * benches[0].global_transform) * benches[0].get_aabb()
 	center = bounds.get_center()
 	var top := bounds.end.y - 0.03
 	var left := bounds.position.x - 1.0
@@ -105,7 +122,8 @@ func build(owner_lab) -> Node3D:
 	back = group(root, "WorkshopBack", Vector3(center.x, top, rear))
 	box(back, "CharcoalWall", Vector3(0, 1.9, -0.2), Vector3(bounds.size.x + 4.6, 3.8, 0.18), "26343e")
 	var window := group(back, "WorkshopWindow", Vector3(0, 2.05, 0))
-	box(window, "BlueGlass", Vector3.ZERO, Vector3(2.8, 2.15, 0.08), "759baa", 0.32)
+	var glass := box(window, "BlueGlass", Vector3.ZERO, Vector3(2.8, 2.15, 0.08), "759baa", 0.32)
+	window_material = glass.material_override as StandardMaterial3D
 	for x in [-1.45, 0.0, 1.45]:
 		box(window, "VerticalFrame", Vector3(x, 0, 0.09), Vector3(0.1, 2.35, 0.14), "afad96")
 	for y in [-1.12, 0.0, 1.12]:
@@ -136,6 +154,34 @@ func build(owner_lab) -> Node3D:
 	light.light_energy = 2.2
 	light.omni_range = 4.5
 	light.shadow_enabled = true
+	light.name = "BaselineLampLight"
+	baseline_lamp = light
+	warm_pool = SpotLight3D.new()
+	warm_pool.name = "WarmDeskPool"
+	lamp.add_child(warm_pool)
+	warm_pool.position = Vector3(0.6, 1.35, 0)
+	warm_pool.rotation_degrees.x = -90.0
+	warm_pool.light_color = Color("ffdbac")
+	warm_pool.light_energy = 2.8
+	warm_pool.light_size = 0.22
+	warm_pool.spot_range = 4.5
+	warm_pool.spot_angle = 62.0
+	warm_pool.spot_angle_attenuation = 0.8
+	warm_pool.shadow_enabled = true
+	# The cool fill belongs to the set rather than the cutaway wall, so orbiting
+	# does not abruptly remove the lighting as the wall opens for the camera.
+	window_fill = SpotLight3D.new()
+	window_fill.name = "CoolWindowFill"
+	root.add_child(window_fill)
+	window_fill.position = Vector3(center.x, top + 2.8, rear + 0.3)
+	window_fill.rotation_degrees = Vector3(-38.0, 180.0, 0.0)
+	window_fill.light_color = Color("b5d7ed")
+	window_fill.light_energy = 0.65
+	window_fill.spot_range = maxf(bounds.size.z + 2.0, 8.0)
+	window_fill.spot_angle = 65.0
+	window_fill.spot_angle_attenuation = 0.65
+	window_fill.shadow_enabled = false
+	set_atmosphere(false)
 	var stool := group(root, "RedStool", Vector3(left, top - 1.0, front + 1.4))
 	round_part(stool, "Seat", Vector3.ZERO, 0.5, 0.16, "9c463b")
 	for x in [-0.28, 0.28]:
@@ -146,5 +192,6 @@ func build(owner_lab) -> Node3D:
 
 func update_view(camera_position: Vector3) -> void:
 	# Open the enclosing set on the camera side, keeping the live toyhouse readable.
-	back.visible = camera_position.z > center.z
-	side.visible = camera_position.x < center.x
+	var local_camera := root.to_local(camera_position)
+	back.visible = local_camera.z > center.z
+	side.visible = local_camera.x < center.x

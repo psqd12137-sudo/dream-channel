@@ -21,6 +21,12 @@ func run() -> void:
 	if "--reference" in OS.get_cmdline_user_args():
 		game.tactile_lab.set_reference_mode()
 		await capture("C-default")
+		game.tactile_lab.toggle_reference_feature(2)
+		await capture("C-light-off")
+		game.tactile_lab.toggle_reference_feature(2)
+		game.tactile_lab.toggle_reference_feature(0)
+		await capture("C-joinery-off")
+		game.tactile_lab.toggle_reference_feature(0)
 		game.tactile_lab.set_mode(false)
 		await capture("C-baseline")
 		game.tactile_lab.set_reference_mode()
@@ -28,11 +34,21 @@ func run() -> void:
 			game.tactile_lab.reset_camera()
 			game.orbit_house_camera(Vector2(float(i) * PI * 0.5 / game.CAMERA_ORBIT_SENSITIVITY, 0))
 			await capture("C-view%d" % i)
+			game.zoom_house_camera(Vector2.ZERO, 0.01)
+			await capture("C-view%d-near" % i)
+			game.zoom_house_camera(Vector2.ZERO, 100)
+			await capture("C-view%d-far" % i)
+		game.tactile_lab.reset_camera()
+		game.house_camera_pitch = 0.34
+		game._apply_house_camera()
+		await capture("C-low-angle")
 		game.tactile_lab.reset_camera()
 		game.tactile_lab.replay()
 		await capture("C-drop")
 		await create_timer(4).timeout
 		await capture("C-ready")
+		if "--benchmark" in OS.get_cmdline_user_args():
+			await benchmark_reference()
 		game.go_home()
 		game.queue_free()
 		await process_frame
@@ -94,3 +110,32 @@ func run() -> void:
 	await process_frame
 	print("TACTILE_CAPTURE: PASS")
 	quit()
+
+func benchmark_reference() -> void:
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	Engine.max_fps = 0
+	var report := {}
+	for preset in ["A", "C-light-off", "C"]:
+		if preset == "A":
+			game.tactile_lab.set_mode(false)
+		else:
+			game.tactile_lab.set_reference_mode()
+			if game.tactile_lab.reference_features[2] != (preset == "C"):
+				game.tactile_lab.toggle_reference_feature(2)
+		await create_timer(3).timeout
+		var frames: Array[float] = []
+		var start := Time.get_ticks_usec()
+		var previous := start
+		while Time.get_ticks_usec() - start < 30000000:
+			await process_frame
+			var now := Time.get_ticks_usec()
+			frames.append(float(now - previous) / 1000.0)
+			previous = now
+		var total := 0.0
+		for value in frames:
+			total += value
+		frames.sort()
+		report[preset] = {"mean_ms": total / frames.size(), "p95_ms": frames[int(frames.size() * 0.95)], "frames": frames.size()}
+		print("REFERENCE_PERF ", preset, " ", report[preset])
+	var file := FileAccess.open(OUT + "/reference-performance.json", FileAccess.WRITE)
+	file.store_string(JSON.stringify(report, "  "))

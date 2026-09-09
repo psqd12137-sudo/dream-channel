@@ -735,9 +735,10 @@ func _draw_lab_hud() -> void:
 		var lab = game.tactile_lab
 		_draw_button(Rect2(1020, 182, 220, 38), "A 当前画面", TEAL if not lab.mode_b else DARK_2, TEXT)
 		_draw_button(Rect2(1020, 230, 220, 38), "B 质感样板", MAGENTA if lab.mode_b and not lab.reference_mode else DARK_2, TEXT)
-		var labels := ["外围桌面", "材质层次", "接触阴影", "轻景深（试验）"]
-		for i in range(4):
-			_draw_button(Rect2(1020, 288 + i * 44, 220, 34), ("✓ " if lab.features[i] else "○ ") + labels[i], TEAL if lab.features[i] else DARK_2, TEXT)
+		var labels := ["玩具底座与拼图接口", "扣合收尾", "工坊氛围光"] if lab.reference_mode else ["外围桌面", "材质层次", "接触阴影", "轻景深（试验）"]
+		var switches = lab.reference_features if lab.reference_mode else lab.features
+		for i in range(labels.size()):
+			_draw_button(Rect2(1020, 288 + i * 44, 220, 34), ("✓ " if switches[i] else "○ ") + labels[i], TEAL if switches[i] else DARK_2, TEXT)
 		_draw_button(Rect2(1020, 482, 220, 38), "R 重播拼装", MAGENTA, TEXT)
 		_draw_button(Rect2(1020, 530, 220, 38), "复位镜头", BLUE, TEXT)
 		_draw_button(Rect2(1020, 578, 220, 38), "C 参考工坊", TEAL if lab.reference_mode else DARK_2, TEXT)
@@ -2298,7 +2299,10 @@ func _gui_input(event: InputEvent) -> void:
 		else:
 			for i in range(4):
 				if Rect2(1020, 288 + i * 44, 220, 34).has_point(point):
-					game.tactile_lab.toggle_feature(i)
+					if game.tactile_lab.reference_mode:
+						game.tactile_lab.toggle_reference_feature(i)
+					else:
+						game.tactile_lab.toggle_feature(i)
 		return
 	if game.phase == "lab_hand_diorama":
 		if LAB_SWITCH_RECT.has_point(point):
