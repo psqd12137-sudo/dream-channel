@@ -34,7 +34,9 @@ func run() -> void:
 	_check(game.phase == "lab_toyhouse_sequence", "toyhouse sequence opens from the test area")
 	_check(game.toyhouse_sequence_active, "toyhouse sequence marks the visual sandbox active")
 	_check(game.room_rules.instance_count() == 2, "toyhouse sequence prepares exactly two adjacent rooms")
-	await _wait_for_effect(game, 6.0)
+	var observed_steps := await _wait_for_effect(game, 6.0)
+	_check(bool(observed_steps.get("assembly_hold", false)), "toyhouse sequence includes a visible assembly hold")
+	_check(bool(observed_steps.get("jump", false)), "toyhouse sequence hands off to the actor jump")
 	_check(not game.animation_busy, "toyhouse sequence finishes all visual effects")
 	_check(game.phase == "lab_toyhouse_sequence" and game.toyhouse_sequence_step == "ready", "toyhouse sequence returns to its replayable ready state")
 	_check(game.current_room_pos == target, "toyhouse sequence moves the actor into the new room")
@@ -69,11 +71,17 @@ func run() -> void:
 		quit(1)
 
 
-func _wait_for_effect(target_game: Node, timeout_seconds: float) -> void:
+func _wait_for_effect(target_game: Node, timeout_seconds: float) -> Dictionary:
 	var deadline := Time.get_ticks_msec() + int(timeout_seconds * 1000.0)
+	var observed := {"assembly_hold": false, "jump": false}
 	while target_game.animation_busy and Time.get_ticks_msec() < deadline:
+		if target_game.toyhouse_sequence_step == "assembly_hold":
+			observed["assembly_hold"] = true
+		elif target_game.toyhouse_sequence_step == "jump":
+			observed["jump"] = true
 		await process_frame
 	_check(not target_game.animation_busy, "toyhouse sequence effect completes before timeout")
+	return observed
 
 
 func _check(ok: bool, message: String) -> void:
