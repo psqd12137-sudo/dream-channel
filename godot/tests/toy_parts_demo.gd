@@ -1,7 +1,8 @@
 extends SceneTree
 
 # Isolated visual prototype. No changes to the formal placement flow.
-const OUT := "res://../output/toy-parts-offscreen"
+const OUT := "res://../output/toy-parts-offscreen-slow"
+const PLAYBACK_DURATION_SCALE := 1.5
 const DROP_HEIGHT := 5.5
 var game: Node3D
 var pieces: Array[Dictionary] = []
@@ -104,8 +105,9 @@ func run() -> void:
 			quit(1)
 			return
 	print("OFFSCREEN_CHECK: PASS all parts above viewport with 48px margin")
-	for frame in range(78):
-		var time := float(frame) / 30.0
+	var frame_count := int(ceil(78 * PLAYBACK_DURATION_SCALE))
+	for frame in range(frame_count):
+		var time := float(frame) / (30.0 * PLAYBACK_DURATION_SCALE)
 		for piece: Dictionary in pieces:
 			pose_piece(piece, time)
 		await RenderingServer.frame_post_draw
@@ -118,7 +120,7 @@ func run() -> void:
 			push_error("Part did not settle exactly: " + str(piece.node.name))
 			quit(1)
 			return
-	print("TOY_PARTS_DEMO: PASS parts=", pieces.size(), " frames=78 final transforms exact")
+	print("TOY_PARTS_DEMO: PASS parts=", pieces.size(), " frames=", frame_count, " final transforms exact")
 	game.run_save_repository.clear()
 	game.queue_free()
 	await process_frame
