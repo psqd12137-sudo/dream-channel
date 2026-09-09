@@ -13,6 +13,9 @@ static func for_room(room_type: String, _theme: String, props: Array) -> Diction
 	var visual_scale := 1.00
 	var material_family := "cardboard"
 	match room_type:
+		"hall":
+			visual_scale = 1.08
+			material_family = "cardboard"
 		"living":
 			visual_scale = 1.00
 			material_family = "painted_wood"

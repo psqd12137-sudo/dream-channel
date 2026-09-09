@@ -125,7 +125,7 @@ func _run() -> void:
 
 	for y in range(game.combat.rows):
 		for x in range(game.combat.cols):
-			var screen_pos: Vector2 = camera.unproject_position(game._battle_world(Vector2i(x, y)))
+			var screen_pos: Vector2 = camera.unproject_position(game.battle_visual_world(Vector2i(x, y)))
 			_check(screen_pos.x >= 0.0 and screen_pos.y >= 0.0 and screen_pos.x <= world_viewport.size.x and screen_pos.y <= world_viewport.size.y, "auto-fit must keep cell %s visible" % Vector2i(x, y))
 	var logical_wall_count: int = game.combat.walls.size()
 	game.orbit_battle_camera(Vector2(196, 0))
@@ -133,7 +133,7 @@ func _run() -> void:
 	_check(game.combat.walls.size() == logical_wall_count, "camera-facing shell cutaway must not mutate combat wall logic")
 	for y in range(game.combat.rows):
 		for x in range(game.combat.cols):
-			var rotated_screen_pos: Vector2 = camera.unproject_position(game._battle_world(Vector2i(x, y)))
+			var rotated_screen_pos: Vector2 = camera.unproject_position(game.battle_visual_world(Vector2i(x, y)))
 			_check(rotated_screen_pos.x >= 0.0 and rotated_screen_pos.y >= 0.0 and rotated_screen_pos.x <= world_viewport.size.x and rotated_screen_pos.y <= world_viewport.size.y, "rotation-invariant fit must keep rotated cell %s visible" % Vector2i(x, y))
 	game.reset_battle_camera()
 
@@ -152,7 +152,7 @@ func _run() -> void:
 	var stable_cell: Node = game.battle_board_root.get_node("Cell_%d_%d" % [target_cell.x, target_cell.y])
 	game.pan_battle_camera(Vector2(-90, 45))
 	game.zoom_battle_camera(Vector2(world_viewport.size) * 0.5, 0.8)
-	var projected: Vector2 = camera.unproject_position(game._battle_world(target_cell))
+	var projected: Vector2 = camera.unproject_position(game.battle_visual_world(target_cell))
 	_check(game.battle_cell_from_viewport(projected) == target_cell, "picking must survive pan and zoom")
 	game.set_battle_hover(projected)
 	await process_frame
@@ -162,7 +162,7 @@ func _run() -> void:
 	_check(hovered_node is MeshInstance3D, "悬停格必须渲染整格覆层")
 	_check(game.battle_board_root.get_node("Cell_%d_%d" % [target_cell.x, target_cell.y]) == stable_cell, "hovering must not rebuild the battle board")
 	var valid_hover_cell := _first_valid_battle_target(game)
-	var valid_projected: Vector2 = camera.unproject_position(game._battle_world(valid_hover_cell))
+	var valid_projected: Vector2 = camera.unproject_position(game.battle_visual_world(valid_hover_cell))
 	game.set_battle_hover(valid_projected)
 	await process_frame
 	_check(_count_named_prefix(battle_root, "HoverValidFill") > 0, "可用悬停格必须渲染绿色覆层")

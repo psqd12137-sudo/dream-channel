@@ -691,13 +691,13 @@ func _battle_camera_frame_offset() -> Vector3:
 func _battle_follow_target_position() -> Vector3:
 	if combat == null:
 		return Vector3.ZERO
-	var points: Array[Vector3] = [_battle_pawn_world(combat.player_pos, true)]
+	var points: Array[Vector3] = [battle_visual_world(combat.player_pos)]
 	for enemy_id in combat.living_enemy_ids():
 		var state = combat.enemy_by_id(enemy_id)
 		# 镜头只能框选玩家和已经揭示的敌人；把隐藏敌人的坐标纳入
 		# 中点会通过镜头移动泄露其位置。
 		if state != null and state.revealed:
-			points.append(_battle_pawn_world(state.pos, false, enemy_id))
+			points.append(battle_visual_world(state.pos))
 	if points.is_empty():
 		return Vector3.ZERO
 	var center := Vector3.ZERO
@@ -3403,6 +3403,8 @@ func battle_cell_from_viewport(view_pos: Vector2) -> Vector2i:
 		var floor_origin := _world_boss_pick_floor_origin(floor_index)
 		var cell := Vector2i(roundi(world.x / HOUSE_CELL) + floor_origin.x, roundi(world.z / HOUSE_CELL) + floor_origin.y)
 		return combat.cell_nodes.get(cell, INVALID_CELL)
+	if battle_presentation_root != null and is_instance_valid(battle_presentation_root):
+		world = battle_presentation_root.to_local(world)
 	var grid_origin := Vector2(-float(combat.cols - 1) * BATTLE_CELL * 0.5, -float(combat.rows - 1) * BATTLE_CELL * 0.5)
 	var target := Vector2i(roundi((world.x - grid_origin.x) / BATTLE_CELL), roundi((world.z - grid_origin.y) / BATTLE_CELL))
 	if target.x < 0 or target.y < 0 or target.x >= combat.cols or target.y >= combat.rows:
@@ -3501,9 +3503,10 @@ func _refit_battle_camera(preserve_zoom: bool) -> void:
 	var max_height := 0.0
 	for raw_height in combat.heights.values():
 		max_height = maxf(max_height, float(raw_height))
-	var half_x := (float(combat.cols - 1) * 0.5 + 0.65) * BATTLE_CELL
-	var half_z := (float(combat.rows - 1) * 0.5 + 0.65) * BATTLE_CELL
-	var max_y := maxf(max_height * 0.64 + 2.25, BATTLE_SHELL_WALL_HEIGHT + 1.0)
+	var visual_scale := battle_presentation_root.scale.x if battle_presentation_root != null and is_instance_valid(battle_presentation_root) else 1.0
+	var half_x := (float(combat.cols - 1) * 0.5 + 0.65) * BATTLE_CELL * visual_scale
+	var half_z := (float(combat.rows - 1) * 0.5 + 0.65) * BATTLE_CELL * visual_scale
+	var max_y := maxf(max_height * 0.64 + 2.25, BATTLE_SHELL_WALL_HEIGHT + 1.0) * visual_scale
 	var horizontal_radius := Vector2(half_x, half_z).length()
 	# 取景焦点现在只来自玩家与已揭示敌人；当焦点偏离棋盘中心时，
 	# 旋转适配半径也必须包含这段已知偏移，否则边缘会在某些角度出框。
@@ -4224,6 +4227,17 @@ func _house_logical_world_from_visual(world: Vector3) -> Vector3:
 
 func _battle_world(pos: Vector2i) -> Vector3:
 	return Vector3((float(pos.x) - float(combat.cols - 1) * 0.5) * BATTLE_CELL, 0.0, (float(pos.y) - float(combat.rows - 1) * 0.5) * BATTLE_CELL)
+
+
+func battle_logical_world(pos: Vector2i) -> Vector3:
+	return _battle_world(pos)
+
+
+func battle_visual_world(pos: Vector2i) -> Vector3:
+	var logical_world := _battle_world(pos)
+	if battle_presentation_root == null or not is_instance_valid(battle_presentation_root):
+		return logical_world
+	return battle_presentation_root.to_global(logical_world)
 
 
 func _screen_to_plane(screen_pos: Vector2, plane_y: float) -> Variant:

@@ -103,6 +103,9 @@ var battle_board_root:
 var battle_actor_root:
 	get: return host.battle_actor_root
 	set(value): host.battle_actor_root = value
+var battle_presentation_root:
+	get: return host.battle_presentation_root
+	set(value): host.battle_presentation_root = value
 var battle_entry_side: int:
 	get: return host.battle_entry_side
 var battle_entry_cell: Vector2i:
@@ -216,36 +219,82 @@ func _add_trap_item_sprite(parent: Node3D, card_id: String, y: float) -> void:
 
 
 func _ensure_battle_layers() -> void:
+	if battle_presentation_root == null or not is_instance_valid(battle_presentation_root):
+		battle_presentation_root = battle_root.get_node_or_null("BattlePresentationRoot") as Node3D
+	if battle_presentation_root == null:
+		battle_presentation_root = Node3D.new()
+		battle_presentation_root.name = "BattlePresentationRoot"
+		battle_root.add_child(battle_presentation_root)
 	if battle_board_root == null or not is_instance_valid(battle_board_root):
-		battle_board_root = battle_root.get_node_or_null("BattleBoard") as Node3D
+		battle_board_root = battle_presentation_root.get_node_or_null("BattleBoard") as Node3D
+		if battle_board_root == null:
+			battle_board_root = battle_root.get_node_or_null("BattleBoard") as Node3D
 	if battle_board_root == null:
 		battle_board_root = Node3D.new()
 		battle_board_root.name = "BattleBoard"
-		battle_root.add_child(battle_board_root)
+		battle_presentation_root.add_child(battle_board_root)
+	elif battle_board_root.get_parent() != battle_presentation_root:
+		battle_board_root.reparent(battle_presentation_root, false)
 	if battle_actor_root == null or not is_instance_valid(battle_actor_root):
-		battle_actor_root = battle_root.get_node_or_null("BattleActors") as Node3D
+		battle_actor_root = battle_presentation_root.get_node_or_null("BattleActors") as Node3D
+		if battle_actor_root == null:
+			battle_actor_root = battle_root.get_node_or_null("BattleActors") as Node3D
 	if battle_actor_root == null:
 		battle_actor_root = Node3D.new()
 		battle_actor_root.name = "BattleActors"
-		battle_root.add_child(battle_actor_root)
+		battle_presentation_root.add_child(battle_actor_root)
+	elif battle_actor_root.get_parent() != battle_presentation_root:
+		battle_actor_root.reparent(battle_presentation_root, false)
 	if battle_hover_root == null or not is_instance_valid(battle_hover_root):
-		battle_hover_root = battle_root.get_node_or_null("BattleHoverOverlay") as Node3D
+		battle_hover_root = battle_presentation_root.get_node_or_null("BattleHoverOverlay") as Node3D
+		if battle_hover_root == null:
+			battle_hover_root = battle_root.get_node_or_null("BattleHoverOverlay") as Node3D
 	if battle_hover_root == null:
 		battle_hover_root = Node3D.new()
 		battle_hover_root.name = "BattleHoverOverlay"
-		battle_root.add_child(battle_hover_root)
+		battle_presentation_root.add_child(battle_hover_root)
+	elif battle_hover_root.get_parent() != battle_presentation_root:
+		battle_hover_root.reparent(battle_presentation_root, false)
 	if battle_target_root == null or not is_instance_valid(battle_target_root):
-		battle_target_root = battle_root.get_node_or_null("BattleTargetOverlay") as Node3D
+		battle_target_root = battle_presentation_root.get_node_or_null("BattleTargetOverlay") as Node3D
+		if battle_target_root == null:
+			battle_target_root = battle_root.get_node_or_null("BattleTargetOverlay") as Node3D
 	if battle_target_root == null:
 		battle_target_root = Node3D.new()
 		battle_target_root.name = "BattleTargetOverlay"
-		battle_root.add_child(battle_target_root)
+		battle_presentation_root.add_child(battle_target_root)
+	elif battle_target_root.get_parent() != battle_presentation_root:
+		battle_target_root.reparent(battle_presentation_root, false)
 	if battle_intent_line_root == null or not is_instance_valid(battle_intent_line_root):
-		battle_intent_line_root = battle_root.get_node_or_null("BattleIntentLines") as Node3D
+		battle_intent_line_root = battle_presentation_root.get_node_or_null("BattleIntentLines") as Node3D
+		if battle_intent_line_root == null:
+			battle_intent_line_root = battle_root.get_node_or_null("BattleIntentLines") as Node3D
 	if battle_intent_line_root == null:
 		battle_intent_line_root = Node3D.new()
 		battle_intent_line_root.name = "BattleIntentLines"
-		battle_root.add_child(battle_intent_line_root)
+		battle_presentation_root.add_child(battle_intent_line_root)
+	elif battle_intent_line_root.get_parent() != battle_presentation_root:
+		battle_intent_line_root.reparent(battle_presentation_root, false)
+
+
+func apply_battle_imagination_mode(mode: String, profile: Dictionary) -> void:
+	_ensure_battle_layers()
+	var visual_scale := 1.0
+	if mode == "imagination":
+		visual_scale = clampf(float(profile.get("visual_scale", 1.0)), 0.90, 1.20)
+	var center := Vector3.ZERO
+	var cell_count := 0
+	if combat != null:
+		for y in range(combat.rows):
+			for x in range(combat.cols):
+				var cell := Vector2i(x, y)
+				if _battle_cell_in_room_footprint(cell):
+					center += _battle_world(cell)
+					cell_count += 1
+	if cell_count > 0:
+		center /= float(cell_count)
+	battle_presentation_root.scale = Vector3.ONE * visual_scale
+	battle_presentation_root.position = center - center * visual_scale
 
 
 func build_battle_world() -> void:
