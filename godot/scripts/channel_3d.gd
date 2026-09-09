@@ -4149,6 +4149,8 @@ func _apply_house_camera() -> void:
 	if house_camera_size_current <= 0.0:
 		house_camera_size_current = _house_camera_size_target()
 	camera.size = house_camera_size_current * lerpf(CAMERA_INTRO_FAR_SCALE, 1.0, house_camera_intro_weight)
+	if tactile_lab != null:
+		tactile_lab.update_reference_view()
 	if kenney_build_lab_mode:
 		_apply_current_room_cutaway()
 

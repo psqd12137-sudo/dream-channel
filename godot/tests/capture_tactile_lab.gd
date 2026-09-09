@@ -18,6 +18,27 @@ func run() -> void:
 	await process_frame
 	root.size = Vector2i(1280, 800)
 	game.start_tactile_lab()
+	if "--reference" in OS.get_cmdline_user_args():
+		game.tactile_lab.set_reference_mode()
+		await capture("C-default")
+		game.tactile_lab.set_mode(false)
+		await capture("C-baseline")
+		game.tactile_lab.set_reference_mode()
+		for i in range(4):
+			game.tactile_lab.reset_camera()
+			game.orbit_house_camera(Vector2(float(i) * PI * 0.5 / game.CAMERA_ORBIT_SENSITIVITY, 0))
+			await capture("C-view%d" % i)
+		game.tactile_lab.reset_camera()
+		game.tactile_lab.replay()
+		await capture("C-drop")
+		await create_timer(4).timeout
+		await capture("C-ready")
+		game.go_home()
+		game.queue_free()
+		await process_frame
+		print("REFERENCE_CAPTURE: PASS")
+		quit()
+		return
 	await capture("B-default")
 	game.tactile_lab.set_mode(false)
 	await capture("A-default")

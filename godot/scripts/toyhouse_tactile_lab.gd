@@ -4,6 +4,11 @@ extends RefCounted
 var host
 var features: Array[bool] = [true, true, true, false]
 var mode_b := true
+var reference_mode := false
+var reference_root: Node3D
+var reference_environment: Environment
+var reference_builder: RefCounted
+var reference_bases: Array[Dictionary] = []
 var material_records: Array[Dictionary] = []
 var decor_root: Node3D
 var target := Vector2i.ZERO
@@ -66,6 +71,13 @@ func start() -> void:
 	baseline_lights = _light_snapshot()
 	_capture_materials()
 	_build_desktop()
+	reference_environment = sample_environment.duplicate()
+	reference_environment.ambient_light_energy = 0.30
+	reference_environment.ambient_light_color = Color("889aaa")
+	reference_builder = load("res://scripts/reference_workshop.gd").new()
+	reference_root = reference_builder.build(self)
+	for node in host.house_root.find_children("ToyWorkbench*", "MeshInstance3D", true, false):
+		reference_bases.append({"node": node, "visible": node.visible})
 	_apply()
 
 func _light_snapshot() -> Array[Dictionary]:
@@ -81,6 +93,7 @@ func _restore_lights(records: Array[Dictionary]) -> void:
 			record.node.set(key, record[key])
 
 func set_mode(sample: bool) -> void:
+	reference_mode = false
 	mode_b = sample
 	features.assign([true, true, true, false] if sample else [false, false, false, false])
 	var restart := playing
@@ -88,6 +101,20 @@ func set_mode(sample: bool) -> void:
 	_apply()
 	if restart:
 		replay()
+
+func set_reference_mode() -> void:
+	var restart := playing
+	_stop_replay()
+	reference_mode = true
+	mode_b = true
+	features.assign([true, false, true, false])
+	_apply()
+	if restart:
+		replay()
+
+func update_reference_view() -> void:
+	if is_instance_valid(reference_root):
+		reference_builder.update_view(host.camera.global_position)
 
 func toggle_feature(index: int) -> void:
 	if index < 0 or index >= features.size():
@@ -101,7 +128,11 @@ func toggle_feature(index: int) -> void:
 		replay()
 
 func _apply() -> void:
-	decor_root.visible = features[0]
+	decor_root.visible = features[0] and not reference_mode
+	reference_root.visible = reference_mode and features[0]
+	for record in reference_bases:
+		record.node.visible = record.visible and not reference_root.visible
+	update_reference_view()
 	for record in material_records:
 		var mesh: MeshInstance3D = record.node
 		mesh.mesh = record.rounded_mesh if features[1] else record.original_mesh
@@ -109,6 +140,8 @@ func _apply() -> void:
 		for i in range(mesh.mesh.get_surface_count()):
 			mesh.set_surface_override_material(i, record.sample_surfaces[i] if features[1] else record.original_surfaces[i])
 	host.world_root.get_node("WorldEnvironment").environment = sample_environment if features[2] else baseline_environment
+	if reference_mode and features[2]:
+		host.world_root.get_node("WorldEnvironment").environment = reference_environment
 	_restore_lights(baseline_lights)
 	if features[2]:
 		var key = host.world_root.get_node("KeyLight")
@@ -118,12 +151,15 @@ func _apply() -> void:
 		var fill = host.world_root.get_node("FillLight")
 		fill.light_color = Color("c4e7e3")
 		fill.light_energy = 0.38
+		if reference_mode:
+			key.light_energy = 0.85
+			fill.light_energy = 0.22
 	var settings = host.presentation_settings
 	settings.depth_of_field_enabled = true if features[3] else (saved_dof[0] if not mode_b else false)
 	settings.depth_of_field_blur_strength = 1.5 if features[3] else saved_dof[1]
 	settings.depth_of_field_focus_width = 0.40 if features[3] else saved_dof[2]
 	settings._apply_depth_of_field_state()
-	host.status_message = "同一房间、同一镜头。A 当前画面 / B 质感样板；四项可单独切换。轻景深默认关闭，避免模糊房间。"
+	host.status_message = "A 原版 / B 质感样板 / C 参考工坊：切割垫、书本、胶带、零件盘与窗边工作台。拖拽旋转，R 重播拼装。"
 	host._refresh_hud()
 
 func reset_camera() -> void:
@@ -189,6 +225,11 @@ func close() -> void:
 				record.node.set_surface_override_material(i, record.original_surfaces[i])
 	if is_instance_valid(decor_root):
 		decor_root.free()
+	if is_instance_valid(reference_root):
+		reference_root.free()
+	for record in reference_bases:
+		if is_instance_valid(record.node):
+			record.node.visible = record.visible
 	host.world_root.get_node("WorldEnvironment").environment = saved_environment
 	_restore_lights(saved_lights)
 	var settings = host.presentation_settings

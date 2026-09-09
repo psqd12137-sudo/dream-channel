@@ -41,6 +41,10 @@ func run() -> void:
 	game.hud._gui_input(click)
 	await process_frame
 	var lab = game.tactile_lab
+	if not lab.has_method("set_reference_mode"):
+		push_error("TACTILE: missing reference workshop preset")
+		quit(1)
+		return
 	check(lab != null and game.phase == "lab_tactile", "entry must stay in test phase")
 	check(game.run_save_repository != repository, "lab must isolate save repository")
 	var layout: Dictionary = game.room_rules.placed.duplicate(true)
@@ -74,6 +78,21 @@ func run() -> void:
 	lab.reset_camera()
 	check(game.camera.transform == camera_pose and game.camera.size == camera_size, "reset restores common camera")
 	check(not lab.features[3], "band blur must remain opt-in")
+	key.keycode = KEY_C
+	game.hud._input(key)
+	check(lab.reference_mode and lab.reference_root.visible, "reference workshop is visible")
+	check(game.camera.transform == camera_pose and game.camera.size == camera_size, "reference keeps comparison camera")
+	check(not lab.features[1], "reference retains original room materials")
+	for name in ["CuttingMat", "BookStack", "TapeRoll", "PartsTray", "WorkshopWindow", "ShelfLeft", "DeskLamp"]:
+		check(lab.reference_root.find_child(name, true, false) != null, "reference includes " + name)
+	lab.set_mode(false)
+	check(not lab.reference_root.visible, "A hides reference room and its lamps")
+	for record in lab.reference_bases:
+		check(record.node.visible == record.visible, "A restores original base visibility")
+	click.position = Vector2(1130, 595) * game.hud.ui_scale + game.hud.ui_offset
+	game.hud._gui_input(click)
+	check(lab.reference_mode, "C button is wired through real HUD")
+	lab.set_mode(true)
 	check(lab.decor_root.visible, "B shows tabletop")
 	lab.toggle_feature(0)
 	check(not lab.decor_root.visible, "tabletop has independent switch")
@@ -94,6 +113,7 @@ func run() -> void:
 	lab.replay()
 	lab.set_mode(false)
 	check(game.active_room_assembly != null, "switching during replay restarts assembly")
+	lab.set_reference_mode()
 	game.go_home()
 	check(game.tactile_lab == null and game.active_room_assembly == null, "exit cleans active animation")
 	check(game.run_save_repository == repository and repository.read() == saved, "formal save remains byte-equivalent data")

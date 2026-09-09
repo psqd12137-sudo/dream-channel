@@ -734,14 +734,14 @@ func _draw_lab_hud() -> void:
 		_label("同一房间 / 同一镜头", Vector2(1020, 156), 12, MUTED)
 		var lab = game.tactile_lab
 		_draw_button(Rect2(1020, 182, 220, 38), "A 当前画面", TEAL if not lab.mode_b else DARK_2, TEXT)
-		_draw_button(Rect2(1020, 230, 220, 38), "B 质感样板", MAGENTA if lab.mode_b else DARK_2, TEXT)
+		_draw_button(Rect2(1020, 230, 220, 38), "B 质感样板", MAGENTA if lab.mode_b and not lab.reference_mode else DARK_2, TEXT)
 		var labels := ["外围桌面", "材质层次", "接触阴影", "轻景深（试验）"]
 		for i in range(4):
 			_draw_button(Rect2(1020, 288 + i * 44, 220, 34), ("✓ " if lab.features[i] else "○ ") + labels[i], TEAL if lab.features[i] else DARK_2, TEXT)
 		_draw_button(Rect2(1020, 482, 220, 38), "R 重播拼装", MAGENTA, TEXT)
 		_draw_button(Rect2(1020, 530, 220, 38), "复位镜头", BLUE, TEXT)
-		_label("拖拽旋转 · 滚轮缩放", Vector2(1020, 604), 12, MUTED)
-		_label("景深默认关闭，优先看清房间", Vector2(1020, 630), 10, MUTED)
+		_draw_button(Rect2(1020, 578, 220, 38), "C 参考工坊", TEAL if lab.reference_mode else DARK_2, TEXT)
+		_label("A/B/C 切换 · 拖拽旋转 · 滚轮缩放", Vector2(1020, 646), 10, MUTED)
 		_draw_coach(Rect2(60, 688, 1160, 68), "实体玩具质感", game.status_message)
 	elif game.phase == "lab_puzzle":
 		_draw_puzzle()
@@ -1825,6 +1825,7 @@ func _input(event: InputEvent) -> void:
 		match key_event.keycode:
 			KEY_A: game.tactile_lab.set_mode(false)
 			KEY_B: game.tactile_lab.set_mode(true)
+			KEY_C: game.tactile_lab.set_reference_mode()
 			KEY_R: game.tactile_lab.replay()
 			KEY_ESCAPE: game.go_home()
 		get_viewport().set_input_as_handled()
@@ -2292,6 +2293,8 @@ func _gui_input(event: InputEvent) -> void:
 			game.tactile_lab.replay()
 		elif Rect2(1020, 530, 220, 38).has_point(point):
 			game.tactile_lab.reset_camera()
+		elif Rect2(1020, 578, 220, 38).has_point(point):
+			game.tactile_lab.set_reference_mode()
 		else:
 			for i in range(4):
 				if Rect2(1020, 288 + i * 44, 220, 34).has_point(point):
