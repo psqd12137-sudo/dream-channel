@@ -345,6 +345,7 @@ var lab_collected := 0
 var wall_transition_mode := 0
 var toyhouse_sequence_active := false
 var active_room_assembly: RefCounted
+var tactile_lab: RefCounted
 var toyhouse_sequence_step := "idle"
 var toyhouse_sequence_target := Vector2i.ZERO
 var puzzle_board: Array[int] = []
@@ -573,13 +574,15 @@ func _process(delta: float) -> void:
 ##   走格跟随玩家-怪物中点、松手延迟回位、偏上对准。
 ## - 共享数学在 `camera_follow_math.gd`（平滑因子、屏幕上方偏移）。
 func _update_camera_follow(delta: float) -> void:
+	if tactile_lab != null:
+		return
 	if active_room_assembly != null:
 		return
 	if house_camera_return_delay > 0.0:
 		house_camera_return_delay = maxf(0.0, house_camera_return_delay - delta)
 		if house_camera_return_delay <= 0.0 and not house_camera_user_hold:
 			_start_house_camera_return()
-	if phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"] and camera != null:
+	if phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile", "world_boss"] and camera != null:
 		var target_size := _house_camera_size_target()
 		var size_factor := CameraFollowMath.smooth_factor(HOUSE_CAMERA_SIZE_SMOOTH_RATE, delta)
 		var next_size := lerpf(house_camera_size_current, target_size, size_factor)
@@ -776,6 +779,9 @@ func set_world_view_rect(rect: Rect2) -> void:
 	world_container.size = rect.size
 	if not changed or camera == null:
 		return
+	if tactile_lab != null:
+		_apply_house_camera()
+		return
 	if phase == "combat" and combat != null:
 		_refit_battle_camera(true)
 		camera.size = battle_camera_fit_size * battle_camera_zoom_ratio
@@ -826,6 +832,8 @@ func is_world_view_point(screen_pos: Vector2) -> bool:
 
 
 func reset_run(seed_value: int = 0) -> void:
+	if tactile_lab != null:
+		tactile_lab.close()
 	_cancel_dynamic_effect()
 	clear_test_visual_filter()
 	show_house_diagnostics = false
@@ -958,6 +966,8 @@ func copy_current_seed() -> void:
 
 
 func go_home() -> void:
+	if tactile_lab != null:
+		tactile_lab.close()
 	if phase == "world_boss" and combat != null:
 		_save_run()
 	boss_preview_active = false
@@ -1119,6 +1129,13 @@ func set_wall_transition_lab_mode(mode: int) -> void:
 
 func start_toyhouse_sequence_lab() -> void:
 	lab_controller.start_toyhouse_sequence_lab()
+
+
+func start_tactile_lab() -> void:
+	if tactile_lab != null:
+		tactile_lab.close()
+	var sample = load("res://scripts/toyhouse_tactile_lab.gd").new(self)
+	sample.start()
 
 
 func replay_toyhouse_sequence_lab() -> void:
@@ -1614,6 +1631,9 @@ func _set_house_token_path_motion(weight: float, token: Node3D, start_position: 
 
 
 func _finish_enter_room(target: Vector2i) -> void:
+	if tactile_lab != null:
+		tactile_lab.finish_entry()
+		return
 	current_room_pos = target
 	house_camera_closeup = false
 	house_camera_following = false
@@ -3971,7 +3991,7 @@ func _set_house_camera() -> void:
 
 
 func toggle_house_camera_closeup() -> bool:
-	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"] or camera == null:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile", "world_boss"] or camera == null:
 		return false
 	house_camera_closeup = not house_camera_closeup
 	house_camera_following = true
@@ -3984,7 +4004,7 @@ func toggle_house_camera_closeup() -> bool:
 
 
 func pan_house_camera(pixel_delta: Vector2) -> void:
-	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"]:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile", "world_boss"]:
 		return
 	house_camera_user_hold = true
 	_cancel_house_camera_return()
@@ -3998,7 +4018,7 @@ func pan_house_camera(pixel_delta: Vector2) -> void:
 
 
 func orbit_house_camera(pixel_delta: Vector2) -> void:
-	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"]:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile", "world_boss"]:
 		return
 	house_camera_user_hold = true
 	_cancel_house_camera_return()
@@ -4008,7 +4028,7 @@ func orbit_house_camera(pixel_delta: Vector2) -> void:
 
 
 func zoom_house_camera(_view_pos: Vector2, zoom_factor: float) -> void:
-	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"]:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile", "world_boss"]:
 		return
 	# 缩放属于手动镜头操作，暂停自动跟随，避免跟随目标和缩放同时改写 target。
 	house_camera_following = false
@@ -4017,6 +4037,8 @@ func zoom_house_camera(_view_pos: Vector2, zoom_factor: float) -> void:
 	var current_target := _house_camera_size_target()
 	var next_size := clampf(current_target * zoom_factor, base_size * CAMERA_ZOOM_MIN, base_size * CAMERA_ZOOM_MAX)
 	house_camera_size_target = next_size
+	if tactile_lab != null:
+		house_camera_size_current = next_size
 	house_camera_zoom_ratio = next_size / maxf(0.001, base_size)
 	house_camera_user_adjusted = true
 	# 同样围绕镜头中心缩放；不再按鼠标位置额外平移 camera target。
@@ -4084,7 +4106,7 @@ func _cancel_house_camera_return() -> void:
 
 
 func _start_house_camera_return() -> void:
-	if camera == null or phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"]:
+	if camera == null or phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile", "world_boss"]:
 		return
 	house_camera_returning = true
 	var player_pos := _house_follow_target_position() + _house_camera_frame_offset()

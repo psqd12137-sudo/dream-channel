@@ -108,6 +108,7 @@ const HOME_TEST_ASSET_EDITOR_RECT := Rect2(780, 282, 205, 42)
 const HOME_TEST_HOST_RECT := Rect2(997, 282, 205, 42)
 const HOME_TEST_WALL_TRANSITION_RECT := Rect2(780, 336, 422, 42)
 const HOME_TEST_TOYHOUSE_RECT := Rect2(780, 390, 422, 42)
+const HOME_TEST_TACTILE_RECT := Rect2(780, 444, 422, 42)
 const TEST_COMBAT_RETURN_RECT := Rect2(1040, 18, 192, 34)
 const HOME_RESOLUTION_RECT := Rect2(76, 714, 180, 36)
 const HOME_WINDOW_MODE_RECT := Rect2(270, 714, 102, 36)
@@ -597,7 +598,7 @@ func _draw_home() -> void:
 	_draw_button(HOME_SEED_COPY_RECT, "复制种子", BLUE, TEXT)
 	_draw_button(HOME_TESTS_RECT, "关闭后台" if game.home_tests_open else "后台测试", Color("734b87"), TEXT)
 	if game.home_tests_open:
-		_draw_ticket_panel(Rect2(764, 96, 454, 350), Color("17151cf2"), MAGENTA)
+		_draw_ticket_panel(Rect2(764, 96, 454, 404), Color("17151cf2"), MAGENTA)
 		_label("节目后台 · 仅供开发检查", Vector2(780, 120), 10, MUTED)
 		_draw_button(HOME_TEST_LAYOUT_RECT, "布局直觉测试区", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_SIDE_RECT, "WASD 横版手感", TEAL, TEXT)
@@ -609,6 +610,7 @@ func _draw_home() -> void:
 		_draw_button(HOME_TEST_HOST_RECT, "大地图 Boss · 独立试玩", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_WALL_TRANSITION_RECT, "墙体显隐动画对比", Color("3e8b78"), TEXT)
 		_draw_button(HOME_TEST_TOYHOUSE_RECT, "玩具屋完整流程样片", MAGENTA, TEXT)
+		_draw_button(HOME_TEST_TACTILE_RECT, "实体玩具质感对比", TEAL, TEXT)
 	_label("画面", Vector2(76, 706), 10, MUTED)
 	_draw_button(HOME_RESOLUTION_RECT, game.display_resolution_label(), TEAL, TEXT)
 	_draw_button(HOME_WINDOW_MODE_RECT, game.display_mode_label(), BLUE, TEXT)
@@ -726,6 +728,21 @@ func _draw_lab_hud() -> void:
 		_label("墙体默认缩入底座", Vector2(1020, 348), 11, MUTED)
 		_label("完成后可自由观察", Vector2(1020, 370), 11, MUTED)
 		_draw_coach(Rect2(60, 660, 1160, 96), "组装 → 跳入 → 揭示", game.status_message)
+	elif game.phase == "lab_tactile":
+		_draw_ticket_panel(Rect2(1004, 88, 260, 586), Color("17151cf2"), TEAL)
+		_label("实体玩具 · 质感对比", Vector2(1020, 126), 17, TEXT)
+		_label("同一房间 / 同一镜头", Vector2(1020, 156), 12, MUTED)
+		var lab = game.tactile_lab
+		_draw_button(Rect2(1020, 182, 220, 38), "A 当前画面", TEAL if not lab.mode_b else DARK_2, TEXT)
+		_draw_button(Rect2(1020, 230, 220, 38), "B 质感样板", MAGENTA if lab.mode_b else DARK_2, TEXT)
+		var labels := ["外围桌面", "材质层次", "接触阴影", "轻景深（试验）"]
+		for i in range(4):
+			_draw_button(Rect2(1020, 288 + i * 44, 220, 34), ("✓ " if lab.features[i] else "○ ") + labels[i], TEAL if lab.features[i] else DARK_2, TEXT)
+		_draw_button(Rect2(1020, 482, 220, 38), "R 重播拼装", MAGENTA, TEXT)
+		_draw_button(Rect2(1020, 530, 220, 38), "复位镜头", BLUE, TEXT)
+		_label("拖拽旋转 · 滚轮缩放", Vector2(1020, 604), 12, MUTED)
+		_label("景深默认关闭，优先看清房间", Vector2(1020, 630), 10, MUTED)
+		_draw_coach(Rect2(60, 688, 1160, 68), "实体玩具质感", game.status_message)
 	elif game.phase == "lab_puzzle":
 		_draw_puzzle()
 	elif game.phase == "lab_chase":
@@ -1804,6 +1821,14 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey):
 		return
 	var key_event: InputEventKey = event
+	if key_event.pressed and not key_event.echo and game.phase == "lab_tactile":
+		match key_event.keycode:
+			KEY_A: game.tactile_lab.set_mode(false)
+			KEY_B: game.tactile_lab.set_mode(true)
+			KEY_R: game.tactile_lab.replay()
+			KEY_ESCAPE: game.go_home()
+		get_viewport().set_input_as_handled()
+		return
 	if key_event.pressed and not key_event.echo and game.phase == "lab_chase" and game.chase_phase == "race" and key_event.unicode > 0:
 		game.chase_type_character(char(key_event.unicode))
 		get_viewport().set_input_as_handled()
@@ -1993,7 +2018,7 @@ func _gui_input(event: InputEvent) -> void:
 				game.clear_battle_hover()
 			queue_redraw()
 			accept_event()
-		elif board_left_pressed and game.phase in ["combat", "world_boss", "explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence"]:
+		elif board_left_pressed and game.phase in ["combat", "world_boss", "explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile"]:
 			board_left_distance += event.relative.length()
 			if board_left_distance >= 5.0:
 				board_left_dragged = true
@@ -2008,7 +2033,7 @@ func _gui_input(event: InputEvent) -> void:
 			game.pan_battle_camera(event.relative)
 			game.clear_battle_hover()
 			accept_event()
-		elif middle_dragging and game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence"]:
+		elif middle_dragging and game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile"]:
 			game.pan_house_camera(event.relative)
 			accept_event()
 		elif middle_dragging and game.phase in ["lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
@@ -2139,7 +2164,7 @@ func _gui_input(event: InputEvent) -> void:
 				board_left_distance = 0.0
 				accept_event()
 				return
-	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence"]:
+	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile"]:
 		if not mouse_event.pressed and board_left_pressed:
 			var should_click := not board_left_dragged and world_view_rect_screen.has_point(mouse_event.position)
 			var was_dragged := board_left_dragged
@@ -2159,14 +2184,14 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 			return
 	if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
-		if mouse_event.pressed and game.phase in ["combat", "world_boss", "explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"] and world_view_rect_screen.has_point(mouse_event.position):
+		if mouse_event.pressed and game.phase in ["combat", "world_boss", "explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile", "lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"] and world_view_rect_screen.has_point(mouse_event.position):
 			middle_dragging = true
 			if game.phase in ["combat", "world_boss"]:
 				game.clear_battle_hover()
 			accept_event()
 		elif not mouse_event.pressed:
 			middle_dragging = false
-			if game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence"]:
+			if game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile"]:
 				game.release_house_camera_gesture()
 			elif game.phase in ["combat", "world_boss"]:
 				game.release_battle_camera_gesture()
@@ -2181,7 +2206,7 @@ func _gui_input(event: InputEvent) -> void:
 			game.zoom_battle_camera(mouse_event.position - world_view_rect_screen.position, 1.1)
 			accept_event()
 			return
-	if mouse_event.pressed and game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence"] and world_view_rect_screen.has_point(mouse_event.position):
+	if mouse_event.pressed and game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_tactile"] and world_view_rect_screen.has_point(mouse_event.position):
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			game.zoom_house_camera(mouse_event.position - world_view_rect_screen.position, 0.9)
 			accept_event()
@@ -2220,6 +2245,8 @@ func _gui_input(event: InputEvent) -> void:
 			game.start_wall_transition_lab()
 		elif game.home_tests_open and HOME_TEST_TOYHOUSE_RECT.has_point(point):
 			game.start_toyhouse_sequence_lab()
+		elif game.home_tests_open and HOME_TEST_TACTILE_RECT.has_point(point):
+			game.start_tactile_lab()
 		elif game.home_tests_open and HOME_TEST_LAYOUT_RECT.has_point(point):
 			game.get_tree().change_scene_to_file("res://scenes/layout_intuition_lab.tscn")
 		elif game.home_tests_open and HOME_TEST_SIDE_RECT.has_point(point):
@@ -2255,6 +2282,20 @@ func _gui_input(event: InputEvent) -> void:
 	if not game.phase.begins_with("lab_") and SETTINGS_TOGGLE_RECT.has_point(point):
 		_set_settings_panel_open(true)
 		accept_event()
+		return
+	if game.phase == "lab_tactile":
+		if Rect2(1020, 182, 220, 38).has_point(point):
+			game.tactile_lab.set_mode(false)
+		elif Rect2(1020, 230, 220, 38).has_point(point):
+			game.tactile_lab.set_mode(true)
+		elif Rect2(1020, 482, 220, 38).has_point(point):
+			game.tactile_lab.replay()
+		elif Rect2(1020, 530, 220, 38).has_point(point):
+			game.tactile_lab.reset_camera()
+		else:
+			for i in range(4):
+				if Rect2(1020, 288 + i * 44, 220, 34).has_point(point):
+					game.tactile_lab.toggle_feature(i)
 		return
 	if game.phase == "lab_hand_diorama":
 		if LAB_SWITCH_RECT.has_point(point):
