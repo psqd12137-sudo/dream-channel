@@ -4,6 +4,7 @@ extends SceneTree
 # dedicated user:// repository so the formal run is never opened or written.
 var failures: Array[String] = []
 var game: Node3D
+var capture_repository
 
 
 func _init() -> void:
@@ -11,13 +12,17 @@ func _init() -> void:
 
 
 func _run() -> void:
+	capture_repository = load("res://scripts/run_save_repository.gd").new("user://combat_imagination_capture.json", "combat_imagination_capture")
+	_check(capture_repository.write({"source": "stale_capture", "interrupted": true}), "capture regression must seed its dedicated stale repository")
+	_check(capture_repository.exists(), "capture regression must begin with a stale dedicated repository")
+	_check(capture_repository.clear(), "capture lab must clear a stale isolated save before it starts")
+	_check(not capture_repository.exists(), "capture lab must clear a stale isolated save before it starts")
 	if OS.has_feature("headless") or DisplayServer.get_name() == "headless":
-		print("COMBAT_IMAGINATION_CAPTURE: SKIP graphical Vulkan display is required")
-		quit(0)
+		_finish("SKIP graphical Vulkan display is required")
 		return
 	game = load("res://channel_3d.tscn").instantiate() as Node3D
 	game.animation_duration_scale = 1.0
-	game.run_save_repository = load("res://scripts/run_save_repository.gd").new("user://combat_imagination_capture.json", game.EXE_SOURCE_ID)
+	game.run_save_repository = capture_repository
 	root.add_child(game)
 	await process_frame
 	await process_frame
@@ -32,11 +37,15 @@ func _run() -> void:
 	await _capture("imagination-rotated")
 	_check(not game.run_save_repository.exists(), "capture lab must not create a formal run save")
 	game.go_home()
-	game.run_save_repository.clear()
+	capture_repository.clear()
 	game.queue_free()
 	await process_frame
+	_finish("PASS baseline imagination rotated entry")
+
+
+func _finish(success_message: String) -> void:
 	if failures.is_empty():
-		print("COMBAT_IMAGINATION_CAPTURE: PASS baseline imagination rotated entry")
+		print("COMBAT_IMAGINATION_CAPTURE: %s" % success_message)
 		quit(0)
 	else:
 		for failure in failures:
