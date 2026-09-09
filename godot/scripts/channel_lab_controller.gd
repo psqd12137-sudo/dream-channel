@@ -128,6 +128,9 @@ var character_animation_demo_mode:
 var pcg_diorama_seed:
 	get: return host.pcg_diorama_seed
 	set(value): host.pcg_diorama_seed = value
+var wall_transition_mode:
+	get: return host.wall_transition_mode
+	set(value): host.wall_transition_mode = value
 var lab_camera_target:
 	get: return host.lab_camera_target
 	set(value): host.lab_camera_target = value
@@ -418,6 +421,68 @@ func start_pcg_hand_layout_lab() -> void:
 	lab_root.add_child(composer)
 	_set_pcg_diorama_camera(composer)
 	status_message = "这是正式地图手摆模拟：在 Godot 编辑器打开 pcg_hand_layout_lab.tscn，移动 Layout 下的房间根节点；运行这里检查镜头、拼接和整房落位动画。当前 %s。" % composer.authored_summary()
+	_refresh_hud()
+
+
+func start_wall_transition_lab() -> void:
+	# This is an in-app visual sandbox: build a deterministic formal room without
+	# calling start_new_run/choose_omen, both of which write the player's save.
+	host._cancel_dynamic_effect()
+	_set_home_video(false)
+	host.reset_run(2026081901)
+	host.active_relics.clear()
+	if not host.omen_options.is_empty():
+		host.active_relics.append(str(host.omen_options[0]))
+	host.phase = "explore"
+	var hall := _find_catalog_room("hall")
+	var placed := false
+	for cell: Vector2i in host.room_rules.frontiers():
+		var rotations: Array = host.room_rules.valid_rotations(cell, hall)
+		if rotations.is_empty():
+			continue
+		if host.room_rules.place(cell, hall, int(rotations[0])):
+			var instance_id := str(host.room_rules.placed[cell].get("instance_id", ""))
+			for raw_pos: Variant in host.room_rules.placed.keys():
+				var pos: Vector2i = raw_pos
+				if str(host.room_rules.placed[pos].get("instance_id", "")) == instance_id:
+					host.room_rules.set_instance_flag(pos, "visited", true)
+					host.room_rules.set_instance_flag(pos, "revealed", true)
+					host.room_rules.set_instance_flag(pos, "completed", false)
+			host.current_room_pos = cell
+			placed = true
+			break
+	if not placed:
+		host.status_message = "墙体显隐测试无法放置正式长廊。"
+		host.go_home()
+		return
+	host.build_house_world()
+	host.phase = "lab_wall_transition"
+	host.wall_transition_mode = 0
+	host.house_root.visible = true
+	host.world_container.visible = true
+	host.battle_root.visible = false
+	host.lab_root.visible = false
+	host.reset_house_camera()
+	host.house_camera_yaw = -PI / 3.0
+	host._apply_house_camera()
+	var composer := host.house_root.get_node_or_null("KenneyFormalComposer") as Node3D
+	if composer != null and composer.has_method("set_cutaway_transition_mode"):
+		composer.set_cutaway_transition_mode(0)
+		host._apply_house_camera()
+	host.status_message = "同一正式长廊：1 直接隐藏 · 2 缩入底座 · 3 波浪渐隐。拖拽旋转，滚轮缩放。"
+	_refresh_hud()
+
+
+func set_wall_transition_lab_mode(mode: int) -> void:
+	if host.phase != "lab_wall_transition":
+		return
+	host.wall_transition_mode = clampi(mode, 0, 2)
+	var composer := host.house_root.get_node_or_null("KenneyFormalComposer") as Node3D
+	if composer != null and composer.has_method("set_cutaway_transition_mode"):
+		composer.set_cutaway_transition_mode(host.wall_transition_mode)
+		host._apply_house_camera()
+	var labels := ["直接隐藏", "缩入底座", "波浪渐隐"]
+	host.status_message = "当前方案：%s。保持相同镜头旋转可比较墙体让位方式。" % labels[host.wall_transition_mode]
 	_refresh_hud()
 
 

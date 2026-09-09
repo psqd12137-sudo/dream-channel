@@ -338,6 +338,7 @@ var lab_player: Node3D = null
 var lab_platforms: Array[Dictionary] = []
 var lab_collectibles: Array[Dictionary] = []
 var lab_collected := 0
+var wall_transition_mode := 0
 var puzzle_board: Array[int] = []
 var puzzle_moves_left := 42
 var puzzle_refreshes_left := 3
@@ -568,7 +569,7 @@ func _update_camera_follow(delta: float) -> void:
 		house_camera_return_delay = maxf(0.0, house_camera_return_delay - delta)
 		if house_camera_return_delay <= 0.0 and not house_camera_user_hold:
 			_start_house_camera_return()
-	if phase in ["explore", "build", "room_ready", "world_boss"] and camera != null:
+	if phase in ["explore", "build", "room_ready", "lab_wall_transition", "world_boss"] and camera != null:
 		var target_size := _house_camera_size_target()
 		var size_factor := CameraFollowMath.smooth_factor(HOUSE_CAMERA_SIZE_SMOOTH_RATE, delta)
 		var next_size := lerpf(house_camera_size_current, target_size, size_factor)
@@ -1090,6 +1091,14 @@ func demo_character_hurt() -> void:
 
 func start_pcg_hand_layout_lab() -> void:
 	lab_controller.start_pcg_hand_layout_lab()
+
+
+func start_wall_transition_lab() -> void:
+	lab_controller.start_wall_transition_lab()
+
+
+func set_wall_transition_lab_mode(mode: int) -> void:
+	lab_controller.set_wall_transition_lab_mode(mode)
 
 
 func _set_pcg_diorama_camera(generator: Node3D) -> void:
@@ -3931,7 +3940,7 @@ func _set_house_camera() -> void:
 
 
 func toggle_house_camera_closeup() -> bool:
-	if phase not in ["explore", "build", "room_ready", "world_boss"] or camera == null:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "world_boss"] or camera == null:
 		return false
 	house_camera_closeup = not house_camera_closeup
 	house_camera_following = true
@@ -3944,7 +3953,7 @@ func toggle_house_camera_closeup() -> bool:
 
 
 func pan_house_camera(pixel_delta: Vector2) -> void:
-	if phase not in ["explore", "build", "room_ready", "world_boss"]:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "world_boss"]:
 		return
 	house_camera_user_hold = true
 	_cancel_house_camera_return()
@@ -3958,7 +3967,7 @@ func pan_house_camera(pixel_delta: Vector2) -> void:
 
 
 func orbit_house_camera(pixel_delta: Vector2) -> void:
-	if phase not in ["explore", "build", "room_ready", "world_boss"]:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "world_boss"]:
 		return
 	house_camera_user_hold = true
 	_cancel_house_camera_return()
@@ -3968,7 +3977,7 @@ func orbit_house_camera(pixel_delta: Vector2) -> void:
 
 
 func zoom_house_camera(_view_pos: Vector2, zoom_factor: float) -> void:
-	if phase not in ["explore", "build", "room_ready", "world_boss"]:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "world_boss"]:
 		return
 	# 缩放属于手动镜头操作，暂停自动跟随，避免跟随目标和缩放同时改写 target。
 	house_camera_following = false
