@@ -357,6 +357,6 @@ if ($failed.Count -gt 0) {
   --script res://tests/wall_transition_game_compare.gd -- res://../output/wall-transition-game
 ```
 
-每个 `mode_0` / `mode_1` / `mode_2` 目录包含同一镜头路径的 PNG 帧；可用 `1/2/3` 键在 `--interactive` 模式切换方案，`A/D` 旋转镜头。墙体动画由正式 `KenneyFormalComposer` 的 `cutaway_transition_mode` 驱动：缩入模式压缩墙体并下沉，波浪模式保留卡通波纹边缘并同步隐藏墙上道具。
+每个 `mode_0` / `mode_1` / `mode_2` 目录包含同一镜头路径的 PNG 帧；可用 `1/2/3` 键在 `--interactive` 模式切换方案，`A/D` 旋转镜头。正式版本默认使用 `retract`（缩入底座）：墙体压缩并下沉，墙上道具同步让位；`instant` 和 `wave` 仍保留在测试区用于复看比较。
 
 游戏内入口：标题 → 后台测试 → 墙体显隐动画对比。该入口直接准备一间正式长廊，不调用开局/预兆流程，也不写入续玩存档；进入后用右侧按钮或数字键 `1/2/3` 切换方案，拖拽旋转镜头、滚轮缩放，左上角返回标题。

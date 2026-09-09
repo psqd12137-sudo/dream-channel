@@ -27,6 +27,8 @@ func run() -> void:
 	game.set_process(false)
 	_check(composer.has_method("set_cutaway_transition_mode"), "composer exposes cutaway transition mode")
 	_check(composer.has_method("cutaway_transition_state"), "composer exposes transition state for comparison")
+	if composer.has_method("cutaway_transition_state"):
+		_check(int(composer.cutaway_transition_state().get("mode", -1)) == 1, "formal composer defaults to retract mode")
 	if not composer.has_method("set_cutaway_transition_mode"):
 		_finish()
 		return

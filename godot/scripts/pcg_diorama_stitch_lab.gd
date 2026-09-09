@@ -80,7 +80,9 @@ var cutaway_visible_wall_count := 0
 var cutaway_visible_doorway_count := 0
 var cutaway_open_passage_count := 0
 var cutaway_focus_room_index := -1
-@export_enum("instant", "retract", "wave") var cutaway_transition_mode := 0
+## Production default: retract walls into their base so the camera reveal feels
+## playful and toy-like. The in-game comparison lab can still select all modes.
+@export_enum("instant", "retract", "wave") var cutaway_transition_mode := 1
 @export_range(0.08, 0.6, 0.01) var cutaway_hide_duration := 0.22
 @export_range(0.08, 0.6, 0.01) var cutaway_show_duration := 0.25
 var cutaway_transition_tweens: Dictionary = {}
