@@ -324,7 +324,22 @@ func _build_joined_diorama() -> void:
 	_build_room_props(center)
 	_apply_room_overrides()
 	_build_room_state_overlays(center)
+	_build_toy_workbench(size)
 	_build_title(size)
+
+
+func _build_toy_workbench(size: Vector2i) -> void:
+	# A quiet receiving surface gives the existing trays weight and contact shadows.
+	# It belongs to the stage, not to occupancy, doors or any room instance.
+	var width := float(size.x) * CELL + 1.0
+	var depth := float(size.y) * CELL + 1.0
+	var bounds := _cell_bounds()
+	var center := (_cell_world(bounds["min"], layout_center) + _cell_world(bounds["max"], layout_center)) * 0.5
+	_add_box("ToyWorkbench", center + Vector3(0, -0.57, 0), Vector3(width, 0.22, depth), Color("e8ddc6"))
+	_add_box("ToyWorkbenchEdge", center + Vector3(0, -0.70, 0), Vector3(width + 0.06, 0.06, depth + 0.06), Color("243541"))
+	for side: float in [-1.0, 1.0]:
+		_add_box("ToyWorkbenchRimX_%s" % side, center + Vector3(side * width * 0.5, -0.43, 0), Vector3(0.08, 0.10, depth), Color("23aa9b"))
+		_add_box("ToyWorkbenchRimZ_%s" % side, center + Vector3(0, -0.43, side * depth * 0.5), Vector3(width, 0.10, 0.08), Color("23aa9b"))
 
 
 func _prepare_room_visual_roots(center: Vector2) -> void:
@@ -365,10 +380,10 @@ func _build_cell(cell: Vector2i, center: Vector2) -> void:
 	var floor_asset := KAYKIT_ROOT + ("floor_wood_large_dark.gltf.glb" if use_kaykit_room_shell and posmod(floor_variant_key, 7) == 0 else "floor_wood_large.gltf.glb") if use_kaykit_room_shell else KENNEY_ROOT + ("floor-detail.fbx" if posmod(floor_variant_key, 7) == 0 else "floor.fbx")
 	var floor_scale := KAYKIT_FLOOR_SCALE if use_kaykit_room_shell else Vector3.ONE * CELL
 	var floor := _add_model("Floor_%d_%d" % [cell.x, cell.y], floor_asset, world + Vector3(0, elevation + 0.025, 0), floor_scale, 0.0, room_index)
-	_apply_memphis_floor_pattern(floor, _room_memphis_style(room_index))
+	_apply_memphis_floor_pattern(floor, _room_memphis_style(room_index), room_visual_roots[room_index])
 
 
-func _apply_memphis_floor_pattern(node: Node, style: Dictionary) -> void:
+func _apply_memphis_floor_pattern(node: Node, style: Dictionary, module_root: Node3D = null) -> void:
 	if node == null:
 		return
 	if node is MeshInstance3D:
@@ -376,13 +391,15 @@ func _apply_memphis_floor_pattern(node: Node, style: Dictionary) -> void:
 		material.shader = preload("res://shaders/memphis_floor.gdshader")
 		material.set_shader_parameter("base_color", style.get("base_color", Color("c96f79")))
 		material.set_shader_parameter("accent_color", style.get("accent_color", Color("f1c24b")))
+		if module_root != null:
+			material.set_shader_parameter("pattern_to_room", module_root.global_transform.affine_inverse() * (node as Node3D).global_transform)
 		var patterns := ["arch_dots", "squiggle_stripes", "confetti_grid", "sunburst_tiles", "zigzag_steps", "orbit_checks"]
 		material.set_shader_parameter("pattern_kind", maxi(0, patterns.find(str(style.get("pattern", "arch_dots")))))
 		var mesh_instance := node as MeshInstance3D
 		for surface_index in range(mesh_instance.get_surface_override_material_count()):
 			mesh_instance.set_surface_override_material(surface_index, material)
 	for child in node.get_children():
-		_apply_memphis_floor_pattern(child, style)
+		_apply_memphis_floor_pattern(child, style, module_root)
 
 
 func _room_base_color(room_index: int, elevation: float) -> Color:
@@ -2381,7 +2398,7 @@ func _apply_handmade_prop_finish(model: Node3D, asset_id: String, finish: String
 			var target_color := tint
 			target_color.a = source_color.a
 			material.albedo_color = source_color.lerp(target_color, tint_strength)
-			material.roughness = maxf(material.roughness, _handmade_finish_roughness(finish))
+			material.roughness = _handmade_finish_roughness(finish)
 			material.metallic = minf(material.metallic, 0.03)
 			material.ao_enabled = true
 			material.ao_light_affect = 0.72
@@ -2405,7 +2422,7 @@ func _apply_memphis_clay_material(model: Node3D, style: Dictionary, tint_strengt
 				source_material = mesh_instance.mesh.surface_get_material(surface_index)
 			var material := source_material.duplicate() as StandardMaterial3D if source_material is StandardMaterial3D else StandardMaterial3D.new()
 			material.albedo_color = material.albedo_color.lerp(accent, tint_strength)
-			material.roughness = maxf(material.roughness, 0.96)
+			material.roughness = _handmade_finish_roughness(str(model.get_meta("handmade_finish", "clay")))
 			material.metallic = minf(material.metallic, 0.03)
 			material.ao_enabled = true
 			material.ao_light_affect = 0.72
@@ -2420,9 +2437,9 @@ func _handmade_finish_roughness(finish: String) -> float:
 		"felt":
 			return 0.98
 		"painted_wood":
-			return 0.90
+			return 0.48
 		_:
-			return 0.95
+			return 0.82
 
 
 func _mesh_instances_in(root: Node3D) -> Array[MeshInstance3D]:

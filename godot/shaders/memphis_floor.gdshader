@@ -3,15 +3,19 @@ shader_type spatial;
 uniform vec4 base_color : source_color = vec4(0.85, 0.70, 0.45, 1.0);
 uniform vec4 accent_color : source_color = vec4(0.2, 0.6, 0.7, 1.0);
 uniform int pattern_kind = 0;
-varying vec3 world_position;
+uniform mat4 pattern_to_room = mat4(1.0);
+uniform float pattern_scale = 0.85;
+uniform float pattern_strength : hint_range(0.0, 1.0) = 0.42;
+uniform float surface_roughness : hint_range(0.0, 1.0) = 0.55;
+varying vec3 room_position;
 
 void vertex() {
-	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	room_position = (pattern_to_room * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
-	// World-space motifs remain continuous across modular floor seams.
-	vec2 p = world_position.xz * 1.4;
+	// Frozen mesh-to-module mapping: continuous within a toy, attached in motion.
+	vec2 p = room_position.xz * pattern_scale;
 	vec2 tile = floor(p);
 	vec2 q = fract(p) - 0.5;
 	float edge = max(fwidth(p.x), fwidth(p.y));
@@ -33,7 +37,7 @@ void fragment() {
 	}
 	vec3 ink = pattern_kind == 2 ? vec3(0.08, 0.10, 0.13) : accent_color.rgb;
 	vec3 paper = pattern_kind == 2 ? vec3(0.91, 0.87, 0.76) : base_color.rgb;
-	ALBEDO = mix(paper, ink, mask);
-	ROUGHNESS = 0.92;
+	ALBEDO = mix(paper, ink, mask * pattern_strength);
+	ROUGHNESS = surface_roughness;
 	METALLIC = 0.0;
 }

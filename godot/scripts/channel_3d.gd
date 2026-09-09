@@ -743,6 +743,16 @@ func _configure_environment() -> void:
 	environment.ambient_light_color = Color("8bc8be")
 	environment.ambient_light_energy = 0.48
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	var studio_sky := ProceduralSkyMaterial.new()
+	studio_sky.sky_top_color = Color("839bb8")
+	studio_sky.sky_horizon_color = Color("ede4d5")
+	studio_sky.ground_bottom_color = Color("343345")
+	studio_sky.ground_horizon_color = Color("b7ada0")
+	studio_sky.sky_energy_multiplier = 0.65
+	studio_sky.ground_energy_multiplier = 0.45
+	var sky := Sky.new()
+	sky.sky_material = studio_sky
+	environment.sky = sky
 	environment_node.environment = environment
 
 
@@ -1295,8 +1305,8 @@ func place_selected_offer() -> void:
 	_remove_remaining_room(str(room.get("id", "")))
 	phase = "explore"
 	build_offers.clear()
-	var final_message := "摆下未知房间。走进去才揭示内容，也才算行程。"
-	status_message = "房间正在翻转落位……"
+	var final_message := "新模块已拼好；演员进入后才揭示内容。"
+	status_message = "玩具模块正在卡合……"
 	event_log.append(final_message)
 	animation_busy = true
 	active_animation_kind = "room_drop"
@@ -1309,53 +1319,55 @@ func place_selected_offer() -> void:
 func _animate_room_placement(target: Vector2i, final_message: String) -> void:
 	var room_nodes := _find_room_instance_nodes(target)
 	if room_nodes.is_empty():
-		status_message = final_message
-		_complete_dynamic_effect()
-		_refresh_hud()
+		_finish_room_placement(target, final_message)
 		return
-	var final_positions: Dictionary = {}
+	var final_transforms: Dictionary = {}
+	var pivot := Vector3.ZERO
 	var drop_height := (1.55 if kenney_build_lab_mode else HOUSE_CELL) * UNITY_ROOM_DROP_HEIGHT_CELLS
 	for room_node: Node3D in room_nodes:
-		final_positions[room_node] = room_node.position
-		room_node.position += Vector3.UP * drop_height
-		room_node.rotation = Vector3(deg_to_rad(-82.0), 0.0, 0.0)
-		room_node.scale = Vector3.ONE * UNITY_ROOM_START_SCALE
+		final_transforms[room_node] = room_node.transform
+		pivot += room_node.position
+	pivot /= float(room_nodes.size())
 	var drop_duration := UNITY_ROOM_DROP_DURATION * animation_duration_scale
 	if drop_duration <= 0.0:
-		for room_node: Node3D in room_nodes:
-			room_node.position = final_positions[room_node]
-			room_node.rotation = Vector3.ZERO
-			room_node.scale = Vector3.ONE
-		status_message = final_message
-		_complete_dynamic_effect()
-		_refresh_hud()
+		_finish_room_placement(target, final_message)
 		return
+	_set_room_module_pose(0.0, final_transforms, pivot, drop_height, UNITY_ROOM_START_SCALE, 1.02, -12.0)
 	var tween := create_tween()
 	active_motion_tween = tween
-	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT).set_parallel(true)
-	for room_node: Node3D in room_nodes:
-		tween.tween_property(room_node, "position", final_positions[room_node], drop_duration)
-		tween.tween_property(room_node, "rotation", Vector3.ZERO, drop_duration)
-		tween.tween_property(room_node, "scale", Vector3.ONE * 1.035, drop_duration)
-	tween.set_parallel(false)
+	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_method(_set_room_module_pose.bind(final_transforms, pivot, drop_height, UNITY_ROOM_START_SCALE, 1.02, -12.0), 0.0, 1.0, drop_duration)
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	var settle_duration := UNITY_ACTOR_SETTLE_DURATION * animation_duration_scale
-	for room_index in range(room_nodes.size()):
-		var room_node: Node3D = room_nodes[room_index]
-		if room_index == 0:
-			tween.tween_property(room_node, "scale", Vector3.ONE, settle_duration)
-		else:
-			tween.parallel().tween_property(room_node, "scale", Vector3.ONE, settle_duration)
+	tween.tween_method(_set_room_module_pose.bind(final_transforms, pivot, 0.0, 1.02, 1.0, 0.0), 0.0, 1.0, settle_duration)
 	await tween.finished
 	if active_motion_tween != tween:
 		return
 	for room_node: Node3D in room_nodes:
-		room_node.position = final_positions[room_node]
-		room_node.rotation = Vector3.ZERO
-		room_node.scale = Vector3.ONE
+		if is_instance_valid(room_node):
+			room_node.transform = final_transforms[room_node]
+	_finish_room_placement(target, final_message)
+
+
+func _set_room_module_pose(weight: float, poses: Dictionary, pivot: Vector3, height: float, start_scale: float, end_scale: float, tilt_degrees: float) -> void:
+	var motion := Basis(Vector3.RIGHT, deg_to_rad(tilt_degrees) * (1.0 - weight)).scaled(Vector3.ONE * lerpf(start_scale, end_scale, weight))
+	for raw_node: Variant in poses:
+		if not is_instance_valid(raw_node):
+			continue
+		var node: Node3D = raw_node
+		var final_pose: Transform3D = poses[raw_node]
+		node.transform = Transform3D(motion * final_pose.basis, pivot + motion * (final_pose.origin - pivot) + Vector3.UP * height * (1.0 - weight))
+
+
+func _finish_room_placement(target: Vector2i, final_message: String) -> void:
 	status_message = final_message
 	_complete_dynamic_effect()
-	_refresh_hud()
+	# Preserve build legality and the existing exploration/entry/save boundary.
+	# Unreachable modules stay placed; unknown rooms are never transit shortcuts.
+	if phase == "explore" and pending_room_pos == target and house_path_to(target).size() >= 2:
+		enter_room(target)
+	else:
+		_refresh_hud()
 
 
 func _find_room_instance_nodes(target: Vector2i) -> Array[Node3D]:
@@ -4090,10 +4102,19 @@ func _set_battle_neutral_lighting(enabled: bool) -> void:
 	var environment_node := world_root.get_node_or_null("WorldEnvironment") as WorldEnvironment
 	if key_light != null:
 		key_light.light_color = Color("fff8ee") if enabled else Color("ffe0ad")
+		key_light.light_energy = 1.45 if enabled else 1.05
+		key_light.light_angular_distance = 0.0 if enabled else 1.5
 	if fill_light != null:
 		fill_light.light_color = Color("bac1c3") if enabled else Color("6bc7d1")
+		fill_light.light_energy = 0.48 if enabled else 0.32
 	if environment_node != null and environment_node.environment != null:
-		environment_node.environment.ambient_light_color = Color("aeb2b2") if enabled else Color("8bc8be")
+		var environment := environment_node.environment
+		environment.ambient_light_color = Color("aeb2b2") if enabled else Color("bfc8c4")
+		environment.ambient_light_energy = 0.48 if enabled else 0.32
+		environment.reflected_light_source = Environment.REFLECTION_SOURCE_BG if enabled else Environment.REFLECTION_SOURCE_SKY
+		environment.ssao_enabled = not enabled and RenderingServer.get_current_rendering_method() == "forward_plus"
+		environment.ssao_radius = 0.45
+		environment.ssao_intensity = 1.4
 
 
 func _house_world(pos: Vector2i) -> Vector3:

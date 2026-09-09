@@ -876,7 +876,7 @@ func _draw_house_hud() -> void:
 func _draw_build_dock() -> void:
 	_draw_ticket_panel(Rect2(20, 478, 968, 290), Color("17151cf5"), TEAL)
 	_label("下一块布景", Vector2(44, 511), 17, TEXT)
-	_label("选票根、对门位、摆上节目台；内容要等演员走进去才揭晓。", Vector2(194, 511), 11, MUTED)
+	_label("选票根、对门位；拼好后演员会跳入可达的新房间。", Vector2(194, 511), 11, MUTED)
 	for i in range(mini(3, game.build_offers.size())):
 		var room: Dictionary = game.build_offers[i]
 		var rect: Rect2 = BUILD_CARD_RECTS[i]

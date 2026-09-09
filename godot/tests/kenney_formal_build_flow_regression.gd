@@ -10,6 +10,7 @@ func _init() -> void:
 func _run() -> void:
 	var game := (load("res://channel_3d.tscn") as PackedScene).instantiate() as Node3D
 	game.animation_duration_scale = 0.0
+	game.run_save_repository = load("res://scripts/run_save_repository.gd").new("user://formal_build_test.json", game.EXE_SOURCE_ID)
 	root.add_child(game)
 	await process_frame
 	await process_frame
@@ -50,7 +51,12 @@ func _run() -> void:
 		game.offer_rotation = chosen_rotation
 		game.build_house_world()
 		_check(game.can_place_selected_offer(), "the restored valid rotation must remain placeable through formal room_rules")
+		game.animation_duration_scale = 1.0
 		game.place_selected_offer()
+		# An interrupted committed placement retains the original hidden/manual-entry path.
+		game._cancel_dynamic_effect()
+		game.build_house_world()
+		game.animation_duration_scale = 0.0
 		await process_frame
 		var composer: Node = game.house_root.get_node_or_null("KenneyFormalComposer")
 		_check(game.room_rules.instance_count() == 2, "placing one five-cell ticket must create one new formal room instance")
@@ -87,7 +93,7 @@ func _run() -> void:
 		_check(composer.cutaway_markers_match_culled_edges(), "formal hidden walls and doorway shells must retain low cutaway boundary markers")
 		_check(composer.wall_bound_props_match_cutaway(), "formal wall-bound furniture must disappear with its canonical cutaway wall")
 		_check(composer.generation_fingerprint() == topology_before_cutaway and composer.visual_edge_records.size() == edge_count_before_cutaway and composer.connection_edges.size() == formal_connection_count, "formal cutaway must be presentation-only and preserve PCG placement topology")
-		game._finish_enter_room(game.pending_room_pos)
+		game.enter_room(game.pending_room_pos)
 		var visited_composer: Node = game.house_root.get_node_or_null("KenneyFormalComposer")
 		var visited_counts: Dictionary = visited_composer.room_state_counts()
 		var visited_cutaway: Dictionary = visited_composer.apply_camera_cutaway(game.current_room_pos, Vector2.ONE)
@@ -129,6 +135,7 @@ func _run() -> void:
 		_check(int(visited_cutaway["open_doors"]) == visited_composer.connection_edges.size(), "entering the connected room must replace every now-traversed doorway shell with an open passage")
 		_check(visited_composer.open_passages_are_clear(), "open passages must remove the door mesh while retaining a visible low threshold")
 		_check(visited_composer.connection_edges.size() == formal_connection_count and visited_composer.doorway_count == doorway_count_before_entry, "opening a visited passage must preserve the formal connection and doorway ledgers")
+	game.run_save_repository.clear()
 	game.queue_free()
 	await process_frame
 	_finish()

@@ -92,6 +92,7 @@ func _run() -> void:
 			game.begin_build(frontier)
 			if game.can_place_selected_offer():
 				target = frontier
+				game.animation_duration_scale = 1.0
 				game.place_selected_offer()
 				placed = true
 				break
@@ -103,8 +104,11 @@ func _run() -> void:
 		check(not str(game.room_rules.placed[target].name) in game.status_message, "placement must not leak room name")
 		var path_to_room := route(game, game.current_room_pos, target)
 		check(not path_to_room.is_empty(), "new room must be reachable through actual doors")
-		for step in path_to_room:
-			game.enter_room(step)
+		var deadline := Time.get_ticks_msec() + 6000
+		while game.animation_busy and Time.get_ticks_msec() < deadline:
+			await process_frame
+		check(not game.animation_busy, "assembly and automatic entry must finish within deadline")
+		game.animation_duration_scale = 0.0
 		check(game.current_room_pos == target, "movement must reach new room")
 		game.resolve_current_room()
 		if game.phase == "combat":

@@ -55,9 +55,14 @@ func run() -> void:
 		check(not game.build_offers.is_empty(), "can keep building on floor")
 		game.place_selected_offer()
 		check(int(game.room_rules.placed[game.pending_room_pos].floor) == int(action.floor), "new room inherits floor")
+		var saved_position: Vector2i = game.current_room_pos
+		check(saved_position == game.pending_room_pos and game.phase == "room_ready", "reachable floor module automatically enters without resolving content")
 		game._save_run()
 		check(game.continue_saved_run(), "floor save resumes")
-		check(game.current_room_pos == destination, "position restored")
+		check(game.current_room_pos == saved_position, "arrived position restored")
+		game._complete_current_room()
+		game.phase = "explore"
+		await game.enter_room(destination)
 		if "--capture" in OS.get_cmdline_user_args():
 			game.reset_house_camera()
 			await create_timer(1.5).timeout

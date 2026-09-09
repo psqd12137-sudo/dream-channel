@@ -4,6 +4,7 @@ uniform vec4 wall_color : source_color = vec4(0.12, 0.24, 0.45, 1.0);
 uniform vec4 accent_color : source_color = vec4(0.93, 0.58, 0.27, 1.0);
 uniform vec2 panel_size = vec2(1.27, 1.08);
 uniform int motif = 0;
+uniform float surface_roughness : hint_range(0.0, 1.0) = 0.88;
 varying vec2 panel_uv;
 
 void vertex() {
@@ -28,6 +29,6 @@ void fragment() {
 		color = mix(color, vec3(0.055, 0.075, 0.12), stripe * step(p.x, 0.24));
 	}
 	ALBEDO = color;
-	ROUGHNESS = 0.98;
+	ROUGHNESS = surface_roughness;
 	METALLIC = 0.0;
 }

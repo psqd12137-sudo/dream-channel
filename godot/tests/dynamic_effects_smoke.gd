@@ -16,6 +16,7 @@ func _run() -> void:
 
 	var game: Node3D = packed.instantiate()
 	game.animation_duration_scale = 0.4
+	game.run_save_repository = load("res://scripts/run_save_repository.gd").new("user://dynamic_effects_test.json", game.EXE_SOURCE_ID)
 	root.add_child(game)
 	await process_frame
 	await process_frame
@@ -39,8 +40,9 @@ func _run() -> void:
 	_check(room_node != null, "the placed room must have a single animated root")
 	if room_node != null:
 		_check(room_node.position.y > 1.0, "the room must begin raised above its settled position")
-		_check(absf(room_node.rotation.x) > 0.5, "the room must begin visibly flipped")
-		_check(room_node.scale.x < 1.0, "the room must begin at Unity's compact scale")
+		_check(absf(room_node.rotation.x) > 0.1 and absf(room_node.rotation.x) < PI * 0.25, "the module must begin slightly tilted with its top readable")
+		_check(room_node.scale.x < 1.0, "the room must begin at a compact scale")
+	_check(not bool(game.room_rules.placed[target].get("revealed", true)), "the landing module must keep unknown content hidden")
 	game.enter_room(target)
 	_check(game.current_room_pos != target, "entering must be ignored while the room is still landing")
 	await _wait_for_effect(game, 2.0)
@@ -52,14 +54,6 @@ func _run() -> void:
 		_check(is_zero_approx(room_node.position.y), "the room must settle onto the house plane")
 		_check(room_node.rotation.is_equal_approx(Vector3.ZERO), "the room must finish face-up")
 		_check(room_node.scale.is_equal_approx(Vector3.ONE), "the room must finish at full scale")
-	var hidden_room: Dictionary = game.room_rules.placed[target]
-	_check(not bool(hidden_room.get("revealed", true)), "landing must not reveal the room")
-
-	game.enter_room(target)
-	_check(game.animation_busy, "walking into a room must lock interaction")
-	_check(game.active_animation_kind == "room_entry", "entering must expose the room_entry animation state")
-	_check(game.current_room_pos != target, "logical movement must wait for the walk animation")
-	await _wait_for_effect(game, 2.0)
 
 	var revealed_room: Dictionary = game.room_rules.placed[target]
 	_check(game.current_room_pos == target, "the actor must arrive in the target room")
@@ -88,6 +82,7 @@ func _run() -> void:
 		_check(not game.animation_busy and game.battle_root.scale.is_equal_approx(Vector3.ONE), "the combat room build must settle before input unlocks")
 		_check(player != null and enemy != null and player.visible and enemy.visible, "player and enemy must finish their combat entrance")
 
+	game.run_save_repository.clear()
 	game.queue_free()
 	await process_frame
 	_finish()
