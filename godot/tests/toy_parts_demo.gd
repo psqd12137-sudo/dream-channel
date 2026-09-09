@@ -1,9 +1,8 @@
 extends SceneTree
 
-# Isolated visual prototype. No changes to the formal placement flow.
+# Isolated visual capture using the same choreography as formal placement.
 const OUT := "res://../output/toy-parts-offscreen-slow"
 const PLAYBACK_DURATION_SCALE := 1.5
-const DROP_HEIGHT := 5.5
 var game: Node3D
 var pieces: Array[Dictionary] = []
 
@@ -40,76 +39,17 @@ func run() -> void:
 	game.presentation_settings._apply_depth_of_field_state()
 	await create_timer(0.5).timeout
 	var module: Node3D = game._find_room_instance_nodes(target)[0]
-	var index := 0
-	for child: Node in module.get_children():
-		if not child is Node3D or not child.visible or child is Label3D:
-			continue
-		var name_lower := String(child.name).to_lower()
-		var kind := "wall"
-		var landing := 0.82 + float(index % 5) * 0.055
-		if "base" in name_lower:
-			kind = "base"
-			landing = 0.53 + float(index % 3) * 0.025
-		elif "floor" in name_lower:
-			kind = "base"
-			landing = 0.63 + float(index % 3) * 0.025
-		elif "prop" in name_lower or "furniture" in name_lower:
-			kind = "prop"
-			landing = 1.10 + float(index % 4) * 0.035
-		pieces.append({"node": child, "pose": child.transform, "landing": landing, "kind": kind,
-			"offset": Vector3(sin(index * 2.4) * 0.9, DROP_HEIGHT + float(index % 4) * 0.25, cos(index * 2.4) * 0.9),
-			"axis": Vector3(0.3, 0.15, 1).normalized(), "angle": deg_to_rad(55 + index % 4 * 15) * (-1.0 if index % 2 else 1.0)})
-		index += 1
-	if pieces.is_empty():
-		push_error("No animated room parts")
-		quit(1)
-		return
-	# A deliberately oversized toy cap makes the delayed punchline readable.
-	var cap := MeshInstance3D.new()
-	cap.name = "LateToyCap"
-	var cap_mesh := SphereMesh.new()
-	cap_mesh.radius = 0.16
-	cap_mesh.height = 0.32
-	cap.mesh = cap_mesh
-	var cap_material := StandardMaterial3D.new()
-	cap_material.albedo_color = Color("ff388a")
-	cap.material_override = cap_material
-	var cap_anchor := Vector3.ZERO
-	for mesh_node: Node in module.find_children("*", "MeshInstance3D", true, false):
-		var mesh_instance := mesh_node as MeshInstance3D
-		if not mesh_instance.is_visible_in_tree():
-			continue
-		var bounds := mesh_instance.get_aabb()
-		var local_top := bounds.get_center() + Vector3.UP * bounds.size.y * 0.5
-		var top := module.to_local(mesh_instance.to_global(local_top))
-		if top.y > cap_anchor.y:
-			cap_anchor = top
-	module.add_child(cap)
-	cap.position = cap_anchor + Vector3.UP * 0.16
-	pieces.append({"node": cap, "pose": cap.transform, "landing": 1.60, "kind": "cap", "offset": Vector3(0.4, DROP_HEIGHT, 0), "axis": Vector3.FORWARD, "angle": 2.0})
+	var assembly = load("res://scripts/toy_room_assembly.gd").new()
 	game.set_process(false)
 	game.camera.size *= 1.18
 	game.camera.position.y += 2.0
-	# Fit each whole part above the actual camera viewport, including its tilted corners.
-	for piece: Dictionary in pieces:
-		var held_time := 1.35 if piece.kind == "cap" else 0.15
-		var fits := false
-		for attempt in range(100):
-			pose_piece(piece, held_time)
-			if lowest_screen_point(piece.node) < -48.0:
-				fits = true
-				break
-			piece.offset.y += 0.5
-		if not fits:
-			push_error("Could not move complete part above viewport: " + str(piece.node.name))
-			quit(1)
-			return
-	print("OFFSCREEN_CHECK: PASS all parts above viewport with 48px margin")
+	assembly.prepare([module], game.camera)
+	pieces = assembly.pieces
+	print("OFFSCREEN_CHECK: shared approved choreography")
 	var frame_count := int(ceil(78 * PLAYBACK_DURATION_SCALE))
 	for frame in range(frame_count):
 		var time := float(frame) / (30.0 * PLAYBACK_DURATION_SCALE)
-		for piece: Dictionary in pieces:
-			pose_piece(piece, time)
+		assembly.pose(time * PLAYBACK_DURATION_SCALE)
 		await RenderingServer.frame_post_draw
 		var result := root.get_texture().get_image().save_png(OUT + "/frame_%03d.png" % frame)
 		if result != OK:
@@ -125,50 +65,3 @@ func run() -> void:
 	game.queue_free()
 	await process_frame
 	quit(0)
-
-func pose_piece(piece: Dictionary, time: float) -> void:
-	var node: Node3D = piece.node
-	var final_pose: Transform3D = piece.pose
-	var landing: float = piece.landing
-	var kind: String = piece.kind
-	var start := 1.20 if kind == "cap" else 0.0
-	node.visible = time >= start
-	if time >= landing + 0.42:
-		node.transform = final_pose
-		return
-	if time >= landing:
-		var u := (time - landing) / 0.42
-		var squash := sin(u * PI * 4.0 + PI * 0.5) * exp(-u * 5.0)
-		var strength := 0.36 if kind == "base" else 0.24
-		var stretch := Vector3(1.0 + squash * strength * 0.55, 1.0 - squash * strength, 1.0 + squash * strength * 0.55)
-		var wobble := sin(u * PI * 5.0) * exp(-u * 4.0) * (0.32 if kind == "wall" else 0.12)
-		var bounce := absf(sin(u * PI * 2.0)) * (1.0 - u) * (0.65 if kind == "cap" else 0.16)
-		node.transform = Transform3D(Basis(Vector3.FORWARD, wobble).scaled(stretch) * final_pose.basis, final_pose.origin + Vector3.UP * bounce)
-		return
-	# All parts burst into a held, crooked pose, then snap down in rhythmic groups.
-	var fall_start := landing - 0.20
-	var t := clampf((time - fall_start) / 0.20, 0.0, 1.0)
-	var fall := t * t * t
-	var offset: Vector3 = piece.offset
-	offset *= 1.0 - fall
-	if time < start + 0.12:
-		offset.y += (1.0 - clampf((time - start) / 0.12, 0, 1)) * 2.0
-	var angle := float(piece.angle) * (1.0 - fall)
-	if kind == "prop":
-		angle += TAU * (1.0 - t)
-	var turn := Basis(piece.axis, angle)
-	var stretch := Vector3(1.0 - 0.16 * sin(t * PI), 1.0 + 0.40 * sin(t * PI), 1.0 - 0.16 * sin(t * PI))
-	node.transform = Transform3D(turn.scaled(stretch) * final_pose.basis, final_pose.origin + offset)
-
-func lowest_screen_point(node: Node3D) -> float:
-	var meshes: Array[Node] = node.find_children("*", "MeshInstance3D", true, false)
-	if node is MeshInstance3D:
-		meshes.append(node)
-	var lowest := -INF
-	for child: Node in meshes:
-		var mesh := child as MeshInstance3D
-		var bounds := mesh.get_aabb()
-		for corner in range(8):
-			var point := mesh.to_global(bounds.get_endpoint(corner))
-			lowest = maxf(lowest, game.camera.unproject_position(point).y)
-	return lowest

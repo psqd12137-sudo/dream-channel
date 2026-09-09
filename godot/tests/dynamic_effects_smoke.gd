@@ -39,9 +39,8 @@ func _run() -> void:
 	_check(game.active_animation_kind == "room_drop", "room placement must expose the room_drop animation state")
 	_check(room_node != null, "the placed room must have a single animated root")
 	if room_node != null:
-		_check(room_node.position.y > 1.0, "the room must begin raised above its settled position")
-		_check(absf(room_node.rotation.x) > 0.1 and absf(room_node.rotation.x) < PI * 0.25, "the module must begin slightly tilted with its top readable")
-		_check(room_node.scale.x < 1.0, "the room must begin at a compact scale")
+		_check(game.active_room_assembly != null, "formal room must animate independent parts with the approved choreography")
+		_check(room_node.transform.basis.is_equal_approx(Basis.IDENTITY), "room root stays fixed while individual parts fall")
 	_check(not bool(game.room_rules.placed[target].get("revealed", true)), "the landing module must keep unknown content hidden")
 	game.enter_room(target)
 	_check(game.current_room_pos != target, "entering must be ignored while the room is still landing")

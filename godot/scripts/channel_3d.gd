@@ -99,11 +99,6 @@ const UNITY_ACTOR_STEP_DURATION := 0.25
 const UNITY_ACTOR_TURN_DURATION := 0.16
 const UNITY_ACTOR_SETTLE_DURATION := 0.12
 const UNITY_CARD_HALF_FLIP_DURATION := 0.10
-const HOUSE_ROOM_DROP_DURATION := 0.38
-const HOUSE_ROOM_DROP_HEIGHT_CELLS := 0.92
-const HOUSE_ROOM_SETTLE_DURATION := 0.12
-const HOUSE_ROOM_COMPONENT_DURATION := 0.28
-const HOUSE_ROOM_COMPONENT_STAGGER := 0.16
 const HOUSE_ASSEMBLY_HOLD_DURATION := 0.10
 const HOUSE_ACTOR_ANTICIPATION_DURATION := 0.09
 const HOUSE_ACTOR_JUMP_DURATION := 0.40
@@ -349,6 +344,7 @@ var lab_collectibles: Array[Dictionary] = []
 var lab_collected := 0
 var wall_transition_mode := 0
 var toyhouse_sequence_active := false
+var active_room_assembly: RefCounted
 var toyhouse_sequence_step := "idle"
 var toyhouse_sequence_target := Vector2i.ZERO
 var puzzle_board: Array[int] = []
@@ -577,6 +573,8 @@ func _process(delta: float) -> void:
 ##   走格跟随玩家-怪物中点、松手延迟回位、偏上对准。
 ## - 共享数学在 `camera_follow_math.gd`（平滑因子、屏幕上方偏移）。
 func _update_camera_follow(delta: float) -> void:
+	if active_room_assembly != null:
+		return
 	if house_camera_return_delay > 0.0:
 		house_camera_return_delay = maxf(0.0, house_camera_return_delay - delta)
 		if house_camera_return_delay <= 0.0 and not house_camera_user_hold:
@@ -1357,141 +1355,22 @@ func place_selected_offer() -> void:
 
 func _animate_room_placement(target: Vector2i, final_message: String) -> void:
 	var room_nodes := _find_room_instance_nodes(target)
-	if room_nodes.is_empty():
+	if room_nodes.is_empty() or animation_duration_scale <= 0.0:
 		_finish_room_placement(target, final_message)
 		return
-	var final_transforms: Dictionary = {}
-	var pivot := Vector3.ZERO
-	var drop_height := (1.55 if kenney_build_lab_mode else HOUSE_CELL) * HOUSE_ROOM_DROP_HEIGHT_CELLS
-	for room_node: Node3D in room_nodes:
-		final_transforms[room_node] = room_node.transform
-		pivot += room_node.position
-	pivot /= float(room_nodes.size())
-	var part_records := _prepare_room_assembly_parts(room_nodes)
-	var drop_duration := HOUSE_ROOM_DROP_DURATION * animation_duration_scale
-	var settle_duration := HOUSE_ROOM_SETTLE_DURATION * animation_duration_scale
-	var part_duration := HOUSE_ROOM_COMPONENT_DURATION * animation_duration_scale
-	var component_stagger := HOUSE_ROOM_COMPONENT_STAGGER * animation_duration_scale
-	if drop_duration <= 0.0:
-		_set_room_module_pose(1.0, final_transforms, pivot, 0.0, 1.02, 1.0, 0.0)
-		_restore_room_assembly_parts(part_records)
-		_finish_room_placement(target, final_message)
-		return
-	_set_room_module_pose(0.0, final_transforms, pivot, drop_height, UNITY_ROOM_START_SCALE, 1.02, -12.0)
-	_set_room_assembly_parts_pose(part_records, 0.0, component_stagger + part_duration)
-	var total_duration := maxf(drop_duration + settle_duration, component_stagger + part_duration)
+	active_room_assembly = preload("res://scripts/toy_room_assembly.gd").new()
+	active_room_assembly.prepare(room_nodes, camera)
+	var assembly = active_room_assembly
 	var tween := create_tween()
 	active_motion_tween = tween
-	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tween.tween_method(_set_room_assembly_pose.bind(final_transforms, pivot, part_records, drop_height, drop_duration, settle_duration, part_duration, component_stagger), 0.0, total_duration, total_duration)
+	tween.tween_method(assembly.pose, 0.0, assembly.DURATION, assembly.DURATION * animation_duration_scale)
 	await tween.finished
 	if active_motion_tween != tween:
 		return
-	for room_node: Node3D in room_nodes:
-		if is_instance_valid(room_node):
-			room_node.transform = final_transforms[room_node]
-	_restore_room_assembly_parts(part_records)
+	assembly.finish()
+	active_room_assembly = null
+	_apply_current_room_cutaway()
 	_finish_room_placement(target, final_message)
-
-
-func _set_room_module_pose(weight: float, poses: Dictionary, pivot: Vector3, height: float, start_scale: float, end_scale: float, tilt_degrees: float) -> void:
-	var motion := Basis(Vector3.RIGHT, deg_to_rad(tilt_degrees) * (1.0 - weight)).scaled(Vector3.ONE * lerpf(start_scale, end_scale, weight))
-	for raw_node: Variant in poses:
-		if not is_instance_valid(raw_node):
-			continue
-		var node: Node3D = raw_node
-		var final_pose: Transform3D = poses[raw_node]
-		node.transform = Transform3D(motion * final_pose.basis, pivot + motion * (final_pose.origin - pivot) + Vector3.UP * height * (1.0 - weight))
-
-
-func _prepare_room_assembly_parts(room_nodes: Array[Node3D]) -> Array[Dictionary]:
-	var records: Array[Dictionary] = []
-	for room_node: Node3D in room_nodes:
-		if room_node == null or not is_instance_valid(room_node):
-			continue
-		var room_records: Array[Dictionary] = []
-		for child: Node in room_node.get_children():
-			if not child is Node3D:
-				continue
-			var part := child as Node3D
-			if not part.visible:
-				continue
-			var part_name := str(part.name)
-			var delay := _room_assembly_part_delay(part_name)
-			var height := 0.72 + float(abs(part_name.hash()) % 4) * 0.08
-			var tilt := -8.0 if posmod(part_name.hash(), 2) == 0 else 7.0
-			var record := {
-				"node": part,
-				"base": part.transform,
-				"delay": delay,
-				"height": height,
-				"tilt": tilt,
-				"visible": part.visible,
-			}
-			room_records.append(record)
-			records.append(record)
-		room_node.set_meta("assembly_part_count", room_records.size())
-	return records
-
-
-func _room_assembly_part_delay(part_name: String) -> float:
-	var normalized := part_name.to_lower()
-	if normalized.begins_with("base_") or normalized.begins_with("floor_"):
-		return 0.0
-	if normalized.begins_with("outer") or normalized.begins_with("divider") or normalized.begins_with("doorway"):
-		return 0.06
-	if normalized.begins_with("junction") or normalized.begins_with("stairs"):
-		return 0.10
-	if normalized.begins_with("roomprop") or normalized.begins_with("override") or normalized.begins_with("production"):
-		return 0.14
-	return 0.10
-
-
-func _set_room_assembly_pose(elapsed: float, poses: Dictionary, pivot: Vector3, part_records: Array[Dictionary], drop_height: float, drop_duration: float, settle_duration: float, part_duration: float, component_stagger: float) -> void:
-	var root_weight := 1.0
-	if elapsed < drop_duration:
-		root_weight = elapsed / maxf(0.001, drop_duration)
-		_set_room_module_pose(root_weight, poses, pivot, drop_height, UNITY_ROOM_START_SCALE, 1.02, -12.0)
-	else:
-		var settle_weight := clampf((elapsed - drop_duration) / maxf(0.001, settle_duration), 0.0, 1.0)
-		_set_room_module_pose(settle_weight, poses, pivot, 0.0, 1.02, 1.0, 0.0)
-	_set_room_assembly_parts_pose(part_records, elapsed, component_stagger + part_duration)
-
-
-func _set_room_assembly_parts_pose(part_records: Array[Dictionary], elapsed: float, total_duration: float) -> void:
-	for record: Dictionary in part_records:
-		var part := record.get("node") as Node3D
-		if part == null or not is_instance_valid(part):
-			continue
-		var base: Transform3D = record.get("base", part.transform)
-		var delay := float(record.get("delay", 0.0))
-		var travel := maxf(0.001, total_duration - delay)
-		var weight := clampf((elapsed - delay) / travel, 0.0, 1.0)
-		if elapsed < delay:
-			part.visible = false
-			continue
-		part.visible = true
-		var eased := _toyhouse_ease_out_back(weight)
-		var pose := base
-		var scale_weight := lerpf(0.86, 1.0, eased)
-		pose.basis = Basis(Vector3.RIGHT, deg_to_rad(float(record.get("tilt", 0.0)) * (1.0 - eased))) * base.basis.scaled(Vector3.ONE * scale_weight)
-		pose.origin = base.origin + Vector3.UP * float(record.get("height", 0.72)) * (1.0 - eased)
-		part.transform = pose
-
-
-func _restore_room_assembly_parts(part_records: Array[Dictionary]) -> void:
-	for record: Dictionary in part_records:
-		var part := record.get("node") as Node3D
-		if part == null or not is_instance_valid(part):
-			continue
-		part.transform = record.get("base", part.transform)
-		part.visible = bool(record.get("visible", true))
-
-
-func _toyhouse_ease_out_back(weight: float) -> float:
-	var p := clampf(weight, 0.0, 1.0) - 1.0
-	var overshoot := 1.25
-	return 1.0 + p * p * ((overshoot + 1.0) * p + overshoot)
 
 
 func _finish_room_placement(target: Vector2i, final_message: String) -> void:
@@ -3992,6 +3871,8 @@ func _add_move_hover_mesh(pos: Vector2i) -> void:
 
 
 func _apply_current_room_cutaway() -> void:
+	if active_room_assembly != null:
+		return
 	house_world_renderer._apply_current_room_cutaway()
 
 
@@ -4656,6 +4537,9 @@ func _find_room_node(pos: Vector2i) -> Node3D:
 
 
 func _cancel_dynamic_effect() -> void:
+	if active_room_assembly != null:
+		active_room_assembly.finish()
+		active_room_assembly = null
 	if active_motion_tween != null and active_motion_tween.is_valid():
 		active_motion_tween.kill()
 	_clear_battle_projectiles()

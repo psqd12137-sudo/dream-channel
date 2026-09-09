@@ -24,7 +24,7 @@ func run() -> void:
 	_check(game.animation_busy and game.active_animation_kind == "room_drop", "toyhouse sequence starts with the room drop")
 	_check(room_node != null, "toyhouse sequence exposes the new room visual root")
 	if room_node != null:
-		_check(room_node.position.y > 1.0, "toyhouse sequence starts the room above the stage")
+		_check(game.active_room_assembly != null, "toyhouse sequence uses the shared cartoon assembly")
 		_check(int(room_node.get_meta("assembly_part_count", 0)) > 0, "toyhouse sequence stages visible room parts")
 	_check(not bool(game.room_rules.placed[target].get("revealed", true)), "toyhouse sequence keeps the new room covered during assembly")
 	if capture:
