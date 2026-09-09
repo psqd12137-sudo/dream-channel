@@ -56,7 +56,7 @@
 
 确认后整块模块轻微倾斜落位、回弹，再自动沿合法路径进入新房间；不可达时保留原有手动进入。角色不得穿过未访问房间抄近路，抵达后只到 `room_ready`，事件仍由玩家确认。已提交但被中断的拼装按原存档恢复，不在读档时自动补播入场。
 
-专项测试：`tests/toyhouse_regression.gd`；Vulkan 对照工具：`tests/capture_memphis_toyhouse.gd`（隔离存档，输出目录可由命令末尾 `-- res://../output/memphis-toyhouse/after` 指定）。当前使用既有镜头、角色小跳和设置；未新增收纳 UI、抽盖、音效或减少动态开关。详细记录见 [实施计划及验收记录](../docs/superpowers/plans/2026-09-09-memphis-toyhouse.md)。
+专项测试：`tests/toyhouse_regression.gd`；Vulkan 对照工具：`tests/capture_memphis_toyhouse.gd`（隔离存档，输出目录可由命令末尾 `-- res://../output/memphis-toyhouse/after` 指定）。沿用既有镜头、设置和交互边界，新增的卡通落件、卡合停顿与角色跳入只在样片入口串联；未新增收纳 UI、抽盖、音效或减少动态开关。详细记录见 [实施计划及验收记录](../docs/superpowers/plans/2026-09-09-memphis-toyhouse.md)。
 
 ### 玩具屋完整流程样片（2026-09-09）
 
@@ -246,7 +246,7 @@ $tests = @(
 	"smoke_test", "latest_3d_smoke", "web_snapshot_smoke", "boss_progression_regression", "combat_mechanics_smoke",
   "battle_view_smoke", "camera_orbit_regression", "camera_dolly_follow_regression", "display_mode_regression", "presentation_settings_regression",
   "ui_hit_regression", "combat_input_regression", "input_intent_regression",
-  "card_system_regression", "intent_arrow_path_regression", "dynamic_effects_smoke", "quaternius_room_art_smoke",
+  "card_system_regression", "intent_arrow_path_regression", "dynamic_effects_smoke", "toyhouse_sequence_regression", "quaternius_room_art_smoke",
   "room_footprint_regression", "multi_room_build_regression", "layout_intuition_regression", "layout_intuition_scene_regression",
   "enemy_patrol_intent_regression", "enemy_vision_state_regression", "enemy_intent_snapshot_regression",
   "enemy_ai_tactical_regression", "enemy_ai_cycle_regression",
