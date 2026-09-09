@@ -341,6 +341,7 @@ func start_combat_lab(room_id: String = "hall") -> void:
 	if lab_root != null:
 		lab_root.visible = false
 	start_combat(room)
+	host.set_battle_imagination_mode("imagination")
 	combat.hand.assign(["jab", "guard", "brace", "fling"])
 	status_message = "意图实验：未揭示怪物最多埋伏一拍，随后会巡逻；蓝色编号显示逐步路径。"
 	build_battle_world()

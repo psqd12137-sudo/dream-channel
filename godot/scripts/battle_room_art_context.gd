@@ -5,6 +5,7 @@ const RoomFootprintCatalog = preload("res://scripts/room_footprint_catalog.gd")
 const RoomArtRegistry = preload("res://scripts/room_art_registry.gd")
 const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 const DungeonLayouts = preload("res://scripts/dungeon_layout_catalog.gd")
+const BattleImaginationProfile = preload("res://scripts/battle_imagination_profile.gd")
 
 const EDITOR_CATALOG_PATH := "res://data/editor/asset_catalog.json"
 const MODEL_CELL := 1.55
@@ -86,6 +87,7 @@ static func build(room: Dictionary, cols: int, rows: int, battle_cell: float, ge
 		var kind := str((raw_wall as Dictionary).get("kind", (raw_wall as Dictionary).get("wall_kind", "cb_wall")))
 		if not kind.is_empty() and kind not in wall_kinds:
 			wall_kinds.append(kind)
+	var imagination_profile := BattleImaginationProfile.for_room(room_type, theme, props)
 	return {
 		"room_type": room_type,
 		"theme": theme,
@@ -103,6 +105,7 @@ static func build(room: Dictionary, cols: int, rows: int, battle_cell: float, ge
 		"accent": style.get("accent", Color("eaa36f")),
 		"shell_color": int(style.get("shell_color", 0)),
 		"height_assets": (style.get("height_assets", {}) as Dictionary).duplicate(true),
+		"imagination_profile": imagination_profile,
 	}
 
 

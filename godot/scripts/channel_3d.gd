@@ -9,6 +9,7 @@ const CameraFollowMath = preload("res://scripts/camera_follow_math.gd")
 const RoomArtRegistry = preload("res://scripts/room_art_registry.gd")
 const RoomPropCatalog = preload("res://scripts/room_prop_catalog.gd")
 const BattleRoomArtContext = preload("res://scripts/battle_room_art_context.gd")
+const BattleImaginationProfile = preload("res://scripts/battle_imagination_profile.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const RunSaveRepository = preload("res://scripts/run_save_repository.gd")
 const BossProgression = preload("res://scripts/boss_progression.gd")
@@ -281,6 +282,9 @@ var battle_camera_returning := false
 var battle_camera_return_tween: Tween = null
 var battle_room_title := "房间"
 var battle_room_context: Dictionary = {}
+var battle_imagination_mode := "baseline"
+var battle_imagination_profile: Dictionary = {}
+var battle_presentation_root: Node3D = null
 var combat_is_boss := false
 var boss_id := ""
 var boss_finish_reason := ""
@@ -2491,6 +2495,8 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	battle_entry_cell = combat.player_pos
 	battle_entry_side = _resolve_battle_entry_side(room)
 	battle_room_context = BattleRoomArtContext.build(room, combat.cols, combat.rows, BATTLE_CELL, run_seed + str(room.get("instance_id", room.get("id", "room"))).hash())
+	battle_imagination_profile = battle_room_context.get("imagination_profile", BattleImaginationProfile.for_room("", "", []))
+	set_battle_imagination_mode("baseline")
 	_apply_battle_footprint_to_combat()
 	_align_battle_terrain_to_room_context()
 	_configure_boss_combat(room)
@@ -2527,6 +2533,14 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	else:
 		status_message = entry_message
 	_refresh_hud()
+
+
+func set_battle_imagination_mode(mode: String) -> void:
+	if mode != "baseline" and mode != "imagination":
+		return
+	battle_imagination_mode = mode
+	if battle_world_renderer != null and battle_world_renderer.has_method("apply_battle_imagination_mode"):
+		battle_world_renderer.call("apply_battle_imagination_mode", battle_imagination_mode, battle_imagination_profile)
 
 
 func _prepare_combat_entry_pose() -> void:
