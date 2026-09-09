@@ -1,7 +1,8 @@
 extends SceneTree
 
 # Isolated visual prototype. No changes to the formal placement flow.
-const OUT := "res://../output/toy-parts-cartoon"
+const OUT := "res://../output/toy-parts-high-drop"
+const DROP_HEIGHT := 5.5
 var game: Node3D
 var pieces: Array[Dictionary] = []
 
@@ -55,7 +56,7 @@ func run() -> void:
 			kind = "prop"
 			landing = 1.10 + float(index % 4) * 0.035
 		pieces.append({"node": child, "pose": child.transform, "landing": landing, "kind": kind,
-			"offset": Vector3(sin(index * 2.4) * 0.9, 2.4 + float(index % 4) * 0.25, cos(index * 2.4) * 0.9),
+			"offset": Vector3(sin(index * 2.4) * 0.9, DROP_HEIGHT + float(index % 4) * 0.25, cos(index * 2.4) * 0.9),
 			"axis": Vector3(0.3, 0.15, 1).normalized(), "angle": deg_to_rad(55 + index % 4 * 15) * (-1.0 if index % 2 else 1.0)})
 		index += 1
 	if pieces.is_empty():
@@ -84,7 +85,7 @@ func run() -> void:
 			cap_anchor = top
 	module.add_child(cap)
 	cap.position = cap_anchor + Vector3.UP * 0.16
-	pieces.append({"node": cap, "pose": cap.transform, "landing": 1.60, "kind": "cap", "offset": Vector3(0.4, 3, 0), "axis": Vector3.FORWARD, "angle": 2.0})
+	pieces.append({"node": cap, "pose": cap.transform, "landing": 1.60, "kind": "cap", "offset": Vector3(0.4, DROP_HEIGHT, 0), "axis": Vector3.FORWARD, "angle": 2.0})
 	game.set_process(false)
 	game.camera.size *= 1.18
 	game.camera.position.y += 2.0
