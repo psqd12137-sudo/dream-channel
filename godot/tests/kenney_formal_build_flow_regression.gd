@@ -91,6 +91,9 @@ func _run() -> void:
 		_check(int(cutaway["culled_walls"]) > 0 and int(cutaway["visible_walls"]) > 0, "formal cutaway must hide near walls while retaining far walls")
 		_check(int(cutaway["visible_doors"]) > 0 and int(cutaway["visible_doors"]) + int(cutaway["culled_doors"]) + int(cutaway["open_doors"]) == composer.doorway_count, "formal cutaway must account for every authored doorway while hiding only blocking frames")
 		_check(composer.cutaway_markers_match_culled_edges(), "formal hidden walls and doorway shells must retain low cutaway boundary markers")
+		# The production retract mode animates wall-bound props together with their
+		# canonical wall; inspect the settled state before asserting visibility.
+		await create_timer(0.35).timeout
 		_check(composer.wall_bound_props_match_cutaway(), "formal wall-bound furniture must disappear with its canonical cutaway wall")
 		_check(composer.generation_fingerprint() == topology_before_cutaway and composer.visual_edge_records.size() == edge_count_before_cutaway and composer.connection_edges.size() == formal_connection_count, "formal cutaway must be presentation-only and preserve PCG placement topology")
 		game.enter_room(game.pending_room_pos)

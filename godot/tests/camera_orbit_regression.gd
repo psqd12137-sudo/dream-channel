@@ -34,6 +34,9 @@ func _run() -> void:
 	_check(game.offer_rotation == room_rotation, "house orbit must not rotate a build offer")
 	_check(composer.generation_fingerprint() == house_fingerprint, "house orbit must not change the PCG generation fingerprint")
 	_check(composer.connection_edges.size() == house_connections and composer.visual_edge_records.size() == house_visual_edges, "house orbit must preserve connection and visual edge ledgers")
+	# Retract mode eases wall-bound props with the cutaway; allow that short
+	# presentation transition to settle before checking the final visibility map.
+	await create_timer(0.3).timeout
 	_check(composer.wall_bound_props_match_cutaway(), "house orbit must keep wall-bound props synchronized with cutaway walls")
 	var house_zoom_target_before: Vector3 = game.house_camera_target
 	game.zoom_house_camera(Vector2(120.0, 90.0), 0.8)

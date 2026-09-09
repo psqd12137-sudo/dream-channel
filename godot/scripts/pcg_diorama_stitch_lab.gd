@@ -906,6 +906,7 @@ func _set_cutaway_prop_visual(prop: Node3D, hidden: bool) -> void:
 	if previous != null and previous.is_valid():
 		previous.kill()
 	prop.visible = true
+	prop.set_meta("cutaway_prop_target_amount", target_amount)
 	var tween := create_tween()
 	cutaway_transition_tweens[key] = tween
 	tween.tween_method(_set_cutaway_prop_amount.bind(prop), current_amount, target_amount, cutaway_hide_duration if hidden else cutaway_show_duration)

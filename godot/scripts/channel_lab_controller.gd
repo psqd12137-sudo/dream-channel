@@ -486,6 +486,68 @@ func set_wall_transition_lab_mode(mode: int) -> void:
 	_refresh_hud()
 
 
+func start_toyhouse_sequence_lab() -> void:
+	# Fixed visual sample: reuse the real build and enter flow while keeping the
+	# test scene outside the formal save lifecycle.
+	host._cancel_dynamic_effect()
+	_set_home_video(false)
+	host.reset_run(2026081901)
+	host.toyhouse_sequence_active = true
+	host.toyhouse_sequence_step = "select"
+	host.large_room_mix_test_mode = true
+	host._apply_large_room_test_catalog()
+	host.phase = "explore"
+	host.house_root.visible = true
+	host.world_container.visible = true
+	host.battle_root.visible = false
+	host.lab_root.visible = false
+	var hall := _find_catalog_room("hall")
+	var target := Vector2i.ZERO
+	var found_target := false
+	for cell: Vector2i in host.room_rules.frontiers():
+		if not hall.is_empty() and not host.room_rules.valid_rotations(cell, hall).is_empty():
+			target = cell
+			found_target = true
+			break
+	if not found_target:
+		var frontiers: Array[Vector2i] = host.room_rules.frontiers()
+		if not frontiers.is_empty():
+			target = frontiers[0]
+			found_target = true
+	if not found_target:
+		host.toyhouse_sequence_active = false
+		host.status_message = "玩具屋样片没有找到可用扩建位置。"
+		host.go_home()
+		return
+	host.toyhouse_sequence_target = target
+	host.reset_house_camera()
+	host.begin_build(target)
+	var selected := -1
+	for index in range(host.build_offers.size()):
+		var offer: Dictionary = host.build_offers[index]
+		if host._room_offer_size(offer) == 5:
+			selected = index
+			break
+	if selected < 0:
+		for index in range(host.build_offers.size()):
+			var offer: Dictionary = host.build_offers[index]
+			if host._room_offer_size(offer) >= 3:
+				selected = index
+				break
+	if not host.build_offers.is_empty():
+		host.selected_offer = maxi(0, selected)
+	host._select_first_valid_rotation()
+	host.place_selected_offer()
+	host.status_message = "固定样片：先看房间零件落下，再看角色跳入新模板。"
+	_refresh_hud()
+
+
+func replay_toyhouse_sequence_lab() -> void:
+	if host.phase != "lab_toyhouse_sequence":
+		return
+	start_toyhouse_sequence_lab()
+
+
 func _set_pcg_diorama_camera(generator: Node3D) -> void:
 	lab_camera_target = generator.camera_target()
 	lab_camera_yaw = -0.62

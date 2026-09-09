@@ -99,6 +99,15 @@ const UNITY_ACTOR_STEP_DURATION := 0.25
 const UNITY_ACTOR_TURN_DURATION := 0.16
 const UNITY_ACTOR_SETTLE_DURATION := 0.12
 const UNITY_CARD_HALF_FLIP_DURATION := 0.10
+const HOUSE_ROOM_DROP_DURATION := 0.38
+const HOUSE_ROOM_DROP_HEIGHT_CELLS := 0.92
+const HOUSE_ROOM_SETTLE_DURATION := 0.12
+const HOUSE_ROOM_COMPONENT_DURATION := 0.28
+const HOUSE_ROOM_COMPONENT_STAGGER := 0.16
+const HOUSE_ASSEMBLY_HOLD_DURATION := 0.10
+const HOUSE_ACTOR_ANTICIPATION_DURATION := 0.09
+const HOUSE_ACTOR_JUMP_DURATION := 0.40
+const HOUSE_ACTOR_JUMP_HEIGHT := 0.42
 const ENEMY_STEP_DURATION := 0.48
 const ENEMY_TURN_DURATION := 0.22
 const ENEMY_ATTACK_DURATION := 0.62
@@ -339,6 +348,9 @@ var lab_platforms: Array[Dictionary] = []
 var lab_collectibles: Array[Dictionary] = []
 var lab_collected := 0
 var wall_transition_mode := 0
+var toyhouse_sequence_active := false
+var toyhouse_sequence_step := "idle"
+var toyhouse_sequence_target := Vector2i.ZERO
 var puzzle_board: Array[int] = []
 var puzzle_moves_left := 42
 var puzzle_refreshes_left := 3
@@ -569,7 +581,7 @@ func _update_camera_follow(delta: float) -> void:
 		house_camera_return_delay = maxf(0.0, house_camera_return_delay - delta)
 		if house_camera_return_delay <= 0.0 and not house_camera_user_hold:
 			_start_house_camera_return()
-	if phase in ["explore", "build", "room_ready", "lab_wall_transition", "world_boss"] and camera != null:
+	if phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"] and camera != null:
 		var target_size := _house_camera_size_target()
 		var size_factor := CameraFollowMath.smooth_factor(HOUSE_CAMERA_SIZE_SMOOTH_RATE, delta)
 		var next_size := lerpf(house_camera_size_current, target_size, size_factor)
@@ -821,6 +833,9 @@ func reset_run(seed_value: int = 0) -> void:
 	show_house_diagnostics = false
 	large_room_mix_test_mode = false
 	character_animation_demo_mode = false
+	toyhouse_sequence_active = false
+	toyhouse_sequence_step = "idle"
+	toyhouse_sequence_target = Vector2i.ZERO
 	camera.environment = null
 	world_container.visible = true
 	house_root.visible = true
@@ -965,6 +980,9 @@ func go_home() -> void:
 	ending_success = false
 	_cancel_dynamic_effect()
 	character_animation_demo_mode = false
+	toyhouse_sequence_active = false
+	toyhouse_sequence_step = "idle"
+	toyhouse_sequence_target = Vector2i.ZERO
 	camera.environment = null
 	house_camera_following = false
 	house_camera_closeup = false
@@ -1099,6 +1117,14 @@ func start_wall_transition_lab() -> void:
 
 func set_wall_transition_lab_mode(mode: int) -> void:
 	lab_controller.set_wall_transition_lab_mode(mode)
+
+
+func start_toyhouse_sequence_lab() -> void:
+	lab_controller.start_toyhouse_sequence_lab()
+
+
+func replay_toyhouse_sequence_lab() -> void:
+	lab_controller.replay_toyhouse_sequence_lab()
 
 
 func _set_pcg_diorama_camera(generator: Node3D) -> void:
@@ -1311,8 +1337,11 @@ func place_selected_offer() -> void:
 	room_rules.set_instance_flag(selected_frontier, "revealed", false)
 	room_rules.set_instance_flag(selected_frontier, "visited", false)
 	pending_room_pos = selected_frontier
+	if toyhouse_sequence_active:
+		toyhouse_sequence_target = pending_room_pos
+		toyhouse_sequence_step = "drop"
 	_remove_remaining_room(str(room.get("id", "")))
-	phase = "explore"
+	phase = "lab_toyhouse_sequence" if toyhouse_sequence_active else "explore"
 	build_offers.clear()
 	var final_message := "新模块已拼好；演员进入后才揭示内容。"
 	status_message = "玩具模块正在卡合……"
@@ -1321,7 +1350,8 @@ func place_selected_offer() -> void:
 	active_animation_kind = "room_drop"
 	build_house_world()
 	_refresh_hud()
-	_save_run()
+	if not toyhouse_sequence_active:
+		_save_run()
 	_animate_room_placement(pending_room_pos, final_message)
 
 
@@ -1332,29 +1362,35 @@ func _animate_room_placement(target: Vector2i, final_message: String) -> void:
 		return
 	var final_transforms: Dictionary = {}
 	var pivot := Vector3.ZERO
-	var drop_height := (1.55 if kenney_build_lab_mode else HOUSE_CELL) * UNITY_ROOM_DROP_HEIGHT_CELLS
+	var drop_height := (1.55 if kenney_build_lab_mode else HOUSE_CELL) * HOUSE_ROOM_DROP_HEIGHT_CELLS
 	for room_node: Node3D in room_nodes:
 		final_transforms[room_node] = room_node.transform
 		pivot += room_node.position
 	pivot /= float(room_nodes.size())
-	var drop_duration := UNITY_ROOM_DROP_DURATION * animation_duration_scale
+	var part_records := _prepare_room_assembly_parts(room_nodes)
+	var drop_duration := HOUSE_ROOM_DROP_DURATION * animation_duration_scale
+	var settle_duration := HOUSE_ROOM_SETTLE_DURATION * animation_duration_scale
+	var part_duration := HOUSE_ROOM_COMPONENT_DURATION * animation_duration_scale
+	var component_stagger := HOUSE_ROOM_COMPONENT_STAGGER * animation_duration_scale
 	if drop_duration <= 0.0:
+		_set_room_module_pose(1.0, final_transforms, pivot, 0.0, 1.02, 1.0, 0.0)
+		_restore_room_assembly_parts(part_records)
 		_finish_room_placement(target, final_message)
 		return
 	_set_room_module_pose(0.0, final_transforms, pivot, drop_height, UNITY_ROOM_START_SCALE, 1.02, -12.0)
+	_set_room_assembly_parts_pose(part_records, 0.0, component_stagger + part_duration)
+	var total_duration := maxf(drop_duration + settle_duration, component_stagger + part_duration)
 	var tween := create_tween()
 	active_motion_tween = tween
-	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_method(_set_room_module_pose.bind(final_transforms, pivot, drop_height, UNITY_ROOM_START_SCALE, 1.02, -12.0), 0.0, 1.0, drop_duration)
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	var settle_duration := UNITY_ACTOR_SETTLE_DURATION * animation_duration_scale
-	tween.tween_method(_set_room_module_pose.bind(final_transforms, pivot, 0.0, 1.02, 1.0, 0.0), 0.0, 1.0, settle_duration)
+	tween.tween_method(_set_room_assembly_pose.bind(final_transforms, pivot, part_records, drop_height, drop_duration, settle_duration, part_duration, component_stagger), 0.0, total_duration, total_duration)
 	await tween.finished
 	if active_motion_tween != tween:
 		return
 	for room_node: Node3D in room_nodes:
 		if is_instance_valid(room_node):
 			room_node.transform = final_transforms[room_node]
+	_restore_room_assembly_parts(part_records)
 	_finish_room_placement(target, final_message)
 
 
@@ -1368,12 +1404,115 @@ func _set_room_module_pose(weight: float, poses: Dictionary, pivot: Vector3, hei
 		node.transform = Transform3D(motion * final_pose.basis, pivot + motion * (final_pose.origin - pivot) + Vector3.UP * height * (1.0 - weight))
 
 
+func _prepare_room_assembly_parts(room_nodes: Array[Node3D]) -> Array[Dictionary]:
+	var records: Array[Dictionary] = []
+	for room_node: Node3D in room_nodes:
+		if room_node == null or not is_instance_valid(room_node):
+			continue
+		var room_records: Array[Dictionary] = []
+		for child: Node in room_node.get_children():
+			if not child is Node3D:
+				continue
+			var part := child as Node3D
+			if not part.visible:
+				continue
+			var part_name := str(part.name)
+			var delay := _room_assembly_part_delay(part_name)
+			var height := 0.72 + float(abs(part_name.hash()) % 4) * 0.08
+			var tilt := -8.0 if posmod(part_name.hash(), 2) == 0 else 7.0
+			var record := {
+				"node": part,
+				"base": part.transform,
+				"delay": delay,
+				"height": height,
+				"tilt": tilt,
+				"visible": part.visible,
+			}
+			room_records.append(record)
+			records.append(record)
+		room_node.set_meta("assembly_part_count", room_records.size())
+	return records
+
+
+func _room_assembly_part_delay(part_name: String) -> float:
+	var normalized := part_name.to_lower()
+	if normalized.begins_with("base_") or normalized.begins_with("floor_"):
+		return 0.0
+	if normalized.begins_with("outer") or normalized.begins_with("divider") or normalized.begins_with("doorway"):
+		return 0.06
+	if normalized.begins_with("junction") or normalized.begins_with("stairs"):
+		return 0.10
+	if normalized.begins_with("roomprop") or normalized.begins_with("override") or normalized.begins_with("production"):
+		return 0.14
+	return 0.10
+
+
+func _set_room_assembly_pose(elapsed: float, poses: Dictionary, pivot: Vector3, part_records: Array[Dictionary], drop_height: float, drop_duration: float, settle_duration: float, part_duration: float, component_stagger: float) -> void:
+	var root_weight := 1.0
+	if elapsed < drop_duration:
+		root_weight = elapsed / maxf(0.001, drop_duration)
+		_set_room_module_pose(root_weight, poses, pivot, drop_height, UNITY_ROOM_START_SCALE, 1.02, -12.0)
+	else:
+		var settle_weight := clampf((elapsed - drop_duration) / maxf(0.001, settle_duration), 0.0, 1.0)
+		_set_room_module_pose(settle_weight, poses, pivot, 0.0, 1.02, 1.0, 0.0)
+	_set_room_assembly_parts_pose(part_records, elapsed, component_stagger + part_duration)
+
+
+func _set_room_assembly_parts_pose(part_records: Array[Dictionary], elapsed: float, total_duration: float) -> void:
+	for record: Dictionary in part_records:
+		var part := record.get("node") as Node3D
+		if part == null or not is_instance_valid(part):
+			continue
+		var base: Transform3D = record.get("base", part.transform)
+		var delay := float(record.get("delay", 0.0))
+		var travel := maxf(0.001, total_duration - delay)
+		var weight := clampf((elapsed - delay) / travel, 0.0, 1.0)
+		if elapsed < delay:
+			part.visible = false
+			continue
+		part.visible = true
+		var eased := _toyhouse_ease_out_back(weight)
+		var pose := base
+		var scale_weight := lerpf(0.86, 1.0, eased)
+		pose.basis = Basis(Vector3.RIGHT, deg_to_rad(float(record.get("tilt", 0.0)) * (1.0 - eased))) * base.basis.scaled(Vector3.ONE * scale_weight)
+		pose.origin = base.origin + Vector3.UP * float(record.get("height", 0.72)) * (1.0 - eased)
+		part.transform = pose
+
+
+func _restore_room_assembly_parts(part_records: Array[Dictionary]) -> void:
+	for record: Dictionary in part_records:
+		var part := record.get("node") as Node3D
+		if part == null or not is_instance_valid(part):
+			continue
+		part.transform = record.get("base", part.transform)
+		part.visible = bool(record.get("visible", true))
+
+
+func _toyhouse_ease_out_back(weight: float) -> float:
+	var p := clampf(weight, 0.0, 1.0) - 1.0
+	var overshoot := 1.25
+	return 1.0 + p * p * ((overshoot + 1.0) * p + overshoot)
+
+
 func _finish_room_placement(target: Vector2i, final_message: String) -> void:
 	status_message = final_message
 	_complete_dynamic_effect()
 	# Preserve build legality and the existing exploration/entry/save boundary.
 	# Unreachable modules stay placed; unknown rooms are never transit shortcuts.
-	if phase == "explore" and pending_room_pos == target and house_path_to(target).size() >= 2:
+	if phase in ["explore", "lab_toyhouse_sequence"] and pending_room_pos == target and house_path_to(target).size() >= 2:
+		var hold_duration := HOUSE_ASSEMBLY_HOLD_DURATION * animation_duration_scale
+		if hold_duration > 0.0:
+			animation_busy = true
+			active_animation_kind = "assembly_hold"
+			if toyhouse_sequence_active:
+				toyhouse_sequence_step = "assembly_hold"
+			var hold_tween := create_tween()
+			active_motion_tween = hold_tween
+			hold_tween.tween_interval(hold_duration)
+			await hold_tween.finished
+			if active_motion_tween != hold_tween:
+				return
+			_complete_dynamic_effect()
 		enter_room(target)
 	else:
 		_refresh_hud()
@@ -1468,13 +1607,15 @@ func enter_room(target: Vector2i) -> void:
 			_refresh_hud()
 			return
 		for index in range(1, path.size()):
-			if phase != "explore" or animation_busy or current_room_pos != path[index - 1]:
+			if phase not in ["explore", "lab_toyhouse_sequence"] or animation_busy or current_room_pos != path[index - 1]:
 				return
 			await enter_room(path[index])
 		return
 	previous_room_pos = current_room_pos
 	animation_busy = true
 	active_animation_kind = "room_entry"
+	if toyhouse_sequence_active:
+		toyhouse_sequence_step = "jump"
 	house_camera_closeup = false
 	house_camera_following = false
 	house_camera_user_hold = false
@@ -1519,17 +1660,22 @@ func _animate_enter_room(target: Vector2i) -> void:
 	var target_position := _house_interaction_target_position("player:lili", target)
 	var doorway_position := (_house_world(current_room_pos) + _house_world(target)) * 0.5
 	doorway_position.y = lerpf(start_position.y, target_position.y, 0.5)
-	var move_duration := UNITY_ACTOR_STEP_DURATION * animation_duration_scale
+	var move_duration := HOUSE_ACTOR_JUMP_DURATION * animation_duration_scale
 	if token != null and move_duration > 0.0:
 		var presenter := token.get_node_or_null("Presenter")
 		if presenter != null and presenter.has_method("play_state"):
 			presenter.play_state("move")
+		house_camera_following = true
+		house_camera_user_hold = false
 		var move_tween := create_tween()
 		active_motion_tween = move_tween
-		move_tween.set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN_OUT)
+		move_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		move_tween.tween_property(token, "scale", Vector3(1.10, 0.80, 1.10), HOUSE_ACTOR_ANTICIPATION_DURATION * animation_duration_scale)
+		move_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 		move_tween.tween_method(_set_house_token_path_motion.bind(token, start_position, doorway_position, target_position), 0.0, 1.0, move_duration)
-		move_tween.tween_property(token, "scale", Vector3(1.06, 0.90, 1.06), UNITY_ACTOR_SETTLE_DURATION * 0.5 * animation_duration_scale)
-		move_tween.tween_property(token, "scale", Vector3.ONE, UNITY_ACTOR_SETTLE_DURATION * 0.5 * animation_duration_scale)
+		move_tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		move_tween.tween_property(token, "scale", Vector3(1.14, 0.74, 1.14), HOUSE_ACTOR_ANTICIPATION_DURATION * 0.55 * animation_duration_scale)
+		move_tween.tween_property(token, "scale", Vector3.ONE, HOUSE_ACTOR_ANTICIPATION_DURATION * 0.65 * animation_duration_scale)
 		await move_tween.finished
 		if active_motion_tween != move_tween:
 			return
@@ -1579,7 +1725,7 @@ func _set_house_token_path_motion(weight: float, token: Node3D, start_position: 
 	var smooth_weight := weight * weight * (3.0 - 2.0 * weight)
 	var inverse := 1.0 - smooth_weight
 	var path_position := start_position * inverse * inverse + doorway_position * 2.0 * inverse * smooth_weight + target_position * smooth_weight * smooth_weight
-	path_position.y += sin(smooth_weight * PI) * 0.18
+	path_position.y += sin(smooth_weight * PI) * HOUSE_ACTOR_JUMP_HEIGHT
 	token.position = path_position
 	var tangent := (doorway_position - start_position) * (2.0 * inverse) + (target_position - doorway_position) * (2.0 * smooth_weight)
 	tangent.y = 0.0
@@ -1592,21 +1738,25 @@ func _finish_enter_room(target: Vector2i) -> void:
 	current_room_pos = target
 	house_camera_closeup = false
 	house_camera_following = false
+	var sequence_lab := toyhouse_sequence_active
 	var room: Dictionary = room_rules.placed[target]
 	var first_visit := not bool(room.get("visited", false))
 	room_rules.set_instance_flag(target, "revealed", true)
 	room_rules.set_instance_flag(target, "visited", true)
 	if first_visit and not bool(room.get("completed", false)):
-		phase = "room_ready"
+		phase = "lab_toyhouse_sequence" if sequence_lab else "room_ready"
 		status_message = str(room.get("description", "你推开了房门。"))
 		event_log.append("你推开了通向%s的门。" % str(room.get("name", "房间")))
 	else:
-		phase = "explore"
+		phase = "lab_toyhouse_sequence" if sequence_lab else "explore"
 		status_message = "回到%s。" % str(room.get("name", "房间"))
+	if sequence_lab:
+		toyhouse_sequence_step = "ready"
 	build_house_world()
 	_complete_dynamic_effect()
 	_refresh_hud()
-	_save_run()
+	if not sequence_lab:
+		_save_run()
 
 
 func resolve_current_room() -> void:
@@ -3940,7 +4090,7 @@ func _set_house_camera() -> void:
 
 
 func toggle_house_camera_closeup() -> bool:
-	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "world_boss"] or camera == null:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"] or camera == null:
 		return false
 	house_camera_closeup = not house_camera_closeup
 	house_camera_following = true
@@ -3953,7 +4103,7 @@ func toggle_house_camera_closeup() -> bool:
 
 
 func pan_house_camera(pixel_delta: Vector2) -> void:
-	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "world_boss"]:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"]:
 		return
 	house_camera_user_hold = true
 	_cancel_house_camera_return()
@@ -3967,7 +4117,7 @@ func pan_house_camera(pixel_delta: Vector2) -> void:
 
 
 func orbit_house_camera(pixel_delta: Vector2) -> void:
-	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "world_boss"]:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"]:
 		return
 	house_camera_user_hold = true
 	_cancel_house_camera_return()
@@ -3977,7 +4127,7 @@ func orbit_house_camera(pixel_delta: Vector2) -> void:
 
 
 func zoom_house_camera(_view_pos: Vector2, zoom_factor: float) -> void:
-	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "world_boss"]:
+	if phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"]:
 		return
 	# 缩放属于手动镜头操作，暂停自动跟随，避免跟随目标和缩放同时改写 target。
 	house_camera_following = false
@@ -4053,7 +4203,7 @@ func _cancel_house_camera_return() -> void:
 
 
 func _start_house_camera_return() -> void:
-	if camera == null or phase not in ["explore", "build", "room_ready", "world_boss"]:
+	if camera == null or phase not in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "world_boss"]:
 		return
 	house_camera_returning = true
 	var player_pos := _house_follow_target_position() + _house_camera_frame_offset()

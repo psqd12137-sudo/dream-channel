@@ -107,6 +107,7 @@ const HOME_TEST_CHARACTER_ANIMATION_RECT := Rect2(997, 228, 205, 42)
 const HOME_TEST_ASSET_EDITOR_RECT := Rect2(780, 282, 205, 42)
 const HOME_TEST_HOST_RECT := Rect2(997, 282, 205, 42)
 const HOME_TEST_WALL_TRANSITION_RECT := Rect2(780, 336, 422, 42)
+const HOME_TEST_TOYHOUSE_RECT := Rect2(780, 390, 422, 42)
 const TEST_COMBAT_RETURN_RECT := Rect2(1040, 18, 192, 34)
 const HOME_RESOLUTION_RECT := Rect2(76, 714, 180, 36)
 const HOME_WINDOW_MODE_RECT := Rect2(270, 714, 102, 36)
@@ -125,6 +126,7 @@ const LAB_SWITCH_RECT := Rect2(940, 86, 220, 32)
 const WALL_MODE_INSTANT_RECT := Rect2(1020, 214, 220, 42)
 const WALL_MODE_RETRACT_RECT := Rect2(1020, 268, 220, 42)
 const WALL_MODE_WAVE_RECT := Rect2(1020, 322, 220, 42)
+const TOYHOUSE_REPLAY_RECT := Rect2(1020, 214, 220, 42)
 const PUZZLE_REFRESH_RECT := Rect2(850, 650, 190, 44)
 const CHASE_START_RECT := Rect2(480, 590, 190, 48)
 const CHASE_FORFEIT_RECT := Rect2(690, 590, 190, 48)
@@ -432,6 +434,8 @@ func _design_world_rect(phase_name: String) -> Rect2:
 		return Rect2(60, 120, 1160, 520)
 	if phase_name == "lab_wall_transition":
 		return HOUSE_VIEW_RECT
+	if phase_name == "lab_toyhouse_sequence":
+		return HOUSE_VIEW_RECT
 	if phase_name == "lab_puzzle" or phase_name == "home":
 		return Rect2(0, 84, 1280, 716)
 	if phase_name == "build":
@@ -593,7 +597,7 @@ func _draw_home() -> void:
 	_draw_button(HOME_SEED_COPY_RECT, "复制种子", BLUE, TEXT)
 	_draw_button(HOME_TESTS_RECT, "关闭后台" if game.home_tests_open else "后台测试", Color("734b87"), TEXT)
 	if game.home_tests_open:
-		_draw_ticket_panel(Rect2(764, 96, 454, 296), Color("17151cf2"), MAGENTA)
+		_draw_ticket_panel(Rect2(764, 96, 454, 350), Color("17151cf2"), MAGENTA)
 		_label("节目后台 · 仅供开发检查", Vector2(780, 120), 10, MUTED)
 		_draw_button(HOME_TEST_LAYOUT_RECT, "布局直觉测试区", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_SIDE_RECT, "WASD 横版手感", TEAL, TEXT)
@@ -604,6 +608,7 @@ func _draw_home() -> void:
 		_draw_button(HOME_TEST_ASSET_EDITOR_RECT, "房间资产地编", Color("c98a37"), TEXT)
 		_draw_button(HOME_TEST_HOST_RECT, "大地图 Boss · 独立试玩", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_WALL_TRANSITION_RECT, "墙体显隐动画对比", Color("3e8b78"), TEXT)
+		_draw_button(HOME_TEST_TOYHOUSE_RECT, "玩具屋完整流程样片", MAGENTA, TEXT)
 	_label("画面", Vector2(76, 706), 10, MUTED)
 	_draw_button(HOME_RESOLUTION_RECT, game.display_resolution_label(), TEAL, TEXT)
 	_draw_button(HOME_WINDOW_MODE_RECT, game.display_mode_label(), BLUE, TEXT)
@@ -709,6 +714,18 @@ func _draw_lab_hud() -> void:
 		_label("数字键 1 / 2 / 3 也可切换", Vector2(1020, 392), 11, MUTED)
 		_label("动画会跟随墙体朝向变化", Vector2(1020, 414), 11, MUTED)
 		_draw_coach(Rect2(60, 660, 1160, 96), "卡通墙体让位", game.status_message)
+	elif game.phase == "lab_toyhouse_sequence":
+		_label("玩具屋完整流程 · R 重播 · 拖拽旋转 · 滚轮缩放", Vector2(78, 108), 18, TEXT)
+		_draw_ticket_panel(Rect2(1004, 88, 260, 586), Color("17151cf2"), MAGENTA)
+		_label("固定样片", Vector2(1020, 142), 15, MUTED)
+		_label("玄关 → 五格新房间", Vector2(1020, 174), 13, TEXT)
+		_draw_button(TOYHOUSE_REPLAY_RECT, "R 重播样片", MAGENTA, TEXT)
+		var step_labels := {"select": "准备对位", "drop": "零件落下", "assembly_hold": "卡合停顿", "jump": "角色跳入", "ready": "房间就绪"}
+		_label("当前阶段：%s" % str(step_labels.get(game.toyhouse_sequence_step, game.toyhouse_sequence_step)), Vector2(1020, 292), 12, GOLD)
+		_label("新房间：%s" % str(game.toyhouse_sequence_target), Vector2(1020, 320), 11, MUTED)
+		_label("墙体默认缩入底座", Vector2(1020, 348), 11, MUTED)
+		_label("完成后可自由观察", Vector2(1020, 370), 11, MUTED)
+		_draw_coach(Rect2(60, 660, 1160, 96), "组装 → 跳入 → 揭示", game.status_message)
 	elif game.phase == "lab_puzzle":
 		_draw_puzzle()
 	elif game.phase == "lab_chase":
@@ -1802,6 +1819,13 @@ func _input(event: InputEvent) -> void:
 			return
 		get_viewport().set_input_as_handled()
 		return
+	if key_event.pressed and not key_event.echo and game.phase == "lab_toyhouse_sequence":
+		if key_event.keycode == KEY_R:
+			game.replay_toyhouse_sequence_lab()
+		else:
+			return
+		get_viewport().set_input_as_handled()
+		return
 	if key_event.pressed and not key_event.echo and key_event.keycode == KEY_C and game.phase in ["explore", "build", "room_ready"]:
 		game.toggle_house_camera_closeup()
 		get_viewport().set_input_as_handled()
@@ -1969,7 +1993,7 @@ func _gui_input(event: InputEvent) -> void:
 				game.clear_battle_hover()
 			queue_redraw()
 			accept_event()
-		elif board_left_pressed and game.phase in ["combat", "world_boss", "explore", "build", "room_ready", "lab_wall_transition"]:
+		elif board_left_pressed and game.phase in ["combat", "world_boss", "explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence"]:
 			board_left_distance += event.relative.length()
 			if board_left_distance >= 5.0:
 				board_left_dragged = true
@@ -1984,7 +2008,7 @@ func _gui_input(event: InputEvent) -> void:
 			game.pan_battle_camera(event.relative)
 			game.clear_battle_hover()
 			accept_event()
-		elif middle_dragging and game.phase in ["explore", "build", "room_ready", "lab_wall_transition"]:
+		elif middle_dragging and game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence"]:
 			game.pan_house_camera(event.relative)
 			accept_event()
 		elif middle_dragging and game.phase in ["lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"]:
@@ -2115,7 +2139,7 @@ func _gui_input(event: InputEvent) -> void:
 				board_left_distance = 0.0
 				accept_event()
 				return
-	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase in ["explore", "build", "room_ready", "lab_wall_transition"]:
+	if mouse_event.button_index == MOUSE_BUTTON_LEFT and game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence"]:
 		if not mouse_event.pressed and board_left_pressed:
 			var should_click := not board_left_dragged and world_view_rect_screen.has_point(mouse_event.position)
 			var was_dragged := board_left_dragged
@@ -2135,14 +2159,14 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 			return
 	if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
-		if mouse_event.pressed and game.phase in ["combat", "world_boss", "explore", "build", "room_ready", "lab_wall_transition", "lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"] and world_view_rect_screen.has_point(mouse_event.position):
+		if mouse_event.pressed and game.phase in ["combat", "world_boss", "explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence", "lab_search", "lab_diorama", "lab_pcg_diorama", "lab_hand_diorama"] and world_view_rect_screen.has_point(mouse_event.position):
 			middle_dragging = true
 			if game.phase in ["combat", "world_boss"]:
 				game.clear_battle_hover()
 			accept_event()
 		elif not mouse_event.pressed:
 			middle_dragging = false
-			if game.phase in ["explore", "build", "room_ready", "lab_wall_transition"]:
+			if game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence"]:
 				game.release_house_camera_gesture()
 			elif game.phase in ["combat", "world_boss"]:
 				game.release_battle_camera_gesture()
@@ -2157,7 +2181,7 @@ func _gui_input(event: InputEvent) -> void:
 			game.zoom_battle_camera(mouse_event.position - world_view_rect_screen.position, 1.1)
 			accept_event()
 			return
-	if mouse_event.pressed and game.phase in ["explore", "build", "room_ready", "lab_wall_transition"] and world_view_rect_screen.has_point(mouse_event.position):
+	if mouse_event.pressed and game.phase in ["explore", "build", "room_ready", "lab_wall_transition", "lab_toyhouse_sequence"] and world_view_rect_screen.has_point(mouse_event.position):
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			game.zoom_house_camera(mouse_event.position - world_view_rect_screen.position, 0.9)
 			accept_event()
@@ -2194,6 +2218,8 @@ func _gui_input(event: InputEvent) -> void:
 			game.start_host_preview()
 		elif game.home_tests_open and HOME_TEST_WALL_TRANSITION_RECT.has_point(point):
 			game.start_wall_transition_lab()
+		elif game.home_tests_open and HOME_TEST_TOYHOUSE_RECT.has_point(point):
+			game.start_toyhouse_sequence_lab()
 		elif game.home_tests_open and HOME_TEST_LAYOUT_RECT.has_point(point):
 			game.get_tree().change_scene_to_file("res://scenes/layout_intuition_lab.tscn")
 		elif game.home_tests_open and HOME_TEST_SIDE_RECT.has_point(point):
@@ -2241,6 +2267,10 @@ func _gui_input(event: InputEvent) -> void:
 			game.set_wall_transition_lab_mode(1)
 		elif WALL_MODE_WAVE_RECT.has_point(point):
 			game.set_wall_transition_lab_mode(2)
+		return
+	if game.phase == "lab_toyhouse_sequence":
+		if TOYHOUSE_REPLAY_RECT.has_point(point):
+			game.replay_toyhouse_sequence_lab()
 		return
 	if game.phase == "lab_puzzle":
 		var origin := Vector2(385, 245)
