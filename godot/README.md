@@ -346,3 +346,15 @@ if ($failed.Count -gt 0) {
 已删除战斗/AI 测试菜单、专用目录/会话脚本/预设及对应专用测试，删除旧扩建 PCG 游戏内启动流程和自动连片独立场景。正式战斗、AI、资产地编与 Boss 独立试玩保留。`pcg_hand_layout_lab.gd`、`pcg_diorama_stitch_lab.gd` 和手摆场景仍被正式房间渲染引用，属于共用代码，未删除。通用显示与回合测试改为直接准备房间，不依赖已删除菜单。
 
 验证：`layout_intuition_regression.gd`（回路、封路、撤销、规格）与 `layout_intuition_scene_regression.gd`（场景、正式存档不变；加 `-- --capture` 输出截图）。测试日志应使用独立的 `--log-file`，不要覆盖玩家运行日志。
+
+## 游戏内墙体显隐对比（2026-09-09）
+
+`tests/wall_transition_game_compare.gd` 直接加载正式 `channel_3d.tscn`，自动放置长廊并沿固定 120° 路径旋转镜头，分别录制三种墙体处理：`0` 直接隐藏、`1` 缩入底座、`2` 波浪渐隐。录制必须使用 Vulkan 图形模式（不能用 `--headless`，因为需要读取画面纹理）。
+
+```powershell
+& 'D:/godot/Godot_v4.7.1-stable_win64_console.exe' --path ./godot `
+  --rendering-method forward_plus --rendering-driver vulkan `
+  --script res://tests/wall_transition_game_compare.gd -- res://../output/wall-transition-game
+```
+
+每个 `mode_0` / `mode_1` / `mode_2` 目录包含同一镜头路径的 PNG 帧；可用 `1/2/3` 键在 `--interactive` 模式切换方案，`A/D` 旋转镜头。墙体动画由正式 `KenneyFormalComposer` 的 `cutaway_transition_mode` 驱动：缩入模式压缩墙体并下沉，波浪模式保留卡通波纹边缘并同步隐藏墙上道具。

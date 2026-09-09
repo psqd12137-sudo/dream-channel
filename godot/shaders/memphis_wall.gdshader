@@ -5,6 +5,8 @@ uniform vec4 accent_color : source_color = vec4(0.93, 0.58, 0.27, 1.0);
 uniform vec2 panel_size = vec2(1.27, 1.08);
 uniform int motif = 0;
 uniform float surface_roughness : hint_range(0.0, 1.0) = 0.88;
+uniform float cutaway_amount : hint_range(0.0, 1.0) = 1.0;
+uniform float cutaway_wave_phase = 0.0;
 varying vec2 panel_uv;
 
 void vertex() {
@@ -14,6 +16,10 @@ void vertex() {
 void fragment() {
 	vec2 p = panel_uv;
 	float aa = max(fwidth(p.x), fwidth(p.y));
+	float wipe_edge = mix(-0.08, 1.08, cutaway_amount) + sin((p.x + cutaway_wave_phase) * 6.28318) * 0.055;
+	if (p.y > wipe_edge + aa) {
+		discard;
+	}
 	vec3 color = wall_color.rgb;
 	// A solid lower band grounds the miniature; motifs occupy one broad zone.
 	float lower = 1.0 - smoothstep(0.25 - aa, 0.25 + aa, p.y);

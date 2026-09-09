@@ -80,6 +80,11 @@ var cutaway_visible_wall_count := 0
 var cutaway_visible_doorway_count := 0
 var cutaway_open_passage_count := 0
 var cutaway_focus_room_index := -1
+@export_enum("instant", "retract", "wave") var cutaway_transition_mode := 0
+@export_range(0.08, 0.6, 0.01) var cutaway_hide_duration := 0.22
+@export_range(0.08, 0.6, 0.01) var cutaway_show_duration := 0.25
+var cutaway_transition_tweens: Dictionary = {}
+var cutaway_transition_active := 0
 var layout_extent := 8.0
 var layout_center := Vector2.ZERO
 
@@ -99,6 +104,7 @@ func _ready() -> void:
 func regenerate(seed_value: int) -> void:
 	generation_seed = seed_value
 	rng.seed = generation_seed
+	_kill_cutaway_transitions()
 	if build_tween != null and build_tween.is_valid():
 		build_tween.kill()
 	build_tween = null
@@ -626,7 +632,10 @@ func apply_camera_cutaway(focus_cell: Vector2i, camera_direction: Vector2) -> Di
 	for raw_node: Variant in structural_edge_nodes.values():
 		var edge_node := raw_node as Node3D
 		if edge_node != null:
-			edge_node.visible = true
+			_ensure_cutaway_pose(edge_node)
+			if cutaway_transition_mode == 0:
+				_restore_cutaway_pose(edge_node)
+				edge_node.visible = true
 	for raw_marker: Variant in cutaway_marker_nodes.values():
 		var marker := raw_marker as Node3D
 		if marker != null:
@@ -636,6 +645,14 @@ func apply_camera_cutaway(focus_cell: Vector2i, camera_direction: Vector2) -> Di
 			junction.visible = true
 	_set_wall_bound_props_visible(true)
 	if cutaway_focus_room_index < 0:
+		for raw_node: Variant in structural_edge_nodes.values():
+			var edge_node := raw_node as Node3D
+			if edge_node != null:
+				_set_cutaway_edge_visual(edge_node, false)
+		for junction: Node3D in structural_junction_nodes:
+			if is_instance_valid(junction):
+				_set_cutaway_edge_visual(junction, false)
+		_update_wall_bound_prop_visibility()
 		return cutaway_debug_state()
 	var viewer_direction := camera_direction.normalized()
 	if viewer_direction.length_squared() < 0.01:
@@ -666,7 +683,7 @@ func apply_camera_cutaway(focus_cell: Vector2i, camera_direction: Vector2) -> Di
 				should_cull = _edge_faces_camera(outward, viewer_direction, edge_key in previously_culled)
 		var edge_node := structural_edge_nodes.get(edge_key) as Node3D
 		if edge_node != null:
-			edge_node.visible = not should_cull
+			_set_cutaway_edge_visual(edge_node, should_cull)
 		var cutaway_marker := cutaway_marker_nodes.get(edge_key) as Node3D
 		if cutaway_marker != null:
 			cutaway_marker.visible = should_cull
@@ -691,6 +708,230 @@ func apply_camera_cutaway(focus_cell: Vector2i, camera_direction: Vector2) -> Di
 	return cutaway_debug_state()
 
 
+func set_cutaway_transition_mode(mode: int) -> void:
+	cutaway_transition_mode = clampi(mode, 0, 2)
+	_kill_cutaway_transitions()
+	for raw_node: Variant in structural_edge_nodes.values():
+		var node := raw_node as Node3D
+		if node == null:
+			continue
+		_ensure_cutaway_pose(node)
+		_restore_cutaway_pose(node)
+		_node_set_cutaway_shader_amount(node, 1.0)
+		_node_set_cutaway_aux_scale(node, 1.0)
+		node.visible = true
+	for shell: Node3D in override_shell_nodes:
+		if is_instance_valid(shell):
+			_ensure_cutaway_pose(shell)
+			_restore_cutaway_pose(shell)
+			_node_set_cutaway_shader_amount(shell, 1.0)
+			_node_set_cutaway_aux_scale(shell, 1.0)
+			shell.visible = true
+	for junction: Node3D in structural_junction_nodes:
+		if is_instance_valid(junction):
+			_ensure_cutaway_pose(junction)
+			_restore_cutaway_pose(junction)
+			junction.visible = true
+	for raw_nodes: Variant in wall_bound_prop_nodes.values():
+		for prop: Node3D in raw_nodes:
+			_set_cutaway_prop_visual(prop, false)
+
+
+func cutaway_transition_state() -> Dictionary:
+	var active := 0
+	for raw_tween: Variant in cutaway_transition_tweens.values():
+		var tween := raw_tween as Tween
+		if tween != null and tween.is_valid():
+			active += 1
+	return {"mode": cutaway_transition_mode, "active": active, "hidden": cutaway_culled_edge_keys.size()}
+
+
+func _kill_cutaway_transitions() -> void:
+	for raw_tween: Variant in cutaway_transition_tweens.values():
+		var tween := raw_tween as Tween
+		if tween != null and tween.is_valid():
+			tween.kill()
+	cutaway_transition_tweens.clear()
+	cutaway_transition_active = 0
+
+
+func _ensure_cutaway_pose(node: Node3D) -> void:
+	if not node.has_meta("cutaway_base_transform"):
+		node.set_meta("cutaway_base_transform", node.transform)
+	if not node.has_meta("cutaway_amount"):
+		node.set_meta("cutaway_amount", 1.0)
+	if not node.has_meta("cutaway_target_amount"):
+		node.set_meta("cutaway_target_amount", 1.0)
+	if not node.has_meta("cutaway_wave_phase"):
+		node.set_meta("cutaway_wave_phase", float(abs(node.name.hash()) % 100) / 100.0)
+	for child: Node in node.get_children():
+		if child is Node3D and not child.has_meta("cutaway_base_scale"):
+			(child as Node3D).set_meta("cutaway_base_scale", (child as Node3D).scale)
+
+
+func _restore_cutaway_pose(node: Node3D) -> void:
+	var base: Transform3D = node.get_meta("cutaway_base_transform", node.transform)
+	node.transform = base
+	node.set_meta("cutaway_amount", 1.0)
+	node.set_meta("cutaway_target_amount", 1.0)
+	_node_set_cutaway_aux_scale(node, 1.0)
+	_node_set_cutaway_shader_amount(node, 1.0)
+
+
+func _set_cutaway_edge_visual(node: Node3D, hidden: bool) -> void:
+	_ensure_cutaway_pose(node)
+	var target_amount := 0.0 if hidden else 1.0
+	var current_amount := float(node.get_meta("cutaway_amount", 1.0))
+	var previous_target := float(node.get_meta("cutaway_target_amount", current_amount))
+	if cutaway_transition_mode == 0:
+		_restore_cutaway_pose(node)
+		node.set_meta("cutaway_amount", target_amount)
+		node.set_meta("cutaway_target_amount", target_amount)
+		if hidden:
+			node.visible = false
+			_node_set_cutaway_aux_scale(node, 0.0)
+			_node_set_cutaway_shader_amount(node, 0.0)
+		else:
+			node.visible = true
+			_restore_cutaway_pose(node)
+		return
+	var active_tween: Tween = cutaway_transition_tweens.get(node)
+	if active_tween != null and active_tween.is_valid() and is_equal_approx(previous_target, target_amount):
+		return
+	if is_equal_approx(current_amount, target_amount):
+		node.visible = not hidden
+		node.set_meta("cutaway_target_amount", target_amount)
+		return
+	var previous: Tween = cutaway_transition_tweens.get(node)
+	if previous != null and previous.is_valid():
+		previous.kill()
+	node.visible = true
+	node.set_meta("cutaway_target_amount", target_amount)
+	var duration := cutaway_hide_duration if hidden else cutaway_show_duration
+	var tween := create_tween()
+	cutaway_transition_tweens[node] = tween
+	cutaway_transition_active += 1
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_method(_set_cutaway_edge_amount.bind(node), current_amount, target_amount, duration)
+	tween.finished.connect(func() -> void:
+		if cutaway_transition_tweens.get(node) != tween:
+			return
+		cutaway_transition_tweens.erase(node)
+		cutaway_transition_active = maxi(0, cutaway_transition_active - 1)
+		node.set_meta("cutaway_amount", target_amount)
+		if hidden:
+			node.visible = false
+		else:
+			node.visible = true
+			_restore_cutaway_pose(node)
+	)
+
+
+func _set_cutaway_edge_amount(amount: float, node: Node3D) -> void:
+	if not is_instance_valid(node):
+		return
+	node.set_meta("cutaway_amount", amount)
+	if cutaway_transition_mode == 1:
+		var base: Transform3D = node.get_meta("cutaway_base_transform", node.transform)
+		var moved := base
+		moved.basis = Basis(base.basis.x, base.basis.y * lerpf(0.04, 1.0, amount), base.basis.z)
+		moved.origin.y -= 0.14 * (1.0 - amount)
+		node.transform = moved
+	else:
+		_restore_cutaway_pose_without_reset(node)
+		_node_set_cutaway_aux_scale(node, amount)
+		_node_set_cutaway_shader_amount(node, amount)
+
+
+func _restore_cutaway_pose_without_reset(node: Node3D) -> void:
+	var base: Transform3D = node.get_meta("cutaway_base_transform", node.transform)
+	node.transform = base
+
+
+func _node_set_cutaway_aux_scale(node: Node3D, amount: float) -> void:
+	for child: Node in node.get_children():
+		if not child is Node3D:
+			continue
+		var child_node := child as Node3D
+		var base_scale: Vector3 = child_node.get_meta("cutaway_base_scale", child_node.scale)
+		if child_node is MeshInstance3D:
+			var material := child_node.material_override as ShaderMaterial
+			if material != null and material.shader != null and material.shader.resource_path.ends_with("memphis_wall.gdshader"):
+				continue
+		child_node.scale = Vector3(base_scale.x, base_scale.y * lerpf(0.04, 1.0, amount), base_scale.z)
+
+
+func _node_set_cutaway_shader_amount(node: Node3D, amount: float) -> void:
+	var phase := float(node.get_meta("cutaway_wave_phase", 0.0))
+	for child: Node in node.get_children():
+		if not child is MeshInstance3D:
+			continue
+		var mesh := child as MeshInstance3D
+		var material := mesh.material_override as ShaderMaterial
+		if material == null or material.shader == null or not material.shader.resource_path.ends_with("memphis_wall.gdshader"):
+			continue
+		material.set_shader_parameter("cutaway_amount", amount)
+		material.set_shader_parameter("cutaway_wave_phase", phase)
+
+
+func _set_cutaway_prop_visual(prop: Node3D, hidden: bool) -> void:
+	if prop == null or not is_instance_valid(prop):
+		return
+	if not prop.has_meta("cutaway_prop_base_transform"):
+		prop.set_meta("cutaway_prop_base_transform", prop.transform)
+	if not prop.has_meta("cutaway_prop_amount"):
+		prop.set_meta("cutaway_prop_amount", 1.0)
+	if not prop.has_meta("cutaway_prop_target_amount"):
+		prop.set_meta("cutaway_prop_target_amount", 1.0)
+	var target_amount := 0.0 if hidden else 1.0
+	if cutaway_transition_mode == 0:
+		prop.transform = prop.get_meta("cutaway_prop_base_transform", prop.transform)
+		prop.set_meta("cutaway_prop_amount", target_amount)
+		prop.set_meta("cutaway_prop_target_amount", target_amount)
+		prop.visible = not hidden
+		return
+	var current_amount := float(prop.get_meta("cutaway_prop_amount", 1.0))
+	var previous_target := float(prop.get_meta("cutaway_prop_target_amount", current_amount))
+	var key := "prop:%d" % prop.get_instance_id()
+	var active_tween: Tween = cutaway_transition_tweens.get(key)
+	if active_tween != null and active_tween.is_valid() and is_equal_approx(previous_target, target_amount):
+		return
+	if is_equal_approx(current_amount, target_amount):
+		prop.visible = not hidden
+		prop.set_meta("cutaway_prop_target_amount", target_amount)
+		return
+	var previous: Tween = cutaway_transition_tweens.get(key)
+	if previous != null and previous.is_valid():
+		previous.kill()
+	prop.visible = true
+	var tween := create_tween()
+	cutaway_transition_tweens[key] = tween
+	tween.tween_method(_set_cutaway_prop_amount.bind(prop), current_amount, target_amount, cutaway_hide_duration if hidden else cutaway_show_duration)
+	tween.finished.connect(func() -> void:
+		if cutaway_transition_tweens.get(key) != tween:
+			return
+		cutaway_transition_tweens.erase(key)
+		prop.set_meta("cutaway_prop_amount", target_amount)
+		prop.set_meta("cutaway_prop_target_amount", target_amount)
+		prop.visible = not hidden
+	)
+
+
+func _set_cutaway_prop_amount(amount: float, prop: Node3D) -> void:
+	if not is_instance_valid(prop):
+		return
+	prop.set_meta("cutaway_prop_amount", amount)
+	var base: Transform3D = prop.get_meta("cutaway_prop_base_transform", prop.transform)
+	var pose := base
+	if cutaway_transition_mode == 1:
+		pose.basis = Basis(base.basis.x, base.basis.y * lerpf(0.04, 1.0, amount), base.basis.z)
+		pose.origin.y -= 0.08 * (1.0 - amount)
+	else:
+		pose.basis = Basis(base.basis.x, base.basis.y * lerpf(0.12, 1.0, amount), base.basis.z)
+		pose.origin.y += sin(amount * PI) * 0.04
+	prop.transform = pose
+
+
 ## Override (template) walls are not part of the structural_edge_nodes ledger, so the
 ## camera cutaway loop above never culls them. Apply the same "facing the camera"
 ## rule here: any override wall of the focus room whose outward direction points toward
@@ -699,7 +940,7 @@ func _apply_override_cutaway(viewer_direction: Vector2) -> void:
 	if cutaway_focus_room_index < 0 or viewer_direction.length_squared() < 0.01:
 		for shell: Node3D in override_shell_nodes:
 			if is_instance_valid(shell):
-				shell.visible = true
+				_set_cutaway_edge_visual(shell, false)
 		return
 	var focus_room_type := RoomArtRegistry.base_room_id(str(rooms[cutaway_focus_room_index].get("room_type", rooms[cutaway_focus_room_index].get("id", ""))))
 	var viewer := viewer_direction.normalized()
@@ -710,7 +951,7 @@ func _apply_override_cutaway(viewer_direction: Vector2) -> void:
 		# Only the focus room's override walls participate in the cutaway; other rooms
 		# stay as-is so the whole house still reads correctly from the overview camera.
 		if shell_room_type != focus_room_type:
-			shell.visible = true
+			_set_cutaway_edge_visual(shell, false)
 			continue
 		# shell.position is local to the room root; its XZ direction from the room centre
 		# is the wall's outward normal. Hide walls facing the camera.
@@ -718,7 +959,7 @@ func _apply_override_cutaway(viewer_direction: Vector2) -> void:
 		offset.y = 0.0
 		var outward := Vector2(offset.x, offset.z).normalized()
 		var faces_camera := outward.dot(viewer) > 0.42
-		shell.visible = not faces_camera
+		_set_cutaway_edge_visual(shell, faces_camera)
 
 
 func _edge_faces_camera(outward: Vector2i, viewer_direction: Vector2, was_culled: bool = false) -> bool:
@@ -737,7 +978,7 @@ func _update_cutaway_junction_visibility() -> void:
 			if not cutaway_culled_edge_keys.has(str(raw_key)):
 				has_visible_edge = true
 				break
-		junction.visible = has_visible_edge
+		_set_cutaway_edge_visual(junction, not has_visible_edge)
 
 
 func _set_wall_bound_props_visible(visible: bool) -> void:
@@ -753,7 +994,7 @@ func _update_wall_bound_prop_visibility() -> void:
 		var edge_is_visible := not cutaway_culled_edge_keys.has(edge_key)
 		for prop: Node3D in wall_bound_prop_nodes[edge_key]:
 			if is_instance_valid(prop):
-				prop.visible = edge_is_visible
+				_set_cutaway_prop_visual(prop, not edge_is_visible)
 
 
 func cutaway_debug_state() -> Dictionary:
