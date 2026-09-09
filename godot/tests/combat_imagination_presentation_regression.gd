@@ -17,6 +17,10 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 	await process_frame
+	var dof_before := {
+		"blur": game.presentation_settings.depth_of_field_blur_strength,
+		"focus": game.presentation_settings.depth_of_field_focus_width,
+	}
 	game.start_combat_lab("hall")
 	await process_frame
 	await process_frame
@@ -30,7 +34,15 @@ func _run() -> void:
 	_check(not str(profile["material_family"]).is_empty(), "profile must name a material family")
 	_check(not str(profile["hero_prop_id"]).is_empty(), "profile must select a hero prop when room props exist")
 	_check(game.battle_presentation_root != null, "combat lab must expose a presentation root")
+	_check(game.combat_presentation_lab, "combat lab must expose the test-only A/B presentation state")
+	_check(game.hud.combat_lab_ab_controls_visible(), "combat lab must expose A/B controls without enabling them in formal combat")
+	_check(_count_meta(game.battle_presentation_root, "imagination_material") > 0, "imagination mode must tag toy materials")
+	_check(_count_meta(game.battle_presentation_root, "imagination_hero_prop") == 1, "imagination mode must have one hero prop")
+	_check(is_equal_approx(game.presentation_settings.depth_of_field_focus_width, float(profile["dof_focus_width"])), "combat lab must use profile focus width")
+	_check(is_equal_approx(game.presentation_settings.depth_of_field_blur_strength, float(profile["dof_blur_strength"])), "combat lab must use profile blur strength")
 	game.set_battle_imagination_mode("baseline")
+	_check(is_equal_approx(game.presentation_settings.depth_of_field_focus_width, float(dof_before["focus"])), "baseline must restore the user's focus width")
+	_check(is_equal_approx(game.presentation_settings.depth_of_field_blur_strength, float(dof_before["blur"])), "baseline must restore the user's blur strength")
 	var baseline_span: float = game.battle_visual_world(Vector2i(0, 0)).distance_to(game.battle_visual_world(Vector2i(1, 0)))
 	game.pan_battle_camera(Vector2(1200, -600))
 	game.set_battle_imagination_mode("imagination")
@@ -76,6 +88,15 @@ func _all_battle_visual_cells_in_viewport(game: Node3D, camera: Camera3D) -> boo
 			if screen_position.x < 0.0 or screen_position.y < 0.0 or screen_position.x > view_size.x or screen_position.y > view_size.y:
 				return false
 	return true
+
+
+func _count_meta(root_node: Node, meta_key: String) -> int:
+	if root_node == null:
+		return 0
+	var count := 1 if root_node.has_meta(meta_key) else 0
+	for child: Node in root_node.get_children():
+		count += _count_meta(child, meta_key)
+	return count
 
 
 func _check(condition: bool, message: String) -> void:

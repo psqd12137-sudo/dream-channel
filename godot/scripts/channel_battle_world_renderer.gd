@@ -295,6 +295,7 @@ func apply_battle_imagination_mode(mode: String, profile: Dictionary) -> void:
 		center /= float(cell_count)
 	battle_presentation_root.scale = Vector3.ONE * visual_scale
 	battle_presentation_root.position = center - center * visual_scale
+	_apply_battle_imagination_finish(mode, profile)
 
 
 func build_battle_world() -> void:
@@ -310,6 +311,7 @@ func build_battle_world() -> void:
 	_build_battle_board()
 	_sync_battle_actors()
 	_update_battle_overlays()
+	_apply_battle_imagination_finish(host.battle_imagination_mode, host.battle_imagination_profile)
 
 
 func reset_battle_display_preferences() -> void:
@@ -1824,6 +1826,84 @@ func _apply_battle_miniature_finish(model: Node3D, asset_id: String) -> void:
 			material.metallic = minf(material.metallic, 0.03)
 			mesh_instance.set_surface_override_material(surface_index, material)
 	model.set_meta("miniature_finish", finish)
+
+
+func _apply_battle_imagination_finish(mode: String, profile: Dictionary) -> void:
+	if battle_board_root == null:
+		return
+	var props: Array[Node3D] = []
+	for raw_node: Node in battle_board_root.find_children("*", "Node3D", true, false):
+		var prop := raw_node as Node3D
+		if prop != null and prop.has_meta("battle_context_prop"):
+			props.append(prop)
+	for prop: Node3D in props:
+		prop.remove_meta("imagination_hero_prop")
+		if mode == "imagination":
+			_apply_toybox_material_family(prop, str(profile.get("material_family", "cardboard")))
+			prop.set_meta("imagination_material", str(profile.get("material_family", "cardboard")))
+		else:
+			_restore_toybox_material_family(prop)
+			prop.remove_meta("imagination_material")
+			if prop.has_meta("imagination_base_scale"):
+				prop.scale = prop.get_meta("imagination_base_scale", prop.scale)
+	if mode != "imagination" or props.is_empty():
+		return
+	var hero_id := str(profile.get("hero_prop_id", ""))
+	var hero: Node3D = null
+	for prop: Node3D in props:
+		if str(prop.get_meta("source_asset_id", "")) == hero_id:
+			hero = prop
+			break
+	if hero == null:
+		hero = props[0]
+	if not hero.has_meta("imagination_base_scale"):
+		hero.set_meta("imagination_base_scale", hero.scale)
+	hero.scale = (hero.get_meta("imagination_base_scale", hero.scale) as Vector3) * clampf(float(profile.get("prop_scale", 1.0)), 1.0, 1.35)
+	hero.set_meta("imagination_hero_prop", true)
+
+
+func _apply_toybox_material_family(model: Node3D, family: String) -> void:
+	var family_tint := _toybox_family_tint(family)
+	for raw_mesh: Node in model.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := raw_mesh as MeshInstance3D
+		if mesh_instance == null or mesh_instance.mesh == null:
+			continue
+		if not mesh_instance.has_meta("imagination_material_restore"):
+			var originals: Array[Material] = []
+			for surface_index in range(mesh_instance.mesh.get_surface_count()):
+				originals.append(mesh_instance.get_surface_override_material(surface_index))
+			mesh_instance.set_meta("imagination_material_restore", originals)
+		for surface_index in range(mesh_instance.mesh.get_surface_count()):
+			var source := mesh_instance.get_surface_override_material(surface_index)
+			if not source is StandardMaterial3D:
+				continue
+			var material := (source as StandardMaterial3D).duplicate() as StandardMaterial3D
+			material.albedo_color = material.albedo_color.lerp(family_tint, 0.13)
+			material.roughness = maxf(material.roughness, 0.92 if family != "plastic" else 0.72)
+			material.metallic = minf(material.metallic, 0.02)
+			mesh_instance.set_surface_override_material(surface_index, material)
+
+
+func _restore_toybox_material_family(model: Node3D) -> void:
+	for raw_mesh: Node in model.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := raw_mesh as MeshInstance3D
+		if mesh_instance == null or mesh_instance.mesh == null or not mesh_instance.has_meta("imagination_material_restore"):
+			continue
+		var originals: Array = mesh_instance.get_meta("imagination_material_restore", [])
+		for surface_index in range(mini(mesh_instance.mesh.get_surface_count(), originals.size())):
+			mesh_instance.set_surface_override_material(surface_index, originals[surface_index])
+
+
+func _toybox_family_tint(family: String) -> Color:
+	match family:
+		"painted_wood":
+			return Color("e9b56c")
+		"plastic":
+			return Color("5bc7bd")
+		"felt":
+			return Color("d87891")
+		_:
+			return Color("ddb879")
 
 
 func _add_portal_marker(parent: Node3D, pos: Vector2i, y: float) -> void:

@@ -285,6 +285,7 @@ var battle_room_context: Dictionary = {}
 var battle_imagination_mode := "baseline"
 var battle_imagination_profile: Dictionary = {}
 var battle_presentation_root: Node3D = null
+var battle_lab_dof_restore: Dictionary = {}
 var combat_is_boss := false
 var boss_id := ""
 var boss_finish_reason := ""
@@ -2541,6 +2542,8 @@ func set_battle_imagination_mode(mode: String) -> void:
 	battle_imagination_mode = mode
 	if battle_world_renderer != null and battle_world_renderer.has_method("apply_battle_imagination_mode"):
 		battle_world_renderer.call("apply_battle_imagination_mode", battle_imagination_mode, battle_imagination_profile)
+	_apply_battle_imagination_dof()
+	_apply_battle_imagination_lighting()
 	_refresh_battle_camera_for_presentation()
 
 
@@ -2550,6 +2553,8 @@ func _refresh_battle_camera_for_presentation() -> void:
 	battle_camera_following = false
 	battle_camera_user_hold = false
 	_cancel_battle_camera_return()
+	battle_camera_pitch = _battle_camera_base_pitch() + _battle_camera_profile_pitch_offset()
+	battle_camera_distance = CAMERA_DIRECTION.length() * _battle_camera_distance_ratio()
 	battle_camera_target = _battle_follow_target_position()
 	_refit_battle_camera(true)
 	battle_camera_target = _battle_follow_target_position() + _battle_camera_frame_offset()
@@ -3498,7 +3503,8 @@ func reset_battle_camera() -> void:
 	battle_camera_target = _battle_follow_target_position()
 	battle_camera_target.y = max_height * 0.18
 	battle_camera_yaw = atan2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z)
-	battle_camera_pitch = atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
+	battle_camera_pitch = _battle_camera_base_pitch() + _battle_camera_profile_pitch_offset()
+	battle_camera_distance = CAMERA_DIRECTION.length() * _battle_camera_distance_ratio()
 	battle_camera_zoom_ratio = 1.0
 	_refit_battle_camera(false)
 	# 镜头自始至终对准玩家与怪物中点的偏上区域（偏下构图，含偏上偏移的纵向分量）
@@ -3528,7 +3534,7 @@ func _refit_battle_camera(preserve_zoom: bool) -> void:
 	# The invariant fit already encloses every rotated cell. Keep only a compact
 	# presentation margin so the miniature, rather than empty backdrop, is the
 	# visual subject of combat.
-	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0)
+	battle_camera_fit_size = _rotation_invariant_fit_size(horizontal_radius, max_y, battle_camera_pitch, 0.8, 6.0) * _battle_camera_fit_margin()
 	camera.size = battle_camera_fit_size * battle_camera_zoom_ratio
 	_apply_battle_camera()
 
@@ -4188,6 +4194,72 @@ func _apply_house_camera() -> void:
 func _set_battle_camera() -> void:
 	_set_battle_neutral_lighting(true)
 	reset_battle_camera()
+
+
+func _battle_camera_base_pitch() -> float:
+	return atan2(CAMERA_DIRECTION.y, Vector2(CAMERA_DIRECTION.x, CAMERA_DIRECTION.z).length())
+
+
+func _battle_camera_profile_pitch_offset() -> float:
+	if combat_presentation_lab and battle_imagination_mode == "imagination":
+		return clampf(float(battle_imagination_profile.get("camera_pitch_offset", 0.0)), -0.35, 0.35)
+	return 0.0
+
+
+func _battle_camera_distance_ratio() -> float:
+	if combat_presentation_lab and battle_imagination_mode == "imagination":
+		return clampf(float(battle_imagination_profile.get("camera_distance_ratio", 1.0)), 0.80, 1.25)
+	return 1.0
+
+
+func _battle_camera_fit_margin() -> float:
+	if combat_presentation_lab and battle_imagination_mode == "imagination":
+		return clampf(float(battle_imagination_profile.get("camera_fit_margin", 1.0)), 0.85, 1.25)
+	return 1.0
+
+
+func _apply_battle_imagination_dof() -> void:
+	if presentation_settings == null:
+		return
+	if combat_presentation_lab and battle_imagination_mode == "imagination":
+		if battle_lab_dof_restore.is_empty():
+			battle_lab_dof_restore = {
+				"blur": presentation_settings.depth_of_field_blur_strength,
+				"focus": presentation_settings.depth_of_field_focus_width,
+			}
+		presentation_settings.depth_of_field_focus_width = clampf(float(battle_imagination_profile.get("dof_focus_width", presentation_settings.depth_of_field_focus_width)), 0.02, 0.45)
+		presentation_settings.depth_of_field_blur_strength = clampf(float(battle_imagination_profile.get("dof_blur_strength", presentation_settings.depth_of_field_blur_strength)), 0.0, 12.0)
+		presentation_settings._apply_depth_of_field_state()
+		return
+	if not battle_lab_dof_restore.is_empty():
+		presentation_settings.depth_of_field_blur_strength = float(battle_lab_dof_restore.get("blur", presentation_settings.depth_of_field_blur_strength))
+		presentation_settings.depth_of_field_focus_width = float(battle_lab_dof_restore.get("focus", presentation_settings.depth_of_field_focus_width))
+		battle_lab_dof_restore.clear()
+		presentation_settings._apply_depth_of_field_state()
+
+
+func _apply_battle_imagination_lighting() -> void:
+	if not (combat_presentation_lab and battle_imagination_mode == "imagination"):
+		_set_battle_neutral_lighting(true)
+		return
+	var key_light := world_root.get_node_or_null("KeyLight") as DirectionalLight3D
+	var fill_light := world_root.get_node_or_null("FillLight") as DirectionalLight3D
+	var environment_node := world_root.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if key_light != null:
+		key_light.light_color = Color("ffe1a6")
+		key_light.light_energy = 1.32
+		key_light.light_angular_distance = 2.1
+	if fill_light != null:
+		fill_light.light_color = Color("70cfc6")
+		fill_light.light_energy = 0.30
+	if environment_node != null and environment_node.environment != null:
+		var environment := environment_node.environment
+		environment.ambient_light_color = Color("b7d6cc")
+		environment.ambient_light_energy = 0.38
+		environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+		environment.ssao_enabled = RenderingServer.get_current_rendering_method() == "forward_plus"
+		environment.ssao_radius = 0.55
+		environment.ssao_intensity = 1.15
 
 
 func _set_battle_neutral_lighting(enabled: bool) -> void:

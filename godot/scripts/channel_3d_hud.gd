@@ -46,6 +46,8 @@ const COMBAT_ACTION_RECT := Rect2(1000, 196, 260, 92)
 const COMBAT_BOSS_PANEL_RECT := Rect2(1000, 410, 260, 126)
 const COMBAT_HAND_RECT := Rect2(150, 570, 820, 230)
 const COMBAT_SIDE_RECT := Rect2(1000, 88, 260, 680)
+const COMBAT_LAB_BASELINE_RECT := Rect2(20, 190, 102, 30)
+const COMBAT_LAB_IMAGINATION_RECT := Rect2(128, 190, 122, 30)
 const TURN_ORDER_RECT := Rect2(404, 8, 386, 56)
 
 const RESET_RECT := Rect2(1142, 17, 110, 38)
@@ -1000,6 +1002,9 @@ func _draw_combat_hud() -> void:
 	var player_statuses: Array[Dictionary] = combat.statuses_for_player()
 	var enemy_statuses: Array[Dictionary] = []
 	var enemy_info_visible: bool = focused_enemy != null and (focused_enemy.revealed or _enemy_intel_visible()) and focused_enemy.hp > 0
+	if combat_lab_ab_controls_visible():
+		_draw_button(COMBAT_LAB_BASELINE_RECT, "A 当前战斗", TEAL if game.battle_imagination_mode == "baseline" else Color("355e5d"), TEXT)
+		_draw_button(COMBAT_LAB_IMAGINATION_RECT, "B 孩童想象", MAGENTA if game.battle_imagination_mode == "imagination" else Color("5a3f62"), TEXT)
 	if enemy_info_visible:
 		enemy_statuses = combat.statuses_for_enemy(focused_enemy)
 	_draw_actor_strip(COMBAT_PLAYER_PANEL_RECT, PLAYER_PROFILE, "莉莉", GREEN, combat.player_hp, game.player_max_hp, "护盾", combat.player_shield, 4, "", _actor_presentation_state("Player"), player_statuses, "player")
@@ -1832,6 +1837,16 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey):
 		return
 	var key_event: InputEventKey = event
+	if key_event.pressed and not key_event.echo and combat_lab_ab_controls_visible():
+		if key_event.keycode == KEY_A:
+			game.set_battle_imagination_mode("baseline")
+		elif key_event.keycode == KEY_B:
+			game.set_battle_imagination_mode("imagination")
+		else:
+			pass
+		if key_event.keycode in [KEY_A, KEY_B]:
+			get_viewport().set_input_as_handled()
+			return
 	if key_event.pressed and not key_event.echo and game.phase == "lab_tactile":
 		match key_event.keycode:
 			KEY_A: game.tactile_lab.set_mode(false)
@@ -1931,6 +1946,8 @@ func _combat_overlay_has_point(point: Vector2) -> bool:
 	for rect: Rect2 in [COMBAT_PLAYER_PANEL_RECT, COMBAT_ENEMY_PANEL_RECT, COMBAT_HAND_RECT, COMBAT_SIDE_RECT]:
 		if rect.has_point(point):
 			return true
+	if combat_lab_ab_controls_visible() and (COMBAT_LAB_BASELINE_RECT.has_point(point) or COMBAT_LAB_IMAGINATION_RECT.has_point(point)):
+		return true
 	if game.phase == "world_boss" and _floor_rail_has_point(point):
 		return true
 	if game.phase == "world_boss" and not game.world_boss_stair_action().is_empty() and STAIR_ACTION_RECT.has_point(point):
@@ -2005,6 +2022,10 @@ func _house_overlay_has_point(point: Vector2) -> bool:
 	if game.phase == "explore":
 		return ENTER_PENDING_RECT.has_point(point) or EXPLORE_STAIR_RECT.has_point(point)
 	return false
+
+
+func combat_lab_ab_controls_visible() -> bool:
+	return game != null and game.phase == "combat" and game.combat_presentation_lab
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -2412,6 +2433,12 @@ func _gui_input(event: InputEvent) -> void:
 		game.enter_room(game.pending_room_pos)
 		return
 	if game.phase in ["combat", "world_boss"]:
+		if combat_lab_ab_controls_visible() and COMBAT_LAB_BASELINE_RECT.has_point(point):
+			game.set_battle_imagination_mode("baseline")
+			return
+		if combat_lab_ab_controls_visible() and COMBAT_LAB_IMAGINATION_RECT.has_point(point):
+			game.set_battle_imagination_mode("imagination")
+			return
 		if game.combat_is_boss and BOSS_ANCHOR_ACTION_RECT.has_point(point):
 			game.dismantle_boss_anchor()
 			return
