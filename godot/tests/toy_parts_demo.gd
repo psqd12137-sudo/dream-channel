@@ -1,7 +1,7 @@
 extends SceneTree
 
 # Isolated visual prototype. No changes to the formal placement flow.
-const OUT := "res://../output/toy-parts-high-drop"
+const OUT := "res://../output/toy-parts-offscreen"
 const DROP_HEIGHT := 5.5
 var game: Node3D
 var pieces: Array[Dictionary] = []
@@ -89,6 +89,21 @@ func run() -> void:
 	game.set_process(false)
 	game.camera.size *= 1.18
 	game.camera.position.y += 2.0
+	# Fit each whole part above the actual camera viewport, including its tilted corners.
+	for piece: Dictionary in pieces:
+		var held_time := 1.35 if piece.kind == "cap" else 0.15
+		var fits := false
+		for attempt in range(100):
+			pose_piece(piece, held_time)
+			if lowest_screen_point(piece.node) < -48.0:
+				fits = true
+				break
+			piece.offset.y += 0.5
+		if not fits:
+			push_error("Could not move complete part above viewport: " + str(piece.node.name))
+			quit(1)
+			return
+	print("OFFSCREEN_CHECK: PASS all parts above viewport with 48px margin")
 	for frame in range(78):
 		var time := float(frame) / 30.0
 		for piece: Dictionary in pieces:
@@ -142,3 +157,16 @@ func pose_piece(piece: Dictionary, time: float) -> void:
 	var turn := Basis(piece.axis, angle)
 	var stretch := Vector3(1.0 - 0.16 * sin(t * PI), 1.0 + 0.40 * sin(t * PI), 1.0 - 0.16 * sin(t * PI))
 	node.transform = Transform3D(turn.scaled(stretch) * final_pose.basis, final_pose.origin + offset)
+
+func lowest_screen_point(node: Node3D) -> float:
+	var meshes: Array[Node] = node.find_children("*", "MeshInstance3D", true, false)
+	if node is MeshInstance3D:
+		meshes.append(node)
+	var lowest := -INF
+	for child: Node in meshes:
+		var mesh := child as MeshInstance3D
+		var bounds := mesh.get_aabb()
+		for corner in range(8):
+			var point := mesh.to_global(bounds.get_endpoint(corner))
+			lowest = maxf(lowest, game.camera.unproject_position(point).y)
+	return lowest
