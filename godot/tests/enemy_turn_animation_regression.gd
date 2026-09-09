@@ -15,6 +15,8 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	game.start_combat_lab("hall")
+	while game.animation_busy:
+		await process_frame
 	game.combat.ambush_active = false
 	game.combat.ambush_idle_turns = 1
 	game.combat.enemy_revealed = false

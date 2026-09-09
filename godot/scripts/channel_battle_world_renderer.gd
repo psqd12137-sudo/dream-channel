@@ -1833,6 +1833,8 @@ func _apply_battle_miniature_finish(model: Node3D, asset_id: String) -> void:
 
 
 func _apply_battle_imagination_finish(mode: String, profile: Dictionary) -> void:
+	if mode != "imagination":
+		_stop_all_imagination_action_feedback()
 	if battle_board_root == null:
 		return
 	var props: Array[Node3D] = []
@@ -1914,10 +1916,16 @@ func play_imagination_entry_stagger(profile: Dictionary) -> Tween:
 		tween.parallel().tween_property(node, "scale", base_scale, 0.16 * host.animation_duration_scale)
 		tween.tween_interval(stagger)
 	tween.finished.connect(func() -> void:
+		if imagination_entry_tween != tween:
+			return
 		if battle_presentation_root != null and is_instance_valid(battle_presentation_root):
 			battle_presentation_root.set_meta("imagination_entry_active", false)
 		for node: Node3D in staged:
-			if is_instance_valid(node) and node.has_meta("imagination_hero_prop"):
+			if not is_instance_valid(node):
+				continue
+			node.remove_meta("imagination_entry_base_position")
+			node.remove_meta("imagination_entry_base_scale")
+			if node.has_meta("imagination_hero_prop"):
 				_start_imagination_idle_motion(node, profile)
 		imagination_entry_tween = null
 		imagination_entry_nodes.clear()
@@ -1931,6 +1939,7 @@ func _settle_imagination_entry() -> void:
 	for node: Node3D in imagination_entry_nodes:
 		if not is_instance_valid(node):
 			continue
+		_stop_imagination_idle_motion(node)
 		if node.has_meta("imagination_entry_base_position"):
 			node.position = node.get_meta("imagination_entry_base_position", node.position)
 		if node.has_meta("imagination_entry_base_scale"):
@@ -1945,6 +1954,9 @@ func _settle_imagination_entry() -> void:
 
 func _start_imagination_idle_motion(prop: Node3D, profile: Dictionary) -> void:
 	if prop == null or not is_instance_valid(prop) or not host.combat_presentation_lab or host.battle_imagination_mode != "imagination":
+		return
+	_stop_imagination_idle_motion(prop)
+	if imagination_entry_tween != null and imagination_entry_tween.is_valid() and imagination_entry_nodes.has(prop):
 		return
 	var strength := clampf(float(profile.get("idle_motion_strength", 0.0)), 0.0, 1.0)
 	if strength <= 0.0:
@@ -1976,6 +1988,8 @@ func _stop_imagination_idle_motion(prop: Node3D) -> void:
 		prop.scale = prop.get_meta("imagination_idle_base_scale", prop.scale)
 	prop.remove_meta("imagination_idle_tween")
 	prop.remove_meta("imagination_idle_motion")
+	prop.remove_meta("imagination_idle_base_position")
+	prop.remove_meta("imagination_idle_base_scale")
 
 
 func _play_imagination_action_feedback(actor: Node3D) -> void:
@@ -1984,12 +1998,39 @@ func _play_imagination_action_feedback(actor: Node3D) -> void:
 	var strength := clampf(float(host.battle_imagination_profile.get("action_motion_strength", 0.0)), 0.0, 1.5)
 	if strength <= 0.0:
 		return
+	_stop_imagination_action_feedback(actor)
 	var base_scale := actor.scale
+	actor.set_meta("imagination_action_base_scale", base_scale)
 	var squash := lerpf(1.03, 1.06, minf(1.0, strength))
 	var tween := actor.create_tween()
+	actor.set_meta("imagination_action_tween", tween)
 	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(actor, "scale", base_scale * Vector3(squash, 0.94, squash), 0.08)
 	tween.tween_property(actor, "scale", base_scale, 0.13)
+	tween.finished.connect(func() -> void:
+		if not is_instance_valid(actor) or actor.get_meta("imagination_action_tween", null) != tween:
+			return
+		_stop_imagination_action_feedback(actor)
+	, CONNECT_ONE_SHOT)
+
+
+func _stop_imagination_action_feedback(actor: Node3D) -> void:
+	if actor == null or not is_instance_valid(actor):
+		return
+	var tween: Tween = actor.get_meta("imagination_action_tween") as Tween if actor.has_meta("imagination_action_tween") else null
+	if tween != null and tween.is_valid():
+		tween.kill()
+	if actor.has_meta("imagination_action_base_scale"):
+		actor.scale = actor.get_meta("imagination_action_base_scale", actor.scale)
+	actor.remove_meta("imagination_action_tween")
+	actor.remove_meta("imagination_action_base_scale")
+
+
+func _stop_all_imagination_action_feedback() -> void:
+	if battle_actor_root == null or not is_instance_valid(battle_actor_root):
+		return
+	for raw_actor: Node in battle_actor_root.get_children():
+		_stop_imagination_action_feedback(raw_actor as Node3D)
 
 
 func _apply_toybox_material_family(model: Node3D, family: String) -> void:

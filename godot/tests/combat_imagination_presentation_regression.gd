@@ -30,10 +30,14 @@ func _run() -> void:
 	var entry_hero := _imagination_hero(game.battle_presentation_root)
 	var entry_baseline_scale := entry_hero.get_meta("imagination_base_scale", Vector3.ONE) as Vector3 if entry_hero != null else Vector3.ZERO
 	_check(game.battle_presentation_root != null and bool(game.battle_presentation_root.get_meta("imagination_entry_active", false)), "entry regression must switch modes while the imagination stagger is active")
+	game.set_battle_imagination_mode("imagination")
+	var entry_idle_tween: Tween = entry_hero.get_meta("imagination_idle_tween") as Tween if entry_hero != null and entry_hero.has_meta("imagination_idle_tween") else null
+	await create_timer(0.90).timeout
 	game.set_battle_imagination_mode("baseline")
 	await _wait_for_animation(game, 2.0)
 	_check(entry_hero != null and entry_hero.scale.is_equal_approx(entry_baseline_scale), "baseline during entry must restore the hero's baseline scale")
 	_check(entry_hero != null and not entry_hero.has_meta("imagination_hero_prop") and not entry_hero.has_meta("imagination_idle_tween"), "baseline during entry must clear imagination hero metadata and tween")
+	_check(entry_idle_tween == null or not entry_idle_tween.is_running(), "baseline after repeated imagination entry selection must stop the first hero idle tween")
 	game.set_battle_imagination_mode("imagination")
 	await process_frame
 	await process_frame
@@ -74,12 +78,25 @@ func _run() -> void:
 	var rotated_projected := camera.unproject_position(game.battle_visual_world(cell))
 	_check(game.battle_cell_from_viewport(rotated_projected) == cell, "rotated scaled presentation must preserve battle picking")
 	_check(_all_battle_visual_cells_in_viewport(game, camera), "rotated imagination mode must keep every visual battle cell in view")
+	var player := game.battle_actor_root.get_node_or_null("Player") as Node3D
+	var player_baseline_scale := player.scale if player != null else Vector3.ZERO
+	game.set_battle_imagination_mode("imagination")
+	for _selection in range(8):
+		game.select_or_play_card(0)
+		game.cancel_selected_card()
+		await create_timer(0.05).timeout
+	await create_timer(0.40).timeout
+	_check(player != null and player.scale.is_equal_approx(player_baseline_scale), "rapid public card selection must restore the player scale before baseline")
+	game.set_battle_imagination_mode("baseline")
+	await create_timer(0.30).timeout
+	_check(player != null and player.scale.is_equal_approx(player_baseline_scale), "baseline must clear rapid public card selection feedback")
 	game.go_home()
 	_check(is_equal_approx(game.presentation_settings.depth_of_field_focus_width, float(dof_before["focus"])), "direct lab exit must restore the user's focus width")
 	_check(is_equal_approx(game.presentation_settings.depth_of_field_blur_strength, float(dof_before["blur"])), "direct lab exit must restore the user's blur strength")
 	_check(game.battle_lab_dof_restore.is_empty(), "direct lab exit must clear the saved DOF snapshot")
 	game.queue_free()
 	await process_frame
+	await _assert_direct_exit_stops_entry_idle()
 	_finish()
 
 
@@ -99,6 +116,28 @@ func _combat_snapshot(combat: RefCounted) -> Dictionary:
 		"walls": combat.walls.duplicate(true),
 		"footprint": footprint.duplicate(true),
 	}
+
+
+func _assert_direct_exit_stops_entry_idle() -> void:
+	var packed := load("res://channel_3d.tscn") as PackedScene
+	var game := packed.instantiate() as Node3D
+	root.add_child(game)
+	await process_frame
+	await process_frame
+	game.animation_duration_scale = 1.0
+	game.start_combat_lab("hall")
+	await create_timer(0.40).timeout
+	var hero := _imagination_hero(game.battle_presentation_root)
+	var baseline_scale := hero.get_meta("imagination_base_scale", Vector3.ONE) as Vector3 if hero != null else Vector3.ZERO
+	game.set_battle_imagination_mode("imagination")
+	var first_idle: Tween = hero.get_meta("imagination_idle_tween") as Tween if hero != null and hero.has_meta("imagination_idle_tween") else null
+	await create_timer(0.90).timeout
+	game.go_home()
+	await create_timer(0.30).timeout
+	_check(first_idle == null or not first_idle.is_running(), "direct exit after repeated imagination entry selection must stop the first hero idle tween")
+	_check(hero != null and hero.scale.is_equal_approx(baseline_scale), "direct exit after repeated imagination entry selection must restore the hero scale")
+	game.queue_free()
+	await process_frame
 
 
 func _all_battle_visual_cells_in_viewport(game: Node3D, camera: Camera3D) -> bool:
