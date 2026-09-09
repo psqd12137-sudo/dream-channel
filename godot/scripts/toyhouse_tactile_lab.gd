@@ -9,7 +9,8 @@ var reference_root: Node3D
 var reference_environment: Environment
 var reference_builder: RefCounted
 var reference_bases: Array[Dictionary] = []
-var reference_features: Array[bool] = [true, true, true]
+var reference_features: Array[bool] = [true, true, true, true]
+var refined_structure := true
 var joinery: RefCounted
 var atmosphere_environment: Environment
 var material_records: Array[Dictionary] = []
@@ -135,6 +136,14 @@ func toggle_reference_feature(index: int) -> void:
 	if restart:
 		replay()
 
+func toggle_refined_structure() -> void:
+	var restart := playing
+	_stop_replay()
+	refined_structure = not refined_structure
+	_apply()
+	if restart:
+		replay()
+
 func toggle_feature(index: int) -> void:
 	if index < 0 or index >= features.size():
 		return
@@ -148,6 +157,7 @@ func toggle_feature(index: int) -> void:
 
 func _apply() -> void:
 	joinery.set_enabled(false)
+	joinery.refined = refined_structure
 	decor_root.visible = features[0] and not reference_mode
 	reference_root.visible = reference_mode and features[0]
 	for record in reference_bases:
@@ -190,8 +200,12 @@ func _apply() -> void:
 	settings.depth_of_field_enabled = true if features[3] else (saved_dof[0] if not mode_b else false)
 	settings.depth_of_field_blur_strength = 1.5 if features[3] else saved_dof[1]
 	settings.depth_of_field_focus_width = 0.40 if features[3] else saved_dof[2]
+	if reference_mode:
+		settings.depth_of_field_enabled = reference_features[3]
+		settings.depth_of_field_blur_strength = 5.5
+		settings.depth_of_field_focus_width = 0.18
 	settings._apply_depth_of_field_state()
-	host.status_message = "A 原版 / B 质感样板 / C 参考工坊。C 可独立比较拼图接口、扣合收尾和氛围光；R 重播，拖拽旋转。"
+	host.status_message = "C：造型按钮切换新旧结构，原版移轴景深可独立关闭检查细节。R 重播拼装；拖拽旋转、滚轮缩放。"
 	host._refresh_hud()
 
 func reset_camera() -> void:

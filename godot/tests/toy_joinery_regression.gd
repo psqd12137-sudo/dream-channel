@@ -15,6 +15,13 @@ func run() -> void:
 	game.start_tactile_lab()
 	var lab = game.tactile_lab
 	lab.set_reference_mode()
+	if not lab.has_method("toggle_refined_structure"):
+		push_error("JOINERY: missing refined structure comparison")
+		game.go_home()
+		game.queue_free()
+		await process_frame
+		quit(1)
+		return
 	if not lab.has_method("toggle_reference_feature"):
 		push_error("JOINERY: missing independent toy interface controls")
 		game.go_home()
@@ -28,6 +35,20 @@ func run() -> void:
 		return
 	var layout: Dictionary = game.room_rules.placed.duplicate(true)
 	var camera_pose: Transform3D = game.camera.transform
+	check(game.presentation_settings.depth_of_field_enabled, "original tilt shift is enabled in C")
+	check(is_equal_approx(game.presentation_settings.depth_of_field_blur_strength, 5.5) and is_equal_approx(game.presentation_settings.depth_of_field_focus_width, 0.18), "C restores original tilt shift parameters")
+	for record in lab.joinery.refined_hidden:
+		check(not record.node.visible, "refined shell hides extra floor and edge layers")
+	for record in lab.joinery.base_records:
+		check(is_equal_approx(record.refined.get_aabb().size.y, record.original.get_aabb().size.y * 0.75), "refined shell is 25 percent thinner")
+	lab.toggle_refined_structure()
+	check(not lab.refined_structure and game.camera.transform == camera_pose, "old C uses same camera")
+	for record in lab.joinery.base_records:
+		check(record.node.mesh == record.toy, "old C restores previous geometry")
+	lab.toggle_refined_structure()
+	lab.toggle_reference_feature(3)
+	check(not game.presentation_settings.depth_of_field_enabled and lab.joinery.enabled, "DOF toggles independently")
+	lab.toggle_reference_feature(3)
 	var mat = lab.reference_root.get_node("CuttingMat")
 	var mat_top: float = (mat.global_transform * mat.get_aabb()).end.y
 	for record in lab.joinery.base_records:

@@ -21,6 +21,12 @@ func run() -> void:
 	if "--reference" in OS.get_cmdline_user_args():
 		game.tactile_lab.set_reference_mode()
 		await capture("C-default")
+		game.tactile_lab.toggle_reference_feature(3)
+		await capture("C-refined-no-dof")
+		game.tactile_lab.toggle_refined_structure()
+		await capture("C-previous-no-dof")
+		game.tactile_lab.toggle_refined_structure()
+		game.tactile_lab.toggle_reference_feature(3)
 		game.tactile_lab.toggle_reference_feature(2)
 		await capture("C-light-off")
 		game.tactile_lab.toggle_reference_feature(2)
