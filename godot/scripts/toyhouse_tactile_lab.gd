@@ -9,11 +9,16 @@ var reference_root: Node3D
 var reference_environment: Environment
 var reference_builder: RefCounted
 var reference_bases: Array[Dictionary] = []
-var reference_features: Array[bool] = [true, true, true, true]
+var reference_features: Array[bool] = [true, true, true, true, true]
 var refined_structure := true
 var joinery: RefCounted
 var atmosphere_environment: Environment
 var material_records: Array[Dictionary] = []
+var material_detail_records: Array[Dictionary] = []
+var reference_material_detail_records: Array[Dictionary] = []
+var material_detail_enabled := false
+var material_detail_shader: Shader = preload("res://shaders/asset_material_detail.gdshader")
+var material_white_texture: Texture2D
 var decor_root: Node3D
 var target := Vector2i.ZERO
 var entry := Vector2i.ZERO
@@ -74,12 +79,15 @@ func start() -> void:
 	sample_environment.ambient_light_color = Color("d8e4df")
 	baseline_lights = _light_snapshot()
 	_capture_materials()
+	material_white_texture = _build_white_texture()
+	_capture_material_details()
 	_build_desktop()
 	reference_environment = sample_environment.duplicate()
 	reference_environment.ambient_light_energy = 0.30
 	reference_environment.ambient_light_color = Color("889aaa")
 	reference_builder = load("res://scripts/reference_workshop.gd").new()
 	reference_root = reference_builder.build(self)
+	_capture_reference_material_details()
 	for node in host.house_root.find_children("ToyWorkbench*", "MeshInstance3D", true, false):
 		reference_bases.append({"node": node, "visible": node.visible})
 	joinery = load("res://scripts/toy_workshop_joinery.gd").new()
@@ -104,6 +112,7 @@ func _restore_lights(records: Array[Dictionary]) -> void:
 
 func set_mode(sample: bool) -> void:
 	reference_mode = false
+	material_detail_enabled = false
 	mode_b = sample
 	features.assign([true, true, true, false] if sample else [false, false, false, false])
 	var restart := playing
@@ -118,6 +127,8 @@ func set_reference_mode() -> void:
 	reference_mode = true
 	mode_b = true
 	features.assign([true, false, true, false])
+	reference_features.assign([true, true, true, true, true])
+	material_detail_enabled = true
 	_apply()
 	if restart:
 		replay()
@@ -132,6 +143,8 @@ func toggle_reference_feature(index: int) -> void:
 	var restart := playing
 	_stop_replay()
 	reference_features[index] = not reference_features[index]
+	if index == 4:
+		material_detail_enabled = reference_features[index]
 	_apply()
 	if restart:
 		replay()
@@ -143,6 +156,12 @@ func toggle_refined_structure() -> void:
 	_apply()
 	if restart:
 		replay()
+
+func set_material_detail(value: bool) -> void:
+	material_detail_enabled = value
+	if reference_mode and reference_features.size() > 4:
+		reference_features[4] = value
+	_apply()
 
 func toggle_feature(index: int) -> void:
 	if index < 0 or index >= features.size():
@@ -169,6 +188,8 @@ func _apply() -> void:
 		mesh.material_override = record.sample_override if features[1] else record.original_override
 		for i in range(mesh.mesh.get_surface_count()):
 			mesh.set_surface_override_material(i, record.sample_surfaces[i] if features[1] else record.original_surfaces[i])
+	_apply_material_details()
+	_apply_reference_material_details()
 	joinery.set_enabled(reference_root.visible and reference_features[0])
 	var atmosphere := reference_root.visible and reference_features[2]
 	reference_builder.set_atmosphere(atmosphere)
@@ -334,6 +355,98 @@ func _capture_materials() -> void:
 			rounded = _rounded_box(size, minf(size[size.min_axis_index()] * 0.15, 0.055))
 		material_records.append({"node": mesh, "original_mesh": mesh.mesh, "rounded_mesh": rounded, "original_override": mesh.material_override,
 			"sample_override": _sample_material(mesh.material_override, kind), "original_surfaces": originals, "sample_surfaces": samples})
+
+func _build_white_texture() -> Texture2D:
+	var image := Image.create(1, 1, false, Image.FORMAT_RGBA8)
+	image.fill(Color.WHITE)
+	return ImageTexture.create_from_image(image)
+
+func _asset_material_kind(mesh: MeshInstance3D) -> String:
+	var names: String = str(mesh.get_path()).to_lower()
+	if "lilitoken" in names or "clay" in names:
+		return "clay"
+	if ["cushion", "pillow", "couch", "armchair", "rug", "bed", "blanket", "curtain", "upholstery", "cuttingmat", "mat", "pad", "fabric"].any(func(part): return part in names):
+		return "felt"
+	if ["book", "paper", "page", "magazine", "note"].any(func(part): return part in names):
+		return "paper"
+	if ["lamp", "light", "metal", "handle", "knob", "hinge", "rail", "pipe", "hardware", "bolt", "washer"].any(func(part): return part in names):
+		return "metal"
+	if ["window", "glass", "mirror"].any(func(part): return part in names):
+		return "glass"
+	if ["pot", "ceramic", "vase", "mug", "dish"].any(func(part): return part in names):
+		return "ceramic"
+	if ["table", "desk", "shelf", "bookcase", "chair", "stool", "cabinet", "wood", "workbench"].any(func(part): return part in names):
+		return "painted_wood"
+	return "plastic"
+
+func _material_kind_index(kind: String) -> int:
+	return {"plastic": 0, "painted_wood": 1, "felt": 2, "metal": 3, "paper": 4, "ceramic": 5, "glass": 6, "clay": 2}.get(kind, 0)
+
+func _detail_material(source: Material, kind: String) -> Material:
+	if not source is StandardMaterial3D:
+		return source
+	var shader_material := ShaderMaterial.new()
+	shader_material.shader = material_detail_shader
+	var standard := source as StandardMaterial3D
+	shader_material.set_shader_parameter("base_texture", standard.albedo_texture if standard.albedo_texture != null else material_white_texture)
+	shader_material.set_shader_parameter("base_color", standard.albedo_color)
+	shader_material.set_shader_parameter("material_kind", _material_kind_index(kind))
+	shader_material.set_shader_parameter("micro_scale", 30.0 if kind in ["painted_wood", "felt"] else 46.0)
+	shader_material.render_priority = standard.render_priority
+	return shader_material
+
+func _capture_material_details() -> void:
+	material_detail_records.clear()
+	for record in material_records:
+		var mesh: MeshInstance3D = record.node
+		var kind := _asset_material_kind(mesh)
+		var detailed_surfaces: Array[Material] = []
+		for i in range(mesh.mesh.get_surface_count()):
+			var source: Material = record.original_surfaces[i]
+			if source == null:
+				source = mesh.mesh.surface_get_material(i)
+			detailed_surfaces.append(_detail_material(source, kind))
+		var detailed_override: Material = _detail_material(record.original_override, kind)
+		material_detail_records.append({"node": mesh, "kind": kind, "original": record.original_override, "detailed": detailed_override, "original_surfaces": record.original_surfaces, "detailed_surfaces": detailed_surfaces})
+
+func _apply_material_details() -> void:
+	for record in material_detail_records:
+		var mesh: MeshInstance3D = record.node
+		if reference_mode and material_detail_enabled:
+			if record.original != null and record.detailed != null:
+				mesh.material_override = record.detailed
+			for i in range(mesh.mesh.get_surface_count()):
+				if record.detailed_surfaces[i] != null:
+					mesh.set_surface_override_material(i, record.detailed_surfaces[i])
+
+func _capture_reference_material_details() -> void:
+	reference_material_detail_records.clear()
+	if not is_instance_valid(reference_root):
+		return
+	for node in reference_root.find_children("*", "MeshInstance3D", true, false):
+		var mesh: MeshInstance3D = node
+		if mesh.mesh == null:
+			continue
+		var kind := _asset_material_kind(mesh)
+		var originals: Array[Material] = []
+		var detailed: Array[Material] = []
+		for i in range(mesh.mesh.get_surface_count()):
+			var source: Material = mesh.get_surface_override_material(i)
+			originals.append(source)
+			if source == null:
+				source = mesh.mesh.surface_get_material(i)
+			detailed.append(_detail_material(source, kind))
+		reference_material_detail_records.append({"node": mesh, "kind": kind, "original": mesh.material_override, "detailed": _detail_material(mesh.material_override, kind), "original_surfaces": originals, "detailed_surfaces": detailed})
+
+func _apply_reference_material_details() -> void:
+	if not is_instance_valid(reference_root):
+		return
+	var enabled := reference_mode and material_detail_enabled
+	for record in reference_material_detail_records:
+		var mesh: MeshInstance3D = record.node
+		mesh.material_override = record.detailed if enabled and record.detailed != null else record.original
+		for i in range(mesh.mesh.get_surface_count()):
+			mesh.set_surface_override_material(i, record.detailed_surfaces[i] if enabled and record.detailed_surfaces[i] != null else record.original_surfaces[i])
 
 func _box(parent: Node3D, name: String, position: Vector3, size: Vector3, color: String, roughness := 0.65) -> MeshInstance3D:
 	var node := MeshInstance3D.new()

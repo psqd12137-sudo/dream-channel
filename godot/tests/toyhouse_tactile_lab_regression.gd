@@ -81,6 +81,19 @@ func run() -> void:
 	key.keycode = KEY_C
 	game.hud._input(key)
 	check(lab.reference_mode and lab.reference_root.visible, "reference workshop is visible")
+	if not lab.has_method("set_material_detail"):
+		push_error("TACTILE: missing asset material detail preset")
+		quit(1)
+		return
+	check(lab.material_detail_records.size() > 20, "C captures per-asset material records")
+	var material_kinds := {}
+	for record: Dictionary in lab.material_detail_records:
+		material_kinds[record.kind] = true
+	check(material_kinds.has("plastic") and material_kinds.has("painted_wood") and material_kinds.has("felt"), "C separates plastic, wood and fabric")
+	lab.set_material_detail(false)
+	check(not lab.material_detail_enabled, "material detail can be disabled for comparison")
+	lab.set_material_detail(true)
+	check(lab.material_detail_enabled, "material detail can be restored")
 	check(game.camera.transform == camera_pose and game.camera.size == camera_size, "reference keeps comparison camera")
 	check(not lab.features[1], "reference retains original room materials")
 	for name in ["CuttingMat", "BookStack", "TapeRoll", "PartsTray", "WorkshopWindow", "ShelfLeft", "DeskLamp"]:

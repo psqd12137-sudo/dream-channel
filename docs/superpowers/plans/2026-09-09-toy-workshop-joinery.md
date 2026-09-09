@@ -49,3 +49,11 @@
 - 旧版造型按钮仅比较结构，景深继续由独立开关控制，便于同条件对比。
 
 验证：toy_joinery_regression 新增 25% 厚度变化、旧版网格恢复、原版景深参数及独立关闭检查；toyhouse_tactile_lab_regression、formal_cartoon_assembly_regression、wall_cutaway_transition_regression 通过。图像输出新增 C-refined-no-dof 与 C-previous-no-dof，并检查四个朝向和近远景。此前性能数据属于第一轮，未用作本轮性能结论。尚未推广正式版。
+
+## 第三轮：局内资产分材质
+
+用户认可当前结构后要求为局内资产加入真实材质并区分不同部件。新增 C 的“资产分材质”开关；A/B 与正式地图保持原材质。按节点路径与部件名称识别：底座/墙柱为哑光塑料，桌椅/书架为涂装木材，沙发/枕头/地毯/床品为布料，灯具/把手/五金为金属，书籍为纸张，花盆等为陶瓷，窗为玻璃，角色保留黏土。保留原 albedo 贴图和孟菲斯配色，额外叠加低对比微表面变化及对应粗糙度/金属度；不强行替换非标准材质。
+
+`asset_material_detail.gdshader` 只负责微表面和光泽响应；`toyhouse_tactile_lab.gd` 保存每个网格原材质，C 启用独立副本，切回 A/B 或退出时恢复引用。原版移轴景深继续独立控制，检查材质时可关闭。HUD 在 C 模式显示“资产分材质”，与底座、扣合、氛围光并列。
+
+验证：`toyhouse_material_regression.gd` 检查实际 C 档材质记录数量、塑料/木材/布料/金属/纸张分类、材质副本、真实 HUD 切换与恢复；`toyhouse_tactile_lab_regression.gd` 检查 C 细化材质和正式资源恢复。`capture_tactile_lab.gd -- --reference` 输出 C-material-off-no-dof、C-material-on-no-dof、C-material-on-near-no-dof；近景检查确认差异可见且不依赖景深。

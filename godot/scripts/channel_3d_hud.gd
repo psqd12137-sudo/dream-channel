@@ -735,16 +735,24 @@ func _draw_lab_hud() -> void:
 		var lab = game.tactile_lab
 		_draw_button(Rect2(1020, 182, 220, 38), "A 当前画面", TEAL if not lab.mode_b else DARK_2, TEXT)
 		_draw_button(Rect2(1020, 230, 220, 38), "B 质感样板", MAGENTA if lab.mode_b and not lab.reference_mode else DARK_2, TEXT)
-		var labels := ["玩具底座与拼图接口", "扣合收尾", "工坊氛围光", "原版移轴景深"] if lab.reference_mode else ["外围桌面", "材质层次", "接触阴影", "轻景深（试验）"]
-		var switches = lab.reference_features if lab.reference_mode else lab.features
-		for i in range(labels.size()):
-			_draw_button(Rect2(1020, 288 + i * 44, 220, 34), ("✓ " if switches[i] else "○ ") + labels[i], TEAL if switches[i] else DARK_2, TEXT)
-		_draw_button(Rect2(1020, 482, 220, 38), "R 重播拼装", MAGENTA, TEXT)
-		_draw_button(Rect2(1020, 530, 105 if lab.reference_mode else 220, 38), "复位镜头", BLUE, TEXT)
 		if lab.reference_mode:
-			_draw_button(Rect2(1135, 530, 105, 38), "造型：新版" if lab.refined_structure else "造型：旧版", TEAL if lab.refined_structure else DARK_2, TEXT)
-		_draw_button(Rect2(1020, 578, 220, 38), "C 参考工坊", TEAL if lab.reference_mode else DARK_2, TEXT)
-		_label("A/B/C 切换 · 拖拽旋转 · 滚轮缩放", Vector2(1020, 646), 10, MUTED)
+			var labels := ["玩具底座与拼图接口", "扣合收尾", "工坊氛围光", "原版移轴景深", "资产分材质"]
+			for i in range(labels.size()):
+				var y := 274 + i * 36
+				_draw_button(Rect2(1020, y, 220, 30), ("✓ " if lab.reference_features[i] else "○ ") + labels[i], TEAL if lab.reference_features[i] else DARK_2, TEXT)
+			_draw_button(Rect2(1020, 466, 220, 34), "R 重播拼装", MAGENTA, TEXT)
+			_draw_button(Rect2(1020, 506, 105, 34), "复位镜头", BLUE, TEXT)
+			_draw_button(Rect2(1135, 506, 105, 34), "造型：新版" if lab.refined_structure else "造型：旧版", TEAL if lab.refined_structure else DARK_2, TEXT)
+			_draw_button(Rect2(1020, 546, 220, 34), "C 参考工坊", TEAL, TEXT)
+			_label("A/B/C 切换 · 拖拽旋转 · 滚轮缩放", Vector2(1020, 616), 10, MUTED)
+		else:
+			var labels := ["外围桌面", "材质层次", "接触阴影", "轻景深（试验）"]
+			for i in range(labels.size()):
+				_draw_button(Rect2(1020, 288 + i * 44, 220, 34), ("✓ " if lab.features[i] else "○ ") + labels[i], TEAL if lab.features[i] else DARK_2, TEXT)
+			_draw_button(Rect2(1020, 482, 220, 38), "R 重播拼装", MAGENTA, TEXT)
+			_draw_button(Rect2(1020, 530, 220, 38), "复位镜头", BLUE, TEXT)
+			_draw_button(Rect2(1020, 578, 220, 38), "C 参考工坊", DARK_2, TEXT)
+			_label("A/B/C 切换 · 拖拽旋转 · 滚轮缩放", Vector2(1020, 646), 10, MUTED)
 		_draw_coach(Rect2(60, 688, 1160, 68), "实体玩具质感", game.status_message)
 	elif game.phase == "lab_puzzle":
 		_draw_puzzle()
@@ -2292,17 +2300,25 @@ func _gui_input(event: InputEvent) -> void:
 			game.tactile_lab.set_mode(false)
 		elif Rect2(1020, 230, 220, 38).has_point(point):
 			game.tactile_lab.set_mode(true)
-		elif Rect2(1020, 482, 220, 38).has_point(point):
+		elif game.tactile_lab.reference_mode and Rect2(1020, 466, 220, 34).has_point(point):
 			game.tactile_lab.replay()
-		elif game.tactile_lab.reference_mode and Rect2(1135, 530, 105, 38).has_point(point):
+		elif not game.tactile_lab.reference_mode and Rect2(1020, 482, 220, 38).has_point(point):
+			game.tactile_lab.replay()
+		elif game.tactile_lab.reference_mode and Rect2(1135, 506, 105, 34).has_point(point):
 			game.tactile_lab.toggle_refined_structure()
-		elif Rect2(1020, 530, 220, 38).has_point(point):
+		elif game.tactile_lab.reference_mode and Rect2(1020, 506, 105, 34).has_point(point):
 			game.tactile_lab.reset_camera()
-		elif Rect2(1020, 578, 220, 38).has_point(point):
+		elif not game.tactile_lab.reference_mode and Rect2(1020, 530, 220, 38).has_point(point):
+			game.tactile_lab.reset_camera()
+		elif game.tactile_lab.reference_mode and Rect2(1020, 546, 220, 34).has_point(point):
+			game.tactile_lab.set_reference_mode()
+		elif not game.tactile_lab.reference_mode and Rect2(1020, 578, 220, 38).has_point(point):
 			game.tactile_lab.set_reference_mode()
 		else:
-			for i in range(4):
-				if Rect2(1020, 288 + i * 44, 220, 34).has_point(point):
+			var switch_count := 5 if game.tactile_lab.reference_mode else 4
+			for i in range(switch_count):
+				var toggle_rect := Rect2(1020, 274 + i * 36, 220, 30) if game.tactile_lab.reference_mode else Rect2(1020, 288 + i * 44, 220, 34)
+				if toggle_rect.has_point(point):
 					if game.tactile_lab.reference_mode:
 						game.tactile_lab.toggle_reference_feature(i)
 					else:
