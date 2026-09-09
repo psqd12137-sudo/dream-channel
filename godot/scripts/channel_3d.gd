@@ -2589,12 +2589,7 @@ func _animate_combat_entry(final_message: String) -> void:
 	battle_root.position = Vector3.ZERO
 	battle_root.scale = Vector3.ONE
 	if combat_presentation_lab and battle_imagination_mode == "imagination" and battle_world_renderer != null:
-		var stagger_tween: Tween = battle_world_renderer.play_imagination_entry_stagger(battle_imagination_profile)
-		if stagger_tween != null:
-			active_motion_tween = stagger_tween
-			await stagger_tween.finished
-			if active_motion_tween != stagger_tween:
-				return
+		battle_world_renderer.play_imagination_entry_stagger(battle_imagination_profile)
 	var player := battle_actor_root.get_node_or_null("Player") as Node3D
 	var enemies_in_scene: Array[Node3D] = []
 	for enemy_id in enemy_nodes.keys():

@@ -26,6 +26,15 @@ func _run() -> void:
 	_check(game.active_animation_kind == "combat_entry", "imagination lab must use the existing combat entry animation")
 	_check(game.battle_presentation_root != null and game.battle_presentation_root.scale.x > 0.0, "presentation root must have a valid entry scale")
 	_check(game.battle_presentation_root != null and game.battle_presentation_root.has_meta("imagination_entry_stagger"), "imagination entry must expose profile-driven stagger metadata")
+	await create_timer(0.40).timeout
+	var entry_hero := _imagination_hero(game.battle_presentation_root)
+	var entry_baseline_scale := entry_hero.get_meta("imagination_base_scale", Vector3.ONE) as Vector3 if entry_hero != null else Vector3.ZERO
+	_check(game.battle_presentation_root != null and bool(game.battle_presentation_root.get_meta("imagination_entry_active", false)), "entry regression must switch modes while the imagination stagger is active")
+	game.set_battle_imagination_mode("baseline")
+	await _wait_for_animation(game, 2.0)
+	_check(entry_hero != null and entry_hero.scale.is_equal_approx(entry_baseline_scale), "baseline during entry must restore the hero's baseline scale")
+	_check(entry_hero != null and not entry_hero.has_meta("imagination_hero_prop") and not entry_hero.has_meta("imagination_idle_tween"), "baseline during entry must clear imagination hero metadata and tween")
+	game.set_battle_imagination_mode("imagination")
 	await process_frame
 	await process_frame
 	var camera := game.camera as Camera3D
@@ -44,6 +53,10 @@ func _run() -> void:
 	_check(_count_meta(game.battle_presentation_root, "imagination_hero_prop") == 1, "imagination mode must have one hero prop")
 	_check(is_equal_approx(game.presentation_settings.depth_of_field_focus_width, float(profile["dof_focus_width"])), "combat lab must use profile focus width")
 	_check(is_equal_approx(game.presentation_settings.depth_of_field_blur_strength, float(profile["dof_blur_strength"])), "combat lab must use profile blur strength")
+	var first_imagination_color := _first_imagination_material_color(game.battle_presentation_root)
+	game.set_battle_imagination_mode("imagination")
+	var repeated_imagination_color := _first_imagination_material_color(game.battle_presentation_root)
+	_check(first_imagination_color.is_equal_approx(repeated_imagination_color), "repeated imagination selection must not accumulate material tint")
 	game.set_battle_imagination_mode("baseline")
 	_check(is_equal_approx(game.presentation_settings.depth_of_field_focus_width, float(dof_before["focus"])), "baseline must restore the user's focus width")
 	_check(is_equal_approx(game.presentation_settings.depth_of_field_blur_strength, float(dof_before["blur"])), "baseline must restore the user's blur strength")
@@ -105,6 +118,42 @@ func _count_meta(root_node: Node, meta_key: String) -> int:
 	for child: Node in root_node.get_children():
 		count += _count_meta(child, meta_key)
 	return count
+
+
+func _imagination_hero(root_node: Node) -> Node3D:
+	if root_node == null:
+		return null
+	if root_node is Node3D and root_node.has_meta("imagination_hero_prop"):
+		return root_node as Node3D
+	for child: Node in root_node.get_children():
+		var hero := _imagination_hero(child)
+		if hero != null:
+			return hero
+	return null
+
+
+func _first_imagination_material_color(root_node: Node) -> Color:
+	if root_node == null:
+		return Color.TRANSPARENT
+	if root_node is MeshInstance3D and root_node.has_meta("imagination_material_restore"):
+		var mesh_instance := root_node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			for surface_index in range(mesh_instance.mesh.get_surface_count()):
+				var material := mesh_instance.get_surface_override_material(surface_index) as StandardMaterial3D
+				if material != null:
+					return material.albedo_color
+	for child: Node in root_node.get_children():
+		var color := _first_imagination_material_color(child)
+		if color != Color.TRANSPARENT:
+			return color
+	return Color.TRANSPARENT
+
+
+func _wait_for_animation(game: Node3D, timeout_seconds: float) -> void:
+	var deadline := Time.get_ticks_msec() + int(timeout_seconds * 1000.0)
+	while game.animation_busy and Time.get_ticks_msec() < deadline:
+		await process_frame
+	_check(not game.animation_busy, "combat entry must settle after a presentation mode switch")
 
 
 func _check(condition: bool, message: String) -> void:

@@ -131,6 +131,8 @@ var battle_triggered_traps: Dictionary = {}
 var salt_ring_hit_frames: SpriteFrames = null
 var full_board_build_count := 0
 var incremental_refresh_count := 0
+var imagination_entry_tween: Tween = null
+var imagination_entry_nodes: Array[Node3D] = []
 var battle_backstage_cells:
 	get: return host.battle_backstage_cells
 var battle_height_prop_assignments:
@@ -279,6 +281,8 @@ func _ensure_battle_layers() -> void:
 
 func apply_battle_imagination_mode(mode: String, profile: Dictionary) -> void:
 	_ensure_battle_layers()
+	if mode == "baseline":
+		_settle_imagination_entry()
 	var visual_scale := 1.0
 	if mode == "imagination":
 		visual_scale = clampf(float(profile.get("visual_scale", 1.0)), 0.90, 1.20)
@@ -1888,8 +1892,12 @@ func play_imagination_entry_stagger(profile: Dictionary) -> Tween:
 			break
 	if staged.is_empty():
 		return null
+	_settle_imagination_entry()
+	battle_presentation_root.set_meta("imagination_entry_active", true)
+	imagination_entry_nodes = staged.duplicate()
 	var stagger: float = clampf(float(profile.get("entry_stagger", 0.08)), 0.03, 0.12) * host.animation_duration_scale
 	var tween: Tween = host.create_tween()
+	imagination_entry_tween = tween
 	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	for node: Node3D in staged:
 		if not is_instance_valid(node):
@@ -1911,8 +1919,28 @@ func play_imagination_entry_stagger(profile: Dictionary) -> Tween:
 		for node: Node3D in staged:
 			if is_instance_valid(node) and node.has_meta("imagination_hero_prop"):
 				_start_imagination_idle_motion(node, profile)
+		imagination_entry_tween = null
+		imagination_entry_nodes.clear()
 	, CONNECT_ONE_SHOT)
 	return tween
+
+
+func _settle_imagination_entry() -> void:
+	if imagination_entry_tween != null and imagination_entry_tween.is_valid():
+		imagination_entry_tween.kill()
+	for node: Node3D in imagination_entry_nodes:
+		if not is_instance_valid(node):
+			continue
+		if node.has_meta("imagination_entry_base_position"):
+			node.position = node.get_meta("imagination_entry_base_position", node.position)
+		if node.has_meta("imagination_entry_base_scale"):
+			node.scale = node.get_meta("imagination_entry_base_scale", node.scale)
+		node.remove_meta("imagination_entry_base_position")
+		node.remove_meta("imagination_entry_base_scale")
+	imagination_entry_tween = null
+	imagination_entry_nodes.clear()
+	if battle_presentation_root != null and is_instance_valid(battle_presentation_root):
+		battle_presentation_root.set_meta("imagination_entry_active", false)
 
 
 func _start_imagination_idle_motion(prop: Node3D, profile: Dictionary) -> void:
@@ -1975,8 +2003,12 @@ func _apply_toybox_material_family(model: Node3D, family: String) -> void:
 			for surface_index in range(mesh_instance.mesh.get_surface_count()):
 				originals.append(mesh_instance.get_surface_override_material(surface_index))
 			mesh_instance.set_meta("imagination_material_restore", originals)
+		var originals: Array = mesh_instance.get_meta("imagination_material_restore", [])
 		for surface_index in range(mesh_instance.mesh.get_surface_count()):
-			var source := mesh_instance.get_surface_override_material(surface_index)
+			var source: Material = originals[surface_index] as Material if surface_index < originals.size() else null
+			mesh_instance.set_surface_override_material(surface_index, source)
+			if source == null:
+				source = mesh_instance.mesh.surface_get_material(surface_index)
 			if not source is StandardMaterial3D:
 				continue
 			var material := (source as StandardMaterial3D).duplicate() as StandardMaterial3D
