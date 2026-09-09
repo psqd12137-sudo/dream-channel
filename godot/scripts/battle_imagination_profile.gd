@@ -3,6 +3,8 @@ extends RefCounted
 
 const VISUAL_SCALE_MIN := 0.90
 const VISUAL_SCALE_MAX := 1.20
+const VISUAL_PADDING_CELLS_MIN := 0.0
+const VISUAL_PADDING_CELLS_MAX := 0.5
 const PROP_SCALE_MIN := 1.00
 const PROP_SCALE_MAX := 1.35
 
@@ -23,7 +25,7 @@ static func for_room(room_type: String, _theme: String, props: Array) -> Diction
 	var hero_prop_id := _first_valid_prop_id(props)
 	return {
 		"visual_scale": clampf(visual_scale, VISUAL_SCALE_MIN, VISUAL_SCALE_MAX),
-		"visual_padding_cells": clampf(0.45, 0.0, 1.0),
+		"visual_padding_cells": clampf(0.45, VISUAL_PADDING_CELLS_MIN, VISUAL_PADDING_CELLS_MAX),
 		"prop_scale": clampf(1.12, PROP_SCALE_MIN, PROP_SCALE_MAX),
 		"hero_prop_id": hero_prop_id,
 		"material_family": material_family,
