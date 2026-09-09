@@ -96,6 +96,7 @@ func _run() -> void:
 	_check(game.battle_lab_dof_restore.is_empty(), "direct lab exit must clear the saved DOF snapshot")
 	game.queue_free()
 	await process_frame
+	await _assert_cutaway_bounces_clear_on_baseline_and_exit()
 	await _assert_direct_exit_stops_entry_idle()
 	await _assert_natural_entry_starts_idle_motion()
 	_finish()
@@ -139,6 +140,66 @@ func _assert_direct_exit_stops_entry_idle() -> void:
 	_check(hero != null and hero.scale.is_equal_approx(baseline_scale), "direct exit after repeated imagination entry selection must restore the hero scale")
 	game.queue_free()
 	await process_frame
+
+
+func _assert_cutaway_bounces_clear_on_baseline_and_exit() -> void:
+	var packed := load("res://channel_3d.tscn") as PackedScene
+	for cleanup_action in ["baseline", "exit"]:
+		var game := packed.instantiate() as Node3D
+		root.add_child(game)
+		await process_frame
+		await process_frame
+		game.animation_duration_scale = 1.0
+		game.start_combat_lab("hall")
+		await create_timer(2.0).timeout
+		var cutaway_poses := _cutaway_shell_poses(game)
+		var tweens_before: Array[Tween] = get_processed_tweens()
+		for orbit_index in range(8):
+			game.orbit_battle_camera(Vector2(196.0 if orbit_index % 2 == 0 else -196.0, 0.0))
+		var orbit_tweens := _new_processed_tweens(tweens_before)
+		_check(not orbit_tweens.is_empty(), "rapid public orbit reversals must create visible cutaway bounce motion")
+		if cleanup_action == "baseline":
+			game.set_battle_imagination_mode("baseline")
+		else:
+			game.go_home()
+		_check(_cutaway_shell_poses_are_restored(cutaway_poses), "%s must immediately restore every cutaway shell transform" % cleanup_action)
+		_check(_no_tweens_running(orbit_tweens), "%s must immediately stop every cutaway bounce tween" % cleanup_action)
+		game.queue_free()
+		await process_frame
+
+
+func _cutaway_shell_poses(game: Node3D) -> Dictionary:
+	var poses := {}
+	for record: Dictionary in game.battle_world_renderer.battle_shell_edge_records.values():
+		for key in ["full", "cutaway"]:
+			var node := record.get(key) as Node3D
+			if node != null:
+				poses[node] = node.transform
+	return poses
+
+
+func _cutaway_shell_poses_are_restored(poses: Dictionary) -> bool:
+	for raw_node: Variant in poses.keys():
+		var node := raw_node as Node3D
+		var base_transform := poses[raw_node] as Transform3D
+		if node == null or not node.transform.is_equal_approx(base_transform):
+			return false
+	return true
+
+
+func _new_processed_tweens(before: Array[Tween]) -> Array[Tween]:
+	var created: Array[Tween] = []
+	for tween: Tween in get_processed_tweens():
+		if not before.has(tween):
+			created.append(tween)
+	return created
+
+
+func _no_tweens_running(tweens: Array[Tween]) -> bool:
+	for tween: Tween in tweens:
+		if tween.is_valid() and tween.is_running():
+			return false
+	return true
 
 
 func _assert_natural_entry_starts_idle_motion() -> void:

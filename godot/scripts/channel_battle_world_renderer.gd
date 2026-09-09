@@ -283,6 +283,7 @@ func apply_battle_imagination_mode(mode: String, profile: Dictionary) -> void:
 	_ensure_battle_layers()
 	if mode == "baseline":
 		_settle_imagination_entry()
+		_stop_all_imagination_cutaway_bounces()
 	var visual_scale := 1.0
 	if mode == "imagination":
 		visual_scale = clampf(float(profile.get("visual_scale", 1.0)), 0.90, 1.20)
@@ -2793,11 +2794,39 @@ func _apply_battle_room_cutaway() -> void:
 func _play_imagination_cutaway_bounce(node: Node3D) -> void:
 	if node == null or not is_instance_valid(node):
 		return
+	_stop_imagination_cutaway_bounce(node)
+	var base_transform := node.transform
+	node.set_meta("imagination_cutaway_bounce_base_transform", base_transform)
 	node.scale = Vector3(0.86, 0.70, 0.86)
 	var tween := node.create_tween()
+	node.set_meta("imagination_cutaway_bounce_tween", tween)
 	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(node, "scale", Vector3(1.04, 0.96, 1.04), 0.10)
-	tween.tween_property(node, "scale", Vector3.ONE, 0.06)
+	tween.tween_property(node, "scale", base_transform.basis.get_scale(), 0.06)
+	tween.finished.connect(func() -> void:
+		if not is_instance_valid(node) or node.get_meta("imagination_cutaway_bounce_tween", null) != tween:
+			return
+		_stop_imagination_cutaway_bounce(node)
+	, CONNECT_ONE_SHOT)
+
+
+func _stop_imagination_cutaway_bounce(node: Node3D) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	var tween: Tween = node.get_meta("imagination_cutaway_bounce_tween") as Tween if node.has_meta("imagination_cutaway_bounce_tween") else null
+	if tween != null and tween.is_valid():
+		tween.kill()
+	if node.has_meta("imagination_cutaway_bounce_base_transform"):
+		node.transform = node.get_meta("imagination_cutaway_bounce_base_transform", node.transform)
+	node.remove_meta("imagination_cutaway_bounce_tween")
+	node.remove_meta("imagination_cutaway_bounce_base_transform")
+
+
+func _stop_all_imagination_cutaway_bounces() -> void:
+	for raw_record: Variant in battle_shell_edge_records.values():
+		var record := raw_record as Dictionary
+		_stop_imagination_cutaway_bounce(record.get("full") as Node3D)
+		_stop_imagination_cutaway_bounce(record.get("cutaway") as Node3D)
 
 
 func battle_room_shell_debug_state() -> Dictionary:

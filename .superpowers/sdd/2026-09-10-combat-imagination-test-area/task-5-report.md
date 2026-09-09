@@ -146,3 +146,22 @@ COMBAT_IMAGINATION_CAPTURE: PASS baseline imagination rotated entry
 ```
 
 The engine reported its existing ObjectDB/resource-cleanup warnings on several successful exits; no scoped regression failed.
+
+## Post-handoff review fix: cutaway bounce ownership
+
+The post-handoff review found that rapid public camera orbit reversals created independent cutaway bounce tweens. Neither baseline selection nor direct lab exit owned those tweens, so both paths left shell/sill transforms deformed while the old writers continued to run.
+
+The presentation regression now starts a settled imagination lab, alternates eight public `orbit_battle_camera()` calls, then exercises both `set_battle_imagination_mode("baseline")` and direct `go_home()` in separate fresh fixtures. It snapshots every full and cutaway shell transform before orbiting and asserts that each cleanup action immediately restores every transform and stops every tween created by the public orbit sequence.
+
+The initial red run exited 1 with the intended failures:
+
+```text
+COMBAT_IMAGINATION_PRESENTATION: baseline must immediately restore every cutaway shell transform
+COMBAT_IMAGINATION_PRESENTATION: baseline must immediately stop every cutaway bounce tween
+COMBAT_IMAGINATION_PRESENTATION: exit must immediately restore every cutaway shell transform
+COMBAT_IMAGINATION_PRESENTATION: exit must immediately stop every cutaway bounce tween
+```
+
+Each bouncing shell node now records its own tween and original transform. Replacing its motion kills and restores the previous owner before creating the next bounce. The completion path restores the original transform and releases the metadata; baseline/exit walk every shell record to perform the same cleanup. Visibility and the formal-combat cutaway path remain unchanged.
+
+The green presentation regression exited 0 with `COMBAT_IMAGINATION_PRESENTATION: PASS`. The complete 12-script related headless suite also exited 0, and headless capture returned its expected `COMBAT_IMAGINATION_CAPTURE: SKIP graphical Vulkan display is required`. A Forward+ Vulkan capture on the NVIDIA GeForce RTX 4070 Laptop GPU exited 0 with `COMBAT_IMAGINATION_CAPTURE: PASS baseline imagination rotated entry`.
