@@ -1920,15 +1920,18 @@ func play_imagination_entry_stagger(profile: Dictionary) -> Tween:
 			return
 		if battle_presentation_root != null and is_instance_valid(battle_presentation_root):
 			battle_presentation_root.set_meta("imagination_entry_active", false)
+		var hero: Node3D = null
 		for node: Node3D in staged:
 			if not is_instance_valid(node):
 				continue
 			node.remove_meta("imagination_entry_base_position")
 			node.remove_meta("imagination_entry_base_scale")
 			if node.has_meta("imagination_hero_prop"):
-				_start_imagination_idle_motion(node, profile)
+				hero = node
 		imagination_entry_tween = null
 		imagination_entry_nodes.clear()
+		if hero != null:
+			_start_imagination_idle_motion(hero, profile)
 	, CONNECT_ONE_SHOT)
 	return tween
 

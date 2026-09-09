@@ -97,6 +97,7 @@ func _run() -> void:
 	game.queue_free()
 	await process_frame
 	await _assert_direct_exit_stops_entry_idle()
+	await _assert_natural_entry_starts_idle_motion()
 	_finish()
 
 
@@ -138,6 +139,33 @@ func _assert_direct_exit_stops_entry_idle() -> void:
 	_check(hero != null and hero.scale.is_equal_approx(baseline_scale), "direct exit after repeated imagination entry selection must restore the hero scale")
 	game.queue_free()
 	await process_frame
+
+
+func _assert_natural_entry_starts_idle_motion() -> void:
+	var packed := load("res://channel_3d.tscn") as PackedScene
+	var game := packed.instantiate() as Node3D
+	root.add_child(game)
+	await process_frame
+	await process_frame
+	game.animation_duration_scale = 1.0
+	game.start_combat_lab("hall")
+	await _wait_for_natural_imagination_entry(game, 3.0)
+	var hero := _imagination_hero(game.battle_presentation_root)
+	var idle_tween: Tween = hero.get_meta("imagination_idle_tween") as Tween if hero != null and hero.has_meta("imagination_idle_tween") else null
+	var position_before := hero.position if hero != null else Vector3.ZERO
+	await create_timer(0.30).timeout
+	_check(idle_tween != null and idle_tween.is_running(), "natural imagination entry must start the hero idle tween after stagger ownership releases")
+	_check(hero != null and not is_equal_approx(hero.position.y, position_before.y), "hero must move after natural imagination entry settles")
+	game.go_home()
+	game.queue_free()
+	await process_frame
+
+
+func _wait_for_natural_imagination_entry(game: Node3D, timeout_seconds: float) -> void:
+	var deadline := Time.get_ticks_msec() + int(timeout_seconds * 1000.0)
+	while (game.animation_busy or (game.battle_presentation_root != null and bool(game.battle_presentation_root.get_meta("imagination_entry_active", false)))) and Time.get_ticks_msec() < deadline:
+		await process_frame
+	_check(not game.animation_busy and (game.battle_presentation_root == null or not bool(game.battle_presentation_root.get_meta("imagination_entry_active", false))), "natural imagination entry must settle before idle motion is sampled")
 
 
 func _all_battle_visual_cells_in_viewport(game: Node3D, camera: Camera3D) -> bool:
