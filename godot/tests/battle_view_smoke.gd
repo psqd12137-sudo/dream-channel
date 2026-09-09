@@ -187,6 +187,24 @@ func _find_room(rooms: Array[Dictionary], id: String) -> Dictionary:
 	return {}
 
 
+func _combat_snapshot(combat: RefCounted) -> Dictionary:
+	var enemies: Array[Dictionary] = []
+	var footprint = combat.get("footprint")
+	if footprint == null:
+		footprint = []
+	for enemy_id in combat.enemy_order:
+		var enemy = combat.enemy_by_id(enemy_id)
+		enemies.append({"id": str(enemy_id), "pos": enemy.pos, "alive": enemy.alive(), "revealed": enemy.revealed})
+	return {
+		"player_pos": combat.player_pos,
+		"enemy_order": combat.enemy_order.duplicate(),
+		"enemies": enemies,
+		"energy": combat.energy,
+		"walls": combat.walls.duplicate(true),
+		"footprint": footprint.duplicate(true),
+	}
+
+
 func _all_named_prefix_hidden(root: Node, prefix: String) -> bool:
 	for child: Node in root.find_children("%s*" % prefix, "", true, false):
 		if child is Node3D and (child as Node3D).visible:
