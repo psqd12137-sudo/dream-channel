@@ -81,6 +81,24 @@ func run() -> void:
 	key.keycode = KEY_C
 	game.hud._input(key)
 	check(lab.reference_mode and lab.reference_root.visible, "reference workshop is visible")
+	var composer = game.house_root.get_node_or_null("KenneyFormalComposer")
+	check(composer != null, "C must keep the formal wall composer")
+	if composer != null:
+		var non_focus_wall_visibility := _non_focus_outer_wall_visibility(composer)
+		game.orbit_house_camera(Vector2(-PI * 0.5 / game.CAMERA_ORBIT_SENSITIVITY, 0.0))
+		await create_timer(0.35).timeout
+		check(_non_focus_outer_wall_visibility(composer) == non_focus_wall_visibility, "rotating C must not recompose non-focused room walls")
+		lab.reset_camera()
+		var initial_culled_edges: Array[String] = composer.cutaway_culled_edge_keys.duplicate()
+		initial_culled_edges.sort()
+		check(_culled_outer_axis_count(composer) <= 1, "C must cut away one near wall side at a time")
+		for _quarter in range(4):
+			game.orbit_house_camera(Vector2(-PI * 0.5 / game.CAMERA_ORBIT_SENSITIVITY, 0.0))
+			await create_timer(0.35).timeout
+		var final_culled_edges: Array[String] = composer.cutaway_culled_edge_keys.duplicate()
+		final_culled_edges.sort()
+		check(final_culled_edges == initial_culled_edges, "a full camera turn must restore the same wall layout")
+		lab.reset_camera()
 	if not lab.has_method("set_material_detail"):
 		push_error("TACTILE: missing asset material detail preset")
 		quit(1)
@@ -144,3 +162,30 @@ func run() -> void:
 		push_error("TACTILE: " + failure)
 	print("TACTILE: ", "PASS" if failures.is_empty() else "FAIL")
 	quit(0 if failures.is_empty() else 1)
+
+func _non_focus_outer_wall_visibility(composer: Node) -> Dictionary:
+	var result := {}
+	for raw_key: Variant in composer.visual_edge_records.keys():
+		var edge_key := str(raw_key)
+		var record: Dictionary = composer.visual_edge_records[edge_key]
+		if str(record.get("kind", "")) != "outer":
+			continue
+		var cell: Vector2i = record.get("cell", Vector2i.ZERO)
+		if int(composer.occupancy.get(cell, -1)) == composer.cutaway_focus_room_index:
+			continue
+		var node: Node3D = composer.structural_edge_nodes.get(edge_key)
+		if node != null:
+			result[edge_key] = node.visible
+	return result
+
+func _culled_outer_axis_count(composer: Node) -> int:
+	var axes := {}
+	for edge_key in composer.cutaway_culled_edge_keys:
+		var record: Dictionary = composer.visual_edge_records.get(edge_key, {})
+		if str(record.get("kind", "")) != "outer" or bool(record.get("passage_open", false)):
+			continue
+		var cell: Vector2i = record.get("cell", Vector2i.ZERO)
+		var neighbor: Vector2i = record.get("neighbor", Vector2i.ZERO)
+		var direction := neighbor - cell
+		axes[direction] = true
+	return axes.size()

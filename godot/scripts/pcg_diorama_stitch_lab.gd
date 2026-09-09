@@ -80,6 +80,7 @@ var cutaway_visible_wall_count := 0
 var cutaway_visible_doorway_count := 0
 var cutaway_open_passage_count := 0
 var cutaway_focus_room_index := -1
+var cutaway_primary_axis := Vector2i.ZERO
 ## Production default: retract walls into their base so the camera reveal feels
 ## playful and toy-like. The in-game comparison lab can still select all modes.
 @export_enum("instant", "retract", "wave") var cutaway_transition_mode := 1
@@ -147,6 +148,7 @@ func regenerate(seed_value: int) -> void:
 	cutaway_visible_doorway_count = 0
 	cutaway_open_passage_count = 0
 	cutaway_focus_room_index = -1
+	cutaway_primary_axis = Vector2i.ZERO
 	_generate_room_layout()
 	_build_joined_diorama()
 	if animate_room_build and not Engine.is_editor_hint():
@@ -659,6 +661,7 @@ func apply_camera_cutaway(focus_cell: Vector2i, camera_direction: Vector2) -> Di
 	var viewer_direction := camera_direction.normalized()
 	if viewer_direction.length_squared() < 0.01:
 		viewer_direction = Vector2.ONE.normalized()
+	var primary_axis := _select_cutaway_axis(viewer_direction)
 	var edge_keys: Array = visual_edge_records.keys()
 	edge_keys.sort()
 	for raw_key: Variant in edge_keys:
@@ -672,9 +675,9 @@ func apply_camera_cutaway(focus_cell: Vector2i, camera_direction: Vector2) -> Di
 		if passage_open:
 			pass
 		elif kind == "outer":
-			should_cull = _edge_faces_camera(neighbor - cell, viewer_direction, edge_key in previously_culled)
+			should_cull = _edge_faces_camera(neighbor - cell, viewer_direction, edge_key in previously_culled) and neighbor - cell == primary_axis
 		elif kind == "door" and not occupancy.has(neighbor):
-			should_cull = _edge_faces_camera(neighbor - cell, viewer_direction, edge_key in previously_culled)
+			should_cull = _edge_faces_camera(neighbor - cell, viewer_direction, edge_key in previously_culled) and neighbor - cell == primary_axis
 		elif kind in ["divider", "door"]:
 			var outward := Vector2i.ZERO
 			if int(occupancy.get(cell, -1)) == cutaway_focus_room_index:
@@ -712,6 +715,7 @@ func apply_camera_cutaway(focus_cell: Vector2i, camera_direction: Vector2) -> Di
 
 func set_cutaway_transition_mode(mode: int) -> void:
 	cutaway_transition_mode = clampi(mode, 0, 2)
+	cutaway_primary_axis = Vector2i.ZERO
 	_kill_cutaway_transitions()
 	for raw_node: Variant in structural_edge_nodes.values():
 		var node := raw_node as Node3D
@@ -947,6 +951,8 @@ func _apply_override_cutaway(viewer_direction: Vector2) -> void:
 		return
 	var focus_room_type := RoomArtRegistry.base_room_id(str(rooms[cutaway_focus_room_index].get("room_type", rooms[cutaway_focus_room_index].get("id", ""))))
 	var viewer := viewer_direction.normalized()
+	var primary_axis := _select_cutaway_axis(viewer)
+	var primary_direction := Vector2(float(primary_axis.x), float(primary_axis.y))
 	for shell: Node3D in override_shell_nodes:
 		if not is_instance_valid(shell):
 			continue
@@ -961,8 +967,21 @@ func _apply_override_cutaway(viewer_direction: Vector2) -> void:
 		var offset := shell.position
 		offset.y = 0.0
 		var outward := Vector2(offset.x, offset.z).normalized()
-		var faces_camera := outward.dot(viewer) > 0.42
+		var faces_camera := outward.dot(viewer) > 0.42 and outward.dot(primary_direction) > 0.92
 		_set_cutaway_edge_visual(shell, faces_camera)
+
+
+func _select_cutaway_axis(viewer_direction: Vector2) -> Vector2i:
+	var x_strength := absf(viewer_direction.x)
+	var z_strength := absf(viewer_direction.y)
+	var candidate := cutaway_primary_axis
+	if candidate == Vector2i.ZERO or absf(x_strength - z_strength) > 0.08:
+		if x_strength >= z_strength:
+			candidate = Vector2i(1 if viewer_direction.x >= 0.0 else -1, 0)
+		else:
+			candidate = Vector2i(0, 1 if viewer_direction.y >= 0.0 else -1)
+		cutaway_primary_axis = candidate
+	return candidate
 
 
 func _edge_faces_camera(outward: Vector2i, viewer_direction: Vector2, was_culled: bool = false) -> bool:

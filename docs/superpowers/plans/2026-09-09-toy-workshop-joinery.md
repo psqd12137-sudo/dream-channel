@@ -57,3 +57,9 @@
 `asset_material_detail.gdshader` 只负责微表面和光泽响应；`toyhouse_tactile_lab.gd` 保存每个网格原材质，C 启用独立副本，切回 A/B 或退出时恢复引用。原版移轴景深继续独立控制，检查材质时可关闭。HUD 在 C 模式显示“资产分材质”，与底座、扣合、氛围光并列。
 
 验证：`toyhouse_material_regression.gd` 检查实际 C 档材质记录数量、塑料/木材/布料/金属/纸张分类、材质副本、真实 HUD 切换与恢复；`toyhouse_tactile_lab_regression.gd` 检查 C 细化材质和正式资源恢复。`capture_tactile_lab.gd -- --reference` 输出 C-material-off-no-dof、C-material-on-no-dof、C-material-on-near-no-dof；近景检查确认差异可见且不依赖景深。
+
+## 第四轮：旋转时保持墙体连续
+
+用户反馈从一个方向旋转到另一个方向后，墙体让位过多，画面看起来像切换了房间布局。根因是相邻两个外墙方向同时通过 0.42 视角阈值，导致整圈多个墙段一起缩入底座。现在用带 0.08 滞回的主墙面方向选择器，每次只对一个最近的外墙方向执行缩入；非当前方向的外墙、其他房间墙体和拼装逻辑保持不变。C 的完整旋转会回到原墙体集合。
+
+验证：`toyhouse_tactile_lab_regression.gd` 检查 C 旋转时非当前房间墙体不重组、同时让位的外墙方向不超过一个，并在四个 90° 旋转后恢复相同的墙体集合；`camera_orbit_regression.gd`、`wall_cutaway_transition_regression.gd`、`formal_cartoon_assembly_regression.gd` 和 `toy_joinery_regression.gd` 继续通过。`capture_tactile_lab.gd -- --reference` 更新四个方向截图，用于检查墙体连续性。
