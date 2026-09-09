@@ -32,9 +32,11 @@ func _run() -> void:
 	_check(game.battle_presentation_root != null, "combat lab must expose a presentation root")
 	game.set_battle_imagination_mode("baseline")
 	var baseline_span: float = game.battle_visual_world(Vector2i(0, 0)).distance_to(game.battle_visual_world(Vector2i(1, 0)))
+	game.pan_battle_camera(Vector2(1200, -600))
 	game.set_battle_imagination_mode("imagination")
 	var imagination_span: float = game.battle_visual_world(Vector2i(0, 0)).distance_to(game.battle_visual_world(Vector2i(1, 0)))
 	_check(imagination_span > baseline_span, "imagination mode must visibly expand the room")
+	_check(_all_battle_visual_cells_in_viewport(game, camera), "switching imagination mode must refit every visual battle cell")
 	_check(_combat_snapshot(game.combat) == logical_before, "visual A/B switching must preserve combat state")
 	var cell := Vector2i(2, 1)
 	var projected := camera.unproject_position(game.battle_visual_world(cell))
@@ -42,6 +44,7 @@ func _run() -> void:
 	game.orbit_battle_camera(Vector2(196, 0))
 	var rotated_projected := camera.unproject_position(game.battle_visual_world(cell))
 	_check(game.battle_cell_from_viewport(rotated_projected) == cell, "rotated scaled presentation must preserve battle picking")
+	_check(_all_battle_visual_cells_in_viewport(game, camera), "rotated imagination mode must keep every visual battle cell in view")
 	game.queue_free()
 	await process_frame
 	_finish()
@@ -63,6 +66,16 @@ func _combat_snapshot(combat: RefCounted) -> Dictionary:
 		"walls": combat.walls.duplicate(true),
 		"footprint": footprint.duplicate(true),
 	}
+
+
+func _all_battle_visual_cells_in_viewport(game: Node3D, camera: Camera3D) -> bool:
+	var view_size: Vector2 = game.world_view_rect.size
+	for y in range(game.combat.rows):
+		for x in range(game.combat.cols):
+			var screen_position := camera.unproject_position(game.battle_visual_world(Vector2i(x, y)))
+			if screen_position.x < 0.0 or screen_position.y < 0.0 or screen_position.x > view_size.x or screen_position.y > view_size.y:
+				return false
+	return true
 
 
 func _check(condition: bool, message: String) -> void:

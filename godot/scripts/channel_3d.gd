@@ -2541,6 +2541,19 @@ func set_battle_imagination_mode(mode: String) -> void:
 	battle_imagination_mode = mode
 	if battle_world_renderer != null and battle_world_renderer.has_method("apply_battle_imagination_mode"):
 		battle_world_renderer.call("apply_battle_imagination_mode", battle_imagination_mode, battle_imagination_profile)
+	_refresh_battle_camera_for_presentation()
+
+
+func _refresh_battle_camera_for_presentation() -> void:
+	if phase != "combat" or combat == null or camera == null:
+		return
+	battle_camera_following = false
+	battle_camera_user_hold = false
+	_cancel_battle_camera_return()
+	battle_camera_target = _battle_follow_target_position()
+	_refit_battle_camera(true)
+	battle_camera_target = _battle_follow_target_position() + _battle_camera_frame_offset()
+	_apply_battle_camera()
 
 
 func _prepare_combat_entry_pose() -> void:
