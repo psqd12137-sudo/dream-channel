@@ -21,7 +21,11 @@ func _run() -> void:
 		"blur": game.presentation_settings.depth_of_field_blur_strength,
 		"focus": game.presentation_settings.depth_of_field_focus_width,
 	}
+	game.animation_duration_scale = 1.0
 	game.start_combat_lab("hall")
+	_check(game.active_animation_kind == "combat_entry", "imagination lab must use the existing combat entry animation")
+	_check(game.battle_presentation_root != null and game.battle_presentation_root.scale.x > 0.0, "presentation root must have a valid entry scale")
+	_check(game.battle_presentation_root != null and game.battle_presentation_root.has_meta("imagination_entry_stagger"), "imagination entry must expose profile-driven stagger metadata")
 	await process_frame
 	await process_frame
 	var camera := game.camera as Camera3D

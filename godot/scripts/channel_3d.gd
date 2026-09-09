@@ -2565,6 +2565,8 @@ func _refresh_battle_camera_for_presentation() -> void:
 func _prepare_combat_entry_pose() -> void:
 	battle_root.position = Vector3(0.0, 0.72, 0.0)
 	battle_root.scale = Vector3(0.92, 0.04, 0.92)
+	if combat_presentation_lab and battle_imagination_mode == "imagination" and battle_world_renderer != null:
+		battle_world_renderer.prepare_imagination_entry(battle_imagination_profile)
 	var player := battle_actor_root.get_node_or_null("Player") as Node3D
 	if player != null:
 		player.visible = false
@@ -2586,6 +2588,13 @@ func _animate_combat_entry(final_message: String) -> void:
 		return
 	battle_root.position = Vector3.ZERO
 	battle_root.scale = Vector3.ONE
+	if combat_presentation_lab and battle_imagination_mode == "imagination" and battle_world_renderer != null:
+		var stagger_tween: Tween = battle_world_renderer.play_imagination_entry_stagger(battle_imagination_profile)
+		if stagger_tween != null:
+			active_motion_tween = stagger_tween
+			await stagger_tween.finished
+			if active_motion_tween != stagger_tween:
+				return
 	var player := battle_actor_root.get_node_or_null("Player") as Node3D
 	var enemies_in_scene: Array[Node3D] = []
 	for enemy_id in enemy_nodes.keys():

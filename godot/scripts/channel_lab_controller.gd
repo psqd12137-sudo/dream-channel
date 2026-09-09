@@ -340,8 +340,12 @@ func start_combat_lab(room_id: String = "hall") -> void:
 	house_root.visible = false
 	if lab_root != null:
 		lab_root.visible = false
-	start_combat(room)
+	# The combat lab is a visual rehearsal space: retain the normal combat entry
+	# state lock, then let the imagination presenter supply its toybox timing.
+	start_combat(room, true)
 	host.set_battle_imagination_mode("imagination")
+	if host.battle_world_renderer != null:
+		host.battle_world_renderer.prepare_imagination_entry(host.battle_imagination_profile)
 	combat.hand.assign(["jab", "guard", "brace", "fling"])
 	status_message = "意图实验：未揭示怪物最多埋伏一拍，随后会巡逻；蓝色编号显示逐步路径。"
 	build_battle_world()

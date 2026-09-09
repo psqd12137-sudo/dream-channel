@@ -1837,6 +1837,7 @@ func _apply_battle_imagination_finish(mode: String, profile: Dictionary) -> void
 		if prop != null and prop.has_meta("battle_context_prop"):
 			props.append(prop)
 	for prop: Node3D in props:
+		_stop_imagination_idle_motion(prop)
 		prop.remove_meta("imagination_hero_prop")
 		if mode == "imagination":
 			_apply_toybox_material_family(prop, str(profile.get("material_family", "cardboard")))
@@ -1860,6 +1861,107 @@ func _apply_battle_imagination_finish(mode: String, profile: Dictionary) -> void
 		hero.set_meta("imagination_base_scale", hero.scale)
 	hero.scale = (hero.get_meta("imagination_base_scale", hero.scale) as Vector3) * clampf(float(profile.get("prop_scale", 1.0)), 1.0, 1.35)
 	hero.set_meta("imagination_hero_prop", true)
+	_start_imagination_idle_motion(hero, profile)
+
+
+func prepare_imagination_entry(profile: Dictionary) -> void:
+	if battle_presentation_root == null:
+		return
+	battle_presentation_root.set_meta("imagination_entry_stagger", clampf(float(profile.get("entry_stagger", 0.0)), 0.0, 1.0))
+	battle_presentation_root.set_meta("imagination_entry_active", true)
+
+
+func play_imagination_entry_stagger(profile: Dictionary) -> Tween:
+	if battle_board_root == null or battle_presentation_root == null:
+		return null
+	var staged: Array[Node3D] = []
+	var floor := battle_board_root.get_node_or_null("Cell_0_0") as Node3D
+	if floor != null:
+		staged.append(floor)
+	var shell := battle_board_root.get_node_or_null("BattleRoomShell") as Node3D
+	if shell != null:
+		staged.append(shell)
+	for raw_prop: Node in battle_board_root.find_children("*", "Node3D", true, false):
+		var prop := raw_prop as Node3D
+		if prop != null and prop.has_meta("imagination_hero_prop"):
+			staged.append(prop)
+			break
+	if staged.is_empty():
+		return null
+	var stagger: float = clampf(float(profile.get("entry_stagger", 0.08)), 0.03, 0.12) * host.animation_duration_scale
+	var tween: Tween = host.create_tween()
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	for node: Node3D in staged:
+		if not is_instance_valid(node):
+			continue
+		if node.has_meta("imagination_idle_motion"):
+			_stop_imagination_idle_motion(node)
+		var base_position := node.position
+		var base_scale := node.scale
+		node.set_meta("imagination_entry_base_position", base_position)
+		node.set_meta("imagination_entry_base_scale", base_scale)
+		node.position = base_position + Vector3(0.0, 0.18, 0.0)
+		node.scale = base_scale * Vector3(0.92, 0.78, 0.92)
+		tween.tween_property(node, "position", base_position, 0.16 * host.animation_duration_scale)
+		tween.parallel().tween_property(node, "scale", base_scale, 0.16 * host.animation_duration_scale)
+		tween.tween_interval(stagger)
+	tween.finished.connect(func() -> void:
+		if battle_presentation_root != null and is_instance_valid(battle_presentation_root):
+			battle_presentation_root.set_meta("imagination_entry_active", false)
+		for node: Node3D in staged:
+			if is_instance_valid(node) and node.has_meta("imagination_hero_prop"):
+				_start_imagination_idle_motion(node, profile)
+	, CONNECT_ONE_SHOT)
+	return tween
+
+
+func _start_imagination_idle_motion(prop: Node3D, profile: Dictionary) -> void:
+	if prop == null or not is_instance_valid(prop) or not host.combat_presentation_lab or host.battle_imagination_mode != "imagination":
+		return
+	var strength := clampf(float(profile.get("idle_motion_strength", 0.0)), 0.0, 1.0)
+	if strength <= 0.0:
+		return
+	var base_position := prop.position
+	var base_scale := prop.scale
+	prop.set_meta("imagination_idle_base_position", base_position)
+	prop.set_meta("imagination_idle_base_scale", base_scale)
+	prop.set_meta("imagination_idle_motion", strength)
+	var lift := lerpf(0.012, 0.035, strength)
+	var tween := prop.create_tween().set_loops()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(prop, "position:y", base_position.y + lift, 0.72)
+	tween.parallel().tween_property(prop, "scale", base_scale * Vector3(1.012, 0.985, 1.012), 0.72)
+	tween.tween_property(prop, "position:y", base_position.y, 0.72)
+	tween.parallel().tween_property(prop, "scale", base_scale, 0.72)
+	prop.set_meta("imagination_idle_tween", tween)
+
+
+func _stop_imagination_idle_motion(prop: Node3D) -> void:
+	if prop == null or not is_instance_valid(prop):
+		return
+	var tween: Tween = prop.get_meta("imagination_idle_tween") as Tween if prop.has_meta("imagination_idle_tween") else null
+	if tween != null and tween.is_valid():
+		tween.kill()
+	if prop.has_meta("imagination_idle_base_position"):
+		prop.position = prop.get_meta("imagination_idle_base_position", prop.position)
+	if prop.has_meta("imagination_idle_base_scale"):
+		prop.scale = prop.get_meta("imagination_idle_base_scale", prop.scale)
+	prop.remove_meta("imagination_idle_tween")
+	prop.remove_meta("imagination_idle_motion")
+
+
+func _play_imagination_action_feedback(actor: Node3D) -> void:
+	if actor == null or not is_instance_valid(actor) or not host.combat_presentation_lab or host.battle_imagination_mode != "imagination":
+		return
+	var strength := clampf(float(host.battle_imagination_profile.get("action_motion_strength", 0.0)), 0.0, 1.5)
+	if strength <= 0.0:
+		return
+	var base_scale := actor.scale
+	var squash := lerpf(1.03, 1.06, minf(1.0, strength))
+	var tween := actor.create_tween()
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(actor, "scale", base_scale * Vector3(squash, 0.94, squash), 0.08)
+	tween.tween_property(actor, "scale", base_scale, 0.13)
 
 
 func _apply_toybox_material_family(model: Node3D, family: String) -> void:
@@ -2195,6 +2297,9 @@ func _add_decoy_pawn(pos: Vector2i) -> void:
 
 
 func _play_actor_state(actor_node_name: String, state: String, callout: String = "") -> void:
+	var actor := battle_actor_root.get_node_or_null(actor_node_name) as Node3D
+	if state != "idle":
+		_play_imagination_action_feedback(actor)
 	var presenter: Node = battle_actor_root.get_node_or_null("%s/Presenter" % actor_node_name)
 	if presenter != null and presenter.has_method("play_state"):
 		presenter.play_state(state, callout)
@@ -2601,10 +2706,22 @@ func _apply_battle_room_cutaway() -> void:
 		var culled := outward.dot(viewer_direction) > threshold
 		full.visible = not culled
 		cutaway.visible = culled
+		if host.combat_presentation_lab and host.battle_imagination_mode == "imagination" and culled != was_culled:
+			_play_imagination_cutaway_bounce(cutaway if culled else full)
 		if culled:
 			battle_shell_culled_count += 1
 		else:
 			battle_shell_visible_count += 1
+
+
+func _play_imagination_cutaway_bounce(node: Node3D) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	node.scale = Vector3(0.86, 0.70, 0.86)
+	var tween := node.create_tween()
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(node, "scale", Vector3(1.04, 0.96, 1.04), 0.10)
+	tween.tween_property(node, "scale", Vector3.ONE, 0.06)
 
 
 func battle_room_shell_debug_state() -> Dictionary:
