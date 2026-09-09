@@ -57,6 +57,10 @@ func _run() -> void:
 	var rotated_projected := camera.unproject_position(game.battle_visual_world(cell))
 	_check(game.battle_cell_from_viewport(rotated_projected) == cell, "rotated scaled presentation must preserve battle picking")
 	_check(_all_battle_visual_cells_in_viewport(game, camera), "rotated imagination mode must keep every visual battle cell in view")
+	game.go_home()
+	_check(is_equal_approx(game.presentation_settings.depth_of_field_focus_width, float(dof_before["focus"])), "direct lab exit must restore the user's focus width")
+	_check(is_equal_approx(game.presentation_settings.depth_of_field_blur_strength, float(dof_before["blur"])), "direct lab exit must restore the user's blur strength")
+	_check(game.battle_lab_dof_restore.is_empty(), "direct lab exit must clear the saved DOF snapshot")
 	game.queue_free()
 	await process_frame
 	_finish()

@@ -971,6 +971,7 @@ func copy_current_seed() -> void:
 
 
 func go_home() -> void:
+	_clear_combat_lab_presentation_state()
 	if tactile_lab != null:
 		tactile_lab.close()
 	if phase == "world_boss" and combat != null:
@@ -3642,6 +3643,7 @@ func return_from_combat() -> void:
 		return
 	if animation_busy or phase != "combat" or combat == null or combat.outcome == "":
 		return
+	_clear_combat_lab_presentation_state()
 	if combat_is_boss:
 		_finish_boss_combat(combat.outcome == "victory")
 		return
@@ -4231,11 +4233,27 @@ func _apply_battle_imagination_dof() -> void:
 		presentation_settings.depth_of_field_blur_strength = clampf(float(battle_imagination_profile.get("dof_blur_strength", presentation_settings.depth_of_field_blur_strength)), 0.0, 12.0)
 		presentation_settings._apply_depth_of_field_state()
 		return
-	if not battle_lab_dof_restore.is_empty():
-		presentation_settings.depth_of_field_blur_strength = float(battle_lab_dof_restore.get("blur", presentation_settings.depth_of_field_blur_strength))
-		presentation_settings.depth_of_field_focus_width = float(battle_lab_dof_restore.get("focus", presentation_settings.depth_of_field_focus_width))
-		battle_lab_dof_restore.clear()
-		presentation_settings._apply_depth_of_field_state()
+	_restore_battle_lab_dof()
+
+
+func _restore_battle_lab_dof() -> void:
+	if presentation_settings == null or battle_lab_dof_restore.is_empty():
+		return
+	presentation_settings.depth_of_field_blur_strength = float(battle_lab_dof_restore.get("blur", presentation_settings.depth_of_field_blur_strength))
+	presentation_settings.depth_of_field_focus_width = float(battle_lab_dof_restore.get("focus", presentation_settings.depth_of_field_focus_width))
+	battle_lab_dof_restore.clear()
+	presentation_settings._apply_depth_of_field_state()
+
+
+func _clear_combat_lab_presentation_state() -> void:
+	if not combat_presentation_lab and battle_lab_dof_restore.is_empty():
+		return
+	_restore_battle_lab_dof()
+	if battle_world_renderer != null and battle_world_renderer.has_method("apply_battle_imagination_mode"):
+		battle_world_renderer.call("apply_battle_imagination_mode", "baseline", battle_imagination_profile)
+	battle_imagination_mode = "baseline"
+	combat_presentation_lab = false
+	_set_battle_neutral_lighting(true)
 
 
 func _apply_battle_imagination_lighting() -> void:
