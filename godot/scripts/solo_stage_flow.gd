@@ -84,9 +84,7 @@ func restore(data: Dictionary) -> bool:
 		return false
 	if not (saved_pending as Dictionary).is_empty() and (saved_results as Array).is_empty():
 		return false
-	version = VERSION
-	stage = saved_stage
-	results.clear()
+	var validated_results: Array[Dictionary] = []
 	for index in range((saved_results as Array).size()):
 		var raw: Variant = (saved_results as Array)[index]
 		if not raw is Dictionary:
@@ -96,7 +94,8 @@ func restore(data: Dictionary) -> bool:
 			return false
 		if not _is_result_shape_valid(record):
 			return false
-		results.append(record.duplicate(true))
+		validated_results.append(record.duplicate(true))
+	var validated_pending: Dictionary = {}
 	if not (saved_pending as Dictionary).is_empty():
 		var pending: Dictionary = saved_pending as Dictionary
 		if int(pending.get("stage", 0)) < 1 or int(pending.get("stage", 0)) > STAGE_COUNT:
@@ -105,10 +104,17 @@ func restore(data: Dictionary) -> bool:
 			return false
 		if not _is_result_shape_valid(pending):
 			return false
-	rng_state = str(data.get("rng_state", ""))
-	pending_result = (saved_pending as Dictionary).duplicate(true)
-	seed_value = int(data.get("seed", 0))
-	milestones = _read_milestones(data.get("milestones", [4, 8, 12]))
+		validated_pending = pending.duplicate(true)
+	var validated_rng_state := str(data.get("rng_state", ""))
+	var validated_seed := int(data.get("seed", 0))
+	var validated_milestones := _read_milestones(data.get("milestones", [4, 8, 12]))
+	version = VERSION
+	stage = saved_stage
+	results = validated_results
+	rng_state = validated_rng_state
+	pending_result = validated_pending
+	seed_value = validated_seed
+	milestones = validated_milestones
 	return true
 
 
