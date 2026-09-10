@@ -20,6 +20,7 @@ const HOME_TITLE_80S = preload("res://assets/ui/retro_broadcast/home_title_layer
 const TV_MASCOT = preload("res://assets/ui/retro_broadcast/teli-14.png")
 const APP_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Regular.otf")
 const DISPLAY_FONT: Font = preload("res://assets/fonts/SourceHanSansCN-Medium.otf")
+const DREAM_STAGE_PANEL = preload("res://scripts/dream_stage_panel.gd")
 
 const INK := Color("17151c")
 const DARK := Color("251b35")
@@ -171,6 +172,7 @@ var board_left_dragged := false
 var board_left_distance := 0.0
 var settings_panel_open := false
 var settings_slider_dragging := ""
+var dream_stage_panel = null
 
 
 func _ready() -> void:
@@ -200,6 +202,12 @@ func _ready() -> void:
 	seed_input.add_theme_stylebox_override("focus", seed_focus)
 	seed_input.text_submitted.connect(_submit_seed_input)
 	add_child(seed_input)
+	dream_stage_panel = DREAM_STAGE_PANEL.new()
+	dream_stage_panel.name = "DreamStagePanel"
+	dream_stage_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dream_stage_panel.submitted.connect(_on_dream_stage_submitted)
+	dream_stage_panel.reveal_finished.connect(_on_dream_stage_reveal_finished)
+	add_child(dream_stage_panel)
 	set_process_input(true)
 	sync_layout()
 
@@ -233,6 +241,8 @@ func _process(delta: float) -> void:
 		sync_layout()
 	if seed_input != null:
 		seed_input.visible = game != null and game.phase == "home"
+	if dream_stage_panel != null and game != null and not bool(game.get("dream_draw_active")):
+		dream_stage_panel.visible = false
 	# 离开战斗时清理残留的飞行动画状态
 	if game != null and game.phase not in ["combat", "world_boss"] and (not card_flight_offsets.is_empty() or not exiting_cards.is_empty() or not card_flight_tweens.is_empty()):
 		for raw_tween: Variant in card_flight_tweens.values():
@@ -493,6 +503,39 @@ func _draw() -> void:
 		_draw_settings_panel()
 	if game.phase in ["combat", "world_boss"] and not settings_panel_open:
 		_draw_status_tooltip()
+
+
+func show_dream_stage_panel(stage: int, records: Array[Dictionary], probabilities: Dictionary) -> void:
+	if dream_stage_panel == null:
+		return
+	dream_stage_panel.show_candidates(stage, records, probabilities)
+	dream_stage_panel.visible = true
+	dream_stage_panel.queue_redraw()
+
+
+func hide_dream_stage_panel() -> void:
+	if dream_stage_panel != null:
+		dream_stage_panel.visible = false
+
+
+func reject_dream_stage_submission(message: String) -> void:
+	if dream_stage_panel != null:
+		dream_stage_panel.reject_submission(message)
+
+
+func reveal_dream_stage(result: Dictionary, seconds: float) -> void:
+	if dream_stage_panel != null:
+		dream_stage_panel.reveal(result, seconds)
+
+
+func _on_dream_stage_submitted(nomination_id: String) -> void:
+	if game != null:
+		game.submit_dream_stage_nomination(nomination_id)
+
+
+func _on_dream_stage_reveal_finished() -> void:
+	if game != null:
+		game.finish_dream_stage_reveal()
 
 
 func _draw_top_bar() -> void:
@@ -2036,6 +2079,12 @@ func _gui_input(event: InputEvent) -> void:
 	if game == null:
 		return
 	_ensure_input_layout()
+	if dream_stage_panel != null and dream_stage_panel.visible:
+		# The draw panel owns the whole screen while a nomination is pending.
+		# Prevent clicks in its backdrop from leaking into map movement.
+		if event is InputEventMouseButton:
+			accept_event()
+			return
 	if event is InputEventMouseMotion:
 		var design_point := _to_design(event.position)
 		if settings_panel_open and not settings_slider_dragging.is_empty():

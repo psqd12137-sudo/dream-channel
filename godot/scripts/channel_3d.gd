@@ -14,6 +14,7 @@ const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd"
 const RunSaveRepository = preload("res://scripts/run_save_repository.gd")
 const SoloStageFlow = preload("res://scripts/solo_stage_flow.gd")
 const DreamRoomLedger = preload("res://scripts/dream_room_ledger.gd")
+const DreamDrawRules = preload("res://scripts/dream_draw_rules.gd")
 const BossProgression = preload("res://scripts/boss_progression.gd")
 const PresentationSettings = preload("res://scripts/presentation_settings.gd")
 const HouseWorldRenderer = preload("res://scripts/channel_house_world_renderer.gd")
@@ -176,6 +177,8 @@ var rng := RandomNumberGenerator.new()
 var run_save_repository = RunSaveRepository.new(RUN_SAVE_PATH, EXE_SOURCE_ID)
 var solo_stage_flow = SoloStageFlow.new()
 var solo_stage_trial_active := false
+var dream_draw_active := false
+var dream_draw_stage := 0
 var solo_trial_previous_repository = null
 var solo_stage_trial_config: Dictionary = {}
 var presentation_settings = null
@@ -876,6 +879,8 @@ func reset_run(seed_value: int = 0) -> void:
 	remaining_rooms = room_catalog.duplicate(true)
 	room_rules.reset(content.get("start_room", {}))
 	room_ledger = DreamRoomLedger.new()
+	dream_draw_active = false
+	dream_draw_stage = 0
 	combat_hp_loss_synced = 0
 	room_rules.placed[Vector2i.ZERO]["revealed"] = true
 	room_rules.placed[Vector2i.ZERO]["visited"] = true
@@ -1012,6 +1017,10 @@ func copy_current_seed() -> void:
 
 
 func go_home() -> void:
+	dream_draw_active = false
+	dream_draw_stage = 0
+	if hud != null:
+		hud.call("hide_dream_stage_panel")
 	_clear_combat_lab_presentation_state()
 	var tactile_camera_transform := Transform3D.IDENTITY
 	var tactile_camera_size := 0.0
@@ -1119,6 +1128,8 @@ func continue_saved_run() -> bool:
 	var saved_ledger: Variant = save.get("room_ledger", {})
 	if saved_ledger is Dictionary and not (saved_ledger as Dictionary).is_empty():
 		room_ledger.restore(saved_ledger as Dictionary)
+	dream_draw_active = solo_stage_trial_active and bool(save.get("dream_draw_active", false))
+	dream_draw_stage = int(save.get("dream_draw_stage", solo_stage_flow.due_stage(run_progress))) if dream_draw_active else 0
 	combat_hp_loss_synced = 0
 	var remaining_ids: Array = save.get("remaining_ids", [])
 	if str(save.get("phase", "")) != "world_boss":
@@ -1150,7 +1161,22 @@ func continue_saved_run() -> bool:
 	var saved_rng_state := str(save.get("rng_state", ""))
 	if saved_rng_state.is_valid_int():
 		rng.state = int(saved_rng_state)
+	if dream_draw_active:
+		_present_saved_dream_draw()
 	return true
+
+
+func _present_saved_dream_draw() -> void:
+	if not dream_draw_active or room_ledger == null or dream_draw_stage <= 0:
+		return
+	var excluded: Array[String] = []
+	for accepted: Dictionary in solo_stage_flow.results:
+		var selected_id := str(accepted.get("selected_id", ""))
+		if not selected_id.is_empty():
+			excluded.append(selected_id)
+	var candidates: Array[Dictionary] = room_ledger.candidates(excluded)
+	if candidates.size() >= 2:
+		hud.call("show_dream_stage_panel", dream_draw_stage, candidates, DreamDrawRules.probabilities(candidates, "", solo_stage_trial_config))
 
 
 func toggle_home_tests() -> void:
@@ -2532,14 +2558,81 @@ func _solo_stage_due_before_finale() -> bool:
 	var due := solo_stage_flow.due_stage(run_progress)
 	if due == 0:
 		return false
+	var excluded: Array[String] = []
+	for accepted: Dictionary in solo_stage_flow.results:
+		var selected_id := str(accepted.get("selected_id", ""))
+		if not selected_id.is_empty():
+			excluded.append(selected_id)
+	var candidates: Array[Dictionary] = room_ledger.candidates(excluded) if room_ledger != null else []
+	if candidates.size() < 2:
+		phase = "explore"
+		dream_draw_active = false
+		dream_draw_stage = 0
+		status_message = "还需要再探索一间未抽过的房间，节目才能抽片。"
+		build_house_world()
+		_save_run()
+		_refresh_hud()
+		return true
+	dream_draw_active = true
+	dream_draw_stage = due
 	phase = "explore"
 	house_camera_closeup = false
 	house_camera_following = false
-	status_message = "第 %d 阶段已到结算点：请在后台样片中提交信物或选择弃权。" % due
+	status_message = "第 %d 阶段已到结算点：把一间房交给节目，或本次弃权。" % due
+	build_house_world()
+	_save_run()
+	hud.call("show_dream_stage_panel", due, candidates, DreamDrawRules.probabilities(candidates, "", solo_stage_trial_config))
+	_refresh_hud()
+	return true
+
+
+func submit_dream_stage_nomination(nomination_id: String) -> void:
+	if not solo_stage_trial_active or not dream_draw_active or dream_draw_stage <= 0:
+		return
+	var excluded: Array[String] = []
+	for accepted: Dictionary in solo_stage_flow.results:
+		var selected_id := str(accepted.get("selected_id", ""))
+		if not selected_id.is_empty():
+			excluded.append(selected_id)
+	var candidates: Array[Dictionary] = room_ledger.candidates(excluded) if room_ledger != null else []
+	var probabilities: Dictionary = DreamDrawRules.probabilities(candidates, nomination_id, solo_stage_trial_config)
+	if probabilities.is_empty():
+		hud.call("reject_dream_stage_submission", "这项提名已失效；候选不足时不会偷偷锁定结局。")
+		return
+	var roll := rng.randf()
+	var selected_id := DreamDrawRules.pick(probabilities, roll)
+	if selected_id.is_empty():
+		hud.call("reject_dream_stage_submission", "节目暂时没有可抽取的候选。")
+		return
+	var draw_result := {
+		"stage": dream_draw_stage,
+		"nomination_id": nomination_id,
+		"selected_id": selected_id,
+		"probabilities": probabilities,
+		"roll": roll,
+		"abstained": nomination_id.is_empty(),
+	}
+	if not solo_stage_flow.accept_result(draw_result):
+		return
+	# Result and the consumed RNG state are persisted before animation begins.
+	solo_stage_flow.rng_state = str(rng.state)
+	_save_run()
+	hud.call("reveal_dream_stage", draw_result, float(solo_stage_trial_config.get("draw_animation_seconds", 2.0)))
+
+
+func finish_dream_stage_reveal() -> void:
+	if not dream_draw_active:
+		return
+	dream_draw_active = false
+	dream_draw_stage = 0
+	if solo_stage_flow.is_finale_ready():
+		status_message = "三份素材已经锁定；下一步将把它们编成终幕节目。"
+	else:
+		status_message = "素材已入档；继续探索，下一阶段会再次抽片。"
+	phase = "explore"
 	build_house_world()
 	_save_run()
 	_refresh_hud()
-	return true
 
 
 func start_event_trial(room: Dictionary) -> void:
@@ -3909,6 +4002,8 @@ func _save_run() -> void:
 		"stair_links": room_rules.stair_links.duplicate(true),
 		"remaining_ids": remaining_ids,
 		"room_ledger": room_ledger.snapshot() if room_ledger != null else {"version": 1, "records": []},
+		"dream_draw_active": dream_draw_active,
+		"dream_draw_stage": dream_draw_stage,
 	}
 	if solo_stage_trial_active:
 		payload["dream_stage"] = solo_stage_flow.snapshot()
