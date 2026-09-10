@@ -1144,6 +1144,30 @@ func start_tactile_lab() -> void:
 	sample.start()
 
 
+func start_formal_workshop_preview(room_id: String = "reference_workshop_demo") -> bool:
+	if tactile_lab == null:
+		start_tactile_lab()
+	return tactile_lab != null and tactile_lab.start_formal_workshop_preview(room_id)
+
+
+func enter_formal_tv_dream_preview() -> Dictionary:
+	if tactile_lab == null:
+		return {"ok": false, "error": "formal_preview_not_started"}
+	return tactile_lab.enter_formal_tv_dream_preview()
+
+
+func return_formal_workshop_preview() -> Dictionary:
+	if tactile_lab == null:
+		return {"ok": false, "error": "formal_preview_not_started"}
+	return tactile_lab.return_formal_workshop_preview()
+
+
+func formal_workshop_preview_snapshot() -> Dictionary:
+	if tactile_lab == null:
+		return {"ok": false, "error": "formal_preview_not_started"}
+	return tactile_lab.formal_preview_snapshot()
+
+
 func replay_toyhouse_sequence_lab() -> void:
 	lab_controller.replay_toyhouse_sequence_lab()
 

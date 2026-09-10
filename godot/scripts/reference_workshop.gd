@@ -27,6 +27,7 @@ func set_atmosphere(enabled: bool) -> void:
 func group(parent: Node3D, title: String, at: Vector3) -> Node3D:
 	var node := Node3D.new()
 	node.name = title
+	node.add_to_group(&"workshop_decor")
 	parent.add_child(node)
 	node.position = at
 	return node
@@ -37,6 +38,7 @@ func box(parent: Node3D, title: String, at: Vector3, size: Vector3, color: Strin
 func round_part(parent: Node3D, title: String, at: Vector3, radius: float, height: float, color: String, metal := false) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	node.name = title
+	node.add_to_group(&"workshop_decor")
 	var mesh := CylinderMesh.new()
 	mesh.top_radius = radius
 	mesh.bottom_radius = radius
@@ -55,6 +57,7 @@ func round_part(parent: Node3D, title: String, at: Vector3, radius: float, heigh
 func ring(parent: Node3D, title: String, at: Vector3, inner: float, outer: float, color: String) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	node.name = title
+	node.add_to_group(&"workshop_decor")
 	var mesh := TorusMesh.new()
 	mesh.inner_radius = inner
 	mesh.outer_radius = outer
@@ -72,6 +75,8 @@ func ring(parent: Node3D, title: String, at: Vector3, inner: float, outer: float
 func build(owner_lab) -> Node3D:
 	lab = owner_lab
 	root = group(lab.host.house_root, "ReferenceWorkshop", Vector3.ZERO)
+	root.set_meta("formal_room_id", "reference_workshop_demo")
+	root.set_meta("presentation_contract", "formal_workshop_profile")
 	var bounds := AABB(Vector3(-4, -0.8, -4), Vector3(8, 0.2, 8))
 	var benches = lab.host.house_root.find_children("ToyWorkbench", "MeshInstance3D", true, false)
 	if not benches.is_empty():

@@ -1,6 +1,8 @@
 extends RefCounted
 
 # Experimental presentation only. Room rules and assembly remain owned by the host.
+const FORMAL_ROOM_ID := "reference_workshop_demo"
+const FormalWorkshopProfile = preload("res://scripts/formal_workshop_profile.gd")
 var host
 var features: Array[bool] = [true, true, true, false]
 var mode_b := true
@@ -34,6 +36,8 @@ var camera_defaults: Dictionary = {}
 var generation := 0
 var playing := false
 var closed := false
+var formal_preview_room_id := ""
+var formal_preview_state := "workshop"
 
 func _init(game) -> void:
 	host = game
@@ -89,6 +93,7 @@ func start() -> void:
 	reference_root = reference_builder.build(self)
 	_capture_reference_material_details()
 	for node in host.house_root.find_children("ToyWorkbench*", "MeshInstance3D", true, false):
+		node.set_meta("formal_room_base", true)
 		reference_bases.append({"node": node, "visible": node.visible})
 	joinery = load("res://scripts/toy_workshop_joinery.gd").new()
 	joinery.build(self)
@@ -132,6 +137,46 @@ func set_reference_mode() -> void:
 	_apply()
 	if restart:
 		replay()
+
+func start_formal_workshop_preview(room_id: String = FORMAL_ROOM_ID) -> bool:
+	var profile := FormalWorkshopProfile.for_room(room_id)
+	if profile.has("error") or not is_instance_valid(reference_root):
+		return false
+	formal_preview_room_id = room_id
+	formal_preview_state = "workshop"
+	reference_root.scale = Vector3.ONE
+	reference_root.set_meta("formal_room_id", room_id)
+	reference_root.set_meta("projection_layer", "workshop")
+	set_reference_mode()
+	return true
+
+func enter_formal_tv_dream_preview() -> Dictionary:
+	if formal_preview_room_id.is_empty() or not is_instance_valid(reference_root):
+		return {"ok": false, "error": "formal_preview_not_started"}
+	formal_preview_state = "tv_dream"
+	reference_root.scale = Vector3.ONE * 1.08
+	reference_root.set_meta("projection_layer", "tv_dream")
+	host.status_message = "电视梦境投射：房间轮廓保留，比例允许夸张。"
+	return formal_preview_snapshot()
+
+func return_formal_workshop_preview() -> Dictionary:
+	if formal_preview_room_id.is_empty() or not is_instance_valid(reference_root):
+		return {"ok": false, "error": "formal_preview_not_started"}
+	formal_preview_state = "workshop"
+	reference_root.scale = Vector3.ONE
+	reference_root.set_meta("projection_layer", "workshop")
+	host.status_message = "梦醒返回工坊：同一间实体房间恢复原构图。"
+	return formal_preview_snapshot()
+
+func formal_preview_snapshot() -> Dictionary:
+	var profile := FormalWorkshopProfile.for_room(formal_preview_room_id)
+	return {
+		"ok": not profile.has("error"),
+		"room_id": formal_preview_room_id,
+		"state": formal_preview_state,
+		"outline": profile.get("room_presentation", {}).get("main_furniture_outline", ""),
+		"projection_layer": reference_root.get_meta("projection_layer", "") if is_instance_valid(reference_root) else ""
+	}
 
 func update_reference_view() -> void:
 	if is_instance_valid(reference_root):
@@ -284,6 +329,8 @@ func close() -> void:
 	if closed:
 		return
 	_stop_replay()
+	if is_instance_valid(reference_root):
+		reference_root.scale = Vector3.ONE
 	closed = true
 	if joinery != null:
 		joinery.close()
