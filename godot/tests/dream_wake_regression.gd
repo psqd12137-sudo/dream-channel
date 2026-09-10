@@ -89,6 +89,8 @@ func _run() -> void:
 	game.run_save_repository = load("res://scripts/run_save_repository.gd").new("user://dream_wake_regression_run.json", game.EXE_SOURCE_ID)
 	game.run_save_repository.clear()
 	game.start_host_preview()
+	game.solo_stage_trial_active = true
+	game.solo_stage_trial_config = {"milestones": [4, 8, 12]}
 	game.boss_preview_active = false
 	game.begin_boss_combat()
 	_check(game.combat != null, "production Boss setup reaches the final combat")
@@ -109,13 +111,17 @@ func _run() -> void:
 	await process_frame
 	resumed.finish_ending()
 	_check(resumed.phase == "home" and not resumed.run_save_repository.exists(), "confirming the ending clears the isolated run save")
+	var formal_path := str(game.RUN_SAVE_PATH)
+	var formal_existed_before := FileAccess.file_exists(formal_path)
+	var formal_fingerprint_before := _file_fingerprint(formal_path) if formal_existed_before else PackedByteArray()
 	game.queue_free()
 	resumed.queue_free()
 	await process_frame
 
 	# A sample run is written under its isolated path, then a fresh controller
 	# starts with the formal repository exactly as a new process would.
-	var formal_repository = load("res://scripts/run_save_repository.gd").new("user://channel_run_v1.json", "CabinSlice_织梦频道.exe@EEC4C574CC22")
+	var isolated_formal_path := "user://dream_wake_regression_formal.json"
+	var formal_repository = load("res://scripts/run_save_repository.gd").new(isolated_formal_path, "CabinSlice_织梦频道.exe@EEC4C574CC22")
 	var sample_repository = load("res://scripts/run_save_repository.gd").new("user://solo_stage_trial_v1.json", "CabinSlice_织梦频道.exe@EEC4C574CC22")
 	formal_repository.clear()
 	sample_repository.clear()
@@ -150,20 +156,54 @@ func _run() -> void:
 	sample_writer.ending_recap = {"outcome": "victory", "success": true, "cards": victory_recap.cards}
 	sample_writer._save_run()
 	_check(sample_repository.exists(), "sample ending writes the isolated checkpoint")
+	formal_repository.write(formal_sentinel)
+	var both_controller = load("res://channel_3d.tscn").instantiate()
+	root.add_child(both_controller)
+	await process_frame
+	both_controller.formal_run_save_path = isolated_formal_path
+	both_controller.run_save_repository = formal_repository
+	both_controller.solo_stage_trial_active = false
+	_check(both_controller.has_saved_run() and not both_controller.solo_stage_trial_active and both_controller.run_save_repository.save_path == isolated_formal_path, "formal continue remains first when formal and sample checkpoints coexist")
+	both_controller.queue_free()
+	await process_frame
 	sample_writer.queue_free()
 	await process_frame
 	var auto_resumed = load("res://channel_3d.tscn").instantiate()
 	auto_resumed.animation_duration_scale = 0.0
 	root.add_child(auto_resumed)
 	await process_frame
-	_check(auto_resumed.has_saved_run(), "home continue discovers an orphaned sample save")
+	auto_resumed.formal_run_save_path = isolated_formal_path
+	auto_resumed.run_save_repository = formal_repository
+	auto_resumed.solo_stage_trial_active = false
+	auto_resumed.solo_trial_previous_repository = null
+	_check(auto_resumed.has_solo_stage_trial_save(), "home exposes an orphaned sample save")
+	var continued_sample: bool = auto_resumed.continue_solo_stage_trial()
+	_check(continued_sample, "explicit sample continue restores the isolated repository")
 	_check(auto_resumed.solo_stage_trial_active and auto_resumed.run_save_repository.save_path == auto_resumed.SOLO_STAGE_TRIAL_SAVE_PATH, "sample discovery adopts the isolated repository and config")
 	_check(auto_resumed.continue_saved_run(), "fresh controller restores the sample ending")
 	_check(auto_resumed.phase == "ending" and auto_resumed.ending_pending and auto_resumed.ending_outcome == "victory", "sample ending resumes with the same outcome")
 	await process_frame
 	auto_resumed.dream_wake_presentation.skip()
 	auto_resumed.finish_ending()
-	_check(not sample_repository.exists() and not formal_repository.exists(), "confirming the sample ending clears only the isolated run")
+	_check(not sample_repository.exists() and formal_repository.read() == formal_sentinel, "confirming the sample ending clears only the isolated run")
+	_check(FileAccess.file_exists(formal_path) == formal_existed_before, "wake sample never creates or removes the formal save")
+	_check((not formal_existed_before) or _file_fingerprint(formal_path) == formal_fingerprint_before, "wake sample never changes the formal save bytes")
+	var formal_game = load("res://channel_3d.tscn").instantiate()
+	formal_game.animation_duration_scale = 0.0
+	root.add_child(formal_game)
+	await process_frame
+	formal_game.run_save_repository = load("res://scripts/run_save_repository.gd").new("user://dream_wake_regression_formal_flow.json", formal_game.EXE_SOURCE_ID)
+	formal_game.start_host_preview()
+	formal_game.boss_preview_active = false
+	formal_game.begin_boss_combat()
+	if formal_game.combat != null:
+		formal_game.combat.outcome = "victory"
+		formal_game.return_from_combat()
+	_check(not formal_game.ending_pending and not formal_game.dream_wake_presentation.is_playing(), "formal ending keeps the original ending UI without sample presentation")
+	_check(not JSON.stringify(formal_game.current_ending()).contains("素材") and not JSON.stringify(formal_game.current_ending()).contains("样片"), "formal ending contains no sample recap copy")
+	formal_game.finish_ending()
+	formal_game.queue_free()
+	await process_frame
 	auto_resumed.queue_free()
 	await process_frame
 
@@ -176,6 +216,12 @@ func _run() -> void:
 func _check(ok: bool, message: String) -> void:
 	if not ok:
 		failures.append(message)
+
+
+func _file_fingerprint(path: String) -> PackedByteArray:
+	if not FileAccess.file_exists(path):
+		return PackedByteArray()
+	return FileAccess.get_file_as_bytes(path)
 
 
 func _fail_and_quit() -> void:

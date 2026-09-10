@@ -6,6 +6,8 @@ const DreamDrawRules = preload("res://scripts/dream_draw_rules.gd")
 signal submitted(nomination_id: String)
 signal reveal_finished()
 signal program_requested(program_entry: Dictionary)
+signal program_confirmed(program_entry: Dictionary)
+signal recap_continue()
 
 const INK := Color("17151c")
 const PAPER := Color("fff3df")
@@ -27,8 +29,15 @@ var reveal_only := false
 var _buttons: Array[Button] = []
 var _abstain_button: Button
 var _program_button: Button
+var _confirm_program_button: Button
+var _recap_continue_button: Button
+var _page_prev_button: Button
+var _page_next_button: Button
+var _page_label: Label
 var _message := ""
 var _program_entry: Dictionary = {}
+var _page_index := 0
+const CANDIDATES_PER_PAGE := 3
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -51,6 +60,7 @@ func show_candidates(next_stage: int, next_records: Array[Dictionary], probabili
 	revealing = false
 	reveal_finished_once = false
 	reveal_only = false
+	_page_index = 0
 	_message = "选择一间房，把它交给这一阶段的节目；也可以本次弃权。"
 	_rebuild_buttons()
 	visible = true
@@ -111,6 +121,8 @@ func _finish_reveal() -> void:
 	_program_entry = _read_program_entry()
 	if _program_button != null and stage >= 3:
 		_program_button.visible = true
+	if _recap_continue_button != null and stage < 3:
+		_recap_continue_button.visible = true
 	queue_redraw()
 	reveal_finished.emit()
 
@@ -121,6 +133,51 @@ func _request_program() -> void:
 	if _program_button != null:
 		_program_button.disabled = true
 	program_requested.emit(_program_entry.duplicate(true))
+
+
+func _confirm_program() -> void:
+	if _program_entry.is_empty() or _confirm_program_button == null or _confirm_program_button.disabled:
+		return
+	_confirm_program_button.disabled = true
+	program_confirmed.emit(_program_entry.duplicate(true))
+
+
+func _continue_recap() -> void:
+	if revealing or not reveal_finished_once:
+		return
+	visible = false
+	recap_continue.emit()
+
+
+func candidate_page_count() -> int:
+	return maxi(1, ceili(float(records.size()) / float(CANDIDATES_PER_PAGE)))
+
+
+func visible_candidate_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for button: Button in _buttons:
+		if button.visible:
+			ids.append(button.name.trim_prefix("Nominate_"))
+	return ids
+
+
+func holds_recap() -> bool:
+	return _recap_continue_button != null and _recap_continue_button.visible and reveal_finished_once
+
+
+func _set_page(next_page: int) -> void:
+	_page_index = clampi(next_page, 0, candidate_page_count() - 1)
+	_rebuild_buttons()
+
+
+func _set_page_controls() -> void:
+	var page_count := candidate_page_count()
+	if _page_prev_button != null:
+		_page_prev_button.disabled = _page_index <= 0
+	if _page_next_button != null:
+		_page_next_button.disabled = _page_index >= page_count - 1
+	if _page_label != null:
+		_page_label.text = "候选第 %d/%d 页" % [_page_index + 1, page_count]
 
 
 func _submit(instance_id: String) -> void:
@@ -143,12 +200,29 @@ func _rebuild_buttons() -> void:
 	if _program_button != null:
 		_program_button.queue_free()
 		_program_button = null
-	for index in range(records.size()):
+	if _confirm_program_button != null:
+		_confirm_program_button.queue_free()
+		_confirm_program_button = null
+	if _recap_continue_button != null:
+		_recap_continue_button.queue_free()
+		_recap_continue_button = null
+	if _page_prev_button != null:
+		_page_prev_button.queue_free()
+		_page_prev_button = null
+	if _page_next_button != null:
+		_page_next_button.queue_free()
+		_page_next_button = null
+	if _page_label != null:
+		_page_label.queue_free()
+		_page_label = null
+	var first_index := _page_index * CANDIDATES_PER_PAGE
+	var last_index := mini(records.size(), first_index + CANDIDATES_PER_PAGE)
+	for index in range(first_index, last_index):
 		var record: Dictionary = records[index]
 		var button := Button.new()
 		button.name = "Nominate_%s" % str(record.get("instance_id", index))
 		button.text = _candidate_text(record)
-		button.position = Vector2(220.0, 205.0 + index * 92.0)
+		button.position = Vector2(220.0, 205.0 + (index - first_index) * 92.0)
 		button.size = Vector2(840.0, 72.0)
 		button.add_theme_font_size_override("font_size", 18)
 		button.add_theme_color_override("font_color", INK)
@@ -172,6 +246,32 @@ func _rebuild_buttons() -> void:
 	_abstain_button.add_theme_stylebox_override("hover", _button_style(Color("65747a"), PAPER))
 	_abstain_button.pressed.connect(func() -> void: _submit(""))
 	add_child(_abstain_button)
+	_page_prev_button = Button.new()
+	_page_prev_button.name = "CandidatePrev"
+	_page_prev_button.text = "上一页"
+	_page_prev_button.position = Vector2(220.0, 485.0)
+	_page_prev_button.size = Vector2(130.0, 38.0)
+	_page_prev_button.pressed.connect(func() -> void: _set_page(_page_index - 1))
+	_page_prev_button.add_theme_color_override("font_color", INK)
+	_page_prev_button.add_theme_stylebox_override("normal", _button_style(Color("d7e6df"), TEAL))
+	add_child(_page_prev_button)
+	_page_next_button = Button.new()
+	_page_next_button.name = "CandidateNext"
+	_page_next_button.text = "下一页"
+	_page_next_button.position = Vector2(990.0, 485.0)
+	_page_next_button.size = Vector2(130.0, 38.0)
+	_page_next_button.pressed.connect(func() -> void: _set_page(_page_index + 1))
+	_page_next_button.add_theme_color_override("font_color", INK)
+	_page_next_button.add_theme_stylebox_override("normal", _button_style(Color("d7e6df"), TEAL))
+	add_child(_page_next_button)
+	_page_label = Label.new()
+	_page_label.name = "CandidatePage"
+	_page_label.position = Vector2(650.0, 492.0)
+	_page_label.size = Vector2(180.0, 28.0)
+	_page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_page_label.add_theme_color_override("font_color", MUTED)
+	add_child(_page_label)
+	_set_page_controls()
 	if stage >= 3:
 		_program_button = Button.new()
 		_program_button.name = "OpenProgramList"
@@ -185,6 +285,30 @@ func _rebuild_buttons() -> void:
 		_program_button.add_theme_stylebox_override("hover", _button_style(Color("fff3a5"), MAGENTA))
 		_program_button.pressed.connect(_request_program)
 		add_child(_program_button)
+		_confirm_program_button = Button.new()
+		_confirm_program_button.name = "ConfirmProgram"
+		_confirm_program_button.text = "确认节目单 · 进入终幕"
+		_confirm_program_button.position = Vector2(790.0, 610.0)
+		_confirm_program_button.size = Vector2(300.0, 48.0)
+		_confirm_program_button.visible = false
+		_confirm_program_button.add_theme_font_size_override("font_size", 17)
+		_confirm_program_button.add_theme_color_override("font_color", INK)
+		_confirm_program_button.add_theme_stylebox_override("normal", _button_style(GOLD, MAGENTA))
+		_confirm_program_button.add_theme_stylebox_override("hover", _button_style(Color("fff3a5"), MAGENTA))
+		_confirm_program_button.pressed.connect(_confirm_program)
+		add_child(_confirm_program_button)
+	else:
+		_recap_continue_button = Button.new()
+		_recap_continue_button.name = "ContinueRecap"
+		_recap_continue_button.text = "看完回顾 · 继续探索"
+		_recap_continue_button.position = Vector2(790.0, 610.0)
+		_recap_continue_button.size = Vector2(300.0, 48.0)
+		_recap_continue_button.visible = false
+		_recap_continue_button.add_theme_font_size_override("font_size", 17)
+		_recap_continue_button.add_theme_color_override("font_color", INK)
+		_recap_continue_button.add_theme_stylebox_override("normal", _button_style(TEAL, GOLD))
+		_recap_continue_button.pressed.connect(_continue_recap)
+		add_child(_recap_continue_button)
 
 
 func _set_buttons_disabled(disabled: bool) -> void:
@@ -192,6 +316,10 @@ func _set_buttons_disabled(disabled: bool) -> void:
 		button.disabled = disabled
 	if _abstain_button != null:
 		_abstain_button.disabled = disabled
+	if _page_prev_button != null:
+		_page_prev_button.disabled = disabled or _page_index <= 0
+	if _page_next_button != null:
+		_page_next_button.disabled = disabled or _page_index >= candidate_page_count() - 1
 
 
 func _button_style(fill: Color, border: Color) -> StyleBoxFlat:
@@ -262,11 +390,26 @@ func show_program_placeholder(program_entry: Dictionary) -> void:
 		var first_name := str(source_names[0]) if source_names.size() > 0 else str(source_ids[0])
 		var second_name := str(source_names[1]) if source_names.size() > 1 else str(source_ids[1])
 		var third_name := str(source_names[2]) if source_names.size() > 2 else str(source_ids[2])
-		_message = "节目单已打开：① %s→%s；② %s→%s；③ %s→%s。" % [first_name, str(profile.get("route_rule", "")), second_name, str(profile.get("anchor_rule", "")), third_name, str(profile.get("climax_rule", ""))]
+		_message = "节目单已打开：① %s→%s；② %s→%s；③ %s→%s。" % [first_name, _friendly_rule(str(profile.get("route_rule", ""))), second_name, _friendly_rule(str(profile.get("anchor_rule", ""))), third_name, _friendly_rule(str(profile.get("climax_rule", "")))]
 	else:
 		_message = "节目单已打开：%d 份素材已锁定；终幕规则将在节目配置阶段接入。" % source_ids.size()
+	if _confirm_program_button != null:
+		_program_button.visible = false
+		_confirm_program_button.disabled = false
+		_confirm_program_button.visible = true
 	visible = true
 	queue_redraw()
+
+
+func _friendly_rule(rule: String) -> String:
+	return {
+		"long_charge": "长蓄力冲刺4格",
+		"short_charge": "短蓄力冲刺2格",
+		"relay": "接力返还行动力",
+		"breather": "喘息恢复",
+		"double_sweep": "双重扫场",
+		"spotlight": "聚光灯锁定",
+	}.get(rule, rule)
 
 
 func _draw() -> void:

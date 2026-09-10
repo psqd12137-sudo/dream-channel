@@ -97,6 +97,7 @@ const ENEMY_INTEL_RECT := Rect2(1000, 300, 260, 58)
 const HOME_START_RECT := Rect2(76, 610, 300, 58)
 const HOME_TUTORIAL_RECT := Rect2(390, 610, 148, 48)
 const HOME_CONTINUE_RECT := Rect2(550, 610, 174, 48)
+const HOME_SAMPLE_CONTINUE_RECT := Rect2(550, 664, 174, 36)
 const HOME_SEED_INPUT_RECT := Rect2(762, 616, 292, 38)
 const HOME_SEED_START_RECT := Rect2(762, 666, 138, 38)
 const HOME_SEED_COPY_RECT := Rect2(916, 666, 138, 38)
@@ -208,6 +209,8 @@ func _ready() -> void:
 	dream_stage_panel.submitted.connect(_on_dream_stage_submitted)
 	dream_stage_panel.reveal_finished.connect(_on_dream_stage_reveal_finished)
 	dream_stage_panel.program_requested.connect(_on_dream_program_requested)
+	dream_stage_panel.program_confirmed.connect(_on_dream_program_confirmed)
+	dream_stage_panel.recap_continue.connect(_on_dream_recap_continue)
 	add_child(dream_stage_panel)
 	set_process_input(true)
 	sync_layout()
@@ -242,7 +245,7 @@ func _process(delta: float) -> void:
 		sync_layout()
 	if seed_input != null:
 		seed_input.visible = game != null and game.phase == "home"
-	if dream_stage_panel != null and game != null and not bool(game.get("dream_draw_active")) and not bool(game.get("dream_program_available")):
+	if dream_stage_panel != null and game != null and not bool(game.get("dream_draw_active")) and not bool(game.get("dream_program_available")) and not dream_stage_panel.holds_recap():
 		dream_stage_panel.visible = false
 	# 离开战斗时清理残留的飞行动画状态
 	if game != null and game.phase not in ["combat", "world_boss"] and (not card_flight_offsets.is_empty() or not exiting_cards.is_empty() or not card_flight_tweens.is_empty()):
@@ -544,6 +547,19 @@ func show_dream_program_placeholder(program_entry: Dictionary) -> void:
 		dream_stage_panel.show_program_placeholder(program_entry)
 
 
+func _on_dream_program_confirmed(program_entry: Dictionary) -> void:
+	if game != null:
+		dream_stage_panel.visible = false
+		game.begin_boss_combat()
+
+
+func _on_dream_recap_continue() -> void:
+	if dream_stage_panel != null:
+		dream_stage_panel.visible = false
+		dream_stage_panel.queue_redraw()
+	queue_redraw()
+
+
 func _on_dream_stage_submitted(nomination_id: String) -> void:
 	if game != null:
 		game.submit_dream_stage_nomination(nomination_id)
@@ -657,8 +673,14 @@ func _draw_home() -> void:
 	_label("纸盒布景正在失控 · 旋开电视，开始这一集", Vector2(202, 598), 12, MUTED)
 	_draw_button(HOME_START_RECT, "打开电视机", MAGENTA, TEXT)
 	_draw_button(HOME_TUTORIAL_RECT, "新手教学", BLUE, TEXT)
-	if game.has_saved_run():
+	var has_formal_save: bool = game.has_formal_saved_run() if game.has_method("has_formal_saved_run") else game.has_saved_run()
+	var has_sample_save: bool = game.has_solo_stage_trial_save() if game.has_method("has_solo_stage_trial_save") else false
+	if has_formal_save:
 		_draw_button(HOME_CONTINUE_RECT, "接着看上集", TEAL, TEXT)
+	elif game.has_saved_run():
+		_draw_button(HOME_CONTINUE_RECT, "接着看样片", TEAL, TEXT)
+	if has_formal_save and has_sample_save:
+		_draw_button(HOME_SAMPLE_CONTINUE_RECT, "继续三阶段样片", MAGENTA, TEXT)
 	_draw_ticket_panel(Rect2(744, 590, 330, 128), Color("fff3dff2"), TEAL)
 	_label("自定义播出", Vector2(762, 612), 11, INK)
 	_draw_button(HOME_SEED_START_RECT, "按种子开局", TEAL, TEXT)
@@ -917,6 +939,16 @@ func _draw_ending_screen() -> void:
 	_display_label("织梦频道", Vector2(500, 96), 30, BLUE)
 	_label("本集播出完毕", Vector2(552, 140), 13, MUTED)
 	var accent := GREEN if bool(ending.get("success", false)) else RED
+	if not game.solo_stage_trial_active:
+		draw_rect(Rect2(310, 190, 660, 390), Color("171d26f5"), true)
+		draw_rect(Rect2(310, 190, 660, 390), accent, false, 3.0)
+		_draw_chip(Rect2(354, 226, 130, 28), "成功" if bool(ending.get("success", false)) else "信号中断", accent, TEXT, 11)
+		_display_label(str(ending.get("title", "结局")), Vector2(354, 314), 34, GOLD)
+		_label("对手：%s" % str(ending.get("boss_name", "未知")), Vector2(356, 356), 14, PAPER)
+		_draw_wrapped(str(ending.get("boss_message", "节目结束。")), Vector2(356, 398), 568, 15, MUTED)
+		_draw_wrapped(str(ending.get("text", "电视熄灭。")), Vector2(356, 470), 568, 14, PAPER_2)
+		_draw_button(ENDING_CONTINUE_RECT, "回到标题", TEAL, TEXT)
+		return
 	draw_rect(Rect2(250, 180, 780, 430), Color("171d26f5"), true)
 	draw_rect(Rect2(250, 180, 780, 430), accent, false, 3.0)
 	_draw_chip(Rect2(354, 226, 130, 28), "成功" if bool(ending.get("success", false)) else "信号中断", accent, TEXT, 11)
@@ -2353,6 +2385,10 @@ func _gui_input(event: InputEvent) -> void:
 			game.start_new_run(false)
 		elif HOME_TUTORIAL_RECT.has_point(point):
 			game.start_new_run(true)
+		elif game.has_formal_saved_run() and HOME_CONTINUE_RECT.has_point(point):
+			game.continue_saved_run()
+		elif game.has_solo_stage_trial_save() and HOME_SAMPLE_CONTINUE_RECT.has_point(point):
+			game.continue_solo_stage_trial()
 		elif game.has_saved_run() and HOME_CONTINUE_RECT.has_point(point):
 			game.continue_saved_run()
 		elif HOME_SEED_START_RECT.has_point(point):

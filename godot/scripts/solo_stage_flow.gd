@@ -14,6 +14,7 @@ var rng_state := ""
 var pending_result: Dictionary = {}
 var seed_value := 0
 var milestones: Array[int] = [4, 8, 12]
+var dream_rng := RandomNumberGenerator.new()
 
 func reset(next_seed: int, config: Dictionary) -> void:
 	seed_value = next_seed
@@ -25,6 +26,14 @@ func reset(next_seed: int, config: Dictionary) -> void:
 	var generator := RandomNumberGenerator.new()
 	generator.seed = next_seed if next_seed != 0 else 1
 	rng_state = str(generator.state)
+	dream_rng.seed = next_seed if next_seed != 0 else 1
+	dream_rng.state = int(rng_state)
+
+
+func next_draw_roll() -> float:
+	var roll := dream_rng.randf()
+	rng_state = str(dream_rng.state)
+	return roll
 
 
 func due_stage(completed_count: int) -> int:
@@ -115,6 +124,9 @@ func restore(data: Dictionary) -> bool:
 	pending_result = validated_pending
 	seed_value = validated_seed
 	milestones = validated_milestones
+	dream_rng.seed = validated_seed if validated_seed != 0 else 1
+	if validated_rng_state.is_valid_int():
+		dream_rng.state = int(validated_rng_state)
 	return true
 
 

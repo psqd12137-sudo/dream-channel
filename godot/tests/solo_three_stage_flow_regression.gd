@@ -89,8 +89,11 @@ func _run() -> void:
 	for raw_source_name: Variant in source_names:
 		mapping_has_names = mapping_has_names and game.hud.dream_stage_panel._message.contains(str(raw_source_name))
 	_check(source_names.size() == 3 and mapping_has_names, "节目单映射显示真实房间名称")
-	game.animation_duration_scale = 1.0
-	game.begin_boss_combat()
+	var confirm_program_button: Button = game.hud.dream_stage_panel.get_node_or_null("ConfirmProgram") as Button
+	_check(confirm_program_button != null and confirm_program_button.visible, "节目单提供明确的终幕确认入口")
+	if confirm_program_button != null:
+		game.animation_duration_scale = 1.0
+		confirm_program_button.emit_signal("pressed")
 	_check(game.phase == "boss_ready" and game.dream_intro_pending, "节目单确认后先进入 Boss 入场演出")
 	_check(game.dream_wake_presentation.current_outcome == "program_intro" and game.dream_wake_presentation.active_card_index == 0, "Boss 入场演出从第一张素材开始")
 	_check(game.run_save_repository.read().get("dream_intro_pending", false), "Boss 入场演出状态写入运行存档")
@@ -119,6 +122,8 @@ func _run() -> void:
 	await _run_all_abstain_variant(abstain_path)
 	await _run_candidate_shortage_variant("user://solo_three_stage_flow_regression_shortage.json")
 	await _run_sample_defeat_variant("user://solo_three_stage_flow_regression_defeat.json")
+	await _run_formal_sample_boundary_variant()
+	await _run_event_failure_gate_variant()
 	_check(FileAccess.file_exists(formal_path) == formal_existed_before, "sample runs do not create or remove the formal save")
 	_check((not formal_existed_before) or _file_fingerprint(formal_path) == formal_fingerprint_before, "formal save byte fingerprint is unchanged after sample runs")
 	if failures.is_empty():
@@ -237,6 +242,58 @@ func _run_sample_defeat_variant(save_path: String) -> void:
 	var progress_after_defeat := int(trial.run_progress)
 	trial.return_from_combat()
 	_check(int(trial.run_progress) == progress_after_defeat, "样片普通房失败不能重复刷进度")
+	trial.go_home()
+	trial.queue_free()
+	await process_frame
+
+
+func _run_formal_sample_boundary_variant() -> void:
+	var trial = await _new_trial_game("user://solo_three_stage_flow_regression_boundary.json", 20260915)
+	var combat_room: Dictionary = {}
+	for candidate: Dictionary in trial.room_catalog:
+		if str(candidate.get("kind", "")) == "combat":
+			combat_room = candidate.duplicate(true)
+			break
+	if combat_room.is_empty():
+		return
+	var target := Vector2i(1, 0)
+	trial.run_progress = 3
+	combat_room["instance_id"] = "boundary-room@1,0"
+	trial.room_rules.placed[target] = combat_room
+	trial.current_room_pos = target
+	trial._finish_enter_room(target)
+	trial.resolve_current_room()
+	if trial.combat != null:
+		var enemy = trial.combat.enemy_by_id(trial.combat.enemy_order[0])
+		trial.combat._apply_player_hit(enemy, "melee", 999)
+		trial.return_from_combat()
+	_check(trial.dream_draw_active, "第4节点普通战斗失败立即打开阶段抽片")
+	trial.go_home()
+	trial.queue_free()
+	await process_frame
+
+
+func _run_event_failure_gate_variant() -> void:
+	var trial = await _new_trial_game("user://solo_three_stage_flow_regression_event_failure.json", 20260917)
+	var event_room: Dictionary = {}
+	for candidate: Dictionary in trial.room_catalog:
+		if str(candidate.get("kind", "")) == "event":
+			event_room = candidate.duplicate(true)
+			break
+	if event_room.is_empty():
+		return
+	var target := Vector2i(1, 0)
+	event_room["instance_id"] = "event-boundary@1,0"
+	event_room["completed"] = false
+	event_room["visited"] = true
+	trial.room_rules.placed[target] = event_room
+	trial.current_room_pos = target
+	trial.event_room_pos = target
+	trial.event_context = "puzzle"
+	trial.solo_stage_flow.accept_result({"stage": 1, "selected_id": "seed"})
+	trial.run_progress = 7
+	trial.finish_event_trial(false)
+	_check(trial.dream_draw_active and trial.dream_draw_stage == 2, "第8节点事件失败立即打开第二阶段抽片")
 	trial.go_home()
 	trial.queue_free()
 	await process_frame

@@ -40,8 +40,29 @@ func _run() -> void:
 	_check(panel.get_node_or_null("OpenProgramList").visible, "stage three exposes an actual program list button")
 	panel.get_node_or_null("OpenProgramList").emit_signal("pressed")
 	_check(requested_program.get("source_ids", []) == ["a", "b", "c"], "program handoff preserves saved source ids")
-	panel.show_program_placeholder({"type": "dream_finale_program", "source_ids": ["a", "b", "c"]})
+	panel.show_program_placeholder({"type": "dream_finale_program", "source_ids": ["a", "b", "c"], "profile": {"valid": true, "route_rule": "long_charge", "anchor_rule": "relay", "climax_rule": "spotlight"}})
 	_check(panel.visible and panel._message.contains("节目单已打开"), "program handoff opens a stable placeholder view")
+	var confirm_button: Button = panel.get_node_or_null("ConfirmProgram") as Button
+	_check(confirm_button != null and confirm_button.visible, "program placeholder keeps a visible confirmation button")
+	_check(panel._message.contains("蓄力") and panel._message.contains("接力") and panel._message.contains("聚光灯"), "program rules use player-readable labels")
+	var many_rows: Array[Dictionary] = []
+	var many_probabilities := {}
+	for index in range(9):
+		var id := "candidate-%d" % index
+		many_rows.append({"instance_id": id, "name": id, "hp_lost": index})
+		many_probabilities[id] = 1.0 / 9.0
+	panel.show_candidates(1, many_rows, many_probabilities)
+	_check(panel.get_node_or_null("CandidateNext") != null and panel.get_node_or_null("CandidatePrev") != null, "多候选阶段提供分页控制")
+	_check(panel.get_node_or_null("Abstain") != null and panel.get_node_or_null("Abstain").visible, "多候选阶段弃权按钮始终可见")
+	var pages: int = panel.candidate_page_count()
+	_check(pages == 3, "九个候选被拆成三个可操作页面")
+	for page in range(pages):
+		_check(panel.visible_candidate_ids().size() > 0, "候选分页 %d 至少有一项可见" % (page + 1))
+		if page < pages - 1:
+			panel.get_node_or_null("CandidateNext").emit_signal("pressed")
+	_check(panel.visible_candidate_ids().has("candidate-8"), "最后一页候选可以到达并操作")
+	panel.get_node_or_null("Nominate_candidate-8").emit_signal("pressed")
+	_check(submitted_value == "candidate-8", "最后一页候选按钮可实际提交")
 	panel.show_reveal_only(2, rows, {"stage": 2, "selected_id": "a"}, 0.0)
 	var before_reveal_only := submitted_value
 	panel.get_node_or_null("Nominate_a").emit_signal("pressed")

@@ -177,6 +177,9 @@ var room_rules = RoomRules.new()
 var combat = null
 var rng := RandomNumberGenerator.new()
 var run_save_repository = RunSaveRepository.new(RUN_SAVE_PATH, EXE_SOURCE_ID)
+## Tests and tools may inject an isolated formal repository while preserving the
+## real RUN_SAVE_PATH as a read-only boundary. Production keeps the real path.
+var formal_run_save_path := RUN_SAVE_PATH
 var solo_stage_flow = SoloStageFlow.new()
 var solo_stage_trial_active := false
 var dream_draw_active := false
@@ -989,6 +992,11 @@ func start_new_run(tutorial_mode: bool = false, seed_override: int = 0) -> void:
 func start_solo_stage_trial(seed_value: int = 0) -> void:
 	if solo_stage_trial_active:
 		return
+	if has_solo_stage_trial_save():
+		# The backend entry resumes an interrupted sample instead of silently
+		# replacing its three-stage checkpoint.
+		continue_solo_stage_trial()
+		return
 	solo_trial_previous_repository = run_save_repository
 	run_save_repository = RunSaveRepository.new(SOLO_STAGE_TRIAL_SAVE_PATH, EXE_SOURCE_ID)
 	solo_stage_trial_active = true
@@ -1007,7 +1015,7 @@ func _restore_solo_trial_repository() -> void:
 	if solo_trial_previous_repository != null:
 		run_save_repository = solo_trial_previous_repository
 	else:
-		run_save_repository = RunSaveRepository.new(RUN_SAVE_PATH, EXE_SOURCE_ID)
+		run_save_repository = RunSaveRepository.new(formal_run_save_path, EXE_SOURCE_ID)
 	solo_trial_previous_repository = null
 	solo_stage_trial_active = false
 	solo_stage_trial_config.clear()
@@ -1135,6 +1143,29 @@ func has_saved_run() -> bool:
 	return run_save_repository.exists()
 
 
+func has_formal_saved_run() -> bool:
+	var formal_repository := RunSaveRepository.new(formal_run_save_path, EXE_SOURCE_ID)
+	return formal_repository.exists()
+
+
+func has_solo_stage_trial_save() -> bool:
+	return RunSaveRepository.new(SOLO_STAGE_TRIAL_SAVE_PATH, EXE_SOURCE_ID).exists()
+
+
+func continue_solo_stage_trial() -> bool:
+	if solo_stage_trial_active:
+		return continue_saved_run()
+	var sample_repository := RunSaveRepository.new(SOLO_STAGE_TRIAL_SAVE_PATH, EXE_SOURCE_ID)
+	if not sample_repository.exists():
+		return false
+	solo_trial_previous_repository = run_save_repository
+	run_save_repository = sample_repository
+	solo_stage_trial_active = true
+	solo_stage_trial_config = _load_json_dictionary(SOLO_STAGE_TRIAL_DATA_PATH)
+	status_message = "继续三阶段样片：从上次节目断点接着播出。"
+	return continue_saved_run()
+
+
 func continue_saved_run() -> bool:
 	_adopt_solo_trial_save_if_needed()
 	_set_home_video(false)
@@ -1241,10 +1272,10 @@ func _adopt_solo_trial_save_if_needed() -> bool:
 	if solo_stage_trial_active:
 		return true
 	# The formal run always wins when both files exist. Only a fresh controller
-	# still pointing at RUN_SAVE_PATH may adopt an orphaned sample checkpoint.
-	if run_save_repository == null or str(run_save_repository.save_path) != RUN_SAVE_PATH:
+	# still pointing at its formal repository may adopt an orphaned sample checkpoint.
+	if run_save_repository == null or str(run_save_repository.save_path) != formal_run_save_path:
 		return false
-	if FileAccess.file_exists(RUN_SAVE_PATH):
+	if FileAccess.file_exists(formal_run_save_path):
 		return false
 	var sample_repository := RunSaveRepository.new(SOLO_STAGE_TRIAL_SAVE_PATH, EXE_SOURCE_ID)
 	if not sample_repository.exists():
@@ -2543,25 +2574,38 @@ func _finish_boss_combat(success: bool) -> void:
 	ending_id = str(result.get("id", "end_fail"))
 	ending_success = success
 	ending_outcome = "victory" if success else "defeat"
-	ending_pending = true
-	ending_recap = boss_recap.duplicate(true)
-	ending_recap["outcome"] = ending_outcome
-	ending_recap["success"] = success
-	ending_recap["title"] = "梦演到结尾" if success else "梦提前中断"
+	ending_pending = solo_stage_trial_active
+	ending_recap.clear()
+	if solo_stage_trial_active:
+		ending_recap = boss_recap.duplicate(true)
+		ending_recap["outcome"] = ending_outcome
+		ending_recap["success"] = success
+		ending_recap["title"] = "梦演到结尾" if success else "梦提前中断"
 	combat = null
 	combat_is_boss = false
 	phase = "ending"
-	# Keep the actual house and toy on stage while the coda plays. The overlay
-	# supplies the TV programme treatment without deleting the player's assets.
-	world_container.visible = true
-	house_root.visible = true
-	battle_root.visible = false
-	if lab_root != null:
-		lab_root.visible = false
-	_set_house_camera()
-	status_message = "梦演到结尾。三张素材正在合成终幕。" if success else "梦提前中断。三张素材正在回放最后一幕。"
-	_save_run()
-	_start_dream_wake_presentation()
+	if solo_stage_trial_active:
+		# Keep the actual house and toy on stage while the sample coda plays. The
+		# overlay supplies the TV programme treatment without deleting assets.
+		world_container.visible = true
+		house_root.visible = true
+		battle_root.visible = false
+		if lab_root != null:
+			lab_root.visible = false
+		_set_house_camera()
+		status_message = "梦演到结尾。三张素材正在合成终幕。" if success else "梦提前中断。三张素材正在回放最后一幕。"
+		_save_run()
+		_start_dream_wake_presentation()
+	else:
+		# Formal runs retain the original ending card and immediate checkpoint
+		# cleanup. The three-card sample presentation is trial-only.
+		world_container.visible = false
+		house_root.visible = false
+		battle_root.visible = false
+		if lab_root != null:
+			lab_root.visible = false
+		_clear_run_save()
+		status_message = str(result.get("boss_message", "节目结束。"))
 	_refresh_hud()
 
 
@@ -2807,7 +2851,7 @@ func submit_dream_stage_nomination(nomination_id: String) -> void:
 	if probabilities.is_empty():
 		hud.call("reject_dream_stage_submission", "这项提名已失效；候选不足时不会偷偷锁定结局。")
 		return
-	var roll := rng.randf()
+	var roll := solo_stage_flow.next_draw_roll()
 	var selected_id := DreamDrawRules.pick(probabilities, roll)
 	if selected_id.is_empty():
 		hud.call("reject_dream_stage_submission", "节目暂时没有可抽取的候选。")
@@ -2835,8 +2879,7 @@ func submit_dream_stage_nomination(nomination_id: String) -> void:
 	}
 	if not solo_stage_flow.accept_result(draw_result):
 		return
-	# Result and the consumed RNG state are persisted before animation begins.
-	solo_stage_flow.rng_state = str(rng.state)
+	# Result and the consumed dream RNG state are persisted before animation begins.
 	_save_run()
 	hud.call("reveal_dream_stage", draw_result, float(solo_stage_trial_config.get("draw_animation_seconds", 2.0)))
 
@@ -2944,9 +2987,10 @@ func finish_event_trial(success: bool) -> void:
 			status_message = "考验失败：警察搜走了%s。" % str(content.get("cards", {}).get(stolen_id, {}).get("name", stolen_id))
 		else:
 			status_message = "考验失败：房间奖励消失了。"
+		var due_after_failure := _solo_stage_due_before_finale()
+		if due_after_failure:
+			return
 		if reaches_finale:
-			if _solo_stage_due_before_finale():
-				return
 			_prepare_boss_ready()
 			return
 		phase = "explore"
@@ -4174,9 +4218,10 @@ func return_from_combat() -> void:
 		battle_root.visible = false
 		house_camera_closeup = true
 		house_camera_following = true
-		if reaches_finale and not _solo_stage_due_before_finale():
+		var due_after_defeat := _solo_stage_due_before_finale()
+		if reaches_finale and not due_after_defeat:
 			_prepare_boss_ready()
-		else:
+		elif not due_after_defeat:
 			phase = "explore"
 			build_house_world()
 			_save_run()

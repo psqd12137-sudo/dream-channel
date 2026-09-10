@@ -31,6 +31,23 @@ func _run() -> void:
 	_check(not invalid.restore({"version": 1, "stage": 3, "results": [{"stage": 2, "selected_id": "a"}, {"stage": 3, "selected_id": "b"}], "pending_result": {}}), "non-sequential result stages are rejected")
 	_check(not invalid.restore({"version": 1, "stage": 2, "results": [{"stage": 1}], "pending_result": {}}), "malformed result records are rejected")
 	await _run_game_integration()
+	var first = load("res://scripts/solo_stage_flow.gd").new()
+	var second = load("res://scripts/solo_stage_flow.gd").new()
+	first.reset(20260916, {"milestones": [4, 8, 12]})
+	second.reset(20260916, {"milestones": [4, 8, 12]})
+	var exploration_rng := RandomNumberGenerator.new()
+	exploration_rng.seed = 777
+	var first_rolls: Array[float] = []
+	var second_rolls: Array[float] = []
+	for index in range(3):
+		first_rolls.append(first.next_draw_roll())
+		for noise in range(index + 1):
+			exploration_rng.randf()
+		second_rolls.append(second.next_draw_roll())
+	_check(first_rolls == second_rolls, "探索 RNG 消费不改变独立梦境抽片序列")
+	var restored = load("res://scripts/solo_stage_flow.gd").new()
+	_check(restored.restore(first.snapshot()), "独立梦境 RNG 状态可恢复")
+	_check(is_equal_approx(restored.next_draw_roll(), first.next_draw_roll()), "独立梦境 RNG 恢复后继续同一序列")
 	if failures.is_empty():
 		print("SOLO_STAGE_FLOW: PASS three stages isolated state")
 		quit(0)
@@ -119,7 +136,9 @@ func _run_game_integration() -> void:
 	await process_frame
 	_check(resumed.solo_stage_flow.results.size() == 1 and resumed.solo_stage_flow.pending_result.is_empty(), "pending result is cleared after one reveal")
 	_check(not resumed.dream_draw_active, "restored pending draw does not reopen nomination")
-	_check(not resumed.hud.dream_stage_panel.visible, "reveal-only panel closes after recovery")
+	_check(resumed.hud.dream_stage_panel.visible and resumed.hud.dream_stage_panel.get_node_or_null("ContinueRecap") != null, "reveal-only panel keeps a readable recap before continuing")
+	resumed.hud.dream_stage_panel.get_node_or_null("ContinueRecap").emit_signal("pressed")
+	_check(not resumed.hud.dream_stage_panel.visible, "recap continue closes the panel")
 	pending_game.queue_free()
 	resumed.queue_free()
 	FileAccess.open(pending_path, FileAccess.WRITE).store_string("")
