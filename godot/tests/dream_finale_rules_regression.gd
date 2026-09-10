@@ -96,9 +96,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("DREAM_FINALE_RULES: PASS")
 		quit(0)
-	for failure: String in failures:
-		push_error("DREAM_FINALE_RULES: " + failure)
-	quit(1)
+	else:
+		for failure: String in failures:
+			push_error("DREAM_FINALE_RULES: " + failure)
+		quit(1)
 
 
 func _rooms(count: int):

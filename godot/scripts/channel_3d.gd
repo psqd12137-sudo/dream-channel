@@ -15,6 +15,7 @@ const RunSaveRepository = preload("res://scripts/run_save_repository.gd")
 const SoloStageFlow = preload("res://scripts/solo_stage_flow.gd")
 const DreamRoomLedger = preload("res://scripts/dream_room_ledger.gd")
 const DreamDrawRules = preload("res://scripts/dream_draw_rules.gd")
+const DreamFinaleProfile = preload("res://scripts/dream_finale_profile.gd")
 const BossProgression = preload("res://scripts/boss_progression.gd")
 const PresentationSettings = preload("res://scripts/presentation_settings.gd")
 const HouseWorldRenderer = preload("res://scripts/channel_house_world_renderer.gd")
@@ -181,6 +182,7 @@ var dream_draw_active := false
 var dream_draw_stage := 0
 var dream_program_available := false
 var dream_program_handoff: Dictionary = {}
+var dream_finale_profile: Dictionary = {}
 var solo_trial_previous_repository = null
 var solo_stage_trial_config: Dictionary = {}
 var presentation_settings = null
@@ -885,6 +887,7 @@ func reset_run(seed_value: int = 0) -> void:
 	dream_draw_stage = 0
 	dream_program_available = false
 	dream_program_handoff.clear()
+	dream_finale_profile.clear()
 	combat_hp_loss_synced = 0
 	room_rules.placed[Vector2i.ZERO]["revealed"] = true
 	room_rules.placed[Vector2i.ZERO]["visited"] = true
@@ -1025,6 +1028,7 @@ func go_home() -> void:
 	dream_draw_stage = 0
 	dream_program_available = false
 	dream_program_handoff.clear()
+	dream_finale_profile.clear()
 	if hud != null:
 		hud.call("hide_dream_stage_panel")
 	_clear_combat_lab_presentation_state()
@@ -1139,6 +1143,8 @@ func continue_saved_run() -> bool:
 	dream_program_available = solo_stage_trial_active and bool(save.get("dream_program_available", false))
 	var saved_program: Variant = save.get("dream_program_handoff", {})
 	dream_program_handoff = saved_program.duplicate(true) if saved_program is Dictionary else {}
+	var saved_finale_profile: Variant = save.get("dream_finale_profile", {})
+	dream_finale_profile = saved_finale_profile.duplicate(true) if saved_finale_profile is Dictionary else {}
 	combat_hp_loss_synced = 0
 	var remaining_ids: Array = save.get("remaining_ids", [])
 	if str(save.get("phase", "")) != "world_boss":
@@ -1896,6 +1902,7 @@ func _begin_world_boss(saved: Dictionary = {}) -> void:
 	var finale = OverworldBossRules.new()
 	var rules: Dictionary = content.get("run_rules", {}).duplicate(true)
 	rules.player_hp = player_hp
+	rules.player_max_hp = player_max_hp
 	rules.base_speed = player_speed
 	rules.base_energy = int(rules.get("base_energy", 5)) + maxi(0, player_speed - int(content.run_rules.get("base_speed", 3)))
 	var seed_value := run_seed
@@ -1909,7 +1916,10 @@ func _begin_world_boss(saved: Dictionary = {}) -> void:
 		deck = initial_state.deck.duplicate()
 		relics = initial_state.relics.duplicate()
 		seed_value = int(initial_state.seed)
-	finale.initialize(room_rules, start, content.bosses.bosses.get(boss_id, {}), content.cards, deck, seed_value, rules, relics)
+		var saved_profile: Variant = initial_state.get("dream_profile", {})
+		if saved_profile is Dictionary and not (saved_profile as Dictionary).is_empty():
+			dream_finale_profile = (saved_profile as Dictionary).duplicate(true)
+	finale.initialize(room_rules, start, content.bosses.bosses.get(boss_id, {}), content.cards, deck, seed_value, rules, relics, dream_finale_profile)
 	if not finale.error.is_empty():
 		status_message = finale.error
 		phase = "boss_ready"
@@ -2672,11 +2682,33 @@ func open_dream_program(program_entry: Dictionary) -> void:
 	if not solo_stage_trial_active or not solo_stage_flow.is_finale_ready():
 		return
 	var source_ids: Array = program_entry.get("source_ids", [])
-	if source_ids.is_empty():
+	if source_ids.size() != 3:
+		status_message = "节目单需要三份已锁定的素材。"
+		_refresh_hud()
 		return
+	var records: Dictionary = {}
+	if room_ledger != null:
+		for record: Dictionary in room_ledger.candidates([]):
+			records[str(record.get("instance_id", ""))] = record
+	var materials: Array[Dictionary] = []
+	for raw_id: Variant in source_ids:
+		var source_id := str(raw_id)
+		if not records.has(source_id):
+			status_message = "节目单缺少一份已保存的房间素材，无法重新抽选。"
+			_refresh_hud()
+			return
+		materials.append((records[source_id] as Dictionary).duplicate(true))
+	var composed: Dictionary = DreamFinaleProfile.compose(materials)
+	if not bool(composed.get("valid", false)):
+		status_message = str(composed.get("error", "终幕素材资料不完整。"))
+		_refresh_hud()
+		return
+	dream_finale_profile = composed.duplicate(true)
 	dream_program_handoff = program_entry.duplicate(true)
+	dream_program_handoff["profile"] = dream_finale_profile.duplicate(true)
+	dream_program_handoff["status"] = "ready"
 	dream_program_available = true
-	status_message = "节目单已打开：素材来源 %s。终幕规则等待配置。" % ", ".join(source_ids.map(func(value: Variant) -> String: return str(value)))
+	status_message = "节目单已打开：%s。终幕规则已锁定。" % str(dream_finale_profile.get("name", "三份素材合成"))
 	hud.call("show_dream_program_placeholder", dream_program_handoff)
 	_save_run()
 
@@ -4052,6 +4084,7 @@ func _save_run() -> void:
 		"dream_draw_stage": dream_draw_stage,
 		"dream_program_available": dream_program_available,
 		"dream_program_handoff": dream_program_handoff.duplicate(true),
+		"dream_finale_profile": dream_finale_profile.duplicate(true),
 	}
 	if solo_stage_trial_active:
 		payload["dream_stage"] = solo_stage_flow.snapshot()

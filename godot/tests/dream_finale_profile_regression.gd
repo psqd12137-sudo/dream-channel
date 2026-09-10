@@ -35,9 +35,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("DREAM_FINALE_PROFILE: PASS")
 		quit(0)
-	for failure: String in failures:
-		push_error("DREAM_FINALE_PROFILE: " + failure)
-	quit(1)
+	else:
+		for failure: String in failures:
+			push_error("DREAM_FINALE_PROFILE: " + failure)
+		quit(1)
 
 
 func _check(ok: bool, message: String) -> void:
