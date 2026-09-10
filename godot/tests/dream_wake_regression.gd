@@ -119,10 +119,25 @@ func _run() -> void:
 	var sample_repository = load("res://scripts/run_save_repository.gd").new("user://solo_stage_trial_v1.json", "CabinSlice_织梦频道.exe@EEC4C574CC22")
 	formal_repository.clear()
 	sample_repository.clear()
+	var formal_sentinel := {"source": "CabinSlice_织梦频道.exe@EEC4C574CC22", "sentinel": "formal-untouched"}
+	formal_repository.write(formal_sentinel)
 	var sample_writer = load("res://channel_3d.tscn").instantiate()
 	sample_writer.animation_duration_scale = 0.0
 	root.add_child(sample_writer)
 	await process_frame
+	sample_writer.solo_stage_trial_active = true
+	sample_writer.solo_stage_trial_config = {"milestones": [4, 8, 12]}
+	sample_writer.run_save_repository = sample_repository
+	sample_writer.start_new_run(false, 20260911)
+	sample_writer.phase = "explore"
+	sample_writer._save_run()
+	_check(sample_repository.exists(), "sample exploration writes the isolated checkpoint")
+	sample_writer.go_home()
+	_check(not sample_repository.exists(), "explicitly returning home clears the sample exploration save")
+	_check(formal_repository.read() == formal_sentinel, "clearing a sample exploration leaves the formal save untouched")
+	# Remove the sentinel so the next fresh process has only an interrupted
+	# sample to discover; this models a machine exit before returning home.
+	formal_repository.clear()
 	sample_writer.solo_stage_trial_active = true
 	sample_writer.solo_stage_trial_config = {"milestones": [4, 8, 12]}
 	sample_writer.run_save_repository = sample_repository
@@ -135,7 +150,6 @@ func _run() -> void:
 	sample_writer.ending_recap = {"outcome": "victory", "success": true, "cards": victory_recap.cards}
 	sample_writer._save_run()
 	_check(sample_repository.exists(), "sample ending writes the isolated checkpoint")
-	sample_writer.go_home()
 	sample_writer.queue_free()
 	await process_frame
 	var auto_resumed = load("res://channel_3d.tscn").instantiate()

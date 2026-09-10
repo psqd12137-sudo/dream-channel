@@ -1044,6 +1044,7 @@ func copy_current_seed() -> void:
 func go_home() -> void:
 	if dream_wake_presentation != null:
 		dream_wake_presentation.cancel()
+	var clear_solo_trial_save := solo_stage_trial_active and not boss_preview_active
 	dream_draw_active = false
 	dream_draw_stage = 0
 	dream_program_available = false
@@ -1114,6 +1115,12 @@ func go_home() -> void:
 	_set_home_video(true)
 	status_message = "电视机预热完毕。"
 	_refresh_hud()
+	if clear_solo_trial_save:
+		# Returning to the title is an explicit discard of the isolated sample.
+		# Process termination never calls go_home, so an interrupted sample can
+		# still be discovered and resumed by the next launch.
+		var sample_repository := RunSaveRepository.new(SOLO_STAGE_TRIAL_SAVE_PATH, EXE_SOURCE_ID)
+		sample_repository.clear()
 	if closing_tactile_lab:
 		for property in tactile_house_camera:
 			set(property, tactile_house_camera[property])
