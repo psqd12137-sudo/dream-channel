@@ -80,6 +80,10 @@ func _run() -> void:
 		var restored_flow = load("res://scripts/solo_stage_flow.gd").new()
 		_check(persisted_stage is Dictionary and restored_flow.restore(persisted_stage as Dictionary), "阶段结果可从存档恢复")
 	_check(game.solo_stage_flow.is_finale_ready(), "三次奖励抽片后进入终幕素材完成状态")
+	var awaiting_program_path := "user://solo_three_stage_flow_regression_awaiting_program.json"
+	var awaiting_program_repository = load("res://scripts/run_save_repository.gd").new(awaiting_program_path, game.EXE_SOURCE_ID)
+	awaiting_program_repository.clear()
+	awaiting_program_repository.write(game.run_save_repository.read())
 	game.hud._on_dream_program_requested(game.dream_program_handoff)
 	_check(game.phase == "boss_ready", "打开第三阶段节目单后进入 boss_ready")
 	_check(game.boss_id == "channel_host", "单人终幕使用固定 Boss")
@@ -119,6 +123,7 @@ func _run() -> void:
 	game.queue_free()
 	resumed.queue_free()
 	await process_frame
+	await _run_program_recovery_variant(awaiting_program_path)
 	await _run_all_abstain_variant(abstain_path)
 	await _run_candidate_shortage_variant("user://solo_three_stage_flow_regression_shortage.json")
 	await _run_sample_defeat_variant("user://solo_three_stage_flow_regression_defeat.json")
@@ -139,6 +144,36 @@ func _run() -> void:
 func _check(ok: bool, message: String) -> void:
 	if not ok:
 		failures.append(message)
+
+
+func _run_program_recovery_variant(save_path: String) -> void:
+	var recovered = load("res://channel_3d.tscn").instantiate()
+	recovered.animation_duration_scale = 0.0
+	root.add_child(recovered)
+	await process_frame
+	recovered.solo_stage_trial_active = true
+	recovered.solo_stage_trial_config = {"milestones": [4, 8, 12]}
+	recovered.run_save_repository = load("res://scripts/run_save_repository.gd").new(save_path, recovered.EXE_SOURCE_ID)
+	_check(recovered.continue_saved_run(), "第三次揭晓后的节目单待配置存档可恢复")
+	_check(recovered.phase == "explore" and str(recovered.dream_program_handoff.get("status", "")) == "awaiting_dream_finale_profile" and recovered.dream_finale_profile.is_empty(), "恢复态保留 awaiting 节目单且尚未生成 profile")
+	var open_button: Button = recovered.hud.dream_stage_panel.get_node_or_null("OpenProgramList") as Button
+	var hidden_confirm: Button = recovered.hud.dream_stage_panel.get_node_or_null("ConfirmProgram") as Button
+	_check(open_button != null and open_button.visible, "恢复待配置节目单显示打开入口")
+	_check(hidden_confirm != null and not hidden_confirm.visible, "恢复待配置节目单隐藏终幕确认")
+	if open_button != null:
+		open_button.emit_signal("pressed")
+	_check(recovered.phase == "boss_ready" and str(recovered.dream_program_handoff.get("status", "")) == "ready" and bool(recovered.dream_finale_profile.get("valid", false)), "实际点击打开节目单后组装 profile 并进入 boss_ready")
+	var confirm_button: Button = recovered.hud.dream_stage_panel.get_node_or_null("ConfirmProgram") as Button
+	_check(confirm_button != null and confirm_button.visible, "profile 就绪且 boss_ready 时显示终幕确认")
+	if confirm_button != null:
+		confirm_button.emit_signal("pressed")
+	_check(recovered.phase == "world_boss" and recovered.combat != null, "实际点击终幕确认后进入 world_boss")
+	var exe_source_id: String = recovered.EXE_SOURCE_ID
+	recovered.go_home()
+	recovered.queue_free()
+	await process_frame
+	var repository = load("res://scripts/run_save_repository.gd").new(save_path, exe_source_id)
+	repository.clear()
 
 
 func _new_trial_game(save_path: String, seed_value: int) -> Node:

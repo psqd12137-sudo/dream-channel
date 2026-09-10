@@ -2936,10 +2936,10 @@ func open_dream_program(program_entry: Dictionary) -> void:
 	dream_program_handoff["status"] = "ready"
 	dream_program_available = true
 	status_message = "节目单已打开：%s。终幕规则已锁定。" % str(dream_finale_profile.get("name", "三份素材合成"))
-	hud.call("show_dream_program_placeholder", dream_program_handoff)
 	_save_run()
 	# Opening the list is the explicit handoff into the fixed solo finale.
 	_prepare_boss_ready()
+	hud.call("show_dream_program_placeholder", dream_program_handoff)
 
 
 func start_event_trial(room: Dictionary) -> void:

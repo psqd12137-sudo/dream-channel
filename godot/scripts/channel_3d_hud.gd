@@ -544,7 +544,7 @@ func reveal_saved_dream_stage(stage: int, records: Array[Dictionary], result: Di
 
 func show_dream_program_placeholder(program_entry: Dictionary) -> void:
 	if dream_stage_panel != null:
-		dream_stage_panel.show_program_placeholder(program_entry)
+		dream_stage_panel.show_program_placeholder(program_entry, str(game.phase) if game != null else "")
 
 
 func _on_dream_program_confirmed(program_entry: Dictionary) -> void:

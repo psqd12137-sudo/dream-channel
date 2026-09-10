@@ -69,8 +69,12 @@ func show_candidates(next_stage: int, next_records: Array[Dictionary], probabili
 
 func update_probabilities(next_probabilities: Dictionary) -> void:
 	probability_map = next_probabilities.duplicate(true)
-	for index in range(mini(records.size(), _buttons.size())):
-		_buttons[index].text = _candidate_text(records[index])
+	var first_index: int = _page_index * CANDIDATES_PER_PAGE
+	for local_index in range(_buttons.size()):
+		var record_index: int = first_index + local_index
+		if record_index >= records.size():
+			break
+		_buttons[local_index].text = _candidate_text(records[record_index])
 	queue_redraw()
 
 
@@ -373,7 +377,7 @@ func _read_program_entry() -> Dictionary:
 	return {"type": "dream_finale_program", "version": 1, "status": "awaiting_dream_finale_profile", "source_ids": source_ids}
 
 
-func show_program_placeholder(program_entry: Dictionary) -> void:
+func show_program_placeholder(program_entry: Dictionary, current_phase: String = "") -> void:
 	if stage < 3 or _program_button == null:
 		var empty_records: Array[Dictionary] = []
 		show_candidates(3, empty_records, {})
@@ -386,6 +390,9 @@ func show_program_placeholder(program_entry: Dictionary) -> void:
 	var source_ids: Array = _program_entry.get("source_ids", [])
 	var source_names: Array = _program_entry.get("source_names", [])
 	var profile: Dictionary = _program_entry.get("profile", {}) if _program_entry.get("profile", {}) is Dictionary else {}
+	var status_ready: bool = str(_program_entry.get("status", "")) == "ready"
+	var profile_valid: bool = bool(profile.get("valid", false))
+	var profile_ready: bool = status_ready and profile_valid and current_phase == "boss_ready"
 	if bool(profile.get("valid", false)) and source_ids.size() == 3:
 		var first_name := str(source_names[0]) if source_names.size() > 0 else str(source_ids[0])
 		var second_name := str(source_names[1]) if source_names.size() > 1 else str(source_ids[1])
@@ -394,9 +401,10 @@ func show_program_placeholder(program_entry: Dictionary) -> void:
 	else:
 		_message = "节目单已打开：%d 份素材已锁定；终幕规则将在节目配置阶段接入。" % source_ids.size()
 	if _confirm_program_button != null:
-		_program_button.visible = false
-		_confirm_program_button.disabled = false
-		_confirm_program_button.visible = true
+		_program_button.visible = not profile_ready
+		_program_button.disabled = false
+		_confirm_program_button.disabled = not profile_ready
+		_confirm_program_button.visible = profile_ready
 	visible = true
 	queue_redraw()
 

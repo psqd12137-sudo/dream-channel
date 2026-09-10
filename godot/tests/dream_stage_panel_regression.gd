@@ -40,7 +40,7 @@ func _run() -> void:
 	_check(panel.get_node_or_null("OpenProgramList").visible, "stage three exposes an actual program list button")
 	panel.get_node_or_null("OpenProgramList").emit_signal("pressed")
 	_check(requested_program.get("source_ids", []) == ["a", "b", "c"], "program handoff preserves saved source ids")
-	panel.show_program_placeholder({"type": "dream_finale_program", "source_ids": ["a", "b", "c"], "profile": {"valid": true, "route_rule": "long_charge", "anchor_rule": "relay", "climax_rule": "spotlight"}})
+	panel.show_program_placeholder({"type": "dream_finale_program", "status": "ready", "source_ids": ["a", "b", "c"], "profile": {"valid": true, "route_rule": "long_charge", "anchor_rule": "relay", "climax_rule": "spotlight"}}, "boss_ready")
 	_check(panel.visible and panel._message.contains("节目单已打开"), "program handoff opens a stable placeholder view")
 	var confirm_button: Button = panel.get_node_or_null("ConfirmProgram") as Button
 	_check(confirm_button != null and confirm_button.visible, "program placeholder keeps a visible confirmation button")
@@ -61,8 +61,23 @@ func _run() -> void:
 		if page < pages - 1:
 			panel.get_node_or_null("CandidateNext").emit_signal("pressed")
 	_check(panel.visible_candidate_ids().has("candidate-8"), "最后一页候选可以到达并操作")
+	panel.update_probabilities({"candidate-6": 0.77, "candidate-7": 0.11, "candidate-8": 0.12})
+	for candidate_index in range(6, 9):
+		var last_page_button: Button = panel.get_node_or_null("Nominate_candidate-%d" % candidate_index) as Button
+		_check(last_page_button != null and last_page_button.text.contains("candidate-%d" % candidate_index), "末页刷新保留候选名称 %d" % candidate_index)
+		_check(last_page_button != null and last_page_button.text.contains("受伤经历 %d" % candidate_index), "末页刷新保留候选受伤值 %d" % candidate_index)
+		var expected_chance: String = {6: "77.0%", 7: "11.0%", 8: "12.0%"}[candidate_index]
+		_check(last_page_button != null and last_page_button.text.contains(expected_chance), "末页刷新更新候选概率 %d" % candidate_index)
 	panel.get_node_or_null("Nominate_candidate-8").emit_signal("pressed")
 	_check(submitted_value == "candidate-8", "最后一页候选按钮可实际提交")
+	await process_frame
+	var awaiting_entry := {"type": "dream_finale_program", "status": "awaiting_dream_finale_profile", "source_ids": ["a", "b", "c"]}
+	panel.show_program_placeholder(awaiting_entry, "explore")
+	await process_frame
+	var awaiting_open_button: Button = panel.get_node_or_null("OpenProgramList") as Button
+	var awaiting_confirm_button: Button = panel.get_node_or_null("ConfirmProgram") as Button
+	_check(awaiting_open_button != null and awaiting_open_button.visible, "恢复待配置节目单显示打开入口")
+	_check(awaiting_confirm_button != null and not awaiting_confirm_button.visible, "恢复待配置节目单不显示终幕确认")
 	panel.show_reveal_only(2, rows, {"stage": 2, "selected_id": "a"}, 0.0)
 	var before_reveal_only := submitted_value
 	panel.get_node_or_null("Nominate_a").emit_signal("pressed")
