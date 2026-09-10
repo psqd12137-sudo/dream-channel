@@ -47,6 +47,23 @@ func _run() -> void:
 	_check(not presentation.is_playing(), "finished presentation leaves playing state")
 	_check(presentation.player_was_stilled, "presentation stills the toy before the coda")
 
+	# The entrance and ending use the same card reel. Each third of its duration
+	# must promote exactly one material so the spotlight has a readable rhythm.
+	presentation.play(player, {"outcome": "program_intro", "cards": victory_recap.cards}, 0.9)
+	_check(presentation.active_card_index == 0, "reel starts with the first material")
+	await process_frame
+	_check(presentation.active_card_index == 0, "first material remains lit at the first frame")
+	await create_timer(0.35).timeout
+	await process_frame
+	_check(presentation.active_card_index == 1, "reel promotes the second material after one third")
+	await create_timer(0.35).timeout
+	await process_frame
+	_check(presentation.active_card_index == 2, "reel promotes the third material after two thirds")
+	presentation.skip()
+	presentation.skip()
+	await process_frame
+	_check(finished_count == 2, "intro reel skip remains idempotent")
+
 	# A defeat must not inherit the success copy, and a missing actor still gets
 	# the same deterministic coda.
 	presentation.play(null, {
@@ -59,7 +76,7 @@ func _run() -> void:
 	_check(not presentation.current_recap.get("success", true), "defeat recap cannot be rendered as success")
 	presentation.skip()
 	await process_frame
-	_check(finished_count == 2, "missing player node still completes the coda once")
+	_check(finished_count == 3, "missing player node still completes the coda once")
 	_check(not presentation.input_locked, "missing player node does not leave input locked")
 
 	# Exercise the real Boss handoff as a persisted ending. The preview uses the

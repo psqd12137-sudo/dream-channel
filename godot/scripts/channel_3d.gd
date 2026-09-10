@@ -187,6 +187,8 @@ var dream_finale_profile: Dictionary = {}
 var ending_pending := false
 var ending_outcome := ""
 var ending_recap: Dictionary = {}
+var dream_intro_pending := false
+var dream_intro_recap: Dictionary = {}
 var dream_wake_presentation = null
 var solo_trial_previous_repository = null
 var solo_stage_trial_config: Dictionary = {}
@@ -959,6 +961,8 @@ func reset_run(seed_value: int = 0) -> void:
 	ending_pending = false
 	ending_outcome = ""
 	ending_recap.clear()
+	dream_intro_pending = false
+	dream_intro_recap.clear()
 	run_progress = 1
 	player_hp = 6
 	player_max_hp = 6
@@ -1080,6 +1084,8 @@ func go_home() -> void:
 	ending_pending = false
 	ending_outcome = ""
 	ending_recap.clear()
+	dream_intro_pending = false
+	dream_intro_recap.clear()
 	_cancel_dynamic_effect()
 	character_animation_demo_mode = false
 	toyhouse_sequence_active = false
@@ -1169,6 +1175,11 @@ func continue_saved_run() -> bool:
 	ending_success = ending_outcome == "victory"
 	var saved_ending_recap: Variant = save.get("ending_recap", {})
 	ending_recap = saved_ending_recap.duplicate(true) if saved_ending_recap is Dictionary else {}
+	dream_intro_pending = bool(save.get("dream_intro_pending", false))
+	var saved_intro_recap: Variant = save.get("dream_intro_recap", {})
+	dream_intro_recap = saved_intro_recap.duplicate(true) if saved_intro_recap is Dictionary else {}
+	if dream_intro_pending and dream_intro_recap.is_empty():
+		dream_intro_pending = false
 	if ending_pending and ending_outcome not in ["victory", "defeat"]:
 		ending_pending = false
 		ending_outcome = ""
@@ -1203,6 +1214,9 @@ func continue_saved_run() -> bool:
 	_refresh_hud()
 	if phase == "ending" and ending_pending:
 		_start_dream_wake_presentation()
+		return true
+	if phase == "boss_ready" and dream_intro_pending:
+		_start_dream_intro_presentation()
 		return true
 	var saved_rng_state := str(save.get("rng_state", ""))
 	if saved_rng_state.is_valid_int():
@@ -1932,6 +1946,25 @@ func _prepare_boss_ready() -> void:
 func begin_boss_combat() -> void:
 	if animation_busy or phase != "boss_ready":
 		return
+	if solo_stage_trial_active and dream_program_available and not dream_program_handoff.is_empty():
+		if dream_intro_pending:
+			return
+		dream_intro_pending = true
+		dream_intro_recap = {
+			"mode": "program_intro",
+			"outcome": "program_intro",
+			"success": false,
+			"title": "节目单入场",
+			"cards": _ending_material_cards(),
+		}
+		status_message = "节目单已确认。三张素材正在亮相，随后进入终幕 Boss。"
+		_save_run()
+		_start_dream_intro_presentation()
+		# Headless and zero-duration regression runs complete the handoff in the
+		# same call while normal play keeps the input lock until the coda ends.
+		if animation_duration_scale <= 0.0 and dream_wake_presentation != null and dream_wake_presentation.is_playing():
+			dream_wake_presentation.skip()
+		return
 	_begin_world_boss()
 
 
@@ -2570,7 +2603,26 @@ func _start_dream_wake_presentation() -> void:
 	dream_wake_presentation.play(player_node, ending_recap, duration)
 
 
+func _start_dream_intro_presentation() -> void:
+	if not dream_intro_pending:
+		return
+	if dream_wake_presentation == null:
+		_on_dream_wake_finished()
+		return
+	var player_node := house_root.get_node_or_null("LiliToken") as Node3D
+	var duration := 3.0 * animation_duration_scale if is_instance_valid(player_node) else 0.0
+	dream_wake_presentation.play(player_node, dream_intro_recap, duration)
+	if duration <= 0.0 and dream_wake_presentation.is_playing():
+		dream_wake_presentation.skip()
+
+
 func _on_dream_wake_finished() -> void:
+	if dream_intro_pending:
+		dream_intro_pending = false
+		dream_intro_recap.clear()
+		_save_run()
+		_begin_world_boss()
+		return
 	if not ending_pending:
 		return
 	status_message = "终幕已播完：%s。确认后返回标题。" % ("梦演到结尾" if ending_outcome == "victory" else "梦提前中断")
@@ -4191,6 +4243,8 @@ func _save_run() -> void:
 		"dream_program_available": dream_program_available,
 		"dream_program_handoff": dream_program_handoff.duplicate(true),
 		"dream_finale_profile": dream_finale_profile.duplicate(true),
+		"dream_intro_pending": dream_intro_pending,
+		"dream_intro_recap": dream_intro_recap.duplicate(true),
 		"ending_pending": ending_pending,
 		"ending_outcome": ending_outcome,
 		"ending_recap": ending_recap.duplicate(true),

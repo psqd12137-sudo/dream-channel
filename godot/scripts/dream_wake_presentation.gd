@@ -25,8 +25,9 @@ class DreamWakeOverlay:
 			return
 		var recap: Dictionary = presentation.current_recap
 		var outcome := str(recap.get("outcome", "defeat"))
+		var intro := outcome == "program_intro"
 		var success := outcome == "victory"
-		var accent := Color("8ccd42") if success else Color("ef493f")
+		var accent := Color("ffe233") if intro else Color("8ccd42") if success else Color("ef493f")
 		var paper := Color("fff3df")
 		var muted := Color("c8e8eb")
 		var gold := Color("ffe233")
@@ -45,7 +46,7 @@ class DreamWakeOverlay:
 		])
 		draw_colored_polygon(spotlight, Color(1.0, 0.86, 0.42, 0.07))
 		draw_string(font, Vector2(512, 90), "织梦频道 · 终幕颁奖", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, gold)
-		var subtitle := "梦演到结尾" if success else "梦提前中断"
+		var subtitle := "节目单入场" if intro else "梦演到结尾" if success else "梦提前中断"
 		draw_string(font, Vector2(538, 124), subtitle, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, accent)
 		draw_string(font, Vector2(472, 155), "三张素材，合成这一场最后的破坏秀", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, muted)
 
@@ -82,6 +83,8 @@ var skip_seconds := 0.0
 var _playing := false
 var _finished_emitted := false
 var _generation := 0
+var _elapsed := 0.0
+var _duration := 0.0
 var _player_node: Node3D = null
 var _player_process_mode := Node.PROCESS_MODE_INHERIT
 var _overlay: DreamWakeOverlay = null
@@ -108,17 +111,20 @@ func play(player_node: Node3D, recap: Dictionary, seconds: float) -> void:
 	_finished_emitted = false
 	_playing = true
 	input_locked = true
+	_elapsed = 0.0
+	_duration = maxf(0.0, seconds)
 	player_was_stilled = false
 	_player_node = player_node
 	current_recap = _normalize_recap(recap)
 	current_outcome = str(current_recap.get("outcome", "defeat"))
-	active_card_index = -1
+	active_card_index = 0
 	_still_player()
 	_overlay.visible = true
 	_overlay.queue_redraw()
-	var duration := maxf(0.0, seconds)
+	var duration := _duration
 	if skip_seconds > 0.0:
 		duration = minf(duration, skip_seconds)
+	_duration = duration
 	if duration <= 0.0:
 		call_deferred("_complete", _generation)
 	else:
@@ -144,6 +150,17 @@ func cancel() -> void:
 
 func is_playing() -> bool:
 	return _playing
+
+
+func _process(delta: float) -> void:
+	if not _playing or _duration <= 0.0:
+		return
+	_elapsed = minf(_duration, _elapsed + delta)
+	var next_card_index: int = mini(2, int(floor(_elapsed / (_duration / 3.0))))
+	if next_card_index != active_card_index:
+		active_card_index = next_card_index
+		if _overlay != null:
+			_overlay.queue_redraw()
 
 
 func card_count() -> int:
@@ -173,9 +190,11 @@ func _normalize_recap(recap: Dictionary) -> Dictionary:
 	var normalized := recap.duplicate(true)
 	var outcome := str(normalized.get("outcome", ""))
 	var success := bool(normalized.get("success", false))
-	if outcome not in ["victory", "defeat"]:
+	if outcome not in ["victory", "defeat", "program_intro"]:
 		outcome = "victory" if success else "defeat"
 		success = outcome == "victory"
+	elif outcome == "program_intro":
+		success = false
 	else:
 		# Outcome is the persisted source of truth. This prevents a stale title or
 		# success flag from displaying the opposite ending after recovery.

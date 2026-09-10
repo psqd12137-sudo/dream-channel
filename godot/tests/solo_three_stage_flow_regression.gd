@@ -75,8 +75,13 @@ func _run() -> void:
 	for raw_source_name: Variant in source_names:
 		mapping_has_names = mapping_has_names and game.hud.dream_stage_panel._message.contains(str(raw_source_name))
 	_check(source_names.size() == 3 and mapping_has_names, "节目单映射显示真实房间名称")
+	game.animation_duration_scale = 1.0
 	game.begin_boss_combat()
-	_check(game.phase == "world_boss" and game.combat != null, "boss_ready 可以开始终幕战斗")
+	_check(game.phase == "boss_ready" and game.dream_intro_pending, "节目单确认后先进入 Boss 入场演出")
+	_check(game.dream_wake_presentation.current_outcome == "program_intro" and game.dream_wake_presentation.active_card_index == 0, "Boss 入场演出从第一张素材开始")
+	_check(game.run_save_repository.read().get("dream_intro_pending", false), "Boss 入场演出状态写入运行存档")
+	game.dream_wake_presentation.skip()
+	_check(game.phase == "world_boss" and game.combat != null and not game.dream_intro_pending, "Boss 入场演出完成后才开始终幕战斗")
 	if game.combat != null:
 		_check(game.combat.initial.get("rules", {}).get("dream_finale_profile", {}).get("source_ids", []) == game.dream_finale_profile.get("source_ids", []), "Boss combat initial rules 保留终幕 profile")
 	var expected_profile: Dictionary = game.dream_finale_profile.duplicate(true)
