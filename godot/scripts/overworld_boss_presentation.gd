@@ -30,6 +30,13 @@ static func refresh(game) -> void:
 		_add_label(boss, "▼ Boss", Vector3(0, 3.0, 0), Color("ff6e96"))
 	boss.position = game._house_world(r.room_nodes[r.enemy_pos].cell) + Vector3(0.65, 0.4, 0)
 	boss.visible = r.enemy_hp > 0 and _floor_visible(game, int(r.room_nodes[r.enemy_pos].get("floor", 0)))
+	var profile_label = layer.get_node_or_null("DreamFinaleProfileLabel")
+	if profile_label != null:
+		profile_label.free()
+	var profile: Dictionary = r.dream_profile if "dream_profile" in r else {}
+	if bool(profile.get("valid", false)):
+		profile_label = _add_label(layer, "终幕 · " + str(profile.get("name", "素材合成")), boss.position + Vector3(0, 1.0, 0), Color("f2b84b"))
+		profile_label.name = "DreamFinaleProfileLabel"
 	var hints = layer.get_node_or_null("Hints")
 	if hints != null:
 		hints.free()
@@ -154,7 +161,7 @@ static func _add_stair_steps(parent: Node3D, prefix: String, origin: Vector3, ki
 		parent.add_child(step)
 
 
-static func _add_label(parent: Node3D, caption: String, position: Vector3, color: Color) -> void:
+static func _add_label(parent: Node3D, caption: String, position: Vector3, color: Color) -> Label3D:
 	var label := Label3D.new()
 	label.text = caption
 	label.position = position
@@ -164,3 +171,4 @@ static func _add_label(parent: Node3D, caption: String, position: Vector3, color
 	label.pixel_size = 0.012
 	label.modulate = color
 	parent.add_child(label)
+	return label

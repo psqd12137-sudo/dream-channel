@@ -25,8 +25,12 @@ var journal: Array = []
 var replaying := false
 var initial: Dictionary = {}
 var error := ""
+var dream_profile: Dictionary = {}
+var relay_awarded_anchors: Dictionary = {}
+var breather_awarded_anchors: Dictionary = {}
+var player_max_hp := 6
 
-func initialize(rooms, start: Vector2i, boss: Dictionary, defs: Dictionary, starter: Array, seed: int, rules: Dictionary, relics: Array) -> void:
+func initialize(rooms, start: Vector2i, boss: Dictionary, defs: Dictionary, starter: Array, seed: int, rules: Dictionary, relics: Array, finale_profile: Dictionary = {}) -> void:
 	graph.clear()
 	room_nodes.clear()
 	room_instances.clear()
@@ -36,6 +40,10 @@ func initialize(rooms, start: Vector2i, boss: Dictionary, defs: Dictionary, star
 	stair_links.clear()
 	physical_cells.clear()
 	anchors.clear()
+	relay_awarded_anchors.clear()
+	breather_awarded_anchors.clear()
+	dream_profile = finale_profile.duplicate(true)
+	player_max_hp = maxi(1, int(rules.get("player_max_hp", rules.get("player_hp", 6))))
 	var instance_cells: Dictionary = {}
 	for raw_cell in rooms.placed.keys():
 		var cell: Vector2i = raw_cell
@@ -106,6 +114,17 @@ func initialize(rooms, start: Vector2i, boss: Dictionary, defs: Dictionary, star
 		graph[cell].sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
 			return a.y < b.y or a.y == b.y and a.x < b.x
 		)
+	# Resolve the third material to its physical cells once. The programme uses
+	# this stable list for spotlight/double-sweep targeting; it never invents
+	# cells outside the connected overworld graph.
+	if not dream_profile.is_empty():
+		var climax_room_id := str(dream_profile.get("climax_room_id", ""))
+		var climax_cells: Array = []
+		for cell: Vector2i in physical_cells:
+			var room: Dictionary = rooms.placed.get(cell, {})
+			if str(room.get("instance_id", "")) == climax_room_id or str(room.get("id", "")) == climax_room_id:
+				climax_cells.append([cell.x, cell.y])
+		dream_profile["climax_cells"] = climax_cells
 	var start_cell: Vector2i = cell_nodes.get(start, INVALID_CELL)
 	if start_cell == INVALID_CELL:
 		error = "终局起点必须位于已探索的大地图格子上。"
@@ -191,6 +210,7 @@ func initialize(rooms, start: Vector2i, boss: Dictionary, defs: Dictionary, star
 		"deck": starter.duplicate(),
 		"relics": relics.duplicate(),
 		"seed": seed,
+		"dream_profile": dream_profile.duplicate(true),
 	}
 	# cols/rows are only compatibility bounds for shared UI helpers; walkability
 	# and pathing are overridden below and continue to use physical coordinates.
@@ -348,6 +368,16 @@ func dismantle() -> bool:
 		broadcast = maxi(0, broadcast - 2)
 		enemy_max_toughness = maxi(2, 6 - cleared())
 		enemy_toughness = mini(enemy_toughness, enemy_max_toughness)
+		var anchor_key := "%d,%d" % [player_pos.x, player_pos.y]
+		if str(dream_profile.get("anchor_rule", "")) == "relay" and not relay_awarded_anchors.has(anchor_key):
+			relay_awarded_anchors[anchor_key] = true
+			energy += 1
+			event_log.append("DreamRelayAP cell=%s amount=1" % anchor_key)
+		elif str(dream_profile.get("anchor_rule", "")) == "breather" and not breather_awarded_anchors.has(anchor_key):
+			breather_awarded_anchors[anchor_key] = true
+			var before_hp := player_hp
+			player_hp = mini(player_max_hp, player_hp + 1)
+			event_log.append("DreamBreatherHP cell=%s amount=%d" % [anchor_key, player_hp - before_hp])
 	if cleared() == 4:
 		outcome = "victory"
 		finish_reason = "ritual"
