@@ -1124,10 +1124,12 @@ func go_home() -> void:
 
 
 func has_saved_run() -> bool:
+	_adopt_solo_trial_save_if_needed()
 	return run_save_repository.exists()
 
 
 func continue_saved_run() -> bool:
+	_adopt_solo_trial_save_if_needed()
 	_set_home_video(false)
 	var save: Dictionary = run_save_repository.read()
 	if save.is_empty():
@@ -1225,6 +1227,25 @@ func continue_saved_run() -> bool:
 		_present_saved_dream_draw()
 	elif dream_program_available and not dream_program_handoff.is_empty():
 		hud.call("show_dream_program_placeholder", dream_program_handoff)
+	return true
+
+
+func _adopt_solo_trial_save_if_needed() -> bool:
+	if solo_stage_trial_active:
+		return true
+	# The formal run always wins when both files exist. Only a fresh controller
+	# still pointing at RUN_SAVE_PATH may adopt an orphaned sample checkpoint.
+	if run_save_repository == null or str(run_save_repository.save_path) != RUN_SAVE_PATH:
+		return false
+	if FileAccess.file_exists(RUN_SAVE_PATH):
+		return false
+	var sample_repository := RunSaveRepository.new(SOLO_STAGE_TRIAL_SAVE_PATH, EXE_SOURCE_ID)
+	if not sample_repository.exists():
+		return false
+	solo_trial_previous_repository = run_save_repository
+	run_save_repository = sample_repository
+	solo_stage_trial_active = true
+	solo_stage_trial_config = _load_json_dictionary(SOLO_STAGE_TRIAL_DATA_PATH)
 	return true
 
 

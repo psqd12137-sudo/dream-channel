@@ -113,6 +113,46 @@ func _run() -> void:
 	resumed.queue_free()
 	await process_frame
 
+	# A sample run is written under its isolated path, then a fresh controller
+	# starts with the formal repository exactly as a new process would.
+	var formal_repository = load("res://scripts/run_save_repository.gd").new("user://channel_run_v1.json", "CabinSlice_织梦频道.exe@EEC4C574CC22")
+	var sample_repository = load("res://scripts/run_save_repository.gd").new("user://solo_stage_trial_v1.json", "CabinSlice_织梦频道.exe@EEC4C574CC22")
+	formal_repository.clear()
+	sample_repository.clear()
+	var sample_writer = load("res://channel_3d.tscn").instantiate()
+	sample_writer.animation_duration_scale = 0.0
+	root.add_child(sample_writer)
+	await process_frame
+	sample_writer.solo_stage_trial_active = true
+	sample_writer.solo_stage_trial_config = {"milestones": [4, 8, 12]}
+	sample_writer.run_save_repository = sample_repository
+	sample_writer.start_new_run(false, 20260911)
+	sample_writer.boss_id = "channel_host"
+	sample_writer.phase = "ending"
+	sample_writer.ending_pending = true
+	sample_writer.ending_outcome = "victory"
+	sample_writer.ending_success = true
+	sample_writer.ending_recap = {"outcome": "victory", "success": true, "cards": victory_recap.cards}
+	sample_writer._save_run()
+	_check(sample_repository.exists(), "sample ending writes the isolated checkpoint")
+	sample_writer.go_home()
+	sample_writer.queue_free()
+	await process_frame
+	var auto_resumed = load("res://channel_3d.tscn").instantiate()
+	auto_resumed.animation_duration_scale = 0.0
+	root.add_child(auto_resumed)
+	await process_frame
+	_check(auto_resumed.has_saved_run(), "home continue discovers an orphaned sample save")
+	_check(auto_resumed.solo_stage_trial_active and auto_resumed.run_save_repository.save_path == auto_resumed.SOLO_STAGE_TRIAL_SAVE_PATH, "sample discovery adopts the isolated repository and config")
+	_check(auto_resumed.continue_saved_run(), "fresh controller restores the sample ending")
+	_check(auto_resumed.phase == "ending" and auto_resumed.ending_pending and auto_resumed.ending_outcome == "victory", "sample ending resumes with the same outcome")
+	await process_frame
+	auto_resumed.dream_wake_presentation.skip()
+	auto_resumed.finish_ending()
+	_check(not sample_repository.exists() and not formal_repository.exists(), "confirming the sample ending clears only the isolated run")
+	auto_resumed.queue_free()
+	await process_frame
+
 	presentation.queue_free()
 	player.queue_free()
 	await process_frame
