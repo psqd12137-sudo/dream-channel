@@ -111,6 +111,7 @@ const HOME_TEST_HOST_RECT := Rect2(997, 282, 205, 42)
 const HOME_TEST_WALL_TRANSITION_RECT := Rect2(780, 336, 422, 42)
 const HOME_TEST_TOYHOUSE_RECT := Rect2(780, 390, 422, 42)
 const HOME_TEST_TACTILE_RECT := Rect2(780, 444, 422, 42)
+const HOME_TEST_SOLO_STAGE_RECT := Rect2(780, 492, 422, 42)
 const TEST_COMBAT_RETURN_RECT := Rect2(1040, 18, 192, 34)
 const HOME_RESOLUTION_RECT := Rect2(76, 714, 180, 36)
 const HOME_WINDOW_MODE_RECT := Rect2(270, 714, 102, 36)
@@ -600,19 +601,20 @@ func _draw_home() -> void:
 	_draw_button(HOME_SEED_COPY_RECT, "复制种子", BLUE, TEXT)
 	_draw_button(HOME_TESTS_RECT, "关闭后台" if game.home_tests_open else "后台测试", Color("734b87"), TEXT)
 	if game.home_tests_open:
-		_draw_ticket_panel(Rect2(764, 96, 454, 404), Color("17151cf2"), MAGENTA)
+		_draw_ticket_panel(Rect2(764, 96, 454, 452), Color("17151cf2"), MAGENTA)
 		_label("节目后台 · 仅供开发检查", Vector2(780, 120), 10, MUTED)
 		_draw_button(HOME_TEST_LAYOUT_RECT, "布局直觉测试区", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_SIDE_RECT, "WASD 横版手感", TEAL, TEXT)
 		_draw_button(HOME_TEST_PUZZLE_RECT, "八数码拼图", GOLD, INK)
 		_draw_button(HOME_TEST_SEARCH_RECT, "3D 微缩搜物", Color("7863a5"), TEXT)
 		_draw_button(HOME_TEST_CHASE_RECT, "警察抓小偷", RED, TEXT)
-		_draw_button(HOME_TEST_CHARACTER_ANIMATION_RECT, "角色动画检查", Color("3e8b78"), TEXT)
+		_draw_button(HOME_TEST_CHARACTER_ANIMATION_RECT, "战斗想象质感对比", Color("3e8b78"), TEXT)
 		_draw_button(HOME_TEST_ASSET_EDITOR_RECT, "房间资产地编", Color("c98a37"), TEXT)
 		_draw_button(HOME_TEST_HOST_RECT, "大地图 Boss · 独立试玩", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_WALL_TRANSITION_RECT, "墙体显隐动画对比", Color("3e8b78"), TEXT)
 		_draw_button(HOME_TEST_TOYHOUSE_RECT, "玩具屋完整流程样片", MAGENTA, TEXT)
 		_draw_button(HOME_TEST_TACTILE_RECT, "实体玩具质感对比", TEAL, TEXT)
+		_draw_button(HOME_TEST_SOLO_STAGE_RECT, "单人三阶段样片", MAGENTA, TEXT)
 	_label("画面", Vector2(76, 706), 10, MUTED)
 	_draw_button(HOME_RESOLUTION_RECT, game.display_resolution_label(), TEAL, TEXT)
 	_draw_button(HOME_WINDOW_MODE_RECT, game.display_mode_label(), BLUE, TEXT)
@@ -2282,6 +2284,8 @@ func _gui_input(event: InputEvent) -> void:
 			game.start_toyhouse_sequence_lab()
 		elif game.home_tests_open and HOME_TEST_TACTILE_RECT.has_point(point):
 			game.start_tactile_lab()
+		elif game.home_tests_open and HOME_TEST_SOLO_STAGE_RECT.has_point(point):
+			game.start_solo_stage_trial()
 		elif game.home_tests_open and HOME_TEST_LAYOUT_RECT.has_point(point):
 			game.get_tree().change_scene_to_file("res://scenes/layout_intuition_lab.tscn")
 		elif game.home_tests_open and HOME_TEST_SIDE_RECT.has_point(point):
@@ -2703,3 +2707,4 @@ It prevents stale bytes on the shared volume from being parsed as GDScript.
 # SMB_SAFE_PADDING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz
 
 # SMB_FINAL_PADDING_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz
+

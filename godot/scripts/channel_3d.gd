@@ -12,6 +12,7 @@ const BattleRoomArtContext = preload("res://scripts/battle_room_art_context.gd")
 const BattleImaginationProfile = preload("res://scripts/battle_imagination_profile.gd")
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const RunSaveRepository = preload("res://scripts/run_save_repository.gd")
+const SoloStageFlow = preload("res://scripts/solo_stage_flow.gd")
 const BossProgression = preload("res://scripts/boss_progression.gd")
 const PresentationSettings = preload("res://scripts/presentation_settings.gd")
 const HouseWorldRenderer = preload("res://scripts/channel_house_world_renderer.gd")
@@ -28,6 +29,8 @@ const EXE_SOURCE_ID := "CabinSlice_织梦频道.exe@EEC4C574CC22"
 const SNAPSHOT_ROOT := "res://data/exe_snapshot/"
 const PRESENTATION_MANIFEST := "res://data/presentation_manifest.json"
 const RUN_SAVE_PATH := "user://channel_run_v1.json"
+const SOLO_STAGE_TRIAL_SAVE_PATH := "user://solo_stage_trial_v1.json"
+const SOLO_STAGE_TRIAL_DATA_PATH := "res://data/solo_stage_trial.json"
 const BATTLE_HEIGHT_ASSET_ROOT := "res://assets/quaternius/ultimate_house_interior/"
 const BATTLE_FLOOR_LIGHT := KAYKIT_DUNGEON_ROOT + "floor_wood_large.gltf.glb"
 const BATTLE_FLOOR_DARK := KAYKIT_DUNGEON_ROOT + "floor_wood_large_dark.gltf.glb"
@@ -170,6 +173,10 @@ var room_rules = RoomRules.new()
 var combat = null
 var rng := RandomNumberGenerator.new()
 var run_save_repository = RunSaveRepository.new(RUN_SAVE_PATH, EXE_SOURCE_ID)
+var solo_stage_flow = SoloStageFlow.new()
+var solo_stage_trial_active := false
+var solo_trial_previous_repository = null
+var solo_stage_trial_config: Dictionary = {}
 var presentation_settings = null
 var battle_feedback_suppressed := false
 var house_world_renderer = null
@@ -856,6 +863,8 @@ func reset_run(seed_value: int = 0) -> void:
 	if seed_value != 0:
 		run_seed = seed_value
 	rng.seed = run_seed
+	if solo_stage_trial_active:
+		solo_stage_flow.reset(run_seed, solo_stage_trial_config)
 	run_layout_profile = (RUN_LAYOUT_PROFILES[posmod(run_seed, RUN_LAYOUT_PROFILES.size())] as Dictionary).duplicate(true)
 	content = WebContentAdapter.new(SNAPSHOT_ROOT, EXE_SOURCE_ID).build_content(run_seed)
 	room_catalog.clear()
@@ -940,6 +949,33 @@ func start_new_run(tutorial_mode: bool = false, seed_override: int = 0) -> void:
 	status_message = "教学提示：先选预兆，再点黄色扩建格；战斗中绿色=移动、金色=放置。" if tutorial_mode else "本集格局：%s。先从两枚行前预兆中选一枚。" % current_layout_profile_label()
 	_refresh_hud()
 	_save_run()
+
+
+func start_solo_stage_trial(seed_value: int = 0) -> void:
+	if solo_stage_trial_active:
+		return
+	solo_trial_previous_repository = run_save_repository
+	run_save_repository = RunSaveRepository.new(SOLO_STAGE_TRIAL_SAVE_PATH, EXE_SOURCE_ID)
+	solo_stage_trial_active = true
+	solo_stage_trial_config = _load_json_dictionary(SOLO_STAGE_TRIAL_DATA_PATH)
+	var next_seed := seed_value if seed_value != 0 else _random_run_seed()
+	start_new_run(false, next_seed)
+	solo_stage_flow.reset(run_seed, solo_stage_trial_config)
+	status_message = "单人三阶段样片：先玩到第4间房，再决定投入或弃权。"
+	_save_run()
+	_refresh_hud()
+
+
+func _restore_solo_trial_repository() -> void:
+	if not solo_stage_trial_active:
+		return
+	if solo_trial_previous_repository != null:
+		run_save_repository = solo_trial_previous_repository
+	else:
+		run_save_repository = RunSaveRepository.new(RUN_SAVE_PATH, EXE_SOURCE_ID)
+	solo_trial_previous_repository = null
+	solo_stage_trial_active = false
+	solo_stage_trial_config.clear()
 
 
 func _random_run_seed() -> int:
@@ -1035,6 +1071,7 @@ func go_home() -> void:
 		camera.transform = tactile_camera_transform
 		camera.size = tactile_camera_size
 		house_root.get_node("LiliToken").transform = tactile_token_transform
+	_restore_solo_trial_repository()
 
 
 func has_saved_run() -> bool:
@@ -1047,6 +1084,11 @@ func continue_saved_run() -> bool:
 	if save.is_empty():
 		return false
 	reset_run(int(save.get("seed", run_seed)))
+	if solo_stage_trial_active and save.has("dream_stage"):
+		if not solo_stage_flow.restore(save.get("dream_stage", {})):
+			status_message = "单人样片存档版本过新，已拒绝载入；存档仍保留。"
+			_refresh_hud()
+			return false
 	player_hp = int(save.get("player_hp", 6))
 	player_max_hp = int(save.get("player_max_hp", 6))
 	player_speed = int(save.get("player_speed", content.get("run_rules", {}).get("base_speed", 3)))
@@ -2446,6 +2488,8 @@ func _finish_reward() -> void:
 	reward_options.clear()
 	reward_origin = ""
 	if origin == "boss_access":
+		if _solo_stage_due_before_finale():
+			return
 		_prepare_boss_ready()
 		return
 	phase = "explore"
@@ -2454,6 +2498,22 @@ func _finish_reward() -> void:
 	build_house_world()
 	_save_run()
 	_refresh_hud()
+
+
+func _solo_stage_due_before_finale() -> bool:
+	if not solo_stage_trial_active:
+		return false
+	var due := solo_stage_flow.due_stage(run_progress)
+	if due == 0:
+		return false
+	phase = "explore"
+	house_camera_closeup = false
+	house_camera_following = false
+	status_message = "第 %d 阶段已到结算点：请在后台样片中提交信物或选择弃权。" % due
+	build_house_world()
+	_save_run()
+	_refresh_hud()
+	return true
 
 
 func start_event_trial(room: Dictionary) -> void:
@@ -2502,6 +2562,8 @@ func finish_event_trial(success: bool) -> void:
 		else:
 			status_message = "考验失败：房间奖励消失了。"
 		if reaches_finale:
+			if _solo_stage_due_before_finale():
+				return
 			_prepare_boss_ready()
 			return
 		phase = "explore"
@@ -3786,6 +3848,8 @@ func _save_run() -> void:
 		"stair_links": room_rules.stair_links.duplicate(true),
 		"remaining_ids": remaining_ids,
 	}
+	if solo_stage_trial_active:
+		payload["dream_stage"] = solo_stage_flow.snapshot()
 	if phase == "world_boss" and combat != null:
 		payload["world_boss"] = combat.snapshot()
 	run_save_repository.write(payload)
