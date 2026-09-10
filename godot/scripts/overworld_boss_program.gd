@@ -128,8 +128,22 @@ func execute(r, s) -> Array[Dictionary]:
 		if s.broken:
 			s.toughness = s.max_toughness
 			s.broken = false
-		return events
-	return super.execute(r, s)
+		return _annotate_attack_events(events)
+	return _annotate_attack_events(super.execute(r, s))
+
+
+func _annotate_attack_events(events: Array[Dictionary]) -> Array[Dictionary]:
+	# Keep the telegraph and the resolved impact explicit for replay and
+	# presentation. `cells` is the announced area; `impact_cells` is the cell
+	# that actually received this event's damage.
+	var telegraph_cells: Array = (plan.get("cells", []) as Array).duplicate()
+	for event: Dictionary in events:
+		if str(event.get("kind", "")) != "attack":
+			continue
+		event["cells"] = telegraph_cells.duplicate()
+		event["telegraph_cells"] = telegraph_cells.duplicate()
+		event["impact_cells"] = [event.get("target", Vector2i(-999, -999))]
+	return events
 
 
 func _to_cell(raw: Variant) -> Vector2i:

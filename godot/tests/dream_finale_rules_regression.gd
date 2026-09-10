@@ -41,8 +41,12 @@ func _run() -> void:
 				combo_rules.host_fight.prepare(combo_rules)
 				var combo_path: Array = combo_rules.host_fight.plan.get("path", [])
 				_check(combo_path.size() == (3 if first_large else 2), "八组合首回合均应用短/长冲撞上限")
+				var combo_route_cells: Array = (combo_rules.host_fight.plan.get("cells", []) as Array).duplicate()
 				var combo_route_events: Array[Dictionary] = combo_rules.host_fight.execute(combo_rules, combo_boss)
-				_check(combo_route_events.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack") == first_large, "八组合首回合实际兑现长短冲撞受击差异")
+				var combo_route_attacks: Array[Dictionary] = combo_route_events.filter(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack")
+				_check(combo_route_attacks.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack") == first_large, "八组合首回合实际兑现长短冲撞受击差异")
+				if not combo_route_attacks.is_empty():
+					_check(combo_route_attacks[0].get("telegraph_cells", []) == combo_route_cells and combo_route_attacks[0].get("impact_cells", []) == [Vector2i.ZERO] and Vector2i.ZERO in combo_route_cells, "八组合 charge 预告受击格与实际事件一致")
 				combo_rules.outcome = ""
 				combo_boss.pos = Vector2i(7, 0)
 				combo_rules.player_pos = Vector2i(2, 0)
@@ -50,8 +54,12 @@ func _run() -> void:
 				combo_rules.host_fight.prepare(combo_rules)
 				var expected_kind := "sweep" if third_combat else "pursuit"
 				_check(str(combo_rules.host_fight.plan.get("kind", "")) == expected_kind, "八组合第三回合均兑现第三素材招式")
+				var combo_climax_cells: Array = (combo_rules.host_fight.plan.get("cells", []) as Array).duplicate()
 				var combo_climax_events: Array[Dictionary] = combo_rules.host_fight.execute(combo_rules, combo_boss)
-				_check(combo_climax_events.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack") == third_combat, "八组合第三回合实际兑现扫场/聚光受击差异")
+				var combo_climax_attacks: Array[Dictionary] = combo_climax_events.filter(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack")
+				_check(combo_climax_attacks.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack") == third_combat, "八组合第三回合实际兑现扫场/聚光受击差异")
+				if not combo_climax_attacks.is_empty():
+					_check(combo_climax_attacks[0].get("telegraph_cells", []) == combo_climax_cells and combo_climax_attacks[0].get("impact_cells", []) == [Vector2i(2, 0)] and Vector2i(2, 0) in combo_climax_cells, "八组合 climax 预告受击格与实际事件一致")
 	var profile_base := {
 		"valid": true,
 		"name": "测试终幕",
@@ -193,6 +201,23 @@ func _run() -> void:
 	_check(long_live_climax.physical_cells == short_live_climax.physical_cells and long_live_climax.initial.get("deck", []) == short_live_climax.initial.get("deck", []), "两种终幕组合使用同一地图与起始牌组")
 	_check(long_live_climax_events.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack") and long_live_climax.player_hp < 6, "double_sweep 实际消费第三房间范围并造成受击")
 	_check(not short_live_climax_events.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack") and short_live_climax.player_hp == 6, "spotlight 实际追击因行动力不足未造成受击")
+
+	var full_long_profile: Dictionary = Profile.compose([
+		{"instance_id": "full-long-route", "room_id": "room-a", "room_size": 3},
+		{"instance_id": "full-relay", "room_id": "room-b", "kind": "combat"},
+		{"instance_id": "full-double", "room_id": "room-c", "kind": "combat"},
+	])
+	var full_short_profile: Dictionary = Profile.compose([
+		{"instance_id": "full-short-route", "room_id": "room-a", "room_size": 1},
+		{"instance_id": "full-breather", "room_id": "room-b", "kind": "quiet"},
+		{"instance_id": "full-spotlight", "room_id": "room-c", "kind": "quiet"},
+	])
+	var full_long: Dictionary = _run_full_profile(Rules, rooms, defs, full_long_profile)
+	var full_short: Dictionary = _run_full_profile(Rules, rooms, defs, full_short_profile)
+	_check(full_long.get("outcome", "") == "victory" and full_short.get("outcome", "") == "victory", "两种极端 profile 都能通过真实玩家/Boss 回合结算至 victory")
+	_check(full_long.get("route_attack", false) and not full_short.get("route_attack", true) and full_long.get("route_boss_pos", Vector2i.ZERO) != full_short.get("route_boss_pos", Vector2i.ZERO), "完整终局的 long/short 冲撞产生实际移动与受击差异")
+	_check(full_long.get("climax_attack", false) and not full_short.get("climax_attack", true), "完整终局的 double_sweep/spotlight 产生实际受击差异")
+	_check(full_long.get("relay_award", false) and full_short.get("breather_award", false), "完整终局实际结算 relay 与 breather 锚点规则")
 	var missing_profile: Dictionary = profile_base.duplicate(true)
 	missing_profile["climax_room_id"] = "missing-room"
 	var missing_rules = _make_rules(Rules, rooms, defs, missing_profile)
@@ -229,6 +254,71 @@ func _make_rules(Rules, rooms, defs: Dictionary, profile: Dictionary):
 	var rules = Rules.new()
 	rules.initialize(rooms, Vector2i.ZERO, {"name": "测试Boss", "hp": 20}, defs, ["guard"], 9, {"player_hp": 6, "player_max_hp": 6, "base_speed": 3, "base_energy": 5}, [], profile)
 	return rules
+
+
+func _run_full_profile(Rules, rooms, defs: Dictionary, profile: Dictionary) -> Dictionary:
+	var rules = _make_rules(Rules, rooms, defs, profile)
+	rules.broadcast_max = 999
+	rules.player_max_hp = 20
+	rules.player_hp = 20
+	var boss = rules.enemy_by_id(rules.enemy_order[0])
+	boss.pos = Vector2i(4, 0)
+	rules.player_pos = Vector2i.ZERO
+	rules.round_number = 1
+	rules.host_fight.prepare(rules)
+	var route_cells: Array = (rules.host_fight.plan.get("cells", []) as Array).duplicate()
+	var route_events: Array[Dictionary] = rules.pulse()
+	var route_attack := route_events.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack")
+	var route_boss_pos: Vector2i = boss.pos
+	var route_event_cells: Array = []
+	for event: Dictionary in route_events:
+		if str(event.get("kind", "")) == "attack":
+			route_event_cells = (event.get("telegraph_cells", []) as Array).duplicate()
+			break
+
+	boss.pos = Vector2i(7, 0)
+	rules.player_pos = Vector2i(2, 0)
+	rules.round_number = 3
+	rules.host_fight.prepare(rules)
+	var climax_cells: Array = (rules.host_fight.plan.get("cells", []) as Array).duplicate()
+	var climax_events: Array[Dictionary] = rules.pulse()
+	var climax_attack := climax_events.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack")
+	var climax_event_cells: Array = []
+	for event: Dictionary in climax_events:
+		if str(event.get("kind", "")) == "attack":
+			climax_event_cells = (event.get("telegraph_cells", []) as Array).duplicate()
+			break
+
+	# Finish the same encounter through actual player movement and anchor
+	# actions. A generous HP/broadcast budget isolates the finale rules while
+	# preserving the real Boss turn between player actions.
+	boss.pos = Vector2i(7, 0)
+	rules.player_pos = Vector2i.ZERO
+	rules.anchors.clear()
+	for cell in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)]:
+		rules.anchors[cell] = 1
+	rules.energy = 100
+	var relay_award := false
+	var breather_award := false
+	for index in range(4):
+		var target := Vector2i(index, 0)
+		while rules.player_pos != target:
+			var step := Vector2i(signi(target.x - rules.player_pos.x), 0)
+			if not rules.step_to(rules.player_pos + step):
+				break
+		var energy_before: int = rules.energy
+		var hp_before: int = rules.player_hp
+		var dismantled: bool = rules.dismantle()
+		if not dismantled:
+			return {"outcome": rules.outcome, "route_attack": route_attack, "climax_attack": climax_attack, "route_boss_pos": route_boss_pos, "route_cells": route_cells, "route_event_cells": route_event_cells, "climax_cells": climax_cells, "climax_event_cells": climax_event_cells, "relay_award": relay_award, "breather_award": breather_award}
+		if str(profile.get("anchor_rule", "")) == "relay" and rules.energy == energy_before - 1:
+			relay_award = true
+		if str(profile.get("anchor_rule", "")) == "breather" and rules.player_hp == mini(rules.player_max_hp, hp_before + 1):
+			breather_award = true
+		if index < 3:
+			rules.energy = 100
+			rules.pulse()
+	return {"outcome": rules.outcome, "route_attack": route_attack, "climax_attack": climax_attack, "route_boss_pos": route_boss_pos, "route_cells": route_cells, "route_event_cells": route_event_cells, "climax_cells": climax_cells, "climax_event_cells": climax_event_cells, "relay_award": relay_award, "breather_award": breather_award}
 
 
 func _check(ok: bool, message: String) -> void:
