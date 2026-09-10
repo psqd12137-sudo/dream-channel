@@ -90,6 +90,40 @@ func _run_game_integration() -> void:
 	_check(not malformed_loaded and game.run_save_repository.exists(), "malformed dream_stage is rejected without clearing")
 	game.run_save_repository.write({"version": 1, "source": game.EXE_SOURCE_ID, "seed": 1337})
 	_check(game.continue_saved_run(), "missing dream_stage preserves legacy load path")
+	# A checkpoint taken after the draw result is committed must resume in the
+	# reveal-only state and clear pending exactly once, without reopening choices.
+	var pending_path := "res://.test_solo_pending_draw.json"
+	var pending_game = load("res://channel_3d.tscn").instantiate()
+	pending_game.animation_duration_scale = 0.0
+	root.add_child(pending_game)
+	await process_frame
+	pending_game.run_save_repository = load("res://scripts/run_save_repository.gd").new(pending_path, pending_game.EXE_SOURCE_ID)
+	pending_game.run_save_repository.clear()
+	pending_game.solo_stage_trial_active = true
+	pending_game.solo_stage_trial_config = pending_game._load_json_dictionary(pending_game.SOLO_STAGE_TRIAL_DATA_PATH)
+	pending_game.start_new_run(false, 20260910)
+	pending_game.room_ledger.visit({"instance_id": "pending-a", "room_id": "kitchen", "name": "厨房", "visited": true})
+	pending_game.room_ledger.visit({"instance_id": "pending-b", "room_id": "hall", "name": "走廊", "visited": true})
+	pending_game.dream_draw_active = true
+	pending_game.dream_draw_stage = 1
+	_check(pending_game.solo_stage_flow.accept_result({"stage": 1, "selected_id": "pending-b", "nomination_id": "pending-a", "probabilities": {"pending-a": 0.6, "pending-b": 0.4}, "roll": 0.2}), "pending draw checkpoint is accepted")
+	pending_game._save_run()
+	var resumed = load("res://channel_3d.tscn").instantiate()
+	resumed.animation_duration_scale = 0.0
+	root.add_child(resumed)
+	await process_frame
+	resumed.run_save_repository = load("res://scripts/run_save_repository.gd").new(pending_path, resumed.EXE_SOURCE_ID)
+	resumed.solo_stage_trial_active = true
+	resumed.solo_stage_trial_config = resumed._load_json_dictionary(resumed.SOLO_STAGE_TRIAL_DATA_PATH)
+	_check(resumed.continue_saved_run(), "pending draw checkpoint restores")
+	await process_frame
+	_check(resumed.solo_stage_flow.results.size() == 1 and resumed.solo_stage_flow.pending_result.is_empty(), "pending result is cleared after one reveal")
+	_check(not resumed.dream_draw_active, "restored pending draw does not reopen nomination")
+	_check(not resumed.hud.dream_stage_panel.visible, "reveal-only panel closes after recovery")
+	pending_game.queue_free()
+	resumed.queue_free()
+	FileAccess.open(pending_path, FileAccess.WRITE).store_string("")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(pending_path))
 	game.go_home()
 	_check(formal_repo.read() == formal_before, "formal repository remains unchanged after trial")
 	_check(game.run_save_repository == formal_repo, "go home restores formal repository")

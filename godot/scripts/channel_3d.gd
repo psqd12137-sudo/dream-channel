@@ -1169,14 +1169,20 @@ func continue_saved_run() -> bool:
 func _present_saved_dream_draw() -> void:
 	if not dream_draw_active or room_ledger == null or dream_draw_stage <= 0:
 		return
+	var pending: Dictionary = solo_stage_flow.pending_result.duplicate(true)
 	var excluded: Array[String] = []
 	for accepted: Dictionary in solo_stage_flow.results:
+		if not pending.is_empty() and int(accepted.get("stage", 0)) == int(pending.get("stage", 0)):
+			continue
 		var selected_id := str(accepted.get("selected_id", ""))
 		if not selected_id.is_empty():
 			excluded.append(selected_id)
 	var candidates: Array[Dictionary] = room_ledger.candidates(excluded)
 	if candidates.size() >= 2:
-		hud.call("show_dream_stage_panel", dream_draw_stage, candidates, DreamDrawRules.probabilities(candidates, "", solo_stage_trial_config))
+		if pending.is_empty():
+			hud.call("show_dream_stage_panel", dream_draw_stage, candidates, DreamDrawRules.probabilities(candidates, "", solo_stage_trial_config))
+		else:
+			hud.call("reveal_saved_dream_stage", dream_draw_stage, candidates, pending, 0.0)
 
 
 func toggle_home_tests() -> void:
@@ -2604,6 +2610,13 @@ func submit_dream_stage_nomination(nomination_id: String) -> void:
 	if selected_id.is_empty():
 		hud.call("reject_dream_stage_submission", "节目暂时没有可抽取的候选。")
 		return
+	hud.call("update_dream_stage_probabilities", probabilities)
+	var source_ids: Array[String] = []
+	for accepted: Dictionary in solo_stage_flow.results:
+		var prior_selected := str(accepted.get("selected_id", ""))
+		if not prior_selected.is_empty():
+			source_ids.append(prior_selected)
+	source_ids.append(selected_id)
 	var draw_result := {
 		"stage": dream_draw_stage,
 		"nomination_id": nomination_id,
@@ -2611,6 +2624,12 @@ func submit_dream_stage_nomination(nomination_id: String) -> void:
 		"probabilities": probabilities,
 		"roll": roll,
 		"abstained": nomination_id.is_empty(),
+		"program_entry": {
+			"type": "dream_finale_program",
+			"version": 1,
+			"status": "awaiting_dream_finale_profile",
+			"source_ids": source_ids,
+		},
 	}
 	if not solo_stage_flow.accept_result(draw_result):
 		return
@@ -2623,6 +2642,7 @@ func submit_dream_stage_nomination(nomination_id: String) -> void:
 func finish_dream_stage_reveal() -> void:
 	if not dream_draw_active:
 		return
+	solo_stage_flow.clear_pending_result()
 	dream_draw_active = false
 	dream_draw_stage = 0
 	if solo_stage_flow.is_finale_ready():

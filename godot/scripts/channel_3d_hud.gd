@@ -523,9 +523,19 @@ func reject_dream_stage_submission(message: String) -> void:
 		dream_stage_panel.reject_submission(message)
 
 
+func update_dream_stage_probabilities(probabilities: Dictionary) -> void:
+	if dream_stage_panel != null:
+		dream_stage_panel.update_probabilities(probabilities)
+
+
 func reveal_dream_stage(result: Dictionary, seconds: float) -> void:
 	if dream_stage_panel != null:
 		dream_stage_panel.reveal(result, seconds)
+
+
+func reveal_saved_dream_stage(stage: int, records: Array[Dictionary], result: Dictionary, seconds: float) -> void:
+	if dream_stage_panel != null:
+		dream_stage_panel.show_reveal_only(stage, records, result, seconds)
 
 
 func _on_dream_stage_submitted(nomination_id: String) -> void:

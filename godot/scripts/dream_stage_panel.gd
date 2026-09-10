@@ -22,6 +22,7 @@ var result: Dictionary = {}
 var submitted_once := false
 var revealing := false
 var reveal_finished_once := false
+var reveal_only := false
 var _buttons: Array[Button] = []
 var _abstain_button: Button
 var _message := ""
@@ -45,6 +46,7 @@ func show_candidates(next_stage: int, next_records: Array[Dictionary], probabili
 	submitted_once = false
 	revealing = false
 	reveal_finished_once = false
+	reveal_only = false
 	_message = "选择一间房，把它交给这一阶段的节目；也可以本次弃权。"
 	_rebuild_buttons()
 	visible = true
@@ -53,7 +55,16 @@ func show_candidates(next_stage: int, next_records: Array[Dictionary], probabili
 
 func update_probabilities(next_probabilities: Dictionary) -> void:
 	probability_map = next_probabilities.duplicate(true)
+	for index in range(mini(records.size(), _buttons.size())):
+		_buttons[index].text = _candidate_text(records[index])
 	queue_redraw()
+
+
+func show_reveal_only(next_stage: int, next_records: Array[Dictionary], saved_result: Dictionary, seconds: float) -> void:
+	show_candidates(next_stage, next_records, saved_result.get("probabilities", {}))
+	reveal_only = true
+	submitted_once = true
+	reveal(saved_result, seconds)
 
 
 func reject_submission(message: String) -> void:
@@ -98,7 +109,7 @@ func _finish_reveal() -> void:
 
 
 func _submit(instance_id: String) -> void:
-	if submitted_once or revealing:
+	if submitted_once or revealing or reveal_only:
 		return
 	submitted_once = true
 	_message = "已交给节目，正在锁定这一阶段的抽片。"
@@ -169,7 +180,8 @@ func _candidate_text(record: Dictionary) -> String:
 	var chance := float(probability_map.get(id, 0.0)) * 100.0
 	var hp := maxi(0, int(record.get("hp_lost", 0)))
 	var score := DreamDrawRules.token_score(record)
-	return "%s    受伤经历 %d    信物分 %d    当前概率 %.1f%%" % [str(record.get("name", record.get("room_id", id))), hp, score, chance]
+	var image_note := "房间图：已提供" if str(record.get("thumbnail_path", "")).strip_edges() != "" else "房间图：暂无缩略图，使用文字回顾"
+	return "交给节目：%s    受伤经历 %d    信物分 %d    当前概率 %.1f%%    %s" % [str(record.get("name", record.get("room_id", id))), hp, score, chance, image_note]
 
 
 func _recap_text() -> String:
@@ -183,7 +195,10 @@ func _recap_text() -> String:
 			break
 	if selected.is_empty():
 		return "节目已完成抽片。"
-	return "节目选中了%s：你在这里损失了%d点生命。" % [str(selected.get("name", selected_id)), int(selected.get("hp_lost", 0))]
+	var base := "节目选中了%s：你在这里损失了%d点生命。" % [str(selected.get("name", selected_id)), int(selected.get("hp_lost", 0))]
+	if stage >= 3:
+		return base + " 节目单入口：三份素材已汇总，进入终幕节目单。"
+	return base + " 阶段素材提示：它会成为终幕的一项来源。"
 
 
 func _draw() -> void:
