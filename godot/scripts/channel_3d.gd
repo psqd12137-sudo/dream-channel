@@ -1080,12 +1080,13 @@ func has_saved_run() -> bool:
 
 func continue_saved_run() -> bool:
 	_set_home_video(false)
-	var save := run_save_repository.read()
+	var save: Dictionary = run_save_repository.read()
 	if save.is_empty():
 		return false
 	reset_run(int(save.get("seed", run_seed)))
 	if solo_stage_trial_active and save.has("dream_stage"):
-		if not solo_stage_flow.restore(save.get("dream_stage", {})):
+		var saved_dream_stage: Variant = save.get("dream_stage")
+		if not saved_dream_stage is Dictionary or not solo_stage_flow.restore(saved_dream_stage as Dictionary):
 			status_message = "单人样片存档版本过新，已拒绝载入；存档仍保留。"
 			_refresh_hud()
 			return false
@@ -2487,9 +2488,9 @@ func _finish_reward() -> void:
 	var origin := reward_origin
 	reward_options.clear()
 	reward_origin = ""
+	if _solo_stage_due_before_finale():
+		return
 	if origin == "boss_access":
-		if _solo_stage_due_before_finale():
-			return
 		_prepare_boss_ready()
 		return
 	phase = "explore"

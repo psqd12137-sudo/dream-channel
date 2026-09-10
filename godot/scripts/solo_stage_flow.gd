@@ -87,10 +87,24 @@ func restore(data: Dictionary) -> bool:
 	version = VERSION
 	stage = saved_stage
 	results.clear()
-	for raw: Variant in saved_results:
+	for index in range((saved_results as Array).size()):
+		var raw: Variant = (saved_results as Array)[index]
 		if not raw is Dictionary:
 			return false
-		results.append((raw as Dictionary).duplicate(true))
+		var record: Dictionary = raw as Dictionary
+		if int(record.get("stage", 0)) != index + 1:
+			return false
+		if not _is_result_shape_valid(record):
+			return false
+		results.append(record.duplicate(true))
+	if not (saved_pending as Dictionary).is_empty():
+		var pending: Dictionary = saved_pending as Dictionary
+		if int(pending.get("stage", 0)) < 1 or int(pending.get("stage", 0)) > STAGE_COUNT:
+			return false
+		if int(pending.get("stage", 0)) != (saved_results as Array).size():
+			return false
+		if not _is_result_shape_valid(pending):
+			return false
 	rng_state = str(data.get("rng_state", ""))
 	pending_result = (saved_pending as Dictionary).duplicate(true)
 	seed_value = int(data.get("seed", 0))
@@ -100,6 +114,10 @@ func restore(data: Dictionary) -> bool:
 
 func is_finale_ready() -> bool:
 	return results.size() == STAGE_COUNT and stage == STAGE_COUNT + 1
+
+
+func _is_result_shape_valid(result: Dictionary) -> bool:
+	return result.has("selected_id") or result.has("nomination_id") or bool(result.get("abstained", false))
 
 
 func _read_milestones(raw: Variant) -> Array[int]:
