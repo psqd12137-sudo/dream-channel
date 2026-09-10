@@ -65,7 +65,7 @@ func _dispatch(card_id: String, card: Dictionary, target: Vector2i, target_state
 	if card_type == "medicine" or card.has("gainEnergy"):
 		combat.energy += int(card.get("gainEnergy", 0))
 		combat.turn_energy_max = maxi(combat.turn_energy_max, combat.energy)
-		combat.player_hp -= int(card.get("selfDamage", 0))
+		combat.apply_player_self_damage(int(card.get("selfDamage", 0)))
 		return true
 	if card_type == "ready":
 		combat.ready_effect = (card.get("ready", {}) as Dictionary).duplicate(true)

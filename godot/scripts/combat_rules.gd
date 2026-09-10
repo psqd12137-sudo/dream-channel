@@ -22,6 +22,9 @@ var traps: Dictionary = {}
 var player_pos := Vector2i.ZERO
 var player_facing := Vector2i.DOWN
 var player_hp := 6
+## Cumulative real HP removed during this encounter. Shields, terrain and healing
+## are deliberately excluded; the counter is used by room experience records.
+var actual_hp_lost_total: int = 0
 var player_shield := 0
 var player_block: int:
 	## Compatibility alias; shield is the authoritative player defense resource.
@@ -507,6 +510,7 @@ func setup(arena: Dictionary, enemy: Variant, card_defs: Dictionary, starter: Ar
 	player_pos = _array_pos(arena.get("player", [0, 1]))
 	player_facing = _cardinal_direction(_array_pos(arena.get("player_facing", [0, 1])))
 	player_hp = int(run_rules.get("player_hp", 6))
+	actual_hp_lost_total = 0
 	player_shield = 0
 	player_statuses.clear()
 	base_speed = int(run_rules.get("base_speed", 3))
@@ -1535,7 +1539,9 @@ func _apply_player_hit(state: CombatEnemyState, kind: String, damage_override: i
 		damage -= terrain_blocked
 		shield_blocked = consume_player_shield(damage)
 		damage -= shield_blocked
+	var hp_before := maxi(player_hp, 0)
 	player_hp -= damage
+	_actual_hp_loss(hp_before, damage)
 	var stolen_id := ""
 	if damage > 0 and state.has_trait("grab"):
 		stolen_id = _steal_player_card()
@@ -1553,6 +1559,18 @@ func _apply_player_hit(state: CombatEnemyState, kind: String, damage_override: i
 		"raw_damage": raw_damage,
 		"stolen_card": stolen_id,
 	}
+
+
+func apply_player_self_damage(amount: int) -> int:
+	var damage := maxi(0, amount)
+	var hp_before := maxi(player_hp, 0)
+	player_hp -= damage
+	_actual_hp_loss(hp_before, damage)
+	return mini(hp_before, damage)
+
+
+func _actual_hp_loss(hp_before: int, requested_damage: int) -> void:
+	actual_hp_lost_total += mini(maxi(hp_before, 0), maxi(requested_damage, 0))
 
 
 func _steal_player_card() -> String:

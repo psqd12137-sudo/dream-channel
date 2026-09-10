@@ -13,6 +13,7 @@ const BattleImaginationProfile = preload("res://scripts/battle_imagination_profi
 const CardboardShellBuilder = preload("res://scripts/cardboard_shell_builder.gd")
 const RunSaveRepository = preload("res://scripts/run_save_repository.gd")
 const SoloStageFlow = preload("res://scripts/solo_stage_flow.gd")
+const DreamRoomLedger = preload("res://scripts/dream_room_ledger.gd")
 const BossProgression = preload("res://scripts/boss_progression.gd")
 const PresentationSettings = preload("res://scripts/presentation_settings.gd")
 const HouseWorldRenderer = preload("res://scripts/channel_house_world_renderer.gd")
@@ -232,6 +233,8 @@ var room_catalog: Array[Dictionary] = []
 var remaining_rooms: Array[Dictionary] = []
 var active_relics: Array[String] = []
 var run_deck: Array[String] = []
+var room_ledger: DreamRoomLedger = DreamRoomLedger.new()
+var combat_hp_loss_synced := 0
 var reward_options: Array[Dictionary] = []
 var reward_origin := ""
 var event_context := ""
@@ -872,6 +875,8 @@ func reset_run(seed_value: int = 0) -> void:
 		room_catalog.append((raw_room as Dictionary).duplicate(true))
 	remaining_rooms = room_catalog.duplicate(true)
 	room_rules.reset(content.get("start_room", {}))
+	room_ledger = DreamRoomLedger.new()
+	combat_hp_loss_synced = 0
 	room_rules.placed[Vector2i.ZERO]["revealed"] = true
 	room_rules.placed[Vector2i.ZERO]["visited"] = true
 	active_relics.clear()
@@ -1110,6 +1115,11 @@ func continue_saved_run() -> bool:
 	for raw_stair: Variant in save.get("stair_links", []):
 		if raw_stair is Dictionary:
 			room_rules.stair_links.append((raw_stair as Dictionary).duplicate(true))
+	room_ledger = DreamRoomLedger.new()
+	var saved_ledger: Variant = save.get("room_ledger", {})
+	if saved_ledger is Dictionary and not (saved_ledger as Dictionary).is_empty():
+		room_ledger.restore(saved_ledger as Dictionary)
+	combat_hp_loss_synced = 0
 	var remaining_ids: Array = save.get("remaining_ids", [])
 	if str(save.get("phase", "")) != "world_boss":
 		ExplorationAnchors.discover(room_rules, int(content.get("run_length", 12)))
@@ -1730,6 +1740,8 @@ func _finish_enter_room(target: Vector2i) -> void:
 	var first_visit := not bool(room.get("visited", false))
 	room_rules.set_instance_flag(target, "revealed", true)
 	room_rules.set_instance_flag(target, "visited", true)
+	if first_visit:
+		_record_room_experience(room)
 	if first_visit and not bool(room.get("completed", false)):
 		phase = "lab_toyhouse_sequence" if sequence_lab else "room_ready"
 		status_message = str(room.get("description", "你推开了房门。"))
@@ -1744,6 +1756,19 @@ func _finish_enter_room(target: Vector2i) -> void:
 	_refresh_hud()
 	if not sequence_lab:
 		_save_run()
+
+
+func _record_room_experience(room: Dictionary) -> void:
+	if room_ledger == null:
+		room_ledger = DreamRoomLedger.new()
+	var record := room.duplicate(true)
+	record["room_id"] = str(room.get("id", room.get("room_id", "")))
+	record["visited"] = true
+	record["room_size"] = int(room.get("room_size", room.get("size", 1)))
+	record["rarity_rank"] = int(room.get("rarity_rank", 1))
+	if not record.has("difficulty_rank"):
+		record["difficulty_rank"] = 2 if str(room.get("encounter_tier", "")) in ["elite", "boss"] else 1 if str(room.get("kind", "")) == "combat" else 0
+	room_ledger.visit(record)
 
 
 func resolve_current_room() -> void:
@@ -2578,6 +2603,7 @@ func start_combat(room: Dictionary, animate_entry: bool = false) -> void:
 	room = room.duplicate(true)
 	RoomFootprintCatalog.expand_large_arena(room)
 	combat = CombatRules.new()
+	combat_hp_loss_synced = 0
 	combat_is_boss = bool(room.get("boss_room", false))
 	if combat_is_boss:
 		boss_id = str(room.get("boss_id", boss_id))
@@ -3717,6 +3743,7 @@ func _rotation_invariant_fit_size(horizontal_radius: float, vertical_span: float
 
 func _after_combat_action(sync_actor_positions: bool = false) -> void:
 	player_hp = combat.player_hp
+	_sync_room_hp_loss()
 	_sync_host_break_relief()
 	_update_boss_phase()
 	# 杀戮尖塔式回合：敌方动画播完后才给玩家发新牌
@@ -3741,6 +3768,20 @@ func _after_combat_action(sync_actor_positions: bool = false) -> void:
 	_refresh_hud()
 
 
+func _sync_room_hp_loss() -> void:
+	if combat == null or room_ledger == null:
+		return
+	var total := maxi(0, int(combat.actual_hp_lost_total))
+	if total <= combat_hp_loss_synced:
+		return
+	var instance_id := str(current_room().get("instance_id", ""))
+	if instance_id.is_empty():
+		combat_hp_loss_synced = total
+		return
+	room_ledger.record_hp_loss(instance_id, total - combat_hp_loss_synced)
+	combat_hp_loss_synced = total
+
+
 func return_from_combat() -> void:
 	if phase == "world_boss" and combat != null and combat.outcome != "":
 		combat.after_action()
@@ -3753,6 +3794,7 @@ func return_from_combat() -> void:
 	if combat_is_boss:
 		_finish_boss_combat(combat.outcome == "victory")
 		return
+	_sync_room_hp_loss()
 	if combat.outcome == "victory":
 		house_camera_closeup = true
 		house_camera_following = true
@@ -3764,6 +3806,24 @@ func return_from_combat() -> void:
 		build_house_world()
 		_set_house_camera()
 		_refresh_hud()
+	elif solo_stage_trial_active:
+		# The sample treats a normal-room defeat as a recorded accident. The room
+		# is completed once, with no victory card choice, so the player can reach
+		# the next stage without farming the same encounter.
+		player_hp = maxi(1, ceili(float(player_max_hp) * 0.5))
+		var reaches_finale := _complete_current_room()
+		combat = null
+		house_root.visible = true
+		battle_root.visible = false
+		house_camera_closeup = true
+		house_camera_following = true
+		if reaches_finale and not _solo_stage_due_before_finale():
+			_prepare_boss_ready()
+		else:
+			phase = "explore"
+			build_house_world()
+			_save_run()
+			_refresh_hud()
 	else:
 		_clear_run_save()
 		go_home()
@@ -3848,6 +3908,7 @@ func _save_run() -> void:
 		"placed": placed_entries,
 		"stair_links": room_rules.stair_links.duplicate(true),
 		"remaining_ids": remaining_ids,
+		"room_ledger": room_ledger.snapshot() if room_ledger != null else {"version": 1, "records": []},
 	}
 	if solo_stage_trial_active:
 		payload["dream_stage"] = solo_stage_flow.snapshot()
