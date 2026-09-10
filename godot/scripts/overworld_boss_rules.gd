@@ -214,6 +214,9 @@ func initialize(rooms, start: Vector2i, boss: Dictionary, defs: Dictionary, star
 		"archetype": "host",
 		"traits": [],
 	}
+	# The combat rule snapshot must contain the finale profile before either
+	# initial.rules or the run save duplicates it.
+	rules["dream_finale_profile"] = dream_profile.duplicate(true)
 	initial = {
 		"cell": [start_cell.x, start_cell.y],
 		"rules": rules.duplicate(true),
@@ -222,9 +225,6 @@ func initialize(rooms, start: Vector2i, boss: Dictionary, defs: Dictionary, star
 		"seed": seed,
 		"dream_profile": dream_profile.duplicate(true),
 	}
-	# Keep the profile inside the combat rule snapshot as well as the outer run
-	# save. Replaying a world boss therefore consumes the exact same programme.
-	rules["dream_finale_profile"] = dream_profile.duplicate(true)
 	# cols/rows are only compatibility bounds for shared UI helpers; walkability
 	# and pathing are overridden below and continue to use physical coordinates.
 	setup({

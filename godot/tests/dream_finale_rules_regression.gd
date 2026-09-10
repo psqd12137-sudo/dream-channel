@@ -37,12 +37,16 @@ func _run() -> void:
 	var route_profile: Dictionary = profile_base.duplicate(true)
 	route_profile["climax_rule"] = "none"
 	var short_rules = _make_rules(Rules, rooms, defs, route_profile)
+	_check(short_rules.initial.get("rules", {}).get("dream_finale_profile", {}).get("route_rule", "") == "short_charge", "combat 初始规则必须持久化 dream_finale_profile")
 	var short_boss = short_rules.enemy_by_id(short_rules.enemy_order[0])
 	short_boss.pos = Vector2i(7, 0)
 	short_rules.player_pos = Vector2i.ZERO
 	short_rules.round_number = 3
 	short_rules.host_fight.prepare(short_rules)
 	_check(short_rules.host_fight.plan.get("path", []).size() == 2, "short_charge 冲撞路径上限为2格")
+	var short_path: Array = short_rules.host_fight.plan.get("path", []).duplicate()
+	var short_events: Array[Dictionary] = short_rules.host_fight.execute(short_rules, short_boss)
+	_check(short_events.size() > 0 and short_boss.pos == short_path[-1], "short_charge 执行消费预告路径并停在上限内")
 
 	var long_profile: Dictionary = profile_base.duplicate(true)
 	long_profile["route_rule"] = "long_charge"
@@ -55,6 +59,9 @@ func _run() -> void:
 	long_rules.host_fight.prepare(long_rules)
 	_check(long_rules.host_fight.plan.get("path", []).size() == 4, "long_charge 冲撞路径上限为4格")
 	_check(long_rules.host_fight.plan.get("path", []).all(func(cell: Vector2i) -> bool: return long_rules.is_walkable(cell)), "冲撞路径不能穿越墙体或非连接格")
+	var long_path: Array = long_rules.host_fight.plan.get("path", []).duplicate()
+	var long_events: Array[Dictionary] = long_rules.host_fight.execute(long_rules, long_boss)
+	_check(long_events.size() > 0 and long_boss.pos == long_path[-1], "long_charge 执行消费预告路径并停在上限内")
 
 	var relay_profile: Dictionary = profile_base.duplicate(true)
 	relay_profile["anchor_rule"] = "relay"
@@ -96,6 +103,9 @@ func _run() -> void:
 	_check(sweep_cells.all(func(cell: Vector2i) -> bool: return cell == Vector2i(2, 0) or cell in sweep_rules.graph.get(Vector2i(2, 0), [])), "double_sweep 不跨越无连接格")
 	var sweep_preview: Dictionary = sweep_rules.host_fight.preview(sweep_rules, sweep_boss)
 	_check(sweep_preview.get("impact_cells", []) == sweep_cells, "扫场预告范围必须与实际执行范围一致")
+	sweep_rules.player_pos = Vector2i(2, 0)
+	var sweep_events: Array[Dictionary] = sweep_rules.host_fight.execute(sweep_rules, sweep_boss)
+	_check(sweep_events.any(func(event: Dictionary) -> bool: return str(event.get("kind", "")) == "attack"), "double_sweep 执行会消费已预告的扫场范围")
 
 	var spotlight_profile: Dictionary = profile_base.duplicate(true)
 	spotlight_profile["climax_cells"] = [[4, 0]]
@@ -106,6 +116,8 @@ func _run() -> void:
 	spotlight_rules.host_fight.prepare(spotlight_rules)
 	_check(spotlight_rules.host_fight.plan.get("kind", "") == "pursuit", "spotlight 保持单次追击攻击")
 	_check(spotlight_rules.host_fight.camera_cells == [Vector2i(2, 0)], "spotlight 每第三回合优先第三份房间取景")
+	var spotlight_events: Array[Dictionary] = spotlight_rules.host_fight.execute(spotlight_rules, spotlight_rules.enemy_by_id(spotlight_rules.enemy_order[0]))
+	_check(spotlight_events.size() > 0, "spotlight 执行仍保持单次追击回合")
 	var missing_profile: Dictionary = profile_base.duplicate(true)
 	missing_profile["climax_room_id"] = "missing-room"
 	var missing_rules = _make_rules(Rules, rooms, defs, missing_profile)
