@@ -1874,8 +1874,14 @@ func _completed_combat_counts() -> Dictionary:
 
 
 func _prepare_boss_ready() -> void:
-	var counts := _completed_combat_counts()
-	boss_id = BossProgression.select_boss_id(content.get("bosses", {}), int(counts.get("early", 0)), int(counts.get("late", 0)))
+	if solo_stage_trial_active and solo_stage_flow.is_finale_ready():
+		# The solo sample measures the three-material programme, so its Boss
+		# actor/base values remain fixed across runs. Formal runs retain the
+		# existing early/late selection path below.
+		boss_id = "channel_host"
+	else:
+		var counts := _completed_combat_counts()
+		boss_id = BossProgression.select_boss_id(content.get("bosses", {}), int(counts.get("early", 0)), int(counts.get("late", 0)))
 	if boss_id.is_empty():
 		status_message = "频道核心数据缺失，无法打开祭坛。"
 		phase = "explore"
@@ -2711,6 +2717,8 @@ func open_dream_program(program_entry: Dictionary) -> void:
 	status_message = "节目单已打开：%s。终幕规则已锁定。" % str(dream_finale_profile.get("name", "三份素材合成"))
 	hud.call("show_dream_program_placeholder", dream_program_handoff)
 	_save_run()
+	# Opening the list is the explicit handoff into the fixed solo finale.
+	_prepare_boss_ready()
 
 
 func start_event_trial(room: Dictionary) -> void:

@@ -17,6 +17,7 @@ func prepare(r, preserve_control_state: bool = false) -> void:
 	if r.round_number == 1:
 		kind = "opening"
 	var finale_profile: Dictionary = r.dream_profile if "dream_profile" in r else {}
+	var route_rule := str(finale_profile.get("route_rule", "short_charge"))
 	var climax_rule := str(finale_profile.get("climax_rule", ""))
 	if r.round_number % 3 == 0:
 		if climax_rule == "double_sweep":
@@ -40,7 +41,7 @@ func prepare(r, preserve_control_state: bool = false) -> void:
 	if kind == "pursuit" or kind == "charge":
 		var limit: int = s.action_points
 		if kind == "charge":
-			limit = 4 if climax_rule == "long_charge" else 2
+			limit = 4 if route_rule == "long_charge" else 2
 		for i in range(1, full.size()):
 			if path.size() >= limit:
 				break

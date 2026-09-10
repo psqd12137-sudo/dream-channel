@@ -134,6 +134,16 @@ func initialize(rooms, start: Vector2i, boss: Dictionary, defs: Dictionary, star
 		var path := _find_path(start_cell, cell)
 		if not path.is_empty() and path.back() == cell:
 			reachable.append(cell)
+	if bool(dream_profile.get("valid", false)) and not str(dream_profile.get("climax_room_id", "")).is_empty():
+		var reachable_climax_cells: Array = []
+		for raw_cell: Variant in dream_profile.get("climax_cells", []):
+			var climax_cell := _link_cell(raw_cell)
+			if climax_cell != INVALID_CELL and climax_cell in reachable:
+				reachable_climax_cells.append([climax_cell.x, climax_cell.y])
+		if reachable_climax_cells.is_empty():
+			error = "终幕第三份素材没有可到达的实体格，无法生成终幕规则。"
+			return
+		dream_profile["climax_cells"] = reachable_climax_cells
 	if reachable.size() < 5:
 		error = "终局需要至少5个通过格子和门洞连通的已探索格子。"
 		return
@@ -212,6 +222,9 @@ func initialize(rooms, start: Vector2i, boss: Dictionary, defs: Dictionary, star
 		"seed": seed,
 		"dream_profile": dream_profile.duplicate(true),
 	}
+	# Keep the profile inside the combat rule snapshot as well as the outer run
+	# save. Replaying a world boss therefore consumes the exact same programme.
+	rules["dream_finale_profile"] = dream_profile.duplicate(true)
 	# cols/rows are only compatibility bounds for shared UI helpers; walkability
 	# and pathing are overridden below and continue to use physical coordinates.
 	setup({

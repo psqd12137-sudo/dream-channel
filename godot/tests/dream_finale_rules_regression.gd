@@ -9,6 +9,18 @@ func _init() -> void:
 
 func _run() -> void:
 	var Rules = load("res://scripts/overworld_boss_rules.gd")
+	var Profile = load("res://scripts/dream_finale_profile.gd")
+	for first_large in [false, true]:
+		for second_combat in [false, true]:
+			for third_combat in [false, true]:
+				var composed: Dictionary = Profile.compose([
+					{"instance_id": "r1-%s" % str(first_large), "room_id": "r1", "room_size": 3 if first_large else 1},
+					{"instance_id": "r2-%s" % str(second_combat), "room_id": "r2", "kind": "combat" if second_combat else "quiet"},
+					{"instance_id": "r3-%s" % str(third_combat), "room_id": "r3", "kind": "combat" if third_combat else "quiet"},
+				])
+				_check(str(composed.get("route_rule", "")) == ("long_charge" if first_large else "short_charge"), "规则回归覆盖八组合的冲撞分支")
+				_check(str(composed.get("anchor_rule", "")) == ("relay" if second_combat else "breather"), "规则回归覆盖八组合的熄锚分支")
+				_check(str(composed.get("climax_rule", "")) == ("double_sweep" if third_combat else "spotlight"), "规则回归覆盖八组合的终幕分支")
 	var rooms = _rooms(8)
 	# The rule harness does not need the full content adapter; an empty card
 	# catalogue keeps this regression independent of presentation assets.
@@ -30,7 +42,7 @@ func _run() -> void:
 	short_rules.player_pos = Vector2i.ZERO
 	short_rules.round_number = 3
 	short_rules.host_fight.prepare(short_rules)
-	_check(short_rules.host_fight.plan.get("path", []).size() <= 2, "short_charge 冲撞路径上限为2格")
+	_check(short_rules.host_fight.plan.get("path", []).size() == 2, "short_charge 冲撞路径上限为2格")
 
 	var long_profile: Dictionary = profile_base.duplicate(true)
 	long_profile["route_rule"] = "long_charge"
@@ -41,7 +53,7 @@ func _run() -> void:
 	long_rules.player_pos = Vector2i.ZERO
 	long_rules.round_number = 3
 	long_rules.host_fight.prepare(long_rules)
-	_check(long_rules.host_fight.plan.get("path", []).size() <= 4, "long_charge 冲撞路径上限为4格")
+	_check(long_rules.host_fight.plan.get("path", []).size() == 4, "long_charge 冲撞路径上限为4格")
 	_check(long_rules.host_fight.plan.get("path", []).all(func(cell: Vector2i) -> bool: return long_rules.is_walkable(cell)), "冲撞路径不能穿越墙体或非连接格")
 
 	var relay_profile: Dictionary = profile_base.duplicate(true)
@@ -82,6 +94,8 @@ func _run() -> void:
 	_check(sweep_rules.host_fight.plan.get("kind", "") == "sweep", "double_sweep 每第三回合进入扫场")
 	_check(sweep_cells.size() >= 2 and sweep_cells.has(Vector2i(2, 0)), "double_sweep 优先第三份房间可达格并覆盖直接相邻格")
 	_check(sweep_cells.all(func(cell: Vector2i) -> bool: return cell == Vector2i(2, 0) or cell in sweep_rules.graph.get(Vector2i(2, 0), [])), "double_sweep 不跨越无连接格")
+	var sweep_preview: Dictionary = sweep_rules.host_fight.preview(sweep_rules, sweep_boss)
+	_check(sweep_preview.get("impact_cells", []) == sweep_cells, "扫场预告范围必须与实际执行范围一致")
 
 	var spotlight_profile: Dictionary = profile_base.duplicate(true)
 	spotlight_profile["climax_cells"] = [[4, 0]]
@@ -92,6 +106,10 @@ func _run() -> void:
 	spotlight_rules.host_fight.prepare(spotlight_rules)
 	_check(spotlight_rules.host_fight.plan.get("kind", "") == "pursuit", "spotlight 保持单次追击攻击")
 	_check(spotlight_rules.host_fight.camera_cells == [Vector2i(2, 0)], "spotlight 每第三回合优先第三份房间取景")
+	var missing_profile: Dictionary = profile_base.duplicate(true)
+	missing_profile["climax_room_id"] = "missing-room"
+	var missing_rules = _make_rules(Rules, rooms, defs, missing_profile)
+	_check(not missing_rules.error.is_empty(), "第三份素材没有可达实体格时必须报错")
 
 	if failures.is_empty():
 		print("DREAM_FINALE_RULES: PASS")

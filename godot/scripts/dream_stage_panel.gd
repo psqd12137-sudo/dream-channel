@@ -256,7 +256,11 @@ func show_program_placeholder(program_entry: Dictionary) -> void:
 	if _program_button != null:
 		_program_button.visible = true
 	var source_ids: Array = _program_entry.get("source_ids", [])
-	_message = "节目单已打开：%d 份素材已锁定；终幕规则将在节目配置阶段接入。" % source_ids.size()
+	var profile: Dictionary = _program_entry.get("profile", {}) if _program_entry.get("profile", {}) is Dictionary else {}
+	if bool(profile.get("valid", false)) and source_ids.size() == 3:
+		_message = "节目单已打开：① %s→%s；② %s→%s；③ %s→%s。" % [str(source_ids[0]), str(profile.get("route_rule", "")), str(source_ids[1]), str(profile.get("anchor_rule", "")), str(source_ids[2]), str(profile.get("climax_rule", ""))]
+	else:
+		_message = "节目单已打开：%d 份素材已锁定；终幕规则将在节目配置阶段接入。" % source_ids.size()
 	visible = true
 	queue_redraw()
 
