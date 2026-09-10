@@ -1,6 +1,7 @@
 extends RefCounted
 
 # Original procedural props arranged from the workshop reference, surrounding the live house.
+const FormalWorkshopProfile = preload("res://scripts/formal_workshop_profile.gd")
 var lab
 var root: Node3D
 var back: Node3D
@@ -93,7 +94,10 @@ func build(owner_lab) -> Node3D:
 	var wm := ShaderMaterial.new()
 	wm.shader = wood
 	desk.material_override = wm
-	var mat := box(root, "CuttingMat", Vector3(center.x, top - 0.015, center.z), Vector3(bounds.size.x + 0.8, 0.06, bounds.size.z + 0.6), "386c60")
+	var profile := FormalWorkshopProfile.for_room("reference_workshop_demo")
+	var mat_size_array: Array = profile.room_presentation.cutting_mat_size
+	var mat_size := Vector3(float(mat_size_array[0]), float(mat_size_array[1]), float(mat_size_array[2]))
+	var mat := box(root, "CuttingMat", Vector3(center.x, top - 0.015, center.z), mat_size, "386c60")
 	var grid := Shader.new()
 	grid.code = "shader_type spatial; varying vec3 p; void vertex(){p=VERTEX;} void fragment(){vec2 q=p.xz*2.0; vec2 d=abs(fract(q-0.5)-0.5)/max(fwidth(q),vec2(0.001)); float line=1.0-min(min(d.x,d.y),1.0); ALBEDO=mix(vec3(0.035,0.11,0.075),vec3(0.25,0.37,0.27),line*0.28); ROUGHNESS=0.95;}"
 	var gm := ShaderMaterial.new()

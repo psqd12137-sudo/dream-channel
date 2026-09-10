@@ -44,6 +44,15 @@ func run() -> void:
 	check(game.start_formal_workshop_preview(), "formal preview entry must start from the isolated lab")
 	await process_frame
 	var lab = game.tactile_lab
+	var base_size: Vector3 = Vector3.ZERO
+	for node: Node in game.house_root.find_children("ToyWorkbench*", "MeshInstance3D", true, false):
+		if node.name == "ToyWorkbench":
+			base_size = node.mesh.get_aabb().size
+	var expected_base_size := Vector3(float(profile.room_presentation.center_base_size[0]), float(profile.room_presentation.center_base_size[1]), float(profile.room_presentation.center_base_size[2]))
+	check(base_size.is_equal_approx(expected_base_size), "formal profile must match the center base mesh dimensions")
+	var mat_probe = lab.reference_root.find_child("CuttingMat", true, false) as MeshInstance3D
+	var expected_mat_size := Vector3(float(profile.room_presentation.cutting_mat_size[0]), float(profile.room_presentation.cutting_mat_size[1]), float(profile.room_presentation.cutting_mat_size[2]))
+	check(mat_probe != null and mat_probe.mesh.get_aabb().size.is_equal_approx(expected_mat_size), "formal profile must match the cutting mat mesh dimensions")
 	check(lab != null and game.phase == "lab_tactile", "formal preview remains in the isolated lab phase")
 	check(lab.reference_root != null and lab.reference_root.is_in_group(&"workshop_decor"), "reference root must be workshop decor")
 	check(lab.reference_root.find_child("CuttingMat", true, false) != null, "formal room must have the green cutting mat")

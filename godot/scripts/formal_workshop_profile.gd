@@ -15,7 +15,7 @@ static func for_room(room_id: String) -> Dictionary:
 		"workshop_scene": "reference_workshop",
 		"room_presentation": {
 			"center_base": "ToyWorkbench",
-			"center_base_size": [8.0, 0.48, 8.0],
+			"center_base_size": [5.65, 0.22, 7.2],
 			"main_furniture_outline": "center_room_and_wall_modules",
 			"cutting_mat": "CuttingMat",
 			"cutting_mat_size": [8.8, 0.06, 8.6],

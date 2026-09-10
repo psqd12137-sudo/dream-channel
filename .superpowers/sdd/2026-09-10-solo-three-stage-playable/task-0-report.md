@@ -20,3 +20,9 @@
 ```
 
 结果：三项均 `PASS`。
+
+## 尺寸契约复审修正
+
+复审发现 Profile 中心底座尺寸曾与 `ToyWorkbench` 实际网格不一致。现已将 Profile 固定为示范房运行时尺寸 `[5.65, 0.22, 7.2]`；切割垫由同一 Profile 尺寸 `[8.8, 0.06, 8.6]` 生成，回归同时读取实际网格并断言一致。
+
+复跑结果：`toyhouse_tactile_lab_regression.gd`、`formal_cartoon_assembly_regression.gd`、`formal_workshop_regression.gd` 均 `PASS`。
