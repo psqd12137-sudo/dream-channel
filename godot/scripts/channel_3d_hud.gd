@@ -917,14 +917,23 @@ func _draw_ending_screen() -> void:
 	_display_label("织梦频道", Vector2(500, 96), 30, BLUE)
 	_label("本集播出完毕", Vector2(552, 140), 13, MUTED)
 	var accent := GREEN if bool(ending.get("success", false)) else RED
-	draw_rect(Rect2(310, 190, 660, 390), Color("171d26f5"), true)
-	draw_rect(Rect2(310, 190, 660, 390), accent, false, 3.0)
+	draw_rect(Rect2(250, 180, 780, 430), Color("171d26f5"), true)
+	draw_rect(Rect2(250, 180, 780, 430), accent, false, 3.0)
 	_draw_chip(Rect2(354, 226, 130, 28), "成功" if bool(ending.get("success", false)) else "信号中断", accent, TEXT, 11)
-	_display_label(str(ending.get("title", "结局")), Vector2(354, 314), 34, GOLD)
-	_label("对手：%s" % str(ending.get("boss_name", "未知")), Vector2(356, 356), 14, PAPER)
-	_draw_wrapped(str(ending.get("boss_message", "节目结束。")), Vector2(356, 398), 568, 15, MUTED)
-	_draw_wrapped(str(ending.get("text", "电视熄灭。")), Vector2(356, 470), 568, 14, PAPER_2)
-	_draw_button(ENDING_CONTINUE_RECT, "回到标题", TEAL, TEXT)
+	_display_label("梦演到结尾" if bool(ending.get("success", false)) else "梦提前中断", Vector2(354, 314), 34, GOLD)
+	_label("终幕回顾 · 三张素材合成最后一场破坏秀", Vector2(356, 356), 14, PAPER)
+	var cards: Array = game.ending_recap.get("cards", []) if game.ending_recap is Dictionary else []
+	for index in range(mini(3, cards.size())):
+		var card: Dictionary = cards[index] if cards[index] is Dictionary else {}
+		var card_rect := Rect2(340 + index * 198, 388, 178, 94)
+		draw_rect(card_rect, Color("24343a"), true)
+		draw_rect(card_rect, Color("52706b"), false, 1.5)
+		_label("素材 %d" % (index + 1), card_rect.position + Vector2(12, 22), 11, GOLD)
+		_label(_shorten(str(card.get("name", "未命名素材")), 10), card_rect.position + Vector2(12, 47), 15, PAPER)
+		_label("受伤 %d 点" % int(card.get("hp_lost", 0)), card_rect.position + Vector2(12, 72), 11, MUTED)
+	_draw_wrapped("梦已经把这三段经历写进电视节目。确认后，玩具会回到现实，隔离样片存档随之清理。" if bool(ending.get("success", false)) else "梦在最后一幕之前中断。三段经历仍被保留为一次完整回放。", Vector2(356, 510), 568, 13, PAPER_2)
+	var presentation_playing: bool = game.dream_wake_presentation != null and game.dream_wake_presentation.is_playing()
+	_draw_button(ENDING_CONTINUE_RECT, "终幕播放中" if presentation_playing else "回到标题", Color("4f5960") if presentation_playing else TEAL, TEXT)
 
 
 func _draw_house_hud() -> void:
@@ -1902,6 +1911,8 @@ func _draw_card_frame_contained(texture: Texture2D, rect: Rect2, modulate: Color
 func _input(event: InputEvent) -> void:
 	if game == null:
 		return
+	if game.dream_wake_presentation != null and game.dream_wake_presentation.input_locked:
+		return
 	if not (event is InputEventKey):
 		return
 	var key_event: InputEventKey = event
@@ -2100,6 +2111,10 @@ func _gui_input(event: InputEvent) -> void:
 	if game == null:
 		return
 	_ensure_input_layout()
+	if game.dream_wake_presentation != null and game.dream_wake_presentation.input_locked:
+		if event is InputEventMouseButton:
+			accept_event()
+		return
 	if dream_stage_panel != null and dream_stage_panel.visible:
 		# The draw panel owns the whole screen while a nomination is pending.
 		# Prevent clicks in its backdrop from leaking into map movement.

@@ -16,6 +16,7 @@ const SoloStageFlow = preload("res://scripts/solo_stage_flow.gd")
 const DreamRoomLedger = preload("res://scripts/dream_room_ledger.gd")
 const DreamDrawRules = preload("res://scripts/dream_draw_rules.gd")
 const DreamFinaleProfile = preload("res://scripts/dream_finale_profile.gd")
+const DreamWakePresentation = preload("res://scripts/dream_wake_presentation.gd")
 const BossProgression = preload("res://scripts/boss_progression.gd")
 const PresentationSettings = preload("res://scripts/presentation_settings.gd")
 const HouseWorldRenderer = preload("res://scripts/channel_house_world_renderer.gd")
@@ -183,6 +184,10 @@ var dream_draw_stage := 0
 var dream_program_available := false
 var dream_program_handoff: Dictionary = {}
 var dream_finale_profile: Dictionary = {}
+var ending_pending := false
+var ending_outcome := ""
+var ending_recap: Dictionary = {}
+var dream_wake_presentation = null
 var solo_trial_previous_repository = null
 var solo_stage_trial_config: Dictionary = {}
 var presentation_settings = null
@@ -406,6 +411,10 @@ func _ready() -> void:
 	lab_root.name = "LabRoot"
 	world_root.add_child(lab_root)
 	hud.game = self
+	dream_wake_presentation = DreamWakePresentation.new()
+	dream_wake_presentation.name = "DreamWakePresentation"
+	dream_wake_presentation.finished.connect(_on_dream_wake_finished)
+	add_child(dream_wake_presentation)
 	house_world_renderer = HouseWorldRenderer.new(self)
 	battle_world_renderer = BattleWorldRenderer.new(self)
 	lab_controller = LabController.new(self)
@@ -854,6 +863,8 @@ func is_world_view_point(screen_pos: Vector2) -> bool:
 
 
 func reset_run(seed_value: int = 0) -> void:
+	if dream_wake_presentation != null:
+		dream_wake_presentation.cancel()
 	if tactile_lab != null:
 		tactile_lab.close()
 	_cancel_dynamic_effect()
@@ -945,6 +956,9 @@ func reset_run(seed_value: int = 0) -> void:
 	boss_round_moved = false
 	ending_id = ""
 	ending_success = false
+	ending_pending = false
+	ending_outcome = ""
+	ending_recap.clear()
 	run_progress = 1
 	player_hp = 6
 	player_max_hp = 6
@@ -1024,6 +1038,8 @@ func copy_current_seed() -> void:
 
 
 func go_home() -> void:
+	if dream_wake_presentation != null:
+		dream_wake_presentation.cancel()
 	dream_draw_active = false
 	dream_draw_stage = 0
 	dream_program_available = false
@@ -1061,6 +1077,9 @@ func go_home() -> void:
 	boss_round_moved = false
 	ending_id = ""
 	ending_success = false
+	ending_pending = false
+	ending_outcome = ""
+	ending_recap.clear()
 	_cancel_dynamic_effect()
 	character_animation_demo_mode = false
 	toyhouse_sequence_active = false
@@ -1145,6 +1164,15 @@ func continue_saved_run() -> bool:
 	dream_program_handoff = saved_program.duplicate(true) if saved_program is Dictionary else {}
 	var saved_finale_profile: Variant = save.get("dream_finale_profile", {})
 	dream_finale_profile = saved_finale_profile.duplicate(true) if saved_finale_profile is Dictionary else {}
+	ending_pending = bool(save.get("ending_pending", false))
+	ending_outcome = str(save.get("ending_outcome", ""))
+	ending_success = ending_outcome == "victory"
+	var saved_ending_recap: Variant = save.get("ending_recap", {})
+	ending_recap = saved_ending_recap.duplicate(true) if saved_ending_recap is Dictionary else {}
+	if ending_pending and ending_outcome not in ["victory", "defeat"]:
+		ending_pending = false
+		ending_outcome = ""
+		ending_recap.clear()
 	combat_hp_loss_synced = 0
 	var remaining_ids: Array = save.get("remaining_ids", [])
 	if str(save.get("phase", "")) != "world_boss":
@@ -1163,7 +1191,7 @@ func continue_saved_run() -> bool:
 		_begin_world_boss(save.world_boss)
 		return true
 	if phase not in ["omen", "explore", "room_ready", "reward", "boss_ready"]:
-		phase = "room_ready" if not bool(current_room().get("completed", false)) else "explore"
+		phase = "ending" if ending_pending else "room_ready" if not bool(current_room().get("completed", false)) else "explore"
 	house_camera_closeup = phase == "reward" and reward_origin in ["combat", "event", "boss_access"]
 	house_camera_following = house_camera_closeup
 	world_container.visible = true
@@ -1173,6 +1201,9 @@ func continue_saved_run() -> bool:
 	build_house_world()
 	_set_house_camera()
 	_refresh_hud()
+	if phase == "ending" and ending_pending:
+		_start_dream_wake_presentation()
+		return true
 	var saved_rng_state := str(save.get("rng_state", ""))
 	if saved_rng_state.is_valid_int():
 		rng.state = int(saved_rng_state)
@@ -2445,20 +2476,31 @@ func _finish_boss_combat(success: bool) -> void:
 	if boss_finish_reason.is_empty():
 		boss_finish_reason = "kill" if success else "hp"
 	boss_recap = {"rounds": combat.round_number, "anchors": boss_anchors_cleared, "breaks": combat.host_fight.break_count if combat.host_fight != null else 0, "reason": boss_finish_reason}
+	boss_recap["cards"] = _ending_material_cards()
 	event_log.append("BossResult %s" % JSON.stringify(boss_recap))
 	var result := current_ending_for(success)
 	ending_id = str(result.get("id", "end_fail"))
 	ending_success = success
+	ending_outcome = "victory" if success else "defeat"
+	ending_pending = true
+	ending_recap = boss_recap.duplicate(true)
+	ending_recap["outcome"] = ending_outcome
+	ending_recap["success"] = success
+	ending_recap["title"] = "梦演到结尾" if success else "梦提前中断"
 	combat = null
 	combat_is_boss = false
 	phase = "ending"
-	world_container.visible = false
-	house_root.visible = false
+	# Keep the actual house and toy on stage while the coda plays. The overlay
+	# supplies the TV programme treatment without deleting the player's assets.
+	world_container.visible = true
+	house_root.visible = true
 	battle_root.visible = false
 	if lab_root != null:
 		lab_root.visible = false
-	_clear_run_save()
-	status_message = str(result.get("boss_message", "节目结束。"))
+	_set_house_camera()
+	status_message = "梦演到结尾。三张素材正在合成终幕。" if success else "梦提前中断。三张素材正在回放最后一幕。"
+	_save_run()
+	_start_dream_wake_presentation()
 	_refresh_hud()
 
 
@@ -2480,7 +2522,60 @@ func current_ending_for(success: bool) -> Dictionary:
 func finish_ending() -> void:
 	if phase != "ending":
 		return
+	if ending_pending and dream_wake_presentation != null and dream_wake_presentation.is_playing():
+		if animation_duration_scale <= 0.0:
+			dream_wake_presentation.skip()
+		if dream_wake_presentation.is_playing():
+			return
+	ending_pending = false
+	ending_outcome = ""
+	ending_recap.clear()
+	_clear_run_save()
 	go_home()
+
+
+func _ending_material_cards() -> Array[Dictionary]:
+	var cards: Array[Dictionary] = []
+	var source_ids: Array = dream_program_handoff.get("source_ids", dream_finale_profile.get("source_ids", []))
+	var source_names: Array = dream_program_handoff.get("source_names", [])
+	var records: Array = room_ledger.snapshot().get("records", []) if room_ledger != null else []
+	for index in range(mini(3, source_ids.size())):
+		var source_id := str(source_ids[index])
+		var record: Dictionary = {}
+		for raw_record: Variant in records:
+			if raw_record is Dictionary and (str((raw_record as Dictionary).get("instance_id", "")) == source_id or str((raw_record as Dictionary).get("room_id", "")) == source_id):
+				record = (raw_record as Dictionary).duplicate(true)
+				break
+		var display_name := str(source_names[index]) if index < source_names.size() else str(record.get("name", source_id))
+		cards.append({
+			"instance_id": source_id,
+			"name": display_name if not display_name.is_empty() else "未命名素材",
+			"hp_lost": maxi(0, int(record.get("hp_lost", 0))),
+			"rarity_rank": int(record.get("rarity_rank", 1)),
+			"difficulty_rank": int(record.get("difficulty_rank", 0)),
+		})
+	while cards.size() < 3:
+		cards.append({"instance_id": "", "name": "未命名素材", "hp_lost": 0, "rarity_rank": 1, "difficulty_rank": 0})
+	return cards
+
+
+func _start_dream_wake_presentation() -> void:
+	if not ending_pending:
+		return
+	if dream_wake_presentation == null:
+		_on_dream_wake_finished()
+		return
+	var player_node := house_root.get_node_or_null("LiliToken") as Node3D
+	var duration := 4.0 * animation_duration_scale if is_instance_valid(player_node) else 0.0
+	dream_wake_presentation.play(player_node, ending_recap, duration)
+
+
+func _on_dream_wake_finished() -> void:
+	if not ending_pending:
+		return
+	status_message = "终幕已播完：%s。确认后返回标题。" % ("梦演到结尾" if ending_outcome == "victory" else "梦提前中断")
+	_save_run()
+	_refresh_hud()
 
 
 func _collect_combat_deck() -> void:
@@ -4096,6 +4191,9 @@ func _save_run() -> void:
 		"dream_program_available": dream_program_available,
 		"dream_program_handoff": dream_program_handoff.duplicate(true),
 		"dream_finale_profile": dream_finale_profile.duplicate(true),
+		"ending_pending": ending_pending,
+		"ending_outcome": ending_outcome,
+		"ending_recap": ending_recap.duplicate(true),
 	}
 	if solo_stage_trial_active:
 		payload["dream_stage"] = solo_stage_flow.snapshot()
