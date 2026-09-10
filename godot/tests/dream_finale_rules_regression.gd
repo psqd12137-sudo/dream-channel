@@ -90,7 +90,6 @@ func _run() -> void:
 	spotlight_rules.player_pos = Vector2i.ZERO
 	spotlight_rules.round_number = 3
 	spotlight_rules.host_fight.prepare(spotlight_rules)
-	print("SPOTLIGHT CAM ", spotlight_rules.host_fight.camera_cells, " PROFILE ", spotlight_rules.dream_profile)
 	_check(spotlight_rules.host_fight.plan.get("kind", "") == "pursuit", "spotlight 保持单次追击攻击")
 	_check(spotlight_rules.host_fight.camera_cells == [Vector2i(2, 0)], "spotlight 每第三回合优先第三份房间取景")
 
