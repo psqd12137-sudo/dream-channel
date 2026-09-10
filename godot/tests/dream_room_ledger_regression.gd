@@ -40,11 +40,15 @@ func _run() -> void:
 	var candidates: Array[Dictionary] = ledger.candidates([])
 	_check(candidates.size() == 2, "不同 instance_id 的房间应分别进入候选池")
 	_check(str(candidates[0].get("instance_id", "")) == "room-a@2,4", "候选按受伤经历从高到低排序")
+	ledger.visit({"instance_id": "room-b@7,7", "room_id": "kitchen", "name": "厨房", "visited": true})
+	_check(ledger.candidates(["room-a@2,3"]).all(func(record: Dictionary) -> bool: return str(record.get("room_id", "")) != "kitchen"), "选中一个实例后同房型的其他实例也必须排除")
 
 	var restored = load("res://scripts/dream_room_ledger.gd").new()
 	_check(restored.restore(JSON.parse_string(JSON.stringify(ledger.snapshot()))), "账本快照应可恢复")
-	_check(restored.candidates([]).size() == 2 and int(restored.candidates([])[0].get("hp_lost", 0)) == 99, "恢复后应保留房间经历与损血")
+	_check(restored.candidates([]).size() == 3 and int(restored.candidates([])[0].get("hp_lost", 0)) == 99, "恢复后应保留房间经历与损血")
 	_check(not restored.restore({"version": 999, "records": []}), "未知账本版本必须拒绝载入")
+	_check(not restored.restore({"version": 1, "records": [{"instance_id": "foyer@2,2", "room_id": "foyer", "name": "起点", "visited": true}]}), "恢复时也必须拒绝玄关 room_id")
+	_check(not restored.restore({"version": 1, "records": [{"instance_id": "entry@2,2", "room_id": "hall", "name": "玄关", "visited": true}]}), "恢复时也必须拒绝玄关名称")
 
 	# Sample defeat is an accident that completes the room once; formal defeat
 	# keeps the original terminal behavior.
@@ -57,13 +61,18 @@ func _run() -> void:
 	var sample_room: Dictionary = _find_room(game, "living")
 	game.room_rules.placed[Vector2i(1, 0)] = sample_room.duplicate(true)
 	game.room_rules.placed[Vector2i(1, 0)]["instance_id"] = "sample_living@1,0"
-	game.room_rules.placed[Vector2i(1, 0)]["visited"] = true
+	game.room_rules.placed[Vector2i(1, 0)]["visited"] = false
+	game.room_rules.placed[Vector2i(1, 0)]["revealed"] = false
 	game.room_rules.placed[Vector2i(1, 0)]["completed"] = false
 	game.current_room_pos = Vector2i(1, 0)
+	game._finish_enter_room(Vector2i(1, 0))
+	_check(game.room_ledger.candidates([]).any(func(record: Dictionary) -> bool: return str(record.get("instance_id", "")) == "sample_living@1,0"), "首次进入房间必须写入稳定经历记录")
 	game.start_combat(game.room_rules.placed[Vector2i(1, 0)])
+	var sample_state = game.combat.enemy_by_id(game.combat.enemy_order[0])
+	game.combat._apply_player_hit(sample_state, "melee", 2)
+	game._after_combat_action()
+	_check(int(game.room_ledger.candidates([])[0].get("hp_lost", 0)) == 2, "战斗实际扣血应经由 after_combat_action 同步进房间账本")
 	game.combat.outcome = "defeat"
-	game.combat.player_hp = 0
-	game.combat.actual_hp_lost_total = 6
 	game.return_from_combat()
 	var sample_progress := int(game.run_progress)
 	_check(game.phase == "explore" and game.player_hp == 3, "样片普通战败应恢复到最大生命50%并继续探索")

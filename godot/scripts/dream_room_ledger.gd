@@ -14,7 +14,7 @@ func visit(record: Dictionary) -> void:
 	if instance_id.is_empty() or not bool(record.get("visited", false)):
 		return
 	var room_id := str(record.get("room_id", record.get("id", "")))
-	if instance_id == "start@0,0" or room_id in ["", "start", "foyer", "玄关"] or bool(record.get("is_entrance", false)):
+	if _is_entrance_record(record, instance_id):
 		return
 	var previous: Dictionary = _records.get(instance_id, {})
 	var normalized := {
@@ -49,12 +49,18 @@ func candidates(excluded_ids: Array) -> Array[Dictionary]:
 	var excluded: Dictionary = {}
 	for raw_id in excluded_ids:
 		excluded[str(raw_id)] = true
-	var result: Array[Dictionary] = []
+	var excluded_room_ids: Dictionary = {}
 	for raw_id in _records.keys():
 		var instance_id := str(raw_id)
 		if excluded.has(instance_id):
-			continue
+			excluded_room_ids[str((_records[instance_id] as Dictionary).get("room_id", ""))] = true
+	var result: Array[Dictionary] = []
+	for raw_id in _records.keys():
+		var instance_id := str(raw_id)
 		var record: Dictionary = _records[instance_id]
+		var room_id := str(record.get("room_id", ""))
+		if excluded.has(instance_id) or excluded.has(room_id) or excluded_room_ids.has(room_id):
+			continue
 		if bool(record.get("visited", false)):
 			result.append(record.duplicate(true))
 	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -88,7 +94,7 @@ func restore(data: Dictionary) -> bool:
 		var instance_id := str(record.get("instance_id", "")).strip_edges()
 		if instance_id.is_empty() or not bool(record.get("visited", false)):
 			return false
-		if instance_id == "start@0,0" or bool(record.get("is_entrance", false)):
+		if _is_entrance_record(record, instance_id):
 			return false
 		record["hp_lost"] = maxi(0, int(record.get("hp_lost", 0)))
 		record["rarity_rank"] = clampi(int(record.get("rarity_rank", 1)), 1, 3)
@@ -105,3 +111,9 @@ func _difficulty_for(record: Dictionary) -> int:
 	if tier in ["beat", "combat", "normal"] or str(record.get("kind", "")) == "combat":
 		return 1
 	return 0
+
+
+func _is_entrance_record(record: Dictionary, instance_id: String = "") -> bool:
+	var room_id := str(record.get("room_id", record.get("id", ""))).strip_edges()
+	var name := str(record.get("name", "")).strip_edges()
+	return instance_id == "start@0,0" or bool(record.get("is_entrance", false)) or room_id in ["", "start", "foyer", "玄关"] or name in ["玄关", "foyer", "起点"]
