@@ -32,6 +32,10 @@ var sample_environment: Environment
 var saved_lights: Array[Dictionary] = []
 var baseline_lights: Array[Dictionary] = []
 var saved_dof: Array = []
+var saved_camera_transform := Transform3D.IDENTITY
+var saved_camera_size := 0.0
+var saved_token_transform := Transform3D.IDENTITY
+var saved_house_camera: Dictionary = {}
 var camera_defaults: Dictionary = {}
 var generation := 0
 var playing := false
@@ -45,6 +49,11 @@ func _init(game) -> void:
 func start() -> void:
 	saved_repository = host.run_save_repository
 	saved_environment = host.world_root.get_node("WorldEnvironment").environment
+	saved_camera_transform = host.camera.transform
+	saved_camera_size = host.camera.size
+	saved_token_transform = host.house_root.get_node("LiliToken").transform
+	for property in ["house_camera_target", "house_camera_fit_size", "house_camera_zoom_ratio", "house_camera_user_adjusted", "house_camera_closeup", "house_camera_distance", "house_camera_yaw", "house_camera_pitch", "house_camera_following", "house_camera_user_hold", "house_camera_return_delay", "house_camera_returning", "house_camera_intro_weight", "house_camera_size_current", "house_camera_size_target"]:
+		saved_house_camera[property] = host.get(property)
 	host.world_root.get_node("WorldEnvironment").environment = saved_environment.duplicate()
 	saved_lights = _light_snapshot()
 	var settings = host.presentation_settings
@@ -132,7 +141,9 @@ func set_reference_mode() -> void:
 	reference_mode = true
 	mode_b = true
 	features.assign([true, false, true, false])
-	reference_features.assign([true, true, true, true, true])
+	# Formal baseline keeps depth of field off by default. It remains an
+	# opt-in comparison toggle, but never obscures the room interfaces.
+	reference_features.assign([true, true, true, false, true])
 	material_detail_enabled = true
 	_apply()
 	if restart:
@@ -268,8 +279,8 @@ func _apply() -> void:
 	settings.depth_of_field_focus_width = 0.40 if features[3] else saved_dof[2]
 	if reference_mode:
 		settings.depth_of_field_enabled = reference_features[3]
-		settings.depth_of_field_blur_strength = 5.5
-		settings.depth_of_field_focus_width = 0.18
+		settings.depth_of_field_blur_strength = 0.8 if reference_features[3] else 0.0
+		settings.depth_of_field_focus_width = 0.40
 	settings._apply_depth_of_field_state()
 	host.status_message = "C：造型按钮切换新旧结构，原版移轴景深可独立关闭检查细节。R 重播拼装；拖拽旋转、滚轮缩放。"
 	host._refresh_hud()
@@ -354,6 +365,11 @@ func close() -> void:
 	settings.depth_of_field_blur_strength = saved_dof[1]
 	settings.depth_of_field_focus_width = saved_dof[2]
 	settings._apply_depth_of_field_state()
+	host.camera.transform = saved_camera_transform
+	host.camera.size = saved_camera_size
+	for property in saved_house_camera:
+		host.set(property, saved_house_camera[property])
+	host.house_root.get_node("LiliToken").transform = saved_token_transform
 	host.run_save_repository = saved_repository
 	host.tactile_lab = null
 
@@ -498,6 +514,7 @@ func _apply_reference_material_details() -> void:
 func _box(parent: Node3D, name: String, position: Vector3, size: Vector3, color: String, roughness := 0.65) -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	node.name = name
+	node.add_to_group(&"workshop_decor")
 	node.mesh = _rounded_box(size, minf(size[size.min_axis_index()] * 0.2, 0.06))
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(color)

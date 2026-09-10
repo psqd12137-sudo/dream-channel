@@ -746,7 +746,9 @@ func _draw_lab_hud() -> void:
 			_draw_button(Rect2(1020, 506, 105, 34), "复位镜头", BLUE, TEXT)
 			_draw_button(Rect2(1135, 506, 105, 34), "造型：新版" if lab.refined_structure else "造型：旧版", TEAL if lab.refined_structure else DARK_2, TEXT)
 			_draw_button(Rect2(1020, 546, 220, 34), "C 参考工坊", TEAL, TEXT)
-			_label("A/B/C 切换 · 拖拽旋转 · 滚轮缩放", Vector2(1020, 616), 10, MUTED)
+			var formal_label := "正式工坊预览" if lab.formal_preview_room_id.is_empty() else ("进入电视梦境" if lab.formal_preview_state == "workshop" else "返回现实工坊")
+			_draw_button(Rect2(1020, 586, 220, 34), formal_label, MAGENTA, TEXT)
+			_label("A/B/C 切换 · 拖拽旋转 · 滚轮缩放", Vector2(1020, 632), 10, MUTED)
 		else:
 			var labels := ["外围桌面", "材质层次", "接触阴影", "轻景深（试验）"]
 			for i in range(labels.size()):
@@ -2333,6 +2335,13 @@ func _gui_input(event: InputEvent) -> void:
 			game.tactile_lab.reset_camera()
 		elif game.tactile_lab.reference_mode and Rect2(1020, 546, 220, 34).has_point(point):
 			game.tactile_lab.set_reference_mode()
+		elif game.tactile_lab.reference_mode and Rect2(1020, 586, 220, 34).has_point(point):
+			if game.tactile_lab.formal_preview_room_id.is_empty():
+				game.start_formal_workshop_preview()
+			elif game.tactile_lab.formal_preview_state == "workshop":
+				game.enter_formal_tv_dream_preview()
+			else:
+				game.return_formal_workshop_preview()
 		elif not game.tactile_lab.reference_mode and Rect2(1020, 578, 220, 38).has_point(point):
 			game.tactile_lab.set_reference_mode()
 		else:

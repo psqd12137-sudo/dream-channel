@@ -972,7 +972,16 @@ func copy_current_seed() -> void:
 
 func go_home() -> void:
 	_clear_combat_lab_presentation_state()
+	var tactile_camera_transform := Transform3D.IDENTITY
+	var tactile_camera_size := 0.0
+	var tactile_house_camera: Dictionary = {}
+	var tactile_token_transform := Transform3D.IDENTITY
+	var closing_tactile_lab := tactile_lab != null
 	if tactile_lab != null:
+		tactile_camera_transform = tactile_lab.saved_camera_transform
+		tactile_camera_size = tactile_lab.saved_camera_size
+		tactile_house_camera = tactile_lab.saved_house_camera.duplicate(true)
+		tactile_token_transform = tactile_lab.saved_token_transform
 		tactile_lab.close()
 	if phase == "world_boss" and combat != null:
 		_save_run()
@@ -1020,6 +1029,12 @@ func go_home() -> void:
 	_set_home_video(true)
 	status_message = "电视机预热完毕。"
 	_refresh_hud()
+	if closing_tactile_lab:
+		for property in tactile_house_camera:
+			set(property, tactile_house_camera[property])
+		camera.transform = tactile_camera_transform
+		camera.size = tactile_camera_size
+		house_root.get_node("LiliToken").transform = tactile_token_transform
 
 
 func has_saved_run() -> bool:
