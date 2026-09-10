@@ -179,6 +179,8 @@ var solo_stage_flow = SoloStageFlow.new()
 var solo_stage_trial_active := false
 var dream_draw_active := false
 var dream_draw_stage := 0
+var dream_program_available := false
+var dream_program_handoff: Dictionary = {}
 var solo_trial_previous_repository = null
 var solo_stage_trial_config: Dictionary = {}
 var presentation_settings = null
@@ -881,6 +883,8 @@ func reset_run(seed_value: int = 0) -> void:
 	room_ledger = DreamRoomLedger.new()
 	dream_draw_active = false
 	dream_draw_stage = 0
+	dream_program_available = false
+	dream_program_handoff.clear()
 	combat_hp_loss_synced = 0
 	room_rules.placed[Vector2i.ZERO]["revealed"] = true
 	room_rules.placed[Vector2i.ZERO]["visited"] = true
@@ -1019,6 +1023,8 @@ func copy_current_seed() -> void:
 func go_home() -> void:
 	dream_draw_active = false
 	dream_draw_stage = 0
+	dream_program_available = false
+	dream_program_handoff.clear()
 	if hud != null:
 		hud.call("hide_dream_stage_panel")
 	_clear_combat_lab_presentation_state()
@@ -1130,6 +1136,9 @@ func continue_saved_run() -> bool:
 		room_ledger.restore(saved_ledger as Dictionary)
 	dream_draw_active = solo_stage_trial_active and bool(save.get("dream_draw_active", false))
 	dream_draw_stage = int(save.get("dream_draw_stage", solo_stage_flow.due_stage(run_progress))) if dream_draw_active else 0
+	dream_program_available = solo_stage_trial_active and bool(save.get("dream_program_available", false))
+	var saved_program: Variant = save.get("dream_program_handoff", {})
+	dream_program_handoff = saved_program.duplicate(true) if saved_program is Dictionary else {}
 	combat_hp_loss_synced = 0
 	var remaining_ids: Array = save.get("remaining_ids", [])
 	if str(save.get("phase", "")) != "world_boss":
@@ -1163,6 +1172,8 @@ func continue_saved_run() -> bool:
 		rng.state = int(saved_rng_state)
 	if dream_draw_active:
 		_present_saved_dream_draw()
+	elif dream_program_available and not dream_program_handoff.is_empty():
+		hud.call("show_dream_program_placeholder", dream_program_handoff)
 	return true
 
 
@@ -2647,12 +2658,27 @@ func finish_dream_stage_reveal() -> void:
 	dream_draw_stage = 0
 	if solo_stage_flow.is_finale_ready():
 		status_message = "三份素材已经锁定；下一步将把它们编成终幕节目。"
+		dream_program_available = true
+		dream_program_handoff = (solo_stage_flow.results[-1].get("program_entry", {}) as Dictionary).duplicate(true) if not solo_stage_flow.results.is_empty() else {}
 	else:
 		status_message = "素材已入档；继续探索，下一阶段会再次抽片。"
 	phase = "explore"
 	build_house_world()
 	_save_run()
 	_refresh_hud()
+
+
+func open_dream_program(program_entry: Dictionary) -> void:
+	if not solo_stage_trial_active or not solo_stage_flow.is_finale_ready():
+		return
+	var source_ids: Array = program_entry.get("source_ids", [])
+	if source_ids.is_empty():
+		return
+	dream_program_handoff = program_entry.duplicate(true)
+	dream_program_available = true
+	status_message = "节目单已打开：素材来源 %s。终幕规则等待配置。" % ", ".join(source_ids.map(func(value: Variant) -> String: return str(value)))
+	hud.call("show_dream_program_placeholder", dream_program_handoff)
+	_save_run()
 
 
 func start_event_trial(room: Dictionary) -> void:
@@ -4024,6 +4050,8 @@ func _save_run() -> void:
 		"room_ledger": room_ledger.snapshot() if room_ledger != null else {"version": 1, "records": []},
 		"dream_draw_active": dream_draw_active,
 		"dream_draw_stage": dream_draw_stage,
+		"dream_program_available": dream_program_available,
+		"dream_program_handoff": dream_program_handoff.duplicate(true),
 	}
 	if solo_stage_trial_active:
 		payload["dream_stage"] = solo_stage_flow.snapshot()

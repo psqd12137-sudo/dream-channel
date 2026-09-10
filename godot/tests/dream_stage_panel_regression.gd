@@ -3,6 +3,7 @@ extends SceneTree
 var failures: Array[String] = []
 var submitted_value := "unset"
 var revealed_count := 0
+var requested_program: Dictionary = {}
 
 func _init() -> void:
 	call_deferred("_run")
@@ -13,6 +14,7 @@ func _run() -> void:
 	panel.size = Vector2(1280, 800)
 	panel.submitted.connect(func(id: String) -> void: submitted_value = id)
 	panel.reveal_finished.connect(func() -> void: revealed_count += 1)
+	panel.program_requested.connect(func(entry: Dictionary) -> void: requested_program = entry.duplicate(true))
 	var rows: Array[Dictionary] = [
 		{"instance_id": "a", "name": "厨房", "hp_lost": 3, "rarity_rank": 1, "difficulty_rank": 1},
 		{"instance_id": "b", "name": "客厅", "hp_lost": 0, "rarity_rank": 2, "difficulty_rank": 0}]
@@ -33,8 +35,13 @@ func _run() -> void:
 	_check(panel._message.contains("阶段素材提示"), "stage one recap explains its material handoff")
 	panel.show_candidates(3, rows, {"a": 0.7, "b": 0.3})
 	panel._submit("b")
-	panel.reveal({"stage": 3, "selected_id": "b"}, 0.0)
+	panel.reveal({"stage": 3, "selected_id": "b", "program_entry": {"type": "dream_finale_program", "source_ids": ["a", "b", "c"]}}, 0.0)
 	_check(panel._message.contains("节目单入口"), "stage three recap exposes the program entry")
+	_check(panel.get_node_or_null("OpenProgramList").visible, "stage three exposes an actual program list button")
+	panel.get_node_or_null("OpenProgramList").emit_signal("pressed")
+	_check(requested_program.get("source_ids", []) == ["a", "b", "c"], "program handoff preserves saved source ids")
+	panel.show_program_placeholder({"type": "dream_finale_program", "source_ids": ["a", "b", "c"]})
+	_check(panel.visible and panel._message.contains("节目单已打开"), "program handoff opens a stable placeholder view")
 	panel.show_reveal_only(2, rows, {"stage": 2, "selected_id": "a"}, 0.0)
 	var before_reveal_only := submitted_value
 	panel.get_node_or_null("Nominate_a").emit_signal("pressed")

@@ -5,6 +5,7 @@ const DreamDrawRules = preload("res://scripts/dream_draw_rules.gd")
 
 signal submitted(nomination_id: String)
 signal reveal_finished()
+signal program_requested(program_entry: Dictionary)
 
 const INK := Color("17151c")
 const PAPER := Color("fff3df")
@@ -25,7 +26,9 @@ var reveal_finished_once := false
 var reveal_only := false
 var _buttons: Array[Button] = []
 var _abstain_button: Button
+var _program_button: Button
 var _message := ""
+var _program_entry: Dictionary = {}
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -43,6 +46,7 @@ func show_candidates(next_stage: int, next_records: Array[Dictionary], probabili
 	)
 	probability_map = probabilities_for_display.duplicate(true)
 	result.clear()
+	_program_entry.clear()
 	submitted_once = false
 	revealing = false
 	reveal_finished_once = false
@@ -104,8 +108,19 @@ func _finish_reveal() -> void:
 	revealing = false
 	reveal_finished_once = true
 	_message = _recap_text()
+	_program_entry = _read_program_entry()
+	if _program_button != null and stage >= 3:
+		_program_button.visible = true
 	queue_redraw()
 	reveal_finished.emit()
+
+
+func _request_program() -> void:
+	if stage < 3 or _program_entry.is_empty():
+		return
+	if _program_button != null:
+		_program_button.disabled = true
+	program_requested.emit(_program_entry.duplicate(true))
 
 
 func _submit(instance_id: String) -> void:
@@ -124,7 +139,10 @@ func _rebuild_buttons() -> void:
 	_buttons.clear()
 	if _abstain_button != null:
 		_abstain_button.queue_free()
-	_abstain_button = null
+		_abstain_button = null
+	if _program_button != null:
+		_program_button.queue_free()
+		_program_button = null
 	for index in range(records.size()):
 		var record: Dictionary = records[index]
 		var button := Button.new()
@@ -154,6 +172,19 @@ func _rebuild_buttons() -> void:
 	_abstain_button.add_theme_stylebox_override("hover", _button_style(Color("65747a"), PAPER))
 	_abstain_button.pressed.connect(func() -> void: _submit(""))
 	add_child(_abstain_button)
+	if stage >= 3:
+		_program_button = Button.new()
+		_program_button.name = "OpenProgramList"
+		_program_button.text = "打开节目单"
+		_program_button.position = Vector2(790.0, 610.0)
+		_program_button.size = Vector2(240.0, 48.0)
+		_program_button.visible = false
+		_program_button.add_theme_font_size_override("font_size", 17)
+		_program_button.add_theme_color_override("font_color", INK)
+		_program_button.add_theme_stylebox_override("normal", _button_style(GOLD, MAGENTA))
+		_program_button.add_theme_stylebox_override("hover", _button_style(Color("fff3a5"), MAGENTA))
+		_program_button.pressed.connect(_request_program)
+		add_child(_program_button)
 
 
 func _set_buttons_disabled(disabled: bool) -> void:
@@ -199,6 +230,35 @@ func _recap_text() -> String:
 	if stage >= 3:
 		return base + " 节目单入口：三份素材已汇总，进入终幕节目单。"
 	return base + " 阶段素材提示：它会成为终幕的一项来源。"
+
+
+func _read_program_entry() -> Dictionary:
+	var saved: Variant = result.get("program_entry", {})
+	if saved is Dictionary and not (saved as Dictionary).is_empty():
+		return (saved as Dictionary).duplicate(true)
+	var source_ids: Array[String] = []
+	for record: Dictionary in records:
+		var id := str(record.get("instance_id", ""))
+		if id == str(result.get("selected_id", "")) or id.is_empty():
+			continue
+		source_ids.append(id)
+	return {"type": "dream_finale_program", "version": 1, "status": "awaiting_dream_finale_profile", "source_ids": source_ids}
+
+
+func show_program_placeholder(program_entry: Dictionary) -> void:
+	if stage < 3 or _program_button == null:
+		var empty_records: Array[Dictionary] = []
+		show_candidates(3, empty_records, {})
+		reveal_only = true
+		reveal_finished_once = true
+		result = {"stage": 3, "program_entry": program_entry.duplicate(true)}
+	_program_entry = program_entry.duplicate(true)
+	if _program_button != null:
+		_program_button.visible = true
+	var source_ids: Array = _program_entry.get("source_ids", [])
+	_message = "节目单已打开：%d 份素材已锁定；终幕规则将在节目配置阶段接入。" % source_ids.size()
+	visible = true
+	queue_redraw()
 
 
 func _draw() -> void:

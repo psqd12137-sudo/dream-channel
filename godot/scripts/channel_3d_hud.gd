@@ -207,6 +207,7 @@ func _ready() -> void:
 	dream_stage_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dream_stage_panel.submitted.connect(_on_dream_stage_submitted)
 	dream_stage_panel.reveal_finished.connect(_on_dream_stage_reveal_finished)
+	dream_stage_panel.program_requested.connect(_on_dream_program_requested)
 	add_child(dream_stage_panel)
 	set_process_input(true)
 	sync_layout()
@@ -241,7 +242,7 @@ func _process(delta: float) -> void:
 		sync_layout()
 	if seed_input != null:
 		seed_input.visible = game != null and game.phase == "home"
-	if dream_stage_panel != null and game != null and not bool(game.get("dream_draw_active")):
+	if dream_stage_panel != null and game != null and not bool(game.get("dream_draw_active")) and not bool(game.get("dream_program_available")):
 		dream_stage_panel.visible = false
 	# 离开战斗时清理残留的飞行动画状态
 	if game != null and game.phase not in ["combat", "world_boss"] and (not card_flight_offsets.is_empty() or not exiting_cards.is_empty() or not card_flight_tweens.is_empty()):
@@ -538,6 +539,11 @@ func reveal_saved_dream_stage(stage: int, records: Array[Dictionary], result: Di
 		dream_stage_panel.show_reveal_only(stage, records, result, seconds)
 
 
+func show_dream_program_placeholder(program_entry: Dictionary) -> void:
+	if dream_stage_panel != null:
+		dream_stage_panel.show_program_placeholder(program_entry)
+
+
 func _on_dream_stage_submitted(nomination_id: String) -> void:
 	if game != null:
 		game.submit_dream_stage_nomination(nomination_id)
@@ -546,6 +552,11 @@ func _on_dream_stage_submitted(nomination_id: String) -> void:
 func _on_dream_stage_reveal_finished() -> void:
 	if game != null:
 		game.finish_dream_stage_reveal()
+
+
+func _on_dream_program_requested(program_entry: Dictionary) -> void:
+	if game != null:
+		game.open_dream_program(program_entry)
 
 
 func _draw_top_bar() -> void:
