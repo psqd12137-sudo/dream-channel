@@ -19,7 +19,13 @@ func prepare(r, preserve_control_state: bool = false) -> void:
 	var finale_profile: Dictionary = r.dream_profile if "dream_profile" in r else {}
 	var route_rule := str(finale_profile.get("route_rule", "short_charge"))
 	var climax_rule := str(finale_profile.get("climax_rule", ""))
-	if r.round_number % 3 == 0:
+	var has_finale_profile := bool(finale_profile.get("valid", false))
+	if r.round_number == 1 and has_finale_profile:
+		# A real finale profile turns the opening telegraph into its first
+		# observable charge. The legacy no-profile preview keeps its opening
+		# pause unchanged.
+		kind = "charge"
+	elif r.round_number % 3 == 0:
 		if climax_rule == "double_sweep":
 			kind = "sweep"
 		elif climax_rule == "spotlight":

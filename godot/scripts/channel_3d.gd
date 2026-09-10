@@ -2697,6 +2697,7 @@ func open_dream_program(program_entry: Dictionary) -> void:
 		for record: Dictionary in room_ledger.candidates([]):
 			records[str(record.get("instance_id", ""))] = record
 	var materials: Array[Dictionary] = []
+	var source_names: Array[String] = []
 	for raw_id: Variant in source_ids:
 		var source_id := str(raw_id)
 		if not records.has(source_id):
@@ -2704,6 +2705,7 @@ func open_dream_program(program_entry: Dictionary) -> void:
 			_refresh_hud()
 			return
 		materials.append((records[source_id] as Dictionary).duplicate(true))
+		source_names.append(str(records[source_id].get("name", source_id)))
 	var composed: Dictionary = DreamFinaleProfile.compose(materials)
 	if not bool(composed.get("valid", false)):
 		status_message = str(composed.get("error", "终幕素材资料不完整。"))
@@ -2712,6 +2714,7 @@ func open_dream_program(program_entry: Dictionary) -> void:
 	dream_finale_profile = composed.duplicate(true)
 	dream_program_handoff = program_entry.duplicate(true)
 	dream_program_handoff["profile"] = dream_finale_profile.duplicate(true)
+	dream_program_handoff["source_names"] = source_names
 	dream_program_handoff["status"] = "ready"
 	dream_program_available = true
 	status_message = "节目单已打开：%s。终幕规则已锁定。" % str(dream_finale_profile.get("name", "三份素材合成"))

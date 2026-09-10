@@ -25,6 +25,29 @@ func _run() -> void:
 	# The rule harness does not need the full content adapter; an empty card
 	# catalogue keeps this regression independent of presentation assets.
 	var defs: Dictionary = {}
+	for first_large in [false, true]:
+		for second_combat in [false, true]:
+			for third_combat in [false, true]:
+				var combo: Dictionary = Profile.compose([
+					{"instance_id": "combo-a-%s" % str(first_large), "room_id": "room-a", "room_size": 3 if first_large else 1},
+					{"instance_id": "combo-b-%s" % str(second_combat), "room_id": "room-b", "kind": "combat" if second_combat else "quiet"},
+					{"instance_id": "combo-c-%s" % str(third_combat), "room_id": "room-c", "kind": "combat" if third_combat else "quiet"},
+				])
+				var combo_rules = _make_rules(Rules, rooms, defs, combo)
+				var combo_boss = combo_rules.enemy_by_id(combo_rules.enemy_order[0])
+				combo_boss.pos = Vector2i(7, 0)
+				combo_rules.player_pos = Vector2i.ZERO
+				combo_rules.round_number = 1
+				combo_rules.host_fight.prepare(combo_rules)
+				var combo_path: Array = combo_rules.host_fight.plan.get("path", [])
+				_check(combo_path.size() == (4 if first_large else 2), "八组合首回合均应用短/长冲撞上限")
+				_check(combo_rules.host_fight.execute(combo_rules, combo_boss).size() > 0, "八组合首回合均可执行")
+				combo_rules.outcome = ""
+				combo_rules.round_number = 3
+				combo_rules.host_fight.prepare(combo_rules)
+				var expected_kind := "sweep" if third_combat else "pursuit"
+				_check(str(combo_rules.host_fight.plan.get("kind", "")) == expected_kind, "八组合第三回合均兑现第三素材招式")
+				_check(combo_rules.host_fight.execute(combo_rules, combo_boss).size() > 0, "八组合第三回合均可执行")
 	var profile_base := {
 		"valid": true,
 		"name": "测试终幕",
@@ -41,7 +64,7 @@ func _run() -> void:
 	var short_boss = short_rules.enemy_by_id(short_rules.enemy_order[0])
 	short_boss.pos = Vector2i(7, 0)
 	short_rules.player_pos = Vector2i.ZERO
-	short_rules.round_number = 3
+	short_rules.round_number = 1
 	short_rules.host_fight.prepare(short_rules)
 	_check(short_rules.host_fight.plan.get("path", []).size() == 2, "short_charge 冲撞路径上限为2格")
 	var short_path: Array = short_rules.host_fight.plan.get("path", []).duplicate()
@@ -55,7 +78,7 @@ func _run() -> void:
 	var long_boss = long_rules.enemy_by_id(long_rules.enemy_order[0])
 	long_boss.pos = Vector2i(7, 0)
 	long_rules.player_pos = Vector2i.ZERO
-	long_rules.round_number = 3
+	long_rules.round_number = 1
 	long_rules.host_fight.prepare(long_rules)
 	_check(long_rules.host_fight.plan.get("path", []).size() == 4, "long_charge 冲撞路径上限为4格")
 	_check(long_rules.host_fight.plan.get("path", []).all(func(cell: Vector2i) -> bool: return long_rules.is_walkable(cell)), "冲撞路径不能穿越墙体或非连接格")
